@@ -60,6 +60,9 @@ DB_PATH: Path = _env_path("BACMAP_DB_PATH", DATA_DIR / "bacmap.sqlite")
 
 RESULTS_DIR: Path = _env_path("BACMAP_RESULTS_DIR", BACMAP_HOME / "results")
 
+# 工作流文件目录（第 4 步迁入工作流后使用；脚本过渡期同样指向此处）。
+WORKFLOWS_DIR: Path = _env_path("BACMAP_WORKFLOWS_DIR", BACMAP_HOME / "workflows")
+
 # Snakemake 运行状态（.snakemake/ 日志等），迁移第 4 步起使用。
 WORKFLOW_STATE_DIR: Path = _env_path("BACMAP_WORKFLOW_STATE_DIR", BACMAP_HOME / "workflow_state")
 WORKFLOW_LOG_DIR: Path = WORKFLOW_STATE_DIR / "log"

@@ -1,0 +1,507 @@
+"""TDD 测试：NLI Reflector（project.md §8.2 Layer 3）。
+
+AI 解读文本 → atomic claims 分解 → 与 Source of Truth（summary.json 事实）
+逐条比对（entailed/contradicted/unverifiable）→ contradiction rate 超阈值
+触发 NEEDS_HUMAN_REVIEW。
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_PROJECT_ROOT / "src"))
+
+from bacmap.core.verify.nli_reflector import (  # noqa: E402
+    AtomicClaim,
+    ClaimType,
+    StrainFacts,
+    Verdict,
+    decompose_claims,
+    extract_facts,
+    reflect,
+)
+from bacmap.store.genome_object_service import (  # noqa: E402
+    _VALID_EVENT_TYPES,
+    GenomeObject,
+    GenomeObjectService,
+    ObjectType,
+)
+from bacmap.tools import pipeline as tools_pipeline  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+def _summary(steps: dict) -> dict:
+    return {"sample": "SAM-001", "steps": steps}
+
+
+def _salmonella_steps() -> dict:
+    return {
+        "species": {"verdict": "Salmonella", "markers": {"invA": "positive"}},
+        "mlst": (
+            "FILE\tSCHEME\tST\taroC\tdnaN\themD\thisD\tpurE\tsucA\tthrA\n"
+            "contigs\tsalmonella_2\t19\t2\t7\t12\t9\t5\t9\t3"
+        ),
+        "serotype": {"sistr": "Typhimurium", "serogroup": "B"},
+        "amr": {
+            "abricate_card": [{"GENE": "blaCTX-M-15"}, {"GENE": "tet(A)"}],
+            "abricate_vfdb": [{"GENE": "ssrA"}],
+        },
+        "plasmid": {"plasmidfinder": [{"GENE": "IncFIB"}]},
+        "dec": {},
+    }
+
+
+def _salmonella_facts() -> StrainFacts:
+    return StrainFacts(
+        sample_id="SAM-001",
+        species="Salmonella",
+        mlst_st="19",
+        serotype="Typhimurium",
+        amr_genes=("blaCTX-M-15", "tet(A)"),
+        virulence_genes=("ssrA",),
+        plasmids=("IncFIB",),
+    )
+
+
+def _facts(
+    sample_id: str,
+    species: str = "Salmonella",
+    mlst_st: str = "19",
+    serotype: str = "Typhimurium",
+    amr_genes: tuple[str, ...] = ("blaCTX-M-15",),
+    plasmids: tuple[str, ...] = ("IncFIB",),
+) -> StrainFacts:
+    return StrainFacts(
+        sample_id=sample_id,
+        species=species,
+        mlst_st=mlst_st,
+        serotype=serotype,
+        amr_genes=amr_genes,
+        virulence_genes=(),
+        plasmids=plasmids,
+    )
+
+
+# ===========================================================================
+# extract_facts
+# ===========================================================================
+
+
+class TestExtractFacts:
+    def test_extracts_all_fields_from_summary(self):
+        facts = extract_facts(_summary(_salmonella_steps()), "SAM-001")
+        assert facts.sample_id == "SAM-001"
+        assert facts.species == "Salmonella"
+        assert facts.mlst_st == "19"
+        assert facts.serotype == "Typhimurium"
+        assert "blaCTX-M-15" in facts.amr_genes
+        assert "tet(A)" in facts.amr_genes
+        assert "ssrA" in facts.virulence_genes
+        assert "IncFIB" in facts.plasmids
+
+    def test_real_species_key_shape(self):
+        """真实 summary 用 steps.species.species 存判决（非 verdict）。"""
+        steps = _salmonella_steps()
+        steps["species"] = {"species": "Salmonella", "confidence": "high"}
+        facts = extract_facts(_summary(steps), "SAM-001")
+        assert facts.species == "Salmonella"
+
+    def test_missing_steps_yields_unknown(self):
+        facts = extract_facts({"steps": {}}, "SAM-X")
+        assert facts.species == "unknown"
+        assert facts.mlst_st == ""
+        assert facts.serotype == ""
+        assert facts.amr_genes == ()
+        assert facts.virulence_genes == ()
+        assert facts.plasmids == ()
+
+    def test_not_salmonella_with_ipah_routes_to_shigella(self):
+        steps = _salmonella_steps()
+        steps["species"] = {"verdict": "not_Salmonella"}
+        steps["dec"] = {"ipaH": "positive"}
+        facts = extract_facts(_summary(steps), "SAM-SHI")
+        assert facts.species == "Shigella"
+
+    def test_not_salmonella_without_ipah_routes_to_ecoli(self):
+        steps = _salmonella_steps()
+        steps["species"] = {"verdict": "not_Salmonella"}
+        steps["dec"] = {"ipaH": "negative"}
+        facts = extract_facts(_summary(steps), "SAM-DEC")
+        assert facts.species == "E. coli"
+
+    def test_vpara_verdict(self):
+        steps = _salmonella_steps()
+        steps["species"] = {"verdict": "V. parahaemolyticus"}
+        facts = extract_facts(_summary(steps), "SAM-VPA")
+        assert facts.species == "V. parahaemolyticus"
+
+
+# ===========================================================================
+# decompose_claims
+# ===========================================================================
+
+
+class TestDecomposeClaims:
+    def test_species_zh(self):
+        claims = decompose_claims("该株经鉴定为沙门菌。")
+        assert AtomicClaim(ClaimType.SPECIES, "Salmonella", "沙门菌") in claims
+
+    def test_species_en(self):
+        claims = decompose_claims("identified as Salmonella enterica")
+        species = [c for c in claims if c.claim_type == ClaimType.SPECIES]
+        assert species and species[0].value == "Salmonella"
+
+    def test_mlst_patterns(self):
+        for text in ("MLST 分析为 ST19", "ST-19 是其序列型", "序列型为 19"):
+            claims = decompose_claims(text)
+            sts = [c for c in claims if c.claim_type == ClaimType.MLST_ST]
+            assert sts and sts[0].value == "19", text
+
+    def test_serotype_zh(self):
+        claims = decompose_claims("血清型为 Typhimurium")
+        sero = [c for c in claims if c.claim_type == ClaimType.SEROTYPE]
+        assert sero and sero[0].value == "Typhimurium"
+
+    def test_serotype_en(self):
+        claims = decompose_claims("serovar Enteritidis was predicted")
+        sero = [c for c in claims if c.claim_type == ClaimType.SEROTYPE]
+        assert sero and sero[0].value == "Enteritidis"
+
+    def test_amr_gene_extraction(self):
+        claims = decompose_claims("检出 blaCTX-M-15 与 mcr-1 耐药基因")
+        amr = {c.value for c in claims if c.claim_type == ClaimType.AMR_GENE}
+        assert "blaCTX-M-15" in amr
+        assert "mcr-1" in amr
+
+    def test_amr_family_gene_not_in_facts_still_extracted(self):
+        """文本声称 blaNDM-1（事实库中没有）也要被提取为 AMR claim。"""
+        claims = decompose_claims("携带 blaNDM-1")
+        amr = [c for c in claims if c.claim_type == ClaimType.AMR_GENE]
+        assert amr and amr[0].value == "blaNDM-1"
+
+    def test_plain_text_no_claims(self):
+        assert decompose_claims("本报告仅供科研使用，不用于临床诊断。") == []
+
+    def test_gene_with_parenthesis_apostrophe(self):
+        claims = decompose_claims("检出 AAC(6')-Iaa 基因")
+        amr = [c for c in claims if c.claim_type == ClaimType.AMR_GENE]
+        assert amr and amr[0].value == "AAC(6')-Iaa"
+
+
+# ===========================================================================
+# reflect
+# ===========================================================================
+
+
+class TestReflect:
+    def test_all_entailed(self):
+        text = "该株为沙门菌，ST19，血清型为 Typhimurium，检出 blaCTX-M-15。"
+        r = reflect(text, _salmonella_facts())
+        assert r.verifiable_count == 4
+        assert r.contradicted_count == 0
+        assert r.contradiction_rate == 0.0
+        assert r.needs_human_review is False
+
+    def test_contradicted_st_flags_review(self):
+        text = "该株为沙门菌，ST34。"
+        r = reflect(text, _salmonella_facts())
+        assert r.contradicted_count == 1
+        assert r.contradiction_rate == pytest.approx(0.5)
+        assert r.needs_human_review is True
+
+    def test_contradicted_amr_gene(self):
+        r = reflect("检出 blaNDM-1", _salmonella_facts())
+        contradicted = [v for v in r.verdicts if v.verdict == Verdict.CONTRADICTED]
+        assert contradicted and contradicted[0].claim.value == "blaNDM-1"
+        assert r.needs_human_review is True
+
+    def test_empty_text(self):
+        r = reflect("", _salmonella_facts())
+        assert r.verdicts == ()
+        assert r.contradiction_rate == 0.0
+        assert r.needs_human_review is False
+
+    def test_unverifiable_only_no_review(self):
+        facts = StrainFacts("SAM-X", "unknown", "", "", (), (), ())
+        r = reflect("该株为沙门菌，ST19", facts)
+        assert r.verifiable_count == 0
+        assert r.contradiction_rate == 0.0
+        assert r.needs_human_review is False
+        assert all(v.verdict == Verdict.UNVERIFIABLE for v in r.verdicts)
+
+    def test_threshold_override(self):
+        r = reflect("该株为沙门菌，ST34。", _salmonella_facts(), threshold=1.0)
+        assert r.contradiction_rate == pytest.approx(0.5)
+        assert r.needs_human_review is False
+
+    def test_duplicate_claims_deduped(self):
+        r = reflect("ST19 与 ST19 相同。", _salmonella_facts())
+        sts = [v for v in r.verdicts if v.claim.claim_type == ClaimType.MLST_ST]
+        assert len(sts) == 1
+
+    def test_serotype_case_insensitive_entailed(self):
+        r = reflect("血清型为 typhimurium", _salmonella_facts())
+        sero = [v for v in r.verdicts if v.claim.claim_type == ClaimType.SEROTYPE]
+        assert sero and sero[0].verdict == Verdict.ENTAILED
+
+    def test_serotype_dotted_abbreviation_entailed(self):
+        """P2-8（QA 发现）：「S. Typhimurium」整体捕获并归一，不再截断为 "S" 假矛盾。"""
+        r = reflect("血清型为 S. Typhimurium", _salmonella_facts())
+        sero = [v for v in r.verdicts if v.claim.claim_type == ClaimType.SEROTYPE]
+        assert sero and sero[0].claim.value == "S. Typhimurium"
+        assert sero[0].verdict == Verdict.ENTAILED
+        assert r.contradicted_count == 0
+
+    def test_serotype_english_serovar_dotted(self):
+        r = reflect("serovar S. Enteritidis", _salmonella_facts())
+        sero = [v for v in r.verdicts if v.claim.claim_type == ClaimType.SEROTYPE]
+        assert sero and sero[0].verdict == Verdict.CONTRADICTED  # 确为不同血清型
+
+    def test_serotype_antigen_formula_not_captured(self):
+        """抗原式（数字开头）按设计不构成 claim——安全缺省，防假矛盾。"""
+        claims = decompose_claims("血清型为 1,4,[5],12:i:1,2")
+        assert not any(c.claim_type == ClaimType.SEROTYPE for c in claims)
+
+    def test_result_is_frozen(self):
+        r = reflect("该株为沙门菌", _salmonella_facts())
+        with pytest.raises(AttributeError):
+            r.needs_human_review = True  # type: ignore[misc]
+
+
+class TestNegationHandling:
+    """评审 A1：否定式表述不得产生假 CONTRADICTED。语义：ENTAILED iff (match != negated)。"""
+
+    def test_negated_species_entailed_on_mismatch(self):
+        facts = StrainFacts("SAM-ECO", "E. coli", "", "", (), (), ())
+        r = reflect("该株不是沙门菌。", facts)
+        assert r.verifiable_count == 1
+        assert r.contradicted_count == 0
+        assert r.needs_human_review is False
+
+    def test_negated_species_contradicted_on_match(self):
+        r = reflect("该株不是沙门菌。", _salmonella_facts())
+        assert r.contradicted_count == 1
+        assert r.needs_human_review is True
+
+    def test_correct_contrastive_sentence_not_flagged(self):
+        """评审 A1 核心案例：正确对比句「不是 X 而是 Y」不再触发误报人审。"""
+        facts = StrainFacts("SAM-SHI", "Shigella", "", "", (), (), ())
+        r = reflect("不是沙门菌，而是志贺菌。", facts)
+        assert r.contradicted_count == 0
+        assert r.needs_human_review is False
+
+    def test_negated_amr_gene_carrier_vs_negative(self):
+        """「未检出 X」：携带株 → CONTRADICTED；阴性株 → ENTAILED。"""
+        carrier = _facts("SAM-A", amr_genes=("blaCTX-M-15",))
+        r1 = reflect("未检出 blaCTX-M-15", carrier)
+        assert r1.contradicted_count == 1 and r1.needs_human_review is True
+        negative = _facts("SAM-B", amr_genes=("tet(A)",))
+        r2 = reflect("未检出 blaCTX-M-15", negative)
+        assert r2.contradicted_count == 0 and r2.needs_human_review is False
+
+    def test_english_negation(self):
+        facts = StrainFacts("SAM-ECO", "E. coli", "", "", (), (), ())
+        r = reflect("The isolate is not Salmonella.", facts)
+        assert r.contradicted_count == 0
+
+    def test_feichang_not_treated_as_negation(self):
+        """「非常」含「非」但间隙有字词——间隙约束防误报。"""
+        r = reflect("非常罕见的沙门菌感染", _salmonella_facts())
+        assert r.contradicted_count == 0
+
+    def test_negated_backfilled_nonfamily_gene(self):
+        """非家族事实基因的否定式提及 → verdict CONTRADICTED，但不进 rate 分母。"""
+        facts = _facts("SAM-A", amr_genes=("marA",))
+        r = reflect("未检出 marA", facts)
+        assert any(
+            v.verdict is Verdict.CONTRADICTED and v.claim.value == "marA" for v in r.verdicts
+        )
+        assert r.contradicted_count == 0
+        assert r.needs_human_review is False
+
+
+class TestAmrNormalizationShared:
+    """评审 A2：reflector 与 validator 共用同一基因身份归一。"""
+
+    def test_bla_variant_entailed(self):
+        """facts CTX-M-15 vs 文本 blaCTX-M-15 → ENTAILED（原假 CONTRADICTED）。"""
+        facts = _facts("SAM-A", amr_genes=("CTX-M-15",))
+        r = reflect("检出 blaCTX-M-15", facts)
+        assert r.contradicted_count == 0
+        assert r.verifiable_count == 1
+
+    def test_mcr_variant_entailed(self):
+        facts = _facts("SAM-A", amr_genes=("MCR-1.1",))
+        r = reflect("携带 mcr-1", facts)
+        assert r.contradicted_count == 0
+
+    def test_shared_module(self):
+        from bacmap.core.analysis.gene_identity import normalize_amr
+
+        assert normalize_amr("blaCTX-M-15") == "ctx-m-15"
+        assert normalize_amr("MCR-1.1") == "mcr-1"
+        assert normalize_amr("mcr-3.2") == "mcr-3"
+        assert normalize_amr("tet(A)") == "tet(a)"
+
+
+class TestBackfillDilution:
+    """评审 A3：佐证回填不进 contradiction_rate 分母。"""
+
+    def test_dilution_regression(self):
+        """15 个佐证基因不得稀释掉单条矛盾 ST（原 1/16 < 0.1 漏报）。"""
+        genes = tuple(f"g{i:03d}" for i in range(15))
+        facts = StrainFacts("SAM-A", "Salmonella", "19", "Typhimurium", genes, (), ())
+        text = "该株为沙门菌，ST34。" + " ".join(genes)
+        r = reflect(text, facts)
+        assert r.contradicted_count == 1
+        assert r.needs_human_review is True
+        assert r.corroborated_count == 15
+
+    def test_backfill_excluded_from_rate(self):
+        facts = _facts("SAM-A", amr_genes=("marA", "tet(A)"))
+        r = reflect("检出 marA 与 tet(A)", facts)
+        assert r.verifiable_count == 1
+        assert r.corroborated_count == 1
+
+
+# ===========================================================================
+# GOM 审计事件
+# ===========================================================================
+
+
+class TestReflectionGomEvent:
+    def test_nli_reflected_is_valid_event_type(self):
+        assert "nli_reflected" in _VALID_EVENT_TYPES
+
+    def test_record_event_on_analysis_object(self, tmp_path):
+        gos = GenomeObjectService(tmp_path / "gom.sqlite")
+        obj = gos.create(
+            GenomeObject(
+                object_id="obj-1",
+                object_type=ObjectType.ANALYSIS,
+                version=1,
+                schema_version="0.1.0",
+                created_at=datetime.now(UTC),
+                created_by="test",
+                payload={"analysis_type": "summary"},
+                pipeline_version="p-v1",
+                database_versions={"card": "3.3.0"},
+                strain_id="SAM-001",
+            )
+        )
+        from bacmap.core.verify.nli_reflector import record_reflection_event
+
+        r = reflect("该株为沙门菌，ST34。", _salmonella_facts())
+        assert record_reflection_event(tmp_path / "gom.sqlite", "SAM-001", r) is True
+        assert obj.object_id == "obj-1"
+
+    def test_record_event_no_matching_strain(self, tmp_path):
+        GenomeObjectService(tmp_path / "gom.sqlite")
+        from bacmap.core.verify.nli_reflector import record_reflection_event
+
+        r = reflect("该株为沙门菌", _salmonella_facts())
+        assert record_reflection_event(tmp_path / "gom.sqlite", "SAM-404", r) is False
+
+    def test_record_event_missing_db(self, tmp_path):
+        from bacmap.core.verify.nli_reflector import record_reflection_event
+
+        r = reflect("该株为沙门菌", _salmonella_facts())
+        assert record_reflection_event(tmp_path / "missing.sqlite", "SAM-001", r) is False
+
+    def test_payload_roundtrip_with_contradicted_claims(self, tmp_path):
+        """P1-3/P1-4：事件 payload 含完整矛盾明细，latest_review_flag 可读回。"""
+        from bacmap.core.verify.nli_reflector import latest_review_flag, record_reflection_event
+
+        gos = GenomeObjectService(tmp_path / "gom.sqlite")
+        gos.create(
+            GenomeObject(
+                object_id="obj-1",
+                object_type=ObjectType.ANALYSIS,
+                version=1,
+                schema_version="0.1.0",
+                created_at=datetime.now(UTC),
+                created_by="test",
+                payload={"analysis_type": "summary"},
+                pipeline_version="p-v1",
+                database_versions={"card": "3.3.0"},
+                strain_id="SAM-001",
+            )
+        )
+        r = reflect("该株为沙门菌，ST34。", _salmonella_facts())
+        assert record_reflection_event(tmp_path / "gom.sqlite", "SAM-001", r) is True
+
+        flag = latest_review_flag(tmp_path / "gom.sqlite", "SAM-001")
+        assert flag is not None
+        assert flag["needs_human_review"] is True
+        assert flag["contradiction_rate"] == pytest.approx(0.5)
+        assert flag["verifiable_count"] == 2
+        assert flag["corroborated_count"] == 0
+        assert len(flag["contradicted_claims"]) == 1
+        assert flag["contradicted_claims"][0]["value"] == "34"
+        assert flag["contradicted_claims"][0]["claim_type"] == "mlst_st"
+        assert "timestamp" in flag
+
+    def test_latest_review_flag_no_events_or_missing_db(self, tmp_path):
+        from bacmap.core.verify.nli_reflector import latest_review_flag
+
+        assert latest_review_flag(tmp_path / "missing.sqlite", "SAM-001") is None
+        GenomeObjectService(tmp_path / "gom.sqlite")
+        assert latest_review_flag(tmp_path / "gom.sqlite", "SAM-404") is None
+
+
+# ===========================================================================
+# bio_verify_result 集成（Layer 3 挂接）
+# ===========================================================================
+
+
+def _write_summary(results: Path, sample_id: str, steps: dict) -> None:
+    report_dir = results / sample_id / "report"
+    report_dir.mkdir(parents=True, exist_ok=True)
+    path = report_dir / f"{sample_id}_summary.json"
+    path.write_text(json.dumps({"sample_id": sample_id, "steps": steps}))
+
+
+class TestVerifyResultLayer3:
+    @pytest.fixture
+    def tmp_results(self, tmp_path: Path, monkeypatch) -> Path:
+        results = tmp_path / "results"
+        results.mkdir()
+        monkeypatch.setattr(tools_pipeline, "_RESULTS_DIR", results)
+        return results
+
+    def test_layer3_present_when_interpretation_text(self, tmp_results):
+        _write_summary(tmp_results, "SAM-001", _salmonella_steps())
+        text = "该株为沙门菌，ST19，血清型为 Typhimurium，检出 blaCTX-M-15。"
+        raw = tools_pipeline.verify_result({"sample_id": "SAM-001", "interpretation_text": text})
+        r = json.loads(raw)
+        assert "layer3" in r
+        assert r["layer3"]["contradiction_rate"] == 0.0
+        assert r["layer3"]["needs_human_review"] is False
+        assert r["layer3"]["verifiable_count"] == 4
+
+    def test_layer3_absent_without_interpretation_text(self, tmp_results):
+        _write_summary(tmp_results, "SAM-001", _salmonella_steps())
+        r = json.loads(tools_pipeline.verify_result({"sample_id": "SAM-001"}))
+        assert "layer3" not in r
+        assert r["passed"] is True
+
+    def test_layer3_contradiction_flags_review(self, tmp_results, monkeypatch, tmp_path):
+        _write_summary(tmp_results, "SAM-001", _salmonella_steps())
+        # 隔离 GOM 事件写入：指向不存在的 DB → record 返回 False，不影响响应
+        monkeypatch.setattr(tools_pipeline, "_REFLECTION_DB_PATH", tmp_path / "no.sqlite")
+        r = json.loads(
+            tools_pipeline.verify_result(
+                {"sample_id": "SAM-001", "interpretation_text": "该株为沙门菌，ST34。"}
+            )
+        )
+        assert r["layer3"]["needs_human_review"] is True
+        assert r["layer3"]["contradicted_count"] == 1

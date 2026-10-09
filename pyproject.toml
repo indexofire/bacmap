@@ -28,6 +28,10 @@ dev = [
     "importlinter>=2.0",
 ]
 
+# ADR-15：修正后的 entry-point 组名（旧 hermes.plugins 不生效）
+[project.entry-points."hermes_agent.plugins"]
+bacmap = "bacmap.adapters.hermes"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/bacmap"]
 
@@ -37,6 +41,10 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# 遗留迁移脚本（HTML/CSS 模板行超长，源仓库 scripts/ 同样不参与 lint）
+"src/bacmap/tools/_scripts/*" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

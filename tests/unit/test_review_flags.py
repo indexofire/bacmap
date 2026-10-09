@@ -1,0 +1,122 @@
+"""TDD 测试：bio_review_flags 工具 + 报告「AI 解读自检」章节（P1-3/P1-4）。
+
+人审闭环出口：nli_reflected 事件 → 工具读回（tools.services.review_flags）
+→ 人类可读报告（generate_report._render_nli_section，PDF 继承）。
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_PROJECT_ROOT / "src"))
+sys.path.insert(0, str(_PROJECT_ROOT / "src" / "bacmap" / "tools" / "_scripts"))
+
+import generate_report as gr  # noqa: E402
+
+from bacmap.core.verify.nli_reflector import (  # noqa: E402
+    StrainFacts,
+    record_reflection_event,
+    reflect,
+)
+from bacmap.store.genome_object_service import (  # noqa: E402
+    GenomeObject,
+    GenomeObjectService,
+    ObjectType,
+)
+from bacmap.tools import services as tools_services  # noqa: E402
+
+
+def _make_facts() -> StrainFacts:
+    return StrainFacts("SAM-001", "Salmonella", "19", "Typhimurium", ("blaCTX-M-15",), (), ())
+
+
+def _seed_gom(db: Path) -> None:
+    gos = GenomeObjectService(db)
+    gos.create(
+        GenomeObject(
+            object_id="obj-1",
+            object_type=ObjectType.ANALYSIS,
+            version=1,
+            schema_version="0.1.0",
+            created_at=datetime.now(UTC),
+            created_by="test",
+            payload={"analysis_type": "summary"},
+            pipeline_version="p-v1",
+            database_versions={"card": "3.3.0"},
+            strain_id="SAM-001",
+        )
+    )
+    r = reflect("该株为沙门菌，ST34，检出 blaNDM-1。", _make_facts())
+    assert record_reflection_event(db, "SAM-001", r) is True
+
+
+class TestReviewFlagsTool:
+    def test_reads_back_flagged_event(self, tmp_path, monkeypatch):
+        _seed_gom(tmp_path / "gom.sqlite")
+        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", tmp_path / "gom.sqlite")
+        r = json.loads(tools_services.review_flags({}))
+        assert r["total"] == 1
+        (event,) = r["events"]
+        assert event["sample_id"] == "SAM-001"
+        assert event["needs_human_review"] is True
+        assert any(c["value"] == "34" for c in event["contradicted_claims"])
+        assert any(c["value"] == "blaNDM-1" for c in event["contradicted_claims"])
+
+    def test_limit_and_empty_db(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", tmp_path / "no.sqlite")
+        r = json.loads(tools_services.review_flags({}))
+        assert r["events"] == [] and "note" in r
+
+    def test_limit_param(self, tmp_path, monkeypatch):
+        _seed_gom(tmp_path / "gom.sqlite")
+        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", tmp_path / "gom.sqlite")
+        r = json.loads(tools_services.review_flags({"limit": 0}))
+        assert r["events"] == [] and r["total"] == 1
+
+
+class TestReportNliSection:
+    def test_flagged_sample_renders_section(self, tmp_path, monkeypatch):
+        _seed_gom(tmp_path / "gom.sqlite")
+        monkeypatch.setattr(gr, "_NLI_DB_PATH", tmp_path / "gom.sqlite")
+        html = gr._render_nli_section("SAM-001")
+        assert "AI 解读自检" in html
+        assert "NEEDS HUMAN REVIEW" in html
+        assert "blaNDM-1" in html
+        assert ">34<" in html
+
+    def test_no_event_renders_empty(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(gr, "_NLI_DB_PATH", tmp_path / "no.sqlite")
+        assert gr._render_nli_section("SAM-001") == ""
+
+    def test_clean_reflection_not_rendered(self, tmp_path, monkeypatch):
+        """未触发人审的事件不入报告（低噪声审计；干净结果只在工具响应层）。"""
+        gos = GenomeObjectService(tmp_path / "gom.sqlite")
+        gos.create(
+            GenomeObject(
+                object_id="obj-1",
+                object_type=ObjectType.ANALYSIS,
+                version=1,
+                schema_version="0.1.0",
+                created_at=datetime.now(UTC),
+                created_by="test",
+                payload={"analysis_type": "summary"},
+                pipeline_version="p-v1",
+                database_versions={"card": "3.3.0"},
+                strain_id="SAM-001",
+            )
+        )
+        clean = reflect("该株为沙门菌，ST19。", _make_facts())
+        # 干净结果不入审计（record 仅在 needs_human_review 时调用）——
+        # 手工注入一个非 review 事件验证报告层过滤
+        gos.log_event(
+            "obj-1",
+            "nli_reflected",
+            {"sample_id": "SAM-001", "needs_human_review": False, "contradiction_rate": 0.0},
+        )
+        monkeypatch.setattr(gr, "_NLI_DB_PATH", tmp_path / "gom.sqlite")
+        assert gr._render_nli_section("SAM-001") == ""
+        assert clean.needs_human_review is False
