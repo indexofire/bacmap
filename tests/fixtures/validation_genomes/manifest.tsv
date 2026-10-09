@@ -1,0 +1,18 @@
+accession	organism	expected	role	fna
+GCF_000006945.2	Salmonella enterica	Salmonella	target	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_000006945.2_ASM694v2_genomic.fna
+GCF_000008865.2	Escherichia coli	E.coli/Shigella	target	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_000008865.2_ASM886v2_genomic.fna
+GCF_000005845.2	Escherichia coli	E.coli/Shigella	target	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_000005845.2_ASM584v2_genomic.fna
+GCF_022354085.1	Shigella	E.coli/Shigella	target	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_022354085.1_ASM2235408v1_genomic.fna
+GCF_000006925.2	Shigella	E.coli/Shigella	target	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_000006925.2_ASM692v2_genomic.fna
+GCF_002950395.1	Shigella	E.coli/Shigella	target	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_002950395.1_ASM295039v1_genomic.fna
+GCF_000196095.1	Vibrio parahaemolyticus	V.parahaemolyticus	target	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_000196095.1_ASM19609v1_genomic.fna
+GCF_023650915.1	Vibrio alginolyticus	V.alginolyticus_negative	negative	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_023650915.1_ASM2365091v1_genomic.fna
+GCF_030060435.1	Vibrio harveyi	V.harveyi_negative	negative	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_030060435.1_ASM3006043v1_genomic.fna
+GCF_002224265.1	Vibrio vulnificus	V.vulnificus_negative	negative	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_002224265.1_ASM222426v1_genomic.fna
+GCF_008369605.1	Vibrio cholerae	V.cholerae_negative	negative	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_008369605.1_ASM836960v1_genomic.fna
+GCF_000240185.1	Klebsiella pneumoniae	K.pneumoniae_negative	negative	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_000240185.1_ASM24018v2_genomic.fna
+GCF_000196035.1	Listeria monocytogenes	L.monocytogenes_negative	negative	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_000196035.1_ASM19603v1_genomic.fna
+GCF_000009085.1	Campylobacter jejuni	C.jejuni_negative	negative	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_000009085.1_ASM908v1_genomic.fna
+GCF_003516125.1	Cronobacter sakazakii	C.sakazakii_negative	negative	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_003516125.1_ASM351612v3_genomic.fna
+GCF_000013425.1	Staphylococcus aureus	S.aureus_negative	negative	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_000013425.1_ASM1342v1_genomic.fna
+GCF_000006765.1	Pseudomonas aeruginosa	P.aeruginosa_negative	negative	/home/mark/repos/github/hermes-bacmap/tests/fixtures/validation_genomes/genomes/GCF_000006765.1_ASM676v1_genomic.fna

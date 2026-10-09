@@ -1,0 +1,79 @@
+"""运行时配置与路径解析（ADR-03）。
+
+原则：任何路径都不由源码位置推导。
+- 数据根目录 ``BACMAP_HOME``（默认 ``~/.local/share/bacmap``），可被环境变量覆盖；
+- 配置文件 ``$BACMAP_HOME/config.toml``（可选，不存在时全部取默认值）；
+- 生信工具从当前 pixi 环境的 PATH 解析（``which``），不做路径注入；
+- 测试与多实例部署通过环境变量覆盖（BACMAP_HOME / BACMAP_DATA_DIR /
+  BACMAP_DB_PATH / BACMAP_RESULTS_DIR）。
+
+历史：hermes-bacmap 的 config.py 把 PROJECT_ROOT/PIXI_BIN 写死在开发仓库目录、
+插件靠软链接加载（docs/research-framework-evidence.md §2.2）——本模块是其替代。
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import tomllib
+from pathlib import Path
+from typing import Any, overload
+
+
+@overload
+def _env_path(var: str, default: Path) -> Path: ...
+
+
+@overload
+def _env_path(var: str, default: None) -> Path | None: ...
+
+
+def _env_path(var: str, default: Path | None) -> Path | None:
+    val = os.environ.get(var)
+    if val:
+        return Path(val).resolve()
+    return default
+
+
+def _load_config_toml(home: Path) -> dict[str, Any]:
+    cfg = home / "config.toml"
+    if cfg.is_file():
+        with cfg.open("rb") as fh:
+            return tomllib.load(fh)
+    return {}
+
+
+BACMAP_HOME: Path = _env_path("BACMAP_HOME", Path.home() / ".local" / "share" / "bacmap")
+
+_toml = _load_config_toml(BACMAP_HOME)
+_paths_cfg: dict[str, Any] = _toml.get("paths", {})
+
+DATA_DIR: Path = _env_path("BACMAP_DATA_DIR", BACMAP_HOME / "data")
+if isinstance(_paths_cfg.get("data_dir"), str):
+    DATA_DIR = Path(_paths_cfg["data_dir"])
+
+REF_DIR: Path = DATA_DIR / "reference"
+
+SPECIES_DB_DIR: Path = DATA_DIR / "db"
+
+DB_PATH: Path = _env_path("BACMAP_DB_PATH", DATA_DIR / "bacmap.sqlite")
+
+RESULTS_DIR: Path = _env_path("BACMAP_RESULTS_DIR", BACMAP_HOME / "results")
+
+# Snakemake 运行状态（.snakemake/ 日志等），迁移第 4 步起使用。
+WORKFLOW_STATE_DIR: Path = _env_path("BACMAP_WORKFLOW_STATE_DIR", BACMAP_HOME / "workflow_state")
+WORKFLOW_LOG_DIR: Path = WORKFLOW_STATE_DIR / "log"
+
+# 大型鉴定数据库（GTDB-Tk / CheckM2 等）由部署者通过环境变量指向。
+CHECKM2_DB: Path | None = _env_path("CHECKM2DB", None) if os.environ.get("CHECKM2DB") else None
+GTDB_DB: Path | None = _env_path("GTDBTK_DATA_PATH", None) or _env_path("GTDBDB", None)
+
+
+def pixi_path() -> str:
+    """当前进程 PATH（pixi 环境激活时即含生信工具 bin）。保留旧名以兼容 engine/_env。"""
+    return os.environ.get("PATH", "")
+
+
+def which(tool: str) -> str | None:
+    """在当前 PATH 中解析生信工具（ADR-03：不做路径注入）。"""
+    return shutil.which(tool, path=pixi_path() or None)

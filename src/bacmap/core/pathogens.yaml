@@ -1,0 +1,62 @@
+# 病原注册表（R0 重构）：所有 rule / 分析模块的病原配置唯一来源。
+#
+# 语义约定：
+# - pathogens 的键 = samples.tsv `species` 列的合法值域
+# - 键的声明顺序即 marker 基因的鉴定优先级（先声明者优先），
+#   pathogen 内 marker_genes 列表顺序为种内优先级
+# - species_label 是 species_identifier 报告的物种名（历史值：
+#   E.coli→DEC、Shigella→Shigella/EIEC，保持不变）
+# - enabled: false 的病原不出现在任何查询表中（P3 管制病原用）
+# - snp_groups.ref 相对项目根解析；species 引用必须已注册
+# - cgMLST 溯源阈值暂留 config.yaml（cgmlst.thresholds），新病原接入时迁移
+pathogens:
+  Salmonella:
+    display_name: 沙门菌
+    species_label: Salmonella
+    marker_genes: [inva]
+    mlst_scheme: salmonella_2
+    cgmlst_scheme: senterica_2
+    amrfinder_organism: Salmonella
+    serotype_engine: sistr
+    snp_group: salmonella
+  Shigella:
+    display_name: 志贺菌
+    species_label: Shigella/EIEC
+    marker_genes: [ipah]
+    mlst_scheme: ecoli_1
+    cgmlst_scheme: ecoli_2
+    amrfinder_organism: Escherichia
+    serotype_engine: shigella
+    snp_group: ecoli
+  V.parahaemolyticus:
+    display_name: 副溶血性弧菌
+    species_label: V_parahaemolyticus
+    marker_genes: [toxr, tlh]
+    mlst_scheme: vparahaemolyticus_1
+    cgmlst_scheme: vparahaemolyticus_3
+    serotype_engine: vpa
+    snp_group: vpara
+  E.coli:
+    display_name: 大肠埃希菌
+    species_label: DEC
+    marker_genes: [uida]
+    mlst_scheme: ecoli_1
+    cgmlst_scheme: ecoli_2
+    amrfinder_organism: Escherichia
+    serotype_engine: ecoh
+    pathotype: dec
+    snp_group: ecoli
+
+snp_groups:
+  salmonella:
+    ref: data/reference/genomes/salmonella_LT2.fasta
+    species: [Salmonella]
+    organism: Salmonella enterica
+  ecoli:
+    ref: data/reference/genomes/ecoli_k12.fasta
+    species: [E.coli, Shigella]
+    organism: Escherichia coli / Shigella
+  vpara:
+    ref: data/reference/genomes/vpara_rimd.fasta
+    species: [V.parahaemolyticus]
+    organism: Vibrio parahaemolyticus
