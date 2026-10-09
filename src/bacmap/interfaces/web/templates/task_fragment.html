@@ -1,0 +1,19 @@
+<table>
+<tr><th style="width:7em">状态</th><td class="state-{{ st.state }}">{{ st.state }}</td></tr>
+<tr><th>步骤</th><td>{{ st.current_step or '—' }}</td></tr>
+<tr><th>消息</th><td>{{ st.message or '—' }}</td></tr>
+</table>
+{% if st.state == 'awaiting_approval' %}
+<h3>审批签名</h3>
+<form class="p" method="post" action="/tasks/{{ task_id }}/approve">
+  <label>审批人 <input name="approver" required></label>
+  <label>决定
+    <select name="decision">
+      <option value="approve">approve — 通过并发布</option>
+      <option value="reject">reject — 拒绝</option>
+    </select>
+  </label>
+  <label>签名（口令/凭证） <input name="signature" required></label>
+  <button type="submit">提交审批</button>
+</form>
+{% endif %}

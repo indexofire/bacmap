@@ -16,7 +16,6 @@ import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -310,62 +309,66 @@ class TestGeneScan:
     def test_single_db_happy(self, tmp_path, monkeypatch):
         contigs = tmp_path / "contigs.fa"
         contigs.write_text(">c\nACGT\n")
+        tsv = (
+            "#FILE\tSEQUENCE\tSTART\tEND\tSTRAND\tGENE\tCOVERAGE\tCOVERAGE_MAP\tGAPS"
+            "\t%COVERAGE\t%IDENTITY\tDATABASE\tACCESSION\tPRODUCT\tRESISTANCE\n"
+            "c.fa\tcontig1\t1\t100\t+\tblaCTX-M-15\t1-100/100\t====\t0/0\t100.00"
+            "\t99.50\tcard\tX1\tbeta-lactamase\tcephalosporin\n"
+        )
 
-        canned_dict = {"database": "card", "total_hits": 3, "genes": []}
+        def fake_run(cmd, capture_output=True, text=True, timeout=600):
+            assert cmd[:3] == ["gapit", "screen", str(contigs)]
+            assert cmd[cmd.index("--db") + 1] == "card"
+            assert cmd[cmd.index("--minid") + 1] == "90.0"
 
-        def fake_scan(path, db_name="card", min_identity=80.0, min_coverage=80.0):
-            assert str(path) == str(contigs)
-            assert db_name == "card"
-            return SimpleNamespace(to_dict=lambda: canned_dict)
+            class P:
+                returncode = 0
+                stdout = tsv
+                stderr = ""
+            return P()
 
-        monkeypatch.setattr("bacmap.core.analysis.gene_scanner.scan", fake_scan)
+        monkeypatch.setattr("bacmap.tools.pipeline.subprocess.run", fake_run)
         r = _parse(
             tools.gene_scan(
-                {
-                    "contigs_path": str(contigs),
-                    "database": "card",
-                    "min_identity": 90.0,
-                    "min_coverage": 95.0,
-                }
+                {"contigs_path": str(contigs), "database": "card",
+                 "min_identity": 90.0, "min_coverage": 95.0}
             )
         )
         assert r["database"] == "card"
-        assert r["total_hits"] == 3
+        assert r["n_hits"] == 1
+        assert r["hits"][0]["gene"] == "blaCTX-M-15"
 
     def test_multi_db_happy(self, tmp_path, monkeypatch):
         contigs = tmp_path / "contigs.fa"
         contigs.write_text(">c\nACGT\n")
 
-        def fake_scan_multi(path, db_list, min_identity=80.0, min_coverage=80.0):
-            return {
-                name: SimpleNamespace(to_dict=lambda n=name: {"database": n}) for name in db_list
-            }
+        def fake_run(cmd, capture_output=True, text=True, timeout=600):
+            class P:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+            return P()
 
-        monkeypatch.setattr("bacmap.core.analysis.gene_scanner.scan_multi", fake_scan_multi)
+        monkeypatch.setattr("bacmap.tools.pipeline.subprocess.run", fake_run)
         r = _parse(tools.gene_scan({"contigs_path": str(contigs), "database": "card,vfdb"}))
-        assert set(r.keys()) == {"card", "vfdb"}
+        assert [x["database"] for x in r["results"]] == ["card", "vfdb"]
 
-    def test_file_not_found_raised_internally(self, tmp_path, monkeypatch):
+    def test_gapit_failure_returns_error(self, tmp_path, monkeypatch):
         contigs = tmp_path / "contigs.fa"
         contigs.write_text(">c\nACGT\n")
 
-        def boom(*a, **k):
-            raise FileNotFoundError("missing db")
+        def fake_run(cmd, capture_output=True, text=True, timeout=600):
+            class P:
+                returncode = 2
+                stdout = ""
+                stderr = "db not found"
+            return P()
 
-        monkeypatch.setattr("bacmap.core.analysis.gene_scanner.scan", boom)
-        r = _parse(tools.gene_scan({"contigs_path": str(contigs)}))
-        assert "missing db" in r["error"]
+        monkeypatch.setattr("bacmap.tools.pipeline.subprocess.run", fake_run)
+        r = _parse(tools.gene_scan({"contigs_path": str(contigs), "database": "nope"}))
+        assert "error" in r
 
-    def test_generic_exception(self, tmp_path, monkeypatch):
-        contigs = tmp_path / "contigs.fa"
-        contigs.write_text(">c\nACGT\n")
 
-        def boom(*a, **k):
-            raise RuntimeError("scan crashed")
-
-        monkeypatch.setattr("bacmap.core.analysis.gene_scanner.scan", boom)
-        r = _parse(tools.gene_scan({"contigs_path": str(contigs)}))
-        assert "gene_scan failed" in r["error"]
 
 
 # ===========================================================================
@@ -635,48 +638,6 @@ class TestSearchSamples:
 # ===========================================================================
 
 
-class TestValidateTaxonomy:
-    def test_contigs_not_found(self, tmp_results):
-        r = _parse(tools.validate_taxonomy({"sample_id": "NOPE"}))
-        assert "Contigs not found" in r["error"]
-
-    def test_simple_mode_happy(self, tmp_results, monkeypatch):
-        sid = "SAM-VAL"
-        asm = tmp_results / sid / "assembly"
-        asm.mkdir(parents=True)
-        (asm / "contigs.fasta").write_text(">c\nACGT\n")
-
-        canned = {
-            "mode": "simple",
-            "marker_gene_species": "Salmonella",
-            "marker_gene_confidence": "high",
-            "marker_gene_markers": [{"gene": "invA", "identity": 99.0}],
-        }
-
-        def fake_validate(contigs, mode="simple", output_dir=None):
-            assert mode == "simple"
-            assert Path(contigs).name == "contigs.fasta"
-            return SimpleNamespace(to_dict=lambda: canned)
-
-        monkeypatch.setattr(
-            "bacmap.core.analysis.taxonomic_validator.validate_genome",
-            fake_validate,
-        )
-        r = _parse(tools.validate_taxonomy({"sample_id": sid, "mode": "simple"}))
-        assert r["marker_gene_species"] == "Salmonella"
-
-    def test_exception_returns_error(self, tmp_results, monkeypatch):
-        sid = "SAM-VAL2"
-        asm = tmp_results / sid / "assembly"
-        asm.mkdir(parents=True)
-        (asm / "contigs.fasta").write_text(">c\nACGT\n")
-
-        def boom(*a, **k):
-            raise RuntimeError("no marker")
-
-        monkeypatch.setattr("bacmap.core.analysis.taxonomic_validator.validate_genome", boom)
-        r = _parse(tools.validate_taxonomy({"sample_id": sid}))
-        assert "Taxonomy validation failed" in r["error"]
 
 
 # ===========================================================================
@@ -684,87 +645,6 @@ class TestValidateTaxonomy:
 # ===========================================================================
 
 
-class TestAnnotateGenome:
-    def test_contigs_not_found(self):
-        r = _parse(tools.annotate_genome({"contigs_path": "/no/such.fa"}))
-        assert "Contigs not found" in r["error"]
-
-    def test_happy_path(self, tmp_path, tmp_results, monkeypatch):
-        contigs = tmp_path / "c.fasta"
-        contigs.write_text(">c\nACGT\n")
-
-        class FakeFeature:
-            def __init__(self, gene, product, identity, source):
-                self.gene = gene
-                self.product = product
-                self.identity = identity
-                self.source = source
-
-        feats = [
-            FakeFeature("invA", "invasion protein", 95.0, "sprot"),
-            FakeFeature("hyp", "hypothetical", 60.0, "sprot"),
-        ]
-
-        class FakeResult:
-            summary = {
-                "total_contigs": 1,
-                "total_CDS": 2,
-                "annotated_CDS": 1,
-                "hypothetical_CDS": 1,
-                "annotation_rate": 0.5,
-            }
-            features = feats
-
-            def save(self, path):
-                Path(path).parent.mkdir(parents=True, exist_ok=True)
-                Path(path).write_text("{}")
-
-        captured = {}
-
-        def fake_annotate(contigs_path, sample_id):
-            captured.update(contigs=contigs_path, sample_id=sample_id)
-            return FakeResult()
-
-        monkeypatch.setattr("bacmap.core.analysis.genome_annotator.annotate", fake_annotate)
-        r = _parse(tools.annotate_genome({"contigs_path": str(contigs), "sample_id": "SAM-ANNO"}))
-        assert r["sample_id"] == "SAM-ANNO"
-        assert r["summary"]["total_CDS"] == 2
-        # Only identity>=80 makes top_genes
-        assert len(r["top_genes"]) == 1
-        assert r["top_genes"][0]["gene"] == "invA"
-        # Default output path was used
-        assert "SAM-ANNO" in r["output"]
-
-    def test_sample_id_inferred_from_path(self, tmp_path, tmp_results, monkeypatch):
-        sample_dir = tmp_path / "SAM-INF" / "assembly"
-        sample_dir.mkdir(parents=True)
-        contigs = sample_dir / "contigs.fasta"
-        contigs.write_text(">c\nACGT\n")
-
-        class FakeResult:
-            summary = {}
-            features = []
-
-            def save(self, path):
-                pass
-
-        monkeypatch.setattr(
-            "bacmap.core.analysis.genome_annotator.annotate",
-            lambda c, s: FakeResult(),
-        )
-        r = _parse(tools.annotate_genome({"contigs_path": str(contigs)}))
-        assert r["sample_id"] == "SAM-INF"
-
-    def test_exception_returns_error(self, tmp_path, monkeypatch):
-        contigs = tmp_path / "c.fasta"
-        contigs.write_text(">c\nACGT\n")
-
-        def boom(*a, **k):
-            raise RuntimeError("pyrodigal fail")
-
-        monkeypatch.setattr("bacmap.core.analysis.genome_annotator.annotate", boom)
-        r = _parse(tools.annotate_genome({"contigs_path": str(contigs)}))
-        assert "Annotation failed" in r["error"]
 
 
 # ===========================================================================

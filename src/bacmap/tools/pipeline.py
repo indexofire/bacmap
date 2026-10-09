@@ -9,6 +9,7 @@ strings. Errors are {"error": "..."}.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -219,9 +220,11 @@ def list_samples(args: dict[str, Any], **kwargs: Any) -> str:
     return json.dumps({"samples": status_list}, ensure_ascii=False)
 
 
+
 @tool_handler
 def gene_scan(args: dict[str, Any], **kwargs: Any) -> str:
-    """Scan contigs against gene database(s). Returns JSON."""
+    """Scan contigs against gene database(s) via gapit (ADR-20). Returns JSON."""
+
     contigs_path = args.get("contigs_path", "")
     database = args.get("database", "card")
     min_identity = args.get("min_identity", 80.0)
@@ -231,103 +234,42 @@ def gene_scan(args: dict[str, Any], **kwargs: Any) -> str:
     if not contigs.exists():
         return json.dumps({"error": f"Contigs not found: {contigs_path}"})
 
+    columns = [
+        "file", "sequence", "start", "end", "strand", "gene", "coverage",
+        "coverage_map", "gaps", "pct_coverage", "pct_identity", "database",
+        "accession", "product", "resistance",
+    ]
+
+    def run_one(db: str) -> dict[str, Any]:
+        try:
+            proc = subprocess.run(
+                ["gapit", "screen", str(contigs), "--db", db,
+                 "--minid", str(min_identity), "--mincov", str(min_coverage)],
+                capture_output=True, text=True, timeout=600,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return {"database": db, "error": f"gapit unavailable: {exc}", "hits": [], "n_hits": 0}
+        if proc.returncode != 0:
+            return {"database": db, "error": proc.stderr[-500:], "hits": [], "n_hits": 0}
+        hits = []
+        for line in proc.stdout.splitlines():
+            if line.startswith("#"):
+                continue
+            fields = line.split("	")
+            if len(fields) >= 6:
+                hits.append(dict(zip(columns, fields)))
+        return {"tool": "gapit", "database": db, "hits": hits, "n_hits": len(hits)}
+
     db_list = [d.strip() for d in database.split(",")]
-
-    try:
-        from bacmap.core.analysis.gene_scanner import scan, scan_multi
-
-        if len(db_list) == 1:
-            result = scan(
-                contigs,
-                db_name=db_list[0],
-                min_identity=min_identity,
-                min_coverage=min_coverage,
-            )
-            return json.dumps(result.to_dict(), ensure_ascii=False)
-        else:
-            results = scan_multi(
-                contigs,
-                db_list,
-                min_identity=min_identity,
-                min_coverage=min_coverage,
-            )
-            output = {name: r.to_dict() for name, r in results.items()}
-            return json.dumps(output, ensure_ascii=False)
-    except FileNotFoundError as e:
-        return json.dumps({"error": str(e)})
-    except Exception as e:
-        logger.exception("gene_scan failed")
-        return json.dumps({"error": f"gene_scan failed: {e}"})
+    results = [run_one(d) for d in db_list]
+    payload = results[0] if len(results) == 1 else {"tool": "gapit", "results": results}
+    return json.dumps(payload, ensure_ascii=False)
 
 
 @tool_handler
 
-@tool_handler
-def validate_taxonomy(args: dict[str, Any], **kwargs: Any) -> str:
-    """Validate genome taxonomy — simple (marker genes) or standard (CheckM2 + GTDB-Tk)."""
-    sample_id = args.get("sample_id", "")
-    mode = args.get("mode", "simple")
-
-    contigs = _RESULTS_DIR / sample_id / "assembly" / "contigs.fasta"
-    if not contigs.exists():
-        return json.dumps({"error": f"Contigs not found for {sample_id}. Run analysis first."})
-
-    try:
-        from bacmap.core.analysis.taxonomic_validator import validate_genome
-
-        output_dir = _RESULTS_DIR / sample_id / "taxonomy"
-        result = validate_genome(contigs, mode=mode, output_dir=output_dir)
-        return json.dumps(result.to_dict(), ensure_ascii=False)
-    except Exception as e:
-        logger.exception("validate_taxonomy failed")
-        return json.dumps({"error": f"Taxonomy validation failed: {e}"})
 
 
-@tool_handler
-def annotate_genome(args: dict[str, Any], **kwargs: Any) -> str:
-    """Annotate assembled contigs with pyrodigal + Prokka DBs."""
-    contigs_path = args.get("contigs_path", "")
-    sample_id = args.get("sample_id", "")
-    output_path = args.get("output_path", "")
-
-    contigs = Path(contigs_path)
-    if not contigs.exists():
-        return json.dumps({"error": f"Contigs not found: {contigs_path}"})
-
-    if not sample_id:
-        sample_id = contigs.parent.parent.name
-
-    if not output_path:
-        output_path = str(_RESULTS_DIR / sample_id / "annotation" / "annotation.json")
-
-    try:
-        from bacmap.core.analysis.genome_annotator import annotate
-
-        result = annotate(contigs_path, sample_id)
-        result.save(output_path)
-
-        summary = result.summary
-        return json.dumps(
-            {
-                "sample_id": sample_id,
-                "output": output_path,
-                "summary": summary,
-                "top_genes": [
-                    {
-                        "gene": f.gene,
-                        "product": f.product,
-                        "identity": f.identity,
-                        "source": f.source,
-                    }
-                    for f in result.features
-                    if f.gene and f.identity >= 80
-                ][:20],
-            },
-            ensure_ascii=False,
-        )
-    except Exception as e:
-        logger.exception("annotate_genome failed")
-        return json.dumps({"error": f"Annotation failed: {e}"})
 
 
 @tool_handler

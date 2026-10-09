@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>提交任务</h2>
+<form class="p" method="post" action="/tasks/submit">
+  <label>任务类型
+    <select name="task_type">
+      <option value="analyze">analyze — 基因组分析</option>
+      <option value="curate">curate — 本地流行特征库构建</option>
+    </select>
+  </label>
+  <label>样本（逗号或换行分隔；analyze 用）
+    <textarea name="samples" rows="2" placeholder="SAM-TYP-001,SAM-TYP-002"></textarea>
+  </label>
+  <label>scope（可选 JSON；curate 用）
+    <input name="scope" placeholder='{"pathogen": "Salmonella"}'>
+  </label>
+  <button type="submit">提交</button>
+</form>
+<h2>最近任务</h2>
+<table>
+<tr><th>task_id</th><th>类型</th><th>状态</th><th>提交人</th><th>创建时间</th></tr>
+{% for t in tasks %}
+<tr>
+  <td><a href="/tasks/{{ t.task_id }}">{{ t.task_id[:12] }}…</a></td>
+  <td>{{ t.task_type }}</td>
+  <td class="state-{{ t.state }}">{{ t.state }}</td>
+  <td>{{ t.submitted_by }}</td>
+  <td>{{ t.created_at[:19] }}</td>
+</tr>
+{% else %}
+<tr><td colspan="5">暂无任务</td></tr>
+{% endfor %}
+</table>
+{% endblock %}

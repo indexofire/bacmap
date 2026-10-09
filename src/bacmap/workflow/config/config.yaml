@@ -1,0 +1,91 @@
+# Hermes-bacmap 分析流程配置
+# 路径可通过环境变量覆盖: BACMAP_RESULTS_DIR, BACMAP_DATA_DIR
+
+threads: 8
+iqtree_seed: 42
+workdir: "results"
+project_root: "../.."
+
+# 物种鉴定方法（species-id 专项）：simple=marker 靶基因（默认）；
+# panel/skani_gtdb/mash_refseq/sourmash/standard 由方案 A/B/C 交付后可用，
+# 数据库缺失时自动回退 simple 并记录原因。Kraken2 reads 级预筛独立开关（方案 D）。
+species_mode: "simple"
+kraken2_prefilter: false
+
+samples_file: "config/samples.tsv"
+
+databases:
+  invA_ref: "../../data/reference/species/markers.fasta"
+  amrfinderplus_db: "../../data/db/amrfinderplus"
+  vfdb: "vfdb"
+  card: "card"
+  plasmidfinder: "plasmidfinder"
+  resfinder: "resfinder"
+
+tools:
+  fastp:
+    qualified_quality_phred: 20
+    length_required: 50
+    detect_adapter_for_pe: true
+  spades:
+    min_contig_len: 200
+    cov_cutoff: 2
+  shovill:
+    minlen: 500
+    ram: 8
+    depth: 100
+  blastn:
+    evalue: 1e-50
+    word_size: 28
+    min_identity: 90
+    min_coverage: 80
+  mlst:
+    scheme: "auto"
+  sistr:
+    threads: 4
+  seqsero2:
+    mapping_mode: "a"
+    analysis_mode: "a"
+  amrfinderplus:
+    organism: "Salmonella"
+    min_coverage: 0.5
+  abricate:
+    minid: 80
+    mincov: 60
+
+# cgMLST per-sample typing + cohort trace-back (EnteroBase schemes via gmlst).
+# Threshold values are published EnteroBase HierCC values; see
+# src/hermes_bacmap/skills/interpret-results/SKILL.md "cgMLST Trace-back
+# Interpretation" for the full per-species rubric and citations.
+cgmlst:
+  schemes:
+    Salmonella: senterica_2
+    "E.coli": ecoli_2
+    Shigella: ecoli_2
+    "V.parahaemolyticus": vparahaemolyticus_3
+  run_cgmlst_cohort: false
+  thresholds:
+    # source: Zhou 2020 Genome Res (HierCC HC5/HC10); Ferrato 2023 Frontiers Microbiol
+    salmonella:
+      outbreak_allele_dist: 10  # HC5/HC10 outbreak boundary (Zhou 2020)
+      clonal_allele_dist: 3     # ST11/ST34 clonal sub-threshold (Ferrato 2023)
+      related_allele_dist: 50   # HierCC HC50 (Zhou 2020)
+    # source: Emerjean 2025 CDC EID (HC5 screen); Zhou 2020 Genome Res (HC50)
+    ecoli:
+      outbreak_allele_dist: 5   # HC5 general screen (Emerjean 2025)
+      related_allele_dist: 50   # HierCC HC50 (Zhou 2020)
+      serotype_specific:        # Emerjean 2025 CDC EID
+        "O26:H11": 8
+        "O157:H7": 16
+        "O103:H2": 5
+        "O80:H2": 9
+    # source: Hawkey 2021 Nat Commun; Weill 2022 (S. sonnei UNRELIABLE -> SNV)
+    shigella:
+      outbreak_allele_dist: 5   # HC5; S. sonnei UNRELIABLE -> SNV confirm
+      related_allele_dist: 50   # HierCC HC50 (Zhou 2020)
+    # source: Achtman 2022 bioRxiv -- only HC1090 species boundary published
+    vparahaemolyticus:
+      outbreak_allele_dist: null    # NO published threshold; verdict=UNDETERMINED
+      related_allele_dist: null     # local calibration required
+  projection:
+    top_n: 10

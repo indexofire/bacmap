@@ -45,6 +45,8 @@ select = ["E", "F", "W", "I", "UP"]
 [tool.ruff.lint.per-file-ignores]
 # 遗留迁移脚本（HTML/CSS 模板行超长，源仓库 scripts/ 同样不参与 lint）
 "src/bacmap/tools/_scripts/*" = ["E501"]
+# Snakemake script: 上下文注入 snakemake 全局对象（F821 误报）；迁移遗留长行
+"src/bacmap/workflow/scripts/*" = ["E501", "F821", "F841"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -201,7 +201,8 @@ class TestCgmlstTracebackRegistration:
         assert "bio_snp_tree" in names  # baseline predecessor
         assert "bio_cgmlst" in names
         # Documented repo count after adding bio_cgmlst (was 24, now 25).
-        assert len(_TOOL_REGISTRY) == 28  # bio_vpa_serotype 随 typing 外移 gapit（v1.4.5）
+        # v1.4.5 去 vpa_serotype；v1.4.7 去 validate_taxonomy/species_compare/db_setup/db_status
+        assert len(_TOOL_REGISTRY) == 23
 
     def test_schema_has_required_sample_id(self):
         schema = next(s for n, s, _ in _TOOL_REGISTRY if n == "bio_cgmlst")

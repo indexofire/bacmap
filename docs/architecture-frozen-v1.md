@@ -1,6 +1,6 @@
-# BacMAP Standalone 框架设计（冻结版 v1.4.5）
+# BacMAP Standalone 框架设计（冻结版 v1.4.7）
 
-- **日期**：2026-10-09（v1.1–v1.4.5 同日修订，见第 10 节）
+- **日期**：2026-10-09（v1.1–v1.4.7 同日修订，见第 10 节）
 - **状态**：冻结（Frozen）。第 8 节的验证项全部通过后，转为"已确认"
 - **依据**：[第一轮辩论](debate-standalone-architecture.md)、[第二轮辩论](debate-round2-harness-vs-delivery.md)、[调研证据](research-framework-evidence.md)（下文以"证据 §x"引用）
 - **变更规则**：本文中标为"冻结"的决策，修改必须新增一条 ADR 修订记录（第 10 节），写明原因、证据与迁移成本；标为"可替换"的部分，只要不改接口即可自由替换实现
@@ -335,9 +335,9 @@ v1.2 起，"能力档位"与"部署位置"是两个独立维度：档位决定�
 
 | 现有模块 | 去向 |
 |---|---|
-| `analysis/species_identifier.py`、`taxonomic_validator.py`、`sourmash_identifier.py`、`ani_identifier.py`、`species_consensus.py`、五档 `bio_db_setup` | **由 gside 取代**；bacmap 保留薄适配器（gside JSON → GOM 物种对象）。鉴定档位改为 gside 的数据分层（mini 随库分发 / panel ~130MB / mash ~179MB），用 `gside db setup` 部署 |
+| `analysis/species_identifier.py`、`taxonomic_validator.py`、`sourmash_identifier.py`、`ani_identifier.py`、`species_consensus.py`、五档 `bio_db_setup` | **由 gside 取代，且 v1.4.7 用户裁定立即生效**：不等第 5 步，上述模块与 `bio_validate_taxonomy`/`bio_species_compare`/`bio_db_setup`/`bio_db_status` 工具已从 bacmap 删除（注册表 29→24）；工作流 species/taxonomy/vpara_targets 规则输出 `pending_gside` 占位，第 5 步接入 `gside species` 后替换。direct blastn 编排类规则（abricate/amrfinder/vpara_virulence/kraken2_prefilter）保留至第 5 步统一换装 |
 | `analysis/gene_scanner.py` 及其在 AMR/毒力/质粒筛查中的调用 | **由 gapit 取代**（contigs 与 reads 双通道，abricate 兼容 TSV + JSON） |
-| ecoh / shigella / vpa 血清型模块（扫描**与判定**） | **整体迁入 gapit**（v1.4.5：判定层也归 gapit，推翻 v1.3"判定逻辑保留"条款）；bacmap 仅保留薄适配器（gapit 输出 → GOM 血清型对象）及分析结果与本地数据的结合。移植在 gapit 仓库进行，移植后须满足本 ADR 质量门槛并附 12 株金标准回归。bacmap 侧的 `core/typing` 已于 v1.4.5 删除 |
+| ecoh / shigella / vpa 血清型模块（扫描**与判定**） | **整体迁入 gapit**（v1.4.5 裁定，v1.4.7 最终确认：不留过渡恢复——曾于 v1.4.6 作为迁移脚手架短暂恢复，用户明确推翻）。bacmap `core/typing` 与 `bacmap/typing` 垫片均已删除；工作流 ecoh/shigella/vpa 血清型规则输出 `pending_gapit` 占位（保留规则名与输出契约），第 5 步接入 gapit 血清型子命令后替换 |
 | cgmlst cohort 自写 MST 脚本 | **由 `gmlst visual` 取代** |
 | `engine/` 的 SequenceMatcher 抽象与 blast/kma 后端 | 筛查职责交给 gapit 后收缩；ReadMapper（bwa/bowtie2 SNP 比对）保留 |
 | GTDB-Tk 标准档（101GB+140GB RAM） | **不由 bacmap 直接集成，由 gside 的 GTDB-Tk 档提供**（开发中）；该档就绪前，标准路径为 marker/panel/mash/sourmash（`all` 仲裁），与单工作站约束一致。gside 发布 GTDB-Tk 档后，`all` 仲裁自动纳入，bacmap 适配器按模式可用性探测，无需改架构 |
@@ -658,7 +658,7 @@ bacmap/
 
 | # | 验证内容 | 通过标准 | 不通过时 |
 |---|---|---|---|
-| V1 | Snakemake 9.x 在 pixi 环境中运行现有工作流 | 12 株 gold standard（其中 9 株有验证 harness）端到端重跑，输出与 7.32 逐字段一致 | 定位不兼容规则后修正；不回退 7.x |
+| V1 | Snakemake 9.x 在 pixi 环境中运行现有工作流（v1.4.7 范围修订） | 12 株 gold standard 端到端重跑；比对范围 = QC/组装/MLST/SISTR/AMR/pathotype/vpa_virulence/注释/报告；物种（→gside）与血清型（→gapit）字段两侧一致剔除计为 SKIP；其余字段与 7.32 逐字段一致 | 定位不兼容规则后修正；不回退 7.x |
 | V2 | DBOS（SQLite 系统库）运行 `analyze` 任务 | 运行中 kill 进程，重启后从断点继续；审批等待超过 24 小时仍可恢复 | 改用 `transitions` + SQLite（ADR-06 兜底） |
 | V3 | Strata + Qwen3.8-Flash-Next 能力实测（IQ3_XXS 与 IQ2_XS 各测一遍） | 意图拆解准确率 ≥95%（自建 100 条中文测试集，含跨任务语句）；注册表内全部工具（迁移起点 29 个）的单步调用参数正确率 ≥95%；完成 3 个挖掘样例任务；确认模型与量化版本的许可证可用于本项目 | IQ2_XS 不达标则同机部署只用 IQ3_XXS + 仲裁；整体不达标则调整角色的 `min_model_tier` |
 | V4 | `mcp` 2.x MCPServer 接入 Hermes 与至少一个其他客户端（如 Claude/Codex/Strata 聊天页） | 两个客户端经 MCP 调用工具、读取说明书，长任务句柄可轮询；写操作只能经提交任务 | 修订 ADR-12 的传输方式 |
@@ -703,3 +703,4 @@ bacmap/
 | v1.4.3 | 2026-10-09 | 第三轮全文复审：**修复 C2 与 ADR-16 的政策级矛盾**——C2 原写"菌株级明细（D2）不出本地网络"为绝对约束，与 ADR-16 "D2 管理员可放行"冲突，C2 改为"D3/D4 永不、D2 默认不发可放行"（**此政策选择待用户批准**，见 ADR-16）；§0 定位表与 ADR-10 "同一模型/本地模型"的过时表述更新（支持 API 端点后角色可异构）；§2 补"两类报告"注（analyze 模板报告=确定性路径，write 定制撰写=开放路径）；新增 §4.7 辅助类型最小定义（TaskId、EvidenceRef、ToolContext、GateSubject、TaskStatus、Approval——原先被 §4.1–4.3 引用但未定义，且 TaskStatus/TaskState 命名不一致） | 第三轮全文复审 |
 | v1.4.4 | 2026-10-09 | D2 数据政策获用户批准：D3/D4 永不出本地网络；D2 默认不发公网端点、管理员可放行至 D2 为止（C2 与 ADR-16 一致生效）；后续调整按本文变更规则走 ADR 修订 | 用户批准 |
 | v1.4.5 | 2026-10-09 | ADR-20 修订（用户裁定）：**血清型判定层也归 gapit**，推翻 v1.3"判定逻辑保留"条款；新增职责分界原则——只依赖基因组的分析一律外部工具化，需与分析结果之外数据结合的判定留在 bacmap（cgMLST 本地投影、共识合并保留）；genome_annotator 归属标记待定（gapit 具备注释能力前暂留）；bacmap `core/typing` 已删除（8 个模块 + 4 个测试文件），测试基线 839 passed / 2 skipped，ruff 与 import-linter 契约保持全绿 | 用户裁定 + 实施验证 |
+| v1.4.7 | 2026-10-09 | **两条用户裁定即时生效**：①血清型三模块彻底放弃（推翻 v1.4.6 迁移脚手架式的临时恢复），gapit 承接，规则改 `pending_gapit` 占位；②**物种鉴定分析能力全部外移 gside**——species_identifier/taxonomic_validator/sourmash_identifier/ani_identifier/species_consensus 五模块与 4 个物种类工具（validate_taxonomy/species_compare/db_setup/db_status）立即删除（注册表 24 工具），species/taxonomy/vpara_targets 规则改 `pending_gside` 占位；测试基线 1004 passed / 1 skipped，ruff 与契约全绿；V1 比对范围相应修订（物种/血清型字段 SKIP）；deploy() 修复（重部署保留 .snakemake 续跑状态） | 用户两条裁定 + 实施验证 |

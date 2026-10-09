@@ -1,0 +1,17 @@
+# 生信分析师（analyze 任务的解读职能，T1 档即可）
+# 冻结设计 §4.4 角色清单格式；权限由本文件决定（SKILL.md 只是指导）
+name: analyst
+task_types: [analyze]
+min_model_tier: T1
+allowed_locations: [local, lan]
+max_data_class: D2
+trust_layer: L3
+tools:                            # 白名单（read/compute 才可直调）
+  - bio_get_result
+  - bio_search_samples
+  - bio_snp_tree
+  - bio_cgmlst
+fs_scope:
+  read: ["${GOM_EXPORT}"]
+  write: []
+network: false

@@ -1,6 +1,6 @@
 [workspace]
 authors = ["indexofire <indexofire@gmail.com>"]
-channels = ["conda-forge"]
+channels = ["conda-forge", "bioconda"]
 name = "bacmap"
 platforms = ["linux-64"]
 version = "0.1.0"
@@ -14,15 +14,53 @@ contracts = { cmd = "lint-imports", env = { PYTHONPATH = "$PIXI_PROJECT_ROOT/src
 
 [dependencies]
 python = "3.12.*"
+samtools = ">=1.20"
+bwa = ">=0.7.17"
+minimap2 = ">=2.28"
+bcftools = ">=1.20"
+blast = ">=2.16"
+bedtools = ">=2.31"
+seqkit = "2.13.*"
+sra-tools = ">=3.0"
+spades = ">=3.15"
+openjdk = ">=11,<17"
+shovill = "1.1.0.*"
+snakemake = "9.27.*"
+pandas = ">=2.3"
+fastp = "1.3.5.*"
+abricate = ">=1.4.0,<2"
+ncbi-amrfinderplus = "3.12.*"
+iqtree = "3.1.2.*"
+prodigal = ">=2.6.3,<3"
+kma = ">=1.4"
+ncbi-datasets-cli = ">=16"
+skani = "0.3.*"
+kraken2 = ">=2.1"
+bracken = ">=2.9"
+mash = ">=2.3"
+mummer4 = "*"
 
 [pypi-dependencies]
+gmlst = "==0.1.1"
 biopython = ">=1.83"
+sistr-cmd = ">=1.1.3,<2"
+setuptools = "<81"
 pydantic = ">=2.0"
 pyrodigal = ">=3.0"
 mappy = ">=2.24"
 pyhmmer = ">=0.10"
 pyyaml = ">=6.0"
 sourmash = ">=4.8"
+gapit = ">=0.5.4"
+dbos = ">=2.0"
+mcp = ">=2.3,<3"
+fastapi = ">=0.110"
+uvicorn = ">=0.29"
+jinja2 = ">=3.1"
+httpx = ">=0.27"
+pydantic-ai-slim = { version = ">=2.0,<3", extras = ["openai"] }
+gside = { path = "/home/mark/repo/github/gside", editable = true }
+bacmap = { path = ".", editable = true }
 
 [feature.dev.dependencies]
 pytest = ">=8.0"

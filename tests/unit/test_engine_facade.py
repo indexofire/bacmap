@@ -1,12 +1,12 @@
 """Unit tests for the engine facade layer.
 
 Covers:
-- engine/_env.py (trivial re-export smoke test)
+- engine/_env.py (re-export smoke test)
 - engine/registry.py (Registry class)
 - engine/backends/__init__.py (lazy loading, available(), get_backend())
-- engine/__init__.py (SequenceMatcher.match + _select_backend)
 
-SequenceMatcher.match is tested with mocked get_backend so no real binary runs.
+SequenceMatcher removed in engine/ 收缩 (v1.4.8)；ReadMapper 由
+test_engine_read_mapper.py 单独覆盖。
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ import pytest
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
-from bacmap.core.engine import SequenceMatcher  # noqa: E402
 from bacmap.core.engine import _env as env_module  # noqa: E402
 from bacmap.core.engine.backends import (  # noqa: E402
     _BUILTINS,
@@ -188,186 +187,3 @@ class TestBackendsModule:
         _ensure("")
         _ensure("   ")
         assert _REG._store == before
-
-
-# ===========================================================================
-# SequenceMatcher._select_backend
-# ===========================================================================
-
-
-class TestSequenceMatcherSelectBackend:
-    def test_protein_query_returns_blastp(self, tmp_path):
-        q = tmp_path / "q.fasta"
-        q.write_text(">q\nACGT\n")
-        assert SequenceMatcher._select_backend(str(q), "prot") == "blastp"
-
-    def test_small_dna_file_returns_blastn(self, tmp_path):
-        q = tmp_path / "q.fasta"
-        q.write_text(">q\nACGT\n")
-        assert SequenceMatcher._select_backend(str(q), "auto") == "blastn"
-
-    def test_large_file_returns_minimap2(self, tmp_path):
-        q = tmp_path / "big.fasta"
-        with q.open("wb") as f:
-            f.seek(10_000_001)
-            f.write(b"0")
-        assert q.stat().st_size > 10_000_000
-        assert SequenceMatcher._select_backend(str(q), "auto") == "minimap2"
-
-    def test_missing_file_returns_blastn(self, tmp_path):
-        missing = tmp_path / "does_not_exist.fasta"
-        assert SequenceMatcher._select_backend(str(missing), "auto") == "blastn"
-
-    def test_boundary_exactly_10mb_returns_blastn(self, tmp_path):
-        q = tmp_path / "exactly_10mb.fasta"
-        with q.open("wb") as f:
-            f.seek(10_000_000 - 1)
-            f.write(b"0")
-        assert q.stat().st_size == 10_000_000
-        # strictly greater than 10_000_000 → exactly 10MB stays blastn
-        assert SequenceMatcher._select_backend(str(q), "auto") == "blastn"
-
-
-# ===========================================================================
-# SequenceMatcher.match routing
-# ===========================================================================
-
-
-class TestSequenceMatcherMatch:
-    def test_mash_mode_raises_valueerror(self, tmp_path):
-        q = tmp_path / "q.fasta"
-        q.write_text(">q\nACGT\n")
-        with pytest.raises(ValueError, match="KmerDistance"):
-            SequenceMatcher.match(str(q), db_path="/db", mode="mash")
-
-    def test_sourmash_mode_raises_valueerror(self, tmp_path):
-        q = tmp_path / "q.fasta"
-        q.write_text(">q\nACGT\n")
-        with pytest.raises(ValueError, match="KmerDistance"):
-            SequenceMatcher.match(str(q), db_path="/db", mode="sourmash")
-
-    def test_minimap2_mode_calls_find_with_target_path(self, tmp_path):
-        q = tmp_path / "q.fasta"
-        t = tmp_path / "t.fasta"
-        q.write_text(">q\nACGT\n")
-        t.write_text(">t\nACGT\n")
-        backend = MagicMock()
-        backend.find.return_value = []
-        with patch("bacmap.core.engine.get_backend", return_value=backend) as gb:
-            SequenceMatcher.match(str(q), db_path=str(t), mode="minimap2")
-        gb.assert_called_once_with("minimap2")
-        _, kwargs = backend.find.call_args
-        assert kwargs["target"] == t
-        assert kwargs["query"] == q
-        assert kwargs["min_identity"] == 0.0
-        assert kwargs["min_coverage"] == 0.0
-
-    def test_minimap2_uses_db_prefix_when_db_path_empty(self, tmp_path):
-        q = tmp_path / "q.fasta"
-        t = tmp_path / "t.fasta"
-        q.write_text(">q\nACGT\n")
-        t.write_text(">t\nACGT\n")
-        backend = MagicMock()
-        backend.find.return_value = []
-        with patch("bacmap.core.engine.get_backend", return_value=backend):
-            SequenceMatcher.match(str(q), db_prefix=str(t), mode="minimap2")
-        _, kwargs = backend.find.call_args
-        assert kwargs["target"] == t
-
-    def test_blastn_mode_calls_find_with_db_path_str(self, tmp_path):
-        q = tmp_path / "q.fasta"
-        q.write_text(">q\nACGT\n")
-        backend = MagicMock()
-        backend.find.return_value = []
-        with patch("bacmap.core.engine.get_backend", return_value=backend) as gb:
-            SequenceMatcher.match(str(q), db_path="/fake/db", mode="blastn")
-        gb.assert_called_once_with("blastn")
-        _, kwargs = backend.find.call_args
-        assert kwargs["db_path"] == "/fake/db"
-        assert kwargs["query"] == q
-
-    def test_blastp_mode_injects_tool_kwarg(self, tmp_path):
-        q = tmp_path / "q.fasta"
-        q.write_text(">q\nACGT\n")
-        backend = MagicMock()
-        backend.find.return_value = []
-        with patch("bacmap.core.engine.get_backend", return_value=backend) as gb:
-            SequenceMatcher.match(str(q), db_path="/db", mode="blastp")
-        gb.assert_called_once_with("blastp", tool="blastp")
-
-    def test_blastx_mode_injects_tool_kwarg(self, tmp_path):
-        q = tmp_path / "q.fasta"
-        q.write_text(">q\nACGT\n")
-        backend = MagicMock()
-        backend.find.return_value = []
-        with patch("bacmap.core.engine.get_backend", return_value=backend) as gb:
-            SequenceMatcher.match(str(q), db_path="/db", mode="blastx")
-        gb.assert_called_once_with("blastx", tool="blastx")
-
-    def test_auto_mode_uses_select_backend(self, tmp_path):
-        q = tmp_path / "q.fasta"
-        q.write_text(">q\nACGT\n")
-        backend = MagicMock()
-        backend.find.return_value = []
-        with patch("bacmap.core.engine.get_backend", return_value=backend) as gb:
-            SequenceMatcher.match(str(q), db_path="/db", mode="auto")
-        gb.assert_called_once_with("blastn")
-
-    def test_db_prefix_takes_precedence_over_db_path(self, tmp_path):
-        q = tmp_path / "q.fasta"
-        q.write_text(">q\nACGT\n")
-        backend = MagicMock()
-        backend.find.return_value = []
-        with patch("bacmap.core.engine.get_backend", return_value=backend):
-            SequenceMatcher.match(
-                str(q),
-                db_prefix="/prefix/db",
-                db_path="/path/db",
-                mode="blastn",
-            )
-        _, kwargs = backend.find.call_args
-        assert kwargs["db_path"] == "/prefix/db"
-
-    def test_min_identity_and_coverage_forwarded(self, tmp_path):
-        q = tmp_path / "q.fasta"
-        q.write_text(">q\nACGT\n")
-        backend = MagicMock()
-        backend.find.return_value = []
-        with patch("bacmap.core.engine.get_backend", return_value=backend):
-            SequenceMatcher.match(
-                str(q),
-                db_path="/db",
-                mode="blastn",
-                min_identity=95.0,
-                min_coverage=90.0,
-            )
-        _, kwargs = backend.find.call_args
-        assert kwargs["min_identity"] == 95.0
-        assert kwargs["min_coverage"] == 90.0
-
-    def test_returns_hits_from_backend(self, tmp_path):
-        q = tmp_path / "q.fasta"
-        q.write_text(">q\nACGT\n")
-        backend = MagicMock()
-        sentinel = ["hit1", "hit2"]
-        backend.find.return_value = sentinel
-        with patch("bacmap.core.engine.get_backend", return_value=backend):
-            result = SequenceMatcher.match(str(q), db_path="/db", mode="blastn")
-        assert result is sentinel
-
-    def test_extra_kwargs_forwarded_to_find(self, tmp_path):
-        q = tmp_path / "q.fasta"
-        q.write_text(">q\nACGT\n")
-        backend = MagicMock()
-        backend.find.return_value = []
-        with patch("bacmap.core.engine.get_backend", return_value=backend):
-            SequenceMatcher.match(
-                str(q),
-                db_path="/db",
-                mode="blastn",
-                evalue=1e-10,
-                max_targets=10,
-            )
-        _, kwargs = backend.find.call_args
-        assert kwargs["evalue"] == 1e-10
-        assert kwargs["max_targets"] == 10

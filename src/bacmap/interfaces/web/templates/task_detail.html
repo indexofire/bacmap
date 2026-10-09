@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/">← 返回列表</a></p>
+<p>task_id: <code>{{ task_id }}</code></p>
+<div id="status">
+{% include "task_fragment.html" %}
+</div>
+<script>
+(function poll() {
+  fetch('/tasks/{{ task_id }}/fragment')
+    .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+    .then(function (html) { document.getElementById('status').innerHTML = html; })
+    .catch(function () {});
+  setTimeout(poll, 2000);
+})();
+</script>
+{% endblock %}

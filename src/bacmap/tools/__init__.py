@@ -14,13 +14,11 @@ re-exported here so `from ..tools import <handler>` keeps working.
 from .cli import align, blast, samtools_op, variant
 from .pipeline import (
     analyze_pathogen,
-    annotate_genome,
     diagnose_failure,
     gene_scan,
     generate_report,
     get_result,
     list_samples,
-    validate_taxonomy,
     verify_result,
 )
 from .seq import fastq_qc, seq_convert, seq_ops, seq_stats
@@ -39,7 +37,6 @@ __all__ = [
     "add_metadata",
     "align",
     "analyze_pathogen",
-    "annotate_genome",
     "blast",
     "cgmlst_traceback",
     "diagnose_failure",
@@ -56,7 +53,6 @@ __all__ = [
     "seq_ops",
     "seq_stats",
     "snp_tree",
-    "validate_taxonomy",
     "variant",
     "verify_result",
 ]

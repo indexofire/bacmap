@@ -1,0 +1,105 @@
+"""bacmap Web 任务页（ADR-14）。
+
+FastAPI + Jinja2 + 内联轮询 JS（离线无 CDN 依赖，满足 C1）。
+路由一律同步 def——引擎的 DBOS 同步 API 不得在事件循环内调用
+（retrieve_workflow 会 RuntimeError），FastAPI 把同步路由放线程池执行。
+页面：任务列表 / 提交（analyze|curate）/ 详情+状态轮询 / 审批签名。
+create_app(engine) 与 build_server(engine) 同构——引擎注入，测试可换。
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+
+from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
+from bacmap.tasks.spec import Approval, TaskType
+
+_TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+
+def create_app(engine: DbosTaskEngine) -> FastAPI:
+    app = FastAPI(title="bacmap", docs_url=None, redoc_url=None)
+
+    @app.get("/", response_class=HTMLResponse)
+    def index(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(
+            request, "index.html", {"tasks": engine.list_tasks()}
+        )
+
+    @app.post("/tasks/submit")
+    def submit_task(
+        task_type: str = Form(...),
+        samples: str = Form(""),
+        scope: str = Form(""),
+    ) -> RedirectResponse:
+        try:
+            tt = TaskType(task_type)
+        except ValueError as exc:
+            raise HTTPException(400, f"未知任务类型: {task_type}") from exc
+        params: dict[str, Any] = {}
+        if samples.strip():
+            params["samples"] = [
+                s.strip() for s in samples.replace("\n", ",").split(",") if s.strip()
+            ]
+        if scope.strip():
+            try:
+                params["scope"] = json.loads(scope)
+            except ValueError as exc:
+                raise HTTPException(400, "scope 不是合法 JSON") from exc
+        try:
+            tid = engine.submit(tt, params, submitted_by="web")
+        except NotImplementedError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return RedirectResponse(f"/tasks/{tid}", status_code=303)
+
+    def _status_or_404(task_id: str):
+        try:
+            return engine.status(task_id)
+        except KeyError as exc:
+            raise HTTPException(404, "任务不存在") from exc
+
+    @app.get("/tasks/{task_id}", response_class=HTMLResponse)
+    def task_detail(request: Request, task_id: str) -> HTMLResponse:
+        st = _status_or_404(task_id)
+        return _TEMPLATES.TemplateResponse(
+            request, "task_detail.html", {"st": st, "task_id": task_id}
+        )
+
+    @app.get("/tasks/{task_id}/fragment", response_class=HTMLResponse)
+    def task_fragment(request: Request, task_id: str) -> HTMLResponse:
+        st = _status_or_404(task_id)
+        return _TEMPLATES.TemplateResponse(
+            request, "task_fragment.html", {"st": st, "task_id": task_id}
+        )
+
+    @app.post("/tasks/{task_id}/approve")
+    def approve_task(
+        task_id: str,
+        approver: str = Form(...),
+        decision: str = Form(...),
+        signature: str = Form(...),
+    ) -> RedirectResponse:
+        if decision not in ("approve", "reject"):
+            raise HTTPException(400, "decision 必须是 approve|reject")
+        try:
+            engine.approve(
+                task_id,
+                Approval(
+                    approver=approver,
+                    decision=decision,  # type: ignore[arg-type]
+                    signature=signature,
+                    at=datetime.now(UTC),
+                ),
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "任务不存在") from exc
+        return RedirectResponse(f"/tasks/{task_id}", status_code=303)
+
+    return app

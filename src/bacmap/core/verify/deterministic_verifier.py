@@ -13,7 +13,6 @@ from typing import Any
 from bacmap.core.utils import parse_mlst
 
 from ..analysis.species_canon import collapse_binomial
-from ..analysis.species_consensus import SpeciesConsensus
 
 _KNOWN_SEROGROUPS = frozenset(
     {
@@ -91,23 +90,6 @@ class DeterministicVerifier:
         if verdict == "Salmonella":
             return CheckResult("species", True, f"Species confirmed: {verdict}")
         return CheckResult("species", False, f"Species NOT confirmed: {verdict!r}")
-
-    def verify_species_consensus(self, consensus: SpeciesConsensus) -> CheckResult:
-        passed = consensus.agreement != "conflict" or not consensus.needs_review
-        return CheckResult(
-            "species_consensus",
-            passed,
-            f"agreement={consensus.agreement}, resolved={consensus.resolved_species!r}, "
-            f"basis={consensus.basis}",
-            {
-                "agreement": consensus.agreement,
-                "resolved_species": consensus.resolved_species,
-                "basis": consensus.basis,
-                "needs_human_review": consensus.needs_review,
-                "methods": [m.method for m in consensus.methods],
-                "disagreeing_methods": consensus.disagreeing_methods,
-            },
-        )
 
     def verify_mlst(self, st: str, alleles: dict[str, str]) -> CheckResult:
         if not st or st in ("-", "N/A", ""):

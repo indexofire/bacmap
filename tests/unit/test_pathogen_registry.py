@@ -66,9 +66,9 @@ GOLDEN_SNP_GROUPS = {
 
 
 def _default_registry_path() -> Path:
-    import bacmap
+    import bacmap.core.pathogen_registry as pr
 
-    return Path(bacmap.core.pathogen_registry.__file__).parent / "pathogens.yaml"
+    return Path(pr.__file__).parent / "pathogens.yaml"
 
 
 def _write_registry(tmp_path: Path, data: dict) -> Path:

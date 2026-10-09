@@ -1,0 +1,205 @@
+"""运行记录（ADR-18 / §4.6）：证据链 `(strain_id, run_id)` 的 run_id 侧。
+
+每次工作流执行生成一条不可修改的 AnalysisRun：完整解析后参数及哈希、
+参考数据库清单、工具实测版本、输入文件 SHA256、随机种子、起止时间。
+存两份：analysis_runs 表（SQLite，INSERT-ONLY）+ 运行目录 run_manifest.json
+（带自身 SHA256，两者内容一致）。
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import sqlite3
+import subprocess
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+from uuid import uuid4
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field
+
+_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS analysis_runs (
+    run_id          TEXT PRIMARY KEY,
+    task_id         TEXT NOT NULL DEFAULT '',
+    strain_ids      TEXT NOT NULL DEFAULT '[]',
+    workflow        TEXT NOT NULL,
+    workflow_commit TEXT NOT NULL DEFAULT '',
+    workflow_dirty  INTEGER NOT NULL DEFAULT 0,
+    started_at      TEXT NOT NULL,
+    finished_at     TEXT,
+    ingested_at     TEXT,
+    resolved_config TEXT NOT NULL DEFAULT '{}',
+    config_sha256   TEXT NOT NULL DEFAULT '',
+    ref_databases   TEXT NOT NULL DEFAULT '[]',
+    tool_versions   TEXT NOT NULL DEFAULT '{}',
+    env_lock_sha256 TEXT NOT NULL DEFAULT '',
+    input_files     TEXT NOT NULL DEFAULT '{}',
+    seeds           TEXT NOT NULL DEFAULT '{}',
+    nondeterministic_steps TEXT NOT NULL DEFAULT '[]',
+    host            TEXT NOT NULL DEFAULT '{}',
+    baseline_version TEXT,
+    manifest_sha256 TEXT NOT NULL DEFAULT ''
+)
+"""
+
+
+class RefDatabase(BaseModel):
+    name: str
+    version: str
+    checksum: str
+
+
+class AnalysisRun(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    run_id: str = Field(default_factory=lambda: uuid4().hex)
+    task_id: str = ""
+    strain_ids: list[str] = []
+    workflow: str
+    workflow_commit: str = ""
+    workflow_dirty: bool = False
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    finished_at: datetime | None = None
+    ingested_at: datetime | None = None
+    resolved_config: dict[str, Any] = {}
+    config_sha256: str = ""
+    ref_databases: list[RefDatabase] = []
+    tool_versions: dict[str, str] = {}
+    env_lock_sha256: str = ""
+    input_files: dict[str, str] = {}
+    seeds: dict[str, int] = {}
+    nondeterministic_steps: list[str] = []
+    host: dict[str, Any] = {}
+    baseline_version: str | None = None
+    manifest_sha256: str = ""
+
+
+def file_sha256(path: Path, chunk: int = 1 << 20) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        while block := fh.read(chunk):
+            h.update(block)
+    return h.hexdigest()
+
+
+def probe_tool_versions(tools: list[str], timeout: int = 20) -> dict[str, str]:
+    """运行时实测版本（ADR-18）：优先 JSON 内嵌版本是第 5 步工具适配器的事，
+    这里是回退通道——逐工具调 --version 取首个非空行。"""
+    versions: dict[str, str] = {}
+    for tool in tools:
+        try:
+            proc = subprocess.run(
+                [tool, "--version"], capture_output=True, text=True, timeout=timeout
+            )
+            out = (proc.stdout or proc.stderr).strip().splitlines()
+            versions[tool] = out[0].strip() if out else f"exit={proc.returncode}"
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            versions[tool] = f"unavailable: {type(exc).__name__}"
+    return versions
+
+
+def resolve_config(workflow_dir: Path, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+    """合并 config.yaml 与覆盖项后的完整参数（深合并一层，与 Snakemake --config 语义一致）。"""
+    cfg_path = workflow_dir / "config" / "config.yaml"
+    cfg = yaml.safe_load(cfg_path.read_text()) or {}
+    for k, v in (overrides or {}).items():
+        if isinstance(v, dict) and isinstance(cfg.get(k), dict):
+            cfg[k].update(v)
+        else:
+            cfg[k] = v
+    return cfg
+
+
+def create_run(
+    workflow: str,
+    workflow_dir: Path,
+    strain_ids: list[str],
+    overrides: dict[str, Any] | None = None,
+    input_files: list[Path] | None = None,
+    db_path: Path | None = None,
+    task_id: str = "",
+) -> AnalysisRun:
+    from bacmap.config import BACMAP_HOME
+
+    resolved = resolve_config(workflow_dir, overrides)
+    run = AnalysisRun(
+        task_id=task_id,
+        strain_ids=strain_ids,
+        workflow=workflow,
+        resolved_config=resolved,
+        config_sha256=hashlib.sha256(
+            json.dumps(resolved, sort_keys=True, ensure_ascii=False).encode()
+        ).hexdigest(),
+        tool_versions=probe_tool_versions(
+            ["snakemake", "fastp", "spades.py", "blastn", "gmlst", "abricate", "iqtree"]
+        ),
+        input_files={str(p): file_sha256(p) for p in (input_files or []) if Path(p).is_file()},
+        seeds={"iqtree": int(resolved.get("iqtree_seed", 42))},
+        host={"hostname": _hostname()},
+    )
+    lock = Path(__file__).resolve().parents[3] / "pixi.lock"
+    if lock.is_file():
+        run.env_lock_sha256 = file_sha256(lock)
+    run.manifest_sha256 = hashlib.sha256(
+        _manifest_body(run).encode()
+    ).hexdigest()
+
+    conn = sqlite3.connect(db_path or (BACMAP_HOME / "runs.sqlite"))
+    with conn:
+        conn.execute(_SCHEMA_SQL)
+        conn.execute(
+            "INSERT INTO analysis_runs (run_id, task_id, strain_ids, workflow, workflow_commit,"
+            " workflow_dirty, started_at, resolved_config, config_sha256, ref_databases,"
+            " tool_versions, env_lock_sha256, input_files, seeds, nondeterministic_steps, host,"
+            " manifest_sha256)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                run.run_id, run.task_id, json.dumps(run.strain_ids), run.workflow,
+                run.workflow_commit, int(run.workflow_dirty),
+                run.started_at.isoformat(), json.dumps(run.resolved_config, ensure_ascii=False),
+                run.config_sha256, json.dumps([r.model_dump() for r in run.ref_databases]),
+                json.dumps(run.tool_versions), run.env_lock_sha256,
+                json.dumps(run.input_files), json.dumps(run.seeds),
+                json.dumps(run.nondeterministic_steps), json.dumps(run.host),
+                run.manifest_sha256,
+            ),
+        )
+    conn.close()
+    return run
+
+
+def finish_run(run: AnalysisRun, db_path: Path | None = None) -> None:
+    from bacmap.config import BACMAP_HOME
+
+    run.finished_at = datetime.now(UTC)
+    conn = sqlite3.connect(db_path or (BACMAP_HOME / "runs.sqlite"))
+    with conn:
+        conn.execute(
+            "UPDATE analysis_runs SET finished_at = ? WHERE run_id = ? AND finished_at IS NULL",
+            (run.finished_at.isoformat(), run.run_id),
+        )
+    conn.close()
+
+
+def write_manifest(run: AnalysisRun, runs_root: Path) -> Path:
+    """运行目录内的 run_manifest.json（与表内容一致，自校验）。"""
+    d = runs_root / run.run_id
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / "run_manifest.json"
+    payload = json.loads(_manifest_body(run))
+    payload["manifest_sha256"] = run.manifest_sha256
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+    return path
+
+
+def _manifest_body(run: AnalysisRun) -> str:
+    return run.model_dump_json(exclude={"finished_at", "ingested_at", "manifest_sha256"})
+
+
+def _hostname() -> str:
+    import socket
+
+    return socket.gethostname()

@@ -1,0 +1,5 @@
+sample	species	R1	R2
+BEN-001	Salmonella	data/benchmark/BEN-001/BEN-001_R1.fastq.gz	data/benchmark/BEN-001/BEN-001_R2.fastq.gz
+BEN-002	Salmonella	data/benchmark/BEN-002/BEN-002_R1.fastq.gz	data/benchmark/BEN-002/BEN-002_R2.fastq.gz
+BEN-003	Salmonella	data/benchmark/BEN-003/BEN-003_R1.fastq.gz	data/benchmark/BEN-003/BEN-003_R2.fastq.gz
+BEN-004	Salmonella	data/benchmark/BEN-004/BEN-004_R1.fastq.gz	data/benchmark/BEN-004/BEN-004_R2.fastq.gz

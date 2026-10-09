@@ -2,8 +2,6 @@
 
 from .failure_diagnostics import Diagnosis, diagnose, diagnose_from_log
 from .gene_identity import normalize_amr
-from .gene_scanner import GeneHit, ScanResult, scan, scan_multi
-from .genome_annotator import AnnotationResult, Feature, annotate
 from .species_canon import (
     ECOLI,
     SALMONELLA,
@@ -12,8 +10,6 @@ from .species_canon import (
     canonical_from_verdict,
     collapse_binomial,
 )
-from .species_identifier import SpeciesIdResult, identify
-from .taxonomic_validator import TaxonomyResult, validate_genome
 
 __all__ = [
     "AnnotationResult",
@@ -25,10 +21,8 @@ __all__ = [
     "Diagnosis",
     "ECOLI",
     "Feature",
-    "GeneHit",
     "ReflectionResult",
     "SALMONELLA",
-    "ScanResult",
     "SHIGELLA",
     "SpeciesIdResult",
     "StrainFacts",
@@ -46,7 +40,6 @@ __all__ = [
     "normalize_amr",
     "reflect",
     "scan",
-    "scan_multi",
     "validate_genome",
 ]
 
