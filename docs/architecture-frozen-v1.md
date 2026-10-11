@@ -1,4 +1,6 @@
-# BacMAP Standalone 框架设计（冻结版 v1.4.7）
+[English](architecture-frozen-v1.en.md) | **简体中文（权威）**
+
+# BacMAP Standalone 框架设计（冻结版 v1.4.8）
 
 - **日期**：2026-10-09（v1.1–v1.4.7 同日修订，见第 10 节）
 - **状态**：冻结（Frozen）。第 8 节的验证项全部通过后，转为"已确认"
@@ -262,8 +264,8 @@ v1.2 起，"能力档位"与"部署位置"是两个独立维度：档位决定�
 | 插件钩子（`pre_tool_call` 可阻断、`transform_llm_output`） | 在 Hermes 对话中对解读文本再加一道门 | 证据 §3.4 |
 | 已有插件资产与使用习惯 | hermes-bacmap 用户平滑过渡 | — |
 
-- **接入方式**：首选 MCP（Hermes 配置 `mcp_servers` 指向 bacmap，stdio）；保留插件适配器 `bacmap.adapters.hermes` 作为第二渠道，由工具注册表生成，修正 entry-point 组名为 `hermes_agent.plugins`，锁定 Hermes 版本。
-- **两条通道的门机制不同**（避免误解）：MCP 通道由 bacmap 服务端强制（只暴露 read/compute 工具 + 任务提交，ADR-12）；插件通道才使用 Hermes 钩子（`pre_tool_call` 阻断写操作、`transform_llm_output` 拦截解读文本）。钩子不是门的实现位置，只是插件通道的补充防线。
+- **接入方式**：仅 MCP（Hermes 配置 `mcp_servers` 指向 bacmap，stdio）。v1.4.8 用户裁定取消插件第二渠道：`bacmap.adapters.hermes` 与 `hermes_agent.plugins` entry-point 已删除（V4 实测 ✓ Connected / 22 工具）。
+- **门的机制**（v1.4.8 起单一通道）：MCP 通道由 bacmap 服务端强制（只暴露 read/compute 工具 + 任务提交，ADR-12）。原插件通道的 Hermes 钩子防线（`pre_tool_call`/`transform_llm_output`）随通道取消一并废止。
 - **不做的事**：不用 Hermes 作内置执行器（插件 API 无稳定性承诺，证据 §3.1）；不要求用户安装 Hermes。
 - **理由**：现有 entry-point 声明不生效，插件靠软链接加载（证据 §2.2）；MCP 让 Hermes 与其他助手走同一条路径，维护一份代码。
 
@@ -623,8 +625,6 @@ bacmap/
 │   │   ├── web/                 # FastAPI + Jinja2 + htmx
 │   │   ├── cli/
 │   │   └── mcp/                 # MCPServer（ADR-12）
-│   └── adapters/
-│       └── hermes/              # Hermes 插件适配器（ADR-15）
 ├── sandbox/                     # SIF 镜像定义文件
 └── tests/
 ```
@@ -704,3 +704,4 @@ bacmap/
 | v1.4.4 | 2026-10-09 | D2 数据政策获用户批准：D3/D4 永不出本地网络；D2 默认不发公网端点、管理员可放行至 D2 为止（C2 与 ADR-16 一致生效）；后续调整按本文变更规则走 ADR 修订 | 用户批准 |
 | v1.4.5 | 2026-10-09 | ADR-20 修订（用户裁定）：**血清型判定层也归 gapit**，推翻 v1.3"判定逻辑保留"条款；新增职责分界原则——只依赖基因组的分析一律外部工具化，需与分析结果之外数据结合的判定留在 bacmap（cgMLST 本地投影、共识合并保留）；genome_annotator 归属标记待定（gapit 具备注释能力前暂留）；bacmap `core/typing` 已删除（8 个模块 + 4 个测试文件），测试基线 839 passed / 2 skipped，ruff 与 import-linter 契约保持全绿 | 用户裁定 + 实施验证 |
 | v1.4.7 | 2026-10-09 | **两条用户裁定即时生效**：①血清型三模块彻底放弃（推翻 v1.4.6 迁移脚手架式的临时恢复），gapit 承接，规则改 `pending_gapit` 占位；②**物种鉴定分析能力全部外移 gside**——species_identifier/taxonomic_validator/sourmash_identifier/ani_identifier/species_consensus 五模块与 4 个物种类工具（validate_taxonomy/species_compare/db_setup/db_status）立即删除（注册表 24 工具），species/taxonomy/vpara_targets 规则改 `pending_gside` 占位；测试基线 1004 passed / 1 skipped，ruff 与契约全绿；V1 比对范围相应修订（物种/血清型字段 SKIP）；deploy() 修复（重部署保留 .snakemake 续跑状态） | 用户两条裁定 + 实施验证 |
+| v1.4.8 | 2026-10-10 | **用户裁定：取消插件通道，仅保留 MCP**——`bacmap.adapters` 包、`hermes_agent.plugins` entry-point、importlinter forbidden 层中的 adapters 条目删除；Hermes 侧 `~/.hermes/plugins/hermes_bacmap` 目录与 plugins.enabled 条目移除（该插件自 09-18 起已因语法错误加载失败）；ADR-15 接入方式修订为 MCP 唯一通道，插件钩子防线条款废止。前置事实：V4 已实测 MCP 通路（✓ Connected 2038ms / 22 工具全量发现，含写操作唯一入口 bacmap_submit_task） | 用户裁定 + 实施验证 |

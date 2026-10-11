@@ -1,19 +1,52 @@
-<table>
-<tr><th style="width:7em">状态</th><td class="state-{{ st.state }}">{{ st.state }}</td></tr>
-<tr><th>步骤</th><td>{{ st.current_step or '—' }}</td></tr>
-<tr><th>消息</th><td>{{ st.message or '—' }}</td></tr>
-</table>
+{% from "_badges.html" import state_badge %}
+<div class="live__inner" data-state="{{ st.state }}">
+<section class="card status-card" aria-labelledby="status-title">
+  <div class="card__head">
+    <h2 class="card__title" id="status-title">运行状态</h2>
+    {{ state_badge(st.state) }}
+  </div>
+  <dl class="statuslist">
+    <div class="statuslist__row">
+      <dt>状态</dt>
+      <dd><code>{{ st.state }}</code></dd>
+    </div>
+    <div class="statuslist__row">
+      <dt>当前步骤</dt>
+      <dd>{{ st.current_step or '—' }}</dd>
+    </div>
+    <div class="statuslist__row">
+      <dt>消息</dt>
+      <dd>{{ st.message or '—' }}</dd>
+    </div>
+  </dl>
+</section>
 {% if st.state == 'awaiting_approval' %}
-<h3>审批签名</h3>
-<form class="p" method="post" action="/tasks/{{ task_id }}/approve">
-  <label>审批人 <input name="approver" required></label>
-  <label>决定
-    <select name="decision">
-      <option value="approve">approve — 通过并发布</option>
-      <option value="reject">reject — 拒绝</option>
-    </select>
-  </label>
-  <label>签名（口令/凭证） <input name="signature" required></label>
-  <button type="submit">提交审批</button>
-</form>
+<section class="card approval-card" aria-labelledby="approval-title">
+  <div class="card__head">
+    <h2 class="card__title" id="approval-title">审批签名</h2>
+  </div>
+  <p class="card__lead">该任务已到达审批门，签名提交后才会继续发布或终止。</p>
+  <form class="form" method="post" action="/tasks/{{ task_id }}/approve">
+    <div class="field">
+      <label class="field__label" for="a-approver">审批人</label>
+      <input class="field__control" id="a-approver" name="approver" type="text" required autocomplete="off">
+    </div>
+    <div class="field">
+      <label class="field__label" for="a-decision">决定</label>
+      <select class="field__control" id="a-decision" name="decision">
+        <option value="approve">approve · 通过并发布</option>
+        <option value="reject">reject · 拒绝</option>
+      </select>
+      <p class="field__hint">reject 会终止该任务，结果不再发布。</p>
+    </div>
+    <div class="field">
+      <label class="field__label" for="a-signature">签名 <span class="field__optional">口令 / 凭证</span></label>
+      <input class="field__control" id="a-signature" name="signature" type="password" required autocomplete="off">
+    </div>
+    <div class="form__actions">
+      <button class="btn btn--primary" type="submit">提交审批</button>
+    </div>
+  </form>
+</section>
 {% endif %}
+</div>

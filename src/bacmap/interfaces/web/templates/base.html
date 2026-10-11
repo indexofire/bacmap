@@ -2,23 +2,33 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
-<title>bacmap 任务</title>
-<style>
- body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 960px; color: #1f2937; }
- table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; }
- td, th { border: 1px solid #d1d5db; padding: 6px 10px; text-align: left; font-size: 0.92em; }
- .state-running { color: #2563eb; } .state-succeeded { color: #16a34a; font-weight: 600; }
- .state-failed, .state-cancelled { color: #dc2626; } .state-awaiting_approval { color: #d97706; font-weight: 600; }
- .state-pending { color: #6b7280; }
- form.p label { display: block; margin: 6px 0 2px; font-size: 0.9em; color: #374151; }
- form.p input, form.p textarea, form.p select { width: 100%; max-width: 480px; padding: 4px 6px; }
- form.p button { margin-top: 8px; padding: 5px 16px; }
- code { background: #f3f4f6; padding: 1px 5px; border-radius: 3px; font-size: 0.88em; word-break: break-all; }
- a { color: #2563eb; }
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="bacmap 本地病原菌基因组分析任务台——任务提交、进度跟踪与审批签名。">
+<title>{% block title %}bacmap 任务台{% endblock %}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237170ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='22 12 18 12 15 21 9 3 6 12 2 12'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body>
-<h1><a href="/" style="text-decoration:none;color:inherit">bacmap 任务</a></h1>
+<a class="skip-link" href="#main">跳到主要内容</a>
+<header class="topbar">
+  <div class="topbar__inner">
+    <a class="brand" href="/">
+      <span class="brand__mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+      <span class="brand__name">bacmap</span>
+      <span class="brand__tag">本地任务台</span>
+    </a>
+    <nav class="topnav" aria-label="主导航">
+      <a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>任务</a>
+      <a href="/overview" {% if request.url.path == '/overview' %}aria-current="page"{% endif %}>系统</a>
+    </nav>
+    <span class="topbar__meta" title="ADR-16：数据不出本地网络">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
+      数据不出网
+    </span>
+  </div>
+</header>
+<main id="main" class="page">
 {% block content %}{% endblock %}
+</main>
 </body>
 </html>

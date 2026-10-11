@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}系统概览 · bacmap{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1 class="pagehead__title">系统概览</h1>
+  <p class="pagehead__sub">当前生效的端点、策略与运行环境。只读视图——修改项请编辑 <span class="mono-dim">config.toml</span>（见配置指南）并重启服务。</p>
+</div>
+
+<section class="card" aria-labelledby="ov-llm">
+  <div class="card__head">
+    <h2 class="card__title" id="ov-llm">LLM 端点</h2>
+    <span class="card__count">{{ endpoints|length }} 个</span>
+  </div>
+  <table class="tasktable">
+    <thead>
+      <tr><th scope="col">名称</th><th scope="col">位置</th><th scope="col">模型</th><th scope="col">Base URL</th><th scope="col">状态</th></tr>
+    </thead>
+    <tbody>
+    {% for e in endpoints %}
+      <tr>
+        <td data-label="名称">{{ e.name }}</td>
+        <td data-label="位置"><span class="typetag">{{ e.location }}</span></td>
+        <td data-label="模型"><span class="mono-dim">{{ e.model }}</span></td>
+        <td data-label="Base URL"><span class="mono-dim">{{ e.base_url }}</span></td>
+        <td data-label="状态">{{ "启用" if e.enabled else "停用" }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5">未配置端点（无 config.toml 时应有内置默认）</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="card__head" style="margin-top:1rem">
+    <h2 class="card__title">用途路由</h2>
+  </div>
+  {% if routing %}
+  <table class="tasktable">
+    <tbody>
+    {% for purpose, ep in routing.items() %}
+      <tr><td data-label="用途">{{ purpose }}</td><td data-label="端点"><span class="mono-dim">{{ ep }}</span></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty__hint">未配置路由——所有用途走第一个启用端点。</p>
+  {% endif %}
+  <p class="field__hint" style="margin-top:.75rem">数据策略：cloud 端点上限 <strong>{{ cloud_max_data_class }}</strong>；D3/D4 永不外发（代码强制，配置不可放宽）。</p>
+</section>
+
+<section class="card" aria-labelledby="ov-env">
+  <div class="card__head">
+    <h2 class="card__title" id="ov-env">运行环境</h2>
+  </div>
+  <table class="tasktable">
+    <tbody>
+    {% for pkg, v in versions.items() %}
+      <tr><td data-label="组件">{{ pkg }}</td><td data-label="版本"><span class="mono-dim">{{ v }}</span></td></tr>
+    {% endfor %}
+    <tr><td data-label="组件">沙箱后端</td><td data-label="版本">{{ sandbox }}</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="card" aria-labelledby="ov-paths">
+  <div class="card__head">
+    <h2 class="card__title" id="ov-paths">路径布局</h2>
+  </div>
+  <table class="tasktable">
+    <tbody>
+    {% for label, p in paths.items() %}
+      <tr><td data-label="路径">{{ label }}</td><td data-label="位置"><span class="mono-dim">{{ p }}</span></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if task_counts %}
+<section class="card" aria-labelledby="ov-tasks">
+  <div class="card__head">
+    <h2 class="card__title" id="ov-tasks">任务分布</h2>
+  </div>
+  <table class="tasktable">
+    <tbody>
+    {% for state, n in task_counts.items() %}
+      <tr><td data-label="状态">{{ state }}</td><td data-label="数量">{{ n }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

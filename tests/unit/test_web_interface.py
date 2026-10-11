@@ -123,3 +123,25 @@ class TestWebInterface:
         c, _ = client
         assert c.get("/tasks/nope").status_code == 404
         assert c.get("/tasks/nope/fragment").status_code == 404
+
+    def test_overview_page(self, client):
+        c, home = client
+        from sqlite3 import connect
+
+        conn = connect(home / "tasks.sqlite")
+        conn.execute(
+            "INSERT INTO tasks (task_id, task_type, state, params_json, submitted_by,"
+            " created_at, updated_at, workflow_id, current_step)"
+            " VALUES ('ov-1','analyze','succeeded','{}','t','2026-01-01T00:00:00',"
+            "'2026-01-01T00:00:00','','analyze')"
+        )
+        conn.commit()
+        conn.close()
+        r = c.get("/overview")
+        assert r.status_code == 200
+        assert "系统概览" in r.text
+        assert "LLM 端点" in r.text
+        assert "D1" in r.text
+        assert "BACMAP_HOME" in r.text
+        assert "任务分布" in r.text
+        assert "succeeded" in r.text

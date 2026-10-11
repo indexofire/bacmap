@@ -8,7 +8,7 @@
   BACMAP_DB_PATH / BACMAP_RESULTS_DIR）。
 
 历史：hermes-bacmap 的 config.py 把 PROJECT_ROOT/PIXI_BIN 写死在开发仓库目录、
-插件靠软链接加载（docs/research-framework-evidence.md §2.2）——本模块是其替代。
+插件靠软链接加载（dev/research-framework-evidence.md §2.2）——本模块是其替代。
 """
 
 from __future__ import annotations

@@ -441,7 +441,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/a6/6e/babde908b879a3b51ffc230919d06a804912559dd4cf8c94f3fa2af69fec/fonttools-4.66.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/a4/e7/119befcfd60c701d3797ba92cb9f715fa74030febba83a80842f96a85a92/gapit-0.5.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/e0/57d07f653813b7ea9e3a82064a2b6a112f63004530ac665e0934829473c7/genai_prices-0.1.9-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/ee/fb/7ab6fa048e51b34d42adc1423abdc379f76828516f9858da572cb0894f65/gmlst-0.1.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/4d/96/1f43472d0534823c2372be53f448b83e69a7f90262031e156a22a08e9034/gmlst-0.5.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/e5/0ae74c83c1cab2c14daadf28bd0143eb14bb81503834af987b66badc7b61/griffelib-2.3.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7e/f5/f66802a942d491edb555dd61e3a9961140fd64c90bce1eafd741609d334d/httpcore-1.0.9-py3-none-any.whl
@@ -530,7 +530,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/certifi-2026.7.22-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/cffi-2.1.1-py312h703531f_3.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/charset-normalizer-3.5.2-h1114479_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/click-8.5.0-pyh5ded981_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/click-8.2.1-pyh707e725_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/cloudpickle-3.1.2-pyhcf101f3_1.conda
       - conda: https://conda.anaconda.org/bioconda/linux-64/clustalo-1.2.4-h503566f_10.conda
       - conda: https://conda.anaconda.org/bioconda/linux-64/clustalw-2.1-hc52dbad_13.conda
@@ -972,7 +972,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/a6/6e/babde908b879a3b51ffc230919d06a804912559dd4cf8c94f3fa2af69fec/fonttools-4.66.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/a4/e7/119befcfd60c701d3797ba92cb9f715fa74030febba83a80842f96a85a92/gapit-0.5.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/e0/57d07f653813b7ea9e3a82064a2b6a112f63004530ac665e0934829473c7/genai_prices-0.1.9-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/ee/fb/7ab6fa048e51b34d42adc1423abdc379f76828516f9858da572cb0894f65/gmlst-0.1.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/4d/96/1f43472d0534823c2372be53f448b83e69a7f90262031e156a22a08e9034/gmlst-0.5.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/e5/0ae74c83c1cab2c14daadf28bd0143eb14bb81503834af987b66badc7b61/griffelib-2.3.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d8/9c/6fe8931fd9f381042a9e4c7d5a7b4cbf7016b252bec0c99a49fce42c3326/httpx2-2.13.1-py3-none-any.whl
@@ -1206,7 +1206,7 @@ packages:
 - pypi: ./
   name: bacmap
   version: 0.1.0
-  sha256: f99e25c3710d456538971911b7cec6dca55603f74c1fc40befe0f9b340e8ccf7
+  sha256: 81dc9a7b121879b5c9cfc4f6e9ecf3ead1e38d47d6ec67d665d7e9f066d16500
   requires_dist:
   - biopython>=1.83
   - pydantic>=2.0
@@ -1487,18 +1487,18 @@ packages:
   version: 8.5.0
   sha256: 255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360
   requires_python: '>=3.10'
-- conda: https://conda.anaconda.org/conda-forge/noarch/click-8.5.0-pyh5ded981_0.conda
-  sha256: 9afb0c2c089330321a219c7ee5a25313bd574d4024be606cbb33e7a5735df662
-  md5: dea5b13a211bbf99876deb980b408a66
+- conda: https://conda.anaconda.org/conda-forge/noarch/click-8.2.1-pyh707e725_0.conda
+  sha256: 8aee789c82d8fdd997840c952a586db63c6890b00e88c4fb6e80a38edd5f51c0
+  md5: 94b550b8d3a614dbd326af798c7dfb40
   depends:
-  - python >=3.11
-  - python
+  - __unix
+  - python >=3.10
   license: BSD-3-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/click?source=compressed-mapping
-  size: 112341
-  timestamp: 1788802215348
+  - pkg:pypi/click?source=hash-mapping
+  size: 87749
+  timestamp: 1747811451319
 - conda: https://conda.anaconda.org/conda-forge/noarch/cloudpickle-3.1.2-pyhcf101f3_1.conda
   sha256: 4c287c2721d8a34c94928be8fe0e9a85754e90189dd4384a31b1806856b50a67
   md5: 61b8078a0905b12529abc622406cb62c
@@ -2341,10 +2341,10 @@ packages:
   - pkg:pypi/gitpython?source=compressed-mapping
   size: 183846
   timestamp: 1790776941235
-- pypi: https://files.pythonhosted.org/packages/ee/fb/7ab6fa048e51b34d42adc1423abdc379f76828516f9858da572cb0894f65/gmlst-0.1.1-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/4d/96/1f43472d0534823c2372be53f448b83e69a7f90262031e156a22a08e9034/gmlst-0.5.2-py3-none-any.whl
   name: gmlst
-  version: 0.1.1
-  sha256: 12b68aa9d3f7754ac8957f077749bdd319d5c8eb694da3af517c0e3f71fb05c9
+  version: 0.5.2
+  sha256: 91f248b0476c85d2ffb98b6b6d759056e6028c0e7fde35ae8f48b4815d1e473f
   requires_dist:
   - click>=8.1
   - flask>=3.0
@@ -2353,6 +2353,7 @@ packages:
   - requests>=2.31
   - rich>=13.0
   - xxhash>=3.0
+  - pyright>=1.1.409 ; extra == 'dev'
   - pytest>=8.0 ; extra == 'dev'
   - ruff>=0.4 ; extra == 'dev'
   requires_python: '>=3.12,<3.13'

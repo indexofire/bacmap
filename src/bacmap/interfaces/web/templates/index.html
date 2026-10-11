@@ -1,34 +1,72 @@
 {% extends "base.html" %}
+{% from "_badges.html" import state_badge %}
+{% block title %}任务 · bacmap{% endblock %}
 {% block content %}
-<h2>提交任务</h2>
-<form class="p" method="post" action="/tasks/submit">
-  <label>任务类型
-    <select name="task_type">
-      <option value="analyze">analyze — 基因组分析</option>
-      <option value="curate">curate — 本地流行特征库构建</option>
-    </select>
-  </label>
-  <label>样本（逗号或换行分隔；analyze 用）
-    <textarea name="samples" rows="2" placeholder="SAM-TYP-001,SAM-TYP-002"></textarea>
-  </label>
-  <label>scope（可选 JSON；curate 用）
-    <input name="scope" placeholder='{"pathogen": "Salmonella"}'>
-  </label>
-  <button type="submit">提交</button>
-</form>
-<h2>最近任务</h2>
-<table>
-<tr><th>task_id</th><th>类型</th><th>状态</th><th>提交人</th><th>创建时间</th></tr>
-{% for t in tasks %}
-<tr>
-  <td><a href="/tasks/{{ t.task_id }}">{{ t.task_id[:12] }}…</a></td>
-  <td>{{ t.task_type }}</td>
-  <td class="state-{{ t.state }}">{{ t.state }}</td>
-  <td>{{ t.submitted_by }}</td>
-  <td>{{ t.created_at[:19] }}</td>
-</tr>
-{% else %}
-<tr><td colspan="5">暂无任务</td></tr>
-{% endfor %}
-</table>
+<div class="pagehead">
+  <h1 class="pagehead__title">分析任务</h1>
+  <p class="pagehead__sub">提交基因组分析任务，跟踪运行进度，并在审批门完成签名。</p>
+</div>
+<div class="layout-index">
+  <section class="card card--form" aria-labelledby="submit-title">
+    <div class="card__head">
+      <h2 class="card__title" id="submit-title">提交新任务</h2>
+    </div>
+    <form class="form" method="post" action="/tasks/submit">
+      <div class="field">
+        <label class="field__label" for="f-task-type">任务类型</label>
+        <select class="field__control" id="f-task-type" name="task_type">
+          <option value="analyze">analyze · 基因组分析</option>
+          <option value="curate">curate · 本地流行特征库构建</option>
+        </select>
+        <p class="field__hint">analyze 逐样本走分析管线；curate 构建本地流行特征库。</p>
+      </div>
+      <div class="field">
+        <label class="field__label" for="f-samples">样本列表 <span class="field__optional">analyze 用</span></label>
+        <textarea class="field__control" id="f-samples" name="samples" rows="3" placeholder="SAM-TYP-001,SAM-TYP-002"></textarea>
+        <p class="field__hint">多个样本用逗号或换行分隔。</p>
+      </div>
+      <div class="field">
+        <label class="field__label" for="f-scope">scope <span class="field__optional">可选 · curate 用</span></label>
+        <input class="field__control field__control--mono" id="f-scope" name="scope" type="text" placeholder='{"pathogen": "Salmonella"}' spellcheck="false">
+        <p class="field__hint">JSON 对象，例如按病原筛选构建范围。</p>
+      </div>
+      <div class="form__actions">
+        <button class="btn btn--primary" type="submit">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+          提交任务
+        </button>
+      </div>
+    </form>
+  </section>
+  <section class="card card--table" aria-labelledby="tasks-title">
+    <div class="card__head">
+      <h2 class="card__title" id="tasks-title">最近任务</h2>
+      <span class="card__count">{{ tasks|length }} 条</span>
+    </div>
+    {% if tasks %}
+    <table class="tasktable">
+      <thead>
+        <tr><th scope="col">任务 ID</th><th scope="col">类型</th><th scope="col">状态</th><th scope="col">提交人</th><th scope="col">创建时间</th></tr>
+      </thead>
+      <tbody>
+      {% for t in tasks %}
+        <tr>
+          <td data-label="任务 ID"><a class="tasklink" href="/tasks/{{ t.task_id }}" title="{{ t.task_id }}">{{ t.task_id[:18] }}…</a></td>
+          <td data-label="类型"><span class="typetag">{{ t.task_type }}</span></td>
+          <td data-label="状态">{{ state_badge(t.state) }}</td>
+          <td data-label="提交人">{{ t.submitted_by }}</td>
+          <td data-label="创建时间"><span class="mono-dim">{{ t.created_at[:16].replace("T", " ") }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+      <h3 class="empty__title">暂无任务</h3>
+      <p class="empty__hint">提交第一个分析任务后，运行状态会实时显示在这里。</p>
+    </div>
+    {% endif %}
+  </section>
+</div>
 {% endblock %}

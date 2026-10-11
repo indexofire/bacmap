@@ -41,7 +41,7 @@ mash = ">=2.3"
 mummer4 = "*"
 
 [pypi-dependencies]
-gmlst = "==0.1.1"
+gmlst = "==0.5.2"
 biopython = ">=1.83"
 sistr-cmd = ">=1.1.3,<2"
 setuptools = "<81"

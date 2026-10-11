@@ -3,35 +3,94 @@
 FastAPI + Jinja2 + 内联轮询 JS（离线无 CDN 依赖，满足 C1）。
 路由一律同步 def——引擎的 DBOS 同步 API 不得在事件循环内调用
 （retrieve_workflow 会 RuntimeError），FastAPI 把同步路由放线程池执行。
-页面：任务列表 / 提交（analyze|curate）/ 详情+状态轮询 / 审批签名。
+页面：任务列表 / 提交（analyze|curate）/ 详情+状态轮询 / 审批签名 / 系统概览（只读）。
 create_app(engine) 与 build_server(engine) 同构——引擎注入，测试可换。
 """
 
 from __future__ import annotations
 
 import json
+import os
+import shutil
+from collections import Counter
 from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from bacmap.agent.llm.endpoints import load_llm_config
+from bacmap.config import BACMAP_HOME, DATA_DIR, RESULTS_DIR, WORKFLOWS_DIR
+from bacmap.interfaces.web.static import STATIC_DIR
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 from bacmap.tasks.spec import Approval, TaskType
 
 _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
+def _overview_data(engine: DbosTaskEngine) -> dict[str, Any]:
+    """系统概览只读数据——端点/路由/数据策略/版本/路径/沙箱/任务分布，零密钥。"""
+    cfg = load_llm_config(BACMAP_HOME / "config.toml")
+    endpoints = [
+        {
+            "name": e.name,
+            "location": e.location,
+            "base_url": e.base_url,
+            "model": e.model,
+            "enabled": e.enabled,
+        }
+        for e in cfg.endpoints.values()
+    ]
+    versions: dict[str, str] = {}
+    for pkg in ("bacmap", "gside", "gapit", "gmlst"):
+        try:
+            versions[pkg] = pkg_version(pkg)
+        except PackageNotFoundError:
+            versions[pkg] = "未安装"
+    if shutil.which("apptainer"):
+        sandbox = "Apptainer"
+    elif shutil.which("podman"):
+        sandbox = "Podman"
+    else:
+        sandbox = "无可用后端（mine 任务将失败）"
+    if os.environ.get("BACMAP_ALLOW_UNSANDBOXED") == "1":
+        sandbox += " · 直通通道已开启"
+    counts = Counter(str(t["state"]) for t in engine.list_tasks())
+    return {
+        "endpoints": endpoints,
+        "routing": cfg.routing,
+        "cloud_max_data_class": cfg.policy.cloud_max_data_class.name,
+        "versions": versions,
+        "paths": {
+            "BACMAP_HOME": str(BACMAP_HOME),
+            "data/": str(DATA_DIR),
+            "results/": str(RESULTS_DIR),
+            "workflows/": str(WORKFLOWS_DIR),
+        },
+        "sandbox": sandbox,
+        "task_counts": dict(counts),
+    }
+
+
 def create_app(engine: DbosTaskEngine) -> FastAPI:
     app = FastAPI(title="bacmap", docs_url=None, redoc_url=None)
+    # 静态资源仅本地（CSS/图标；零外联，ADR-16）
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request) -> HTMLResponse:
         return _TEMPLATES.TemplateResponse(
             request, "index.html", {"tasks": engine.list_tasks()}
         )
+
+    @app.get("/overview", response_class=HTMLResponse)
+    def overview(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(request, "overview.html", _overview_data(engine))
 
     @app.post("/tasks/submit")
     def submit_task(

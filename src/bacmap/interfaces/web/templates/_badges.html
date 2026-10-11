@@ -1,0 +1,5 @@
+{# 状态徽章宏：state-* 契约的唯一中文标签映射（DESIGN.md §2.2 / §10 债务登记） #}
+{% macro state_badge(state) -%}
+{% set labels = {"pending": "排队中", "running": "运行中", "awaiting_approval": "待审批", "succeeded": "已完成", "failed": "已失败", "cancelled": "已取消"} %}
+<span class="badge badge--{{ state }}"><span class="badge__dot" aria-hidden="true"></span>{{ labels.get(state, state) }}</span>
+{%- endmacro %}

@@ -14,11 +14,22 @@ from bacmap.tools.spec import DataClass
 TASK_TYPES = ("analyze", "curate", "mine", "write")
 
 _TASK_TYPE_ZH = {
-    "analyze": "基因组分析（QC/组装/物种/分型/耐药等管线）",
-    "curate": "本地流行特征库构建",
-    "mine": "数据挖掘（探索性分析）",
-    "write": "报告或论文撰写",
+    "analyze": "基因组分析——对测序数据/装配跑管线：QC、组装、物种鉴定、分型、耐药基因筛查等",
+    "curate": "本地流行特征库的构建与比对——结果整理入库、与本地特征库/基线数据比对、更新参考集",
+    "mine": (
+        "数据挖掘——对已有分析结果的二次操作：统计/汇总/比率计算、"
+        "菌株间或与历史数据的比较、聚类、可视化图表"
+    ),
+    "write": "报告或论文撰写——生成文字产物：简报、报告、论文文本",
 }
+
+_PROMPT_RULES = (
+    "拆解规则：\n"
+    "1. 一句话包含多个意图时，全部列出并保持用户所述顺序；\n"
+    "2. 同一任务类型的连续子步骤（如「QC、组装和分型」都属 analyze）合并为一个任务，不重复输出；\n"
+    "3. 对分析结果的后续操作（统计率、比较、聚类、可视化）属于 mine，不是 analyze；\n"
+    "4. 与本地库/基线比对属于 curate。"
+)
 
 
 class IntentTask(BaseModel):
@@ -41,6 +52,8 @@ _PROMPT_TEMPLATE = (
     "你是病原微生物基因组分析系统的任务路由器。把用户的请求拆解为任务列表。\n"
     "task_type 只能取以下四个值之一：\n"
     + "\n".join(f"- {k}: {v}" for k, v in _TASK_TYPE_ZH.items())
+    + "\n\n"
+    + _PROMPT_RULES
     + "\n\n用户请求：{text}\n\n不要发明用户没有要求的任务；无法归类时返回空列表。"
 )
 

@@ -383,7 +383,7 @@ VARIANT = {
             },
             "reference": {
                 "type": "string",
-                "description": "Reference FASTA (required for mpileup_call, consensus, faidx).",
+                "description": "Reference FASTA (required for mpileup_call, consensus).",
             },
             "query": {
                 "type": "string",
@@ -781,8 +781,8 @@ QUERY_METADATA = {
     "description": (
         "Query strain background metadata (patient info, isolation details, "
         "outbreak linkage) from the strain_metadata table. Supports filtering "
-        "by province, outbreak_id, sample_source, date range, and custom "
-        "extra JSON fields. Use this when the user asks about sample "
+        "by province, outbreak_id, sample_source, and date range. "
+        "Use this when the user asks about sample "
         "background, epidemiological info, or outbreak investigations."
     ),
     "parameters": {

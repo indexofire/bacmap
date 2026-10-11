@@ -28,9 +28,8 @@ dev = [
     "importlinter>=2.0",
 ]
 
-# ADR-15：修正后的 entry-point 组名（旧 hermes.plugins 不生效）
-[project.entry-points."hermes_agent.plugins"]
-bacmap = "bacmap.adapters.hermes"
+[project.scripts]
+bacmap = "bacmap.interfaces.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bacmap"]
@@ -53,7 +52,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q"
 
-# ADR-02：依赖方向契约。core/store/tools 不得导入 agent/tasks/interfaces/adapters。
+# ADR-02：依赖方向契约。core/store/tools 不得导入 agent/tasks/interfaces/workflow。
 [tool.importlinter]
 root_packages = ["bacmap"]
 
@@ -69,6 +68,5 @@ forbidden_modules = [
     "bacmap.agent",
     "bacmap.tasks",
     "bacmap.interfaces",
-    "bacmap.adapters",
     "bacmap.workflow",
 ]
