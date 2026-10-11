@@ -51,6 +51,7 @@ def client(tmp_path: Path, monkeypatch):
         },
     )
     monkeypatch.setattr(eng, "_run_snakemake", lambda p: _Proc())
+    monkeypatch.setattr(eng, "_generate_report_for", lambda s: {"sample_id": s})
     monkeypatch.setattr(eng, "_step_create_run", lambda p: {"run_id": "web-run-1"})
     monkeypatch.setattr(eng, "_step_finish_run", lambda rid, p: None)
     engine = eng.DbosTaskEngine(tmp_path)
@@ -145,3 +146,35 @@ class TestWebInterface:
         assert "BACMAP_HOME" in r.text
         assert "任务分布" in r.text
         assert "succeeded" in r.text
+
+
+class TestResultsPages:
+    """结果查询界面（深度补全：任务台之外的人工查询面）。"""
+
+    def test_samples_page_lists_completed(self, client):
+        c, _ = client
+        r = c.get("/samples")
+        assert r.status_code == 200
+        assert "SAM-001" in r.text
+        assert "Salmonella" in r.text
+
+    def test_sample_detail_shows_species(self, client):
+        c, _ = client
+        r = c.get("/samples/SAM-001")
+        assert r.status_code == 200
+        assert "Salmonella" in r.text
+        assert "blaCTX-M-15" in r.text
+
+    def test_missing_sample_404(self, client):
+        c, _ = client
+        assert c.get("/samples/NOPE").status_code == 404
+
+    def test_search_finds_by_gene(self, client):
+        c, _ = client
+        r = c.get("/search", params={"query": "blaCTX-M-15"})
+        assert r.status_code == 200
+        assert "SAM-001" in r.text
+
+    def test_report_file_route_404_when_absent(self, client):
+        c, _ = client
+        assert c.get("/samples/SAM-001/report").status_code == 404

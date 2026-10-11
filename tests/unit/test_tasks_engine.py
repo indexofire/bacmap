@@ -194,3 +194,17 @@ class TestEngineStateMachineHardening:
         assert engine._transition_from_running("t-guard", "awaiting_approval", "{}") is True
         assert engine._transition_from_running("t-guard", "awaiting_approval", "{}") is False
         assert engine.status("t-guard").state == TaskState.AWAITING_APPROVAL
+
+
+class TestAnalyzeAutoReport:
+    """§2 注①：analyze 任务末尾的模板化分析报告应自动生成（不再只是按需工具）。"""
+
+    def test_report_generated_at_end_of_analyze(self, engine, monkeypatch):
+        calls: list[str] = []
+        monkeypatch.setattr(
+            eng, "_generate_report_for", lambda s: (calls.append(s), {"sample_id": s})[1]
+        )
+        tid = engine.submit(TaskType.ANALYZE, {"samples": ["SAM-001"]}, "t")
+        st = _wait(engine, tid)
+        assert calls == ["SAM-001"]
+        assert st.state in (TaskState.SUCCEEDED, TaskState.AWAITING_APPROVAL)

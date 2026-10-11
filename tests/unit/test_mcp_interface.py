@@ -96,6 +96,7 @@ class TestTaskToolsRoundtrip:
         monkeypatch.setattr(eng, "_run_snakemake", lambda params: _Proc())
         monkeypatch.setattr(eng, "_step_create_run", lambda params: {"run_id": "mcp-run-1"})
         monkeypatch.setattr(eng, "_step_finish_run", lambda run_id, params: None)
+        monkeypatch.setattr(eng, "_generate_report_for", lambda s: {"sample_id": s})
         engine = eng.DbosTaskEngine(tmp_path)
         srv = build_server(engine)
         yield srv

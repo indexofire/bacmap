@@ -201,9 +201,30 @@ def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
         if summary:
             _step_ingest_gom(str(home), s, run["run_id"], summary)
         out["gates"][s] = _step_gate(str(home), s, text)
+        out.setdefault("reports", {})[s] = _step_report(s)
     if any(g["verdict"] != "pass" for g in out["gates"].values()):
         out["status"] = "AWAITING_APPROVAL"
     return out
+
+
+def _generate_report_for(sample_id: str) -> dict[str, Any]:
+    """任务末尾模板化分析报告（冻结 §2 注①：确定性路径、C3 无 LLM 可用）。
+
+    报告失败不拖垮分析任务——返回 error 信封供人审跟进。
+    """
+    from bacmap.tools.pipeline import generate_report
+
+    try:
+        raw = generate_report({"sample_id": sample_id})
+        parsed = json.loads(raw) if isinstance(raw, str) else {"error": str(raw)}
+        return dict(parsed)
+    except Exception as exc:  # 报告为呈现层：任何失败降级为 error 信封
+        return {"error": f"report generation failed: {exc}"}
+
+
+@DBOS.step()
+def _step_report(sample_id: str) -> dict[str, Any]:
+    return _generate_report_for(sample_id)
 
 
 def _run_sandbox(spec: Any) -> Any:

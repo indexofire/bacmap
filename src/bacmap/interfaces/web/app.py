@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -77,6 +77,56 @@ def _overview_data(engine: DbosTaskEngine) -> dict[str, Any]:
     }
 
 
+def _digest(summary: dict[str, Any]) -> dict[str, Any]:
+    """summary JSON → 展示行（物种/MLST/血清型/基因计数，口径对齐 bio_get_result）。"""
+    from bacmap.core.utils import parse_mlst
+
+    steps = summary.get("steps", {}) or {}
+    sp = steps.get("species", {}) or {}
+    verdict = sp.get("verdict", "N/A") if isinstance(sp, dict) else str(sp)
+    mlst_raw = steps.get("mlst", "") or ""
+    st = parse_mlst(mlst_raw)["st"] if mlst_raw else "N/A"
+    sero = steps.get("serotype", {}) or {}
+    serovar = sero.get("sistr", "N/A") if isinstance(sero, dict) else "N/A"
+    amr = steps.get("amr", {}) or {}
+    card = amr.get("abricate_card", []) if isinstance(amr, dict) else []
+    vfdb = amr.get("abricate_vfdb", []) if isinstance(amr, dict) else []
+    plasmid = (steps.get("plasmid", {}) or {}).get("plasmidfinder", [])
+    dec = steps.get("dec", {}) if isinstance(steps.get("dec", {}), dict) else {}
+    return {
+        "sample_id": summary.get("_sample_id", summary.get("sample", "")),
+        "verdict": verdict,
+        "st": st,
+        "serovar": serovar,
+        "n_card": len(card),
+        "n_vfdb": len(vfdb),
+        "n_plasmid": len(plasmid),
+        "ipaH": dec.get("ipaH", "N/A"),
+        "pathotype": dec.get("pathotype", "N/A"),
+        "card_genes": sorted({str(g.get("GENE", "")) for g in card if g.get("GENE")}),
+        "vfdb_genes": sorted({str(g.get("GENE", "")) for g in vfdb if g.get("GENE")}),
+    }
+
+
+def _load_summaries(engine: DbosTaskEngine) -> list[dict[str, Any]]:
+    """已完成样本的 summary 扫描（基于 engine.home，随 --home 正确）。"""
+    results = Path(engine.home) / "results"
+    out: list[dict[str, Any]] = []
+    for sj in sorted(results.glob("*/report/*_summary.json")):
+        try:
+            data = json.loads(sj.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict):
+            data["_sample_id"] = sj.parent.parent.name
+            out.append(data)
+    return out
+
+
+def _report_path(engine: DbosTaskEngine, sample_id: str) -> Path:
+    return Path(engine.home) / "results" / sample_id / "report" / f"{sample_id}_report.html"
+
+
 def create_app(engine: DbosTaskEngine) -> FastAPI:
     app = FastAPI(title="bacmap", docs_url=None, redoc_url=None)
     # 静态资源仅本地（CSS/图标；零外联，ADR-16）
@@ -91,6 +141,68 @@ def create_app(engine: DbosTaskEngine) -> FastAPI:
     @app.get("/overview", response_class=HTMLResponse)
     def overview(request: Request) -> HTMLResponse:
         return _TEMPLATES.TemplateResponse(request, "overview.html", _overview_data(engine))
+
+    @app.get("/samples", response_class=HTMLResponse)
+    def samples_page(request: Request) -> HTMLResponse:
+        rows = [_digest(s) for s in _load_summaries(engine)]
+        return _TEMPLATES.TemplateResponse(request, "samples.html", {"rows": rows})
+
+    @app.get("/samples/{sample_id}", response_class=HTMLResponse)
+    def sample_detail(request: Request, sample_id: str) -> HTMLResponse:
+        summary = next(
+            (s for s in _load_summaries(engine) if s["_sample_id"] == sample_id), None
+        )
+        if summary is None:
+            raise HTTPException(404, "样本不存在")
+        d = _digest(summary)
+        d["has_report"] = _report_path(engine, sample_id).is_file()
+        return _TEMPLATES.TemplateResponse(request, "sample_detail.html", {"d": d})
+
+    @app.get("/samples/{sample_id}/report")
+    def sample_report(sample_id: str) -> FileResponse:
+        path = _report_path(engine, sample_id)
+        if not path.is_file():
+            raise HTTPException(404, "该样本尚未生成 HTML 报告")
+        return FileResponse(path, media_type="text/html")
+
+    @app.get("/search", response_class=HTMLResponse)
+    def search_page(
+        request: Request,
+        query: str = "",
+        serotype: str = "",
+        mlst_st: str = "",
+        amr_gene: str = "",
+    ) -> HTMLResponse:
+        rows = [_digest(s) for s in _load_summaries(engine)]
+        terms = [q.lower() for q in query.split() if q.strip()]
+        ser_l, st_u, gene_l = (
+            serotype.strip().lower(), mlst_st.strip().upper(), amr_gene.strip().lower()
+        )
+        hits = []
+        for r in rows:
+            hay = " ".join(
+                [r["verdict"], r["serovar"], r["st"], *r["card_genes"], *r["vfdb_genes"]]
+            ).lower()
+            if terms and not all(t in hay for t in terms):
+                continue
+            if ser_l and ser_l not in r["serovar"].lower():
+                continue
+            if st_u and r["st"].upper() != st_u:
+                continue
+            if gene_l and gene_l not in [g.lower() for g in r["card_genes"] + r["vfdb_genes"]]:
+                continue
+            hits.append(r)
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "search.html",
+            {
+                "hits": hits,
+                "query": query,
+                "serotype": serotype,
+                "mlst_st": mlst_st,
+                "amr_gene": amr_gene,
+            },
+        )
 
     @app.post("/tasks/submit")
     def submit_task(

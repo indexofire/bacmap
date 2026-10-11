@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}样本 · bacmap{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1 class="pagehead__title">样本结果</h1>
+  <p class="pagehead__sub">全部已完成分析的样本，点击样本号查看详情与 HTML 报告。</p>
+</div>
+<section class="card" aria-labelledby="samples-title">
+  <div class="card__head">
+    <h2 class="card__title" id="samples-title">样本</h2>
+    <span class="card__count">{{ rows|length }} 株</span>
+  </div>
+  {% if rows %}
+  <table class="tasktable">
+    <thead>
+      <tr><th scope="col">样本</th><th scope="col">物种</th><th scope="col">MLST</th><th scope="col">血清型</th><th scope="col">耐药基因</th><th scope="col">毒力基因</th></tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td data-label="样本"><a class="tasklink" href="/samples/{{ r.sample_id }}">{{ r.sample_id }}</a></td>
+        <td data-label="物种">{{ r.verdict }}</td>
+        <td data-label="MLST"><span class="mono-dim">{{ r.st }}</span></td>
+        <td data-label="血清型">{{ r.serovar }}</td>
+        <td data-label="耐药基因">{{ r.n_card }}</td>
+        <td data-label="毒力基因">{{ r.n_vfdb }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    <h3 class="empty__title">暂无已完成样本</h3>
+    <p class="empty__hint">提交分析任务并完成后，结果会出现在这里。</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}检索 · bacmap{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1 class="pagehead__title">结果检索</h1>
+  <p class="pagehead__sub">按关键词（物种/血清型/ST/基因名）或结构化字段检索已完成样本。</p>
+</div>
+<section class="card card--form" aria-labelledby="search-title">
+  <div class="card__head"><h2 class="card__title" id="search-title">检索条件</h2></div>
+  <form class="form" method="get" action="/search">
+    <div class="field">
+      <label class="field__label" for="q">关键词</label>
+      <input class="field__control" id="q" name="query" type="text" value="{{ query }}" placeholder="Salmonella blaCTX-M-15 …">
+      <p class="field__hint">多个词空格分隔，全部命中才返回。</p>
+    </div>
+    <div class="field">
+      <label class="field__label" for="f-sero">血清型</label>
+      <input class="field__control" id="f-sero" name="serotype" type="text" value="{{ serotype }}" placeholder="Typhimurium">
+    </div>
+    <div class="field">
+      <label class="field__label" for="f-st">MLST ST</label>
+      <input class="field__control field__control--mono" id="f-st" name="mlst_st" type="text" value="{{ mlst_st }}" placeholder="19">
+    </div>
+    <div class="field">
+      <label class="field__label" for="f-gene">耐药基因</label>
+      <input class="field__control field__control--mono" id="f-gene" name="amr_gene" type="text" value="{{ amr_gene }}" placeholder="blaCTX-M-15">
+    </div>
+    <div class="form__actions">
+      <button class="btn btn--primary" type="submit">检索</button>
+    </div>
+  </form>
+</section>
+<section class="card" aria-labelledby="hits-title">
+  <div class="card__head">
+    <h2 class="card__title" id="hits-title">结果</h2>
+    <span class="card__count">{{ hits|length }} 株</span>
+  </div>
+  {% if hits %}
+  <table class="tasktable">
+    <thead>
+      <tr><th scope="col">样本</th><th scope="col">物种</th><th scope="col">MLST</th><th scope="col">血清型</th></tr>
+    </thead>
+    <tbody>
+    {% for r in hits %}
+      <tr>
+        <td data-label="样本"><a class="tasklink" href="/samples/{{ r.sample_id }}">{{ r.sample_id }}</a></td>
+        <td data-label="物种">{{ r.verdict }}</td>
+        <td data-label="MLST"><span class="mono-dim">{{ r.st }}</span></td>
+        <td data-label="血清型">{{ r.serovar }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    <h3 class="empty__title">无匹配样本</h3>
+    <p class="empty__hint">调整关键词或结构化字段后重试。</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ d.sample_id }} · bacmap{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1 class="pagehead__title mono-dim">{{ d.sample_id }}</h1>
+  <p class="pagehead__sub">
+    分析结果详情
+    {% if d.has_report %}· <a href="/samples/{{ d.sample_id }}/report">查看 HTML 报告</a>{% endif %}
+  </p>
+</div>
+<section class="card" aria-labelledby="det-title">
+  <div class="card__head"><h2 class="card__title" id="det-title">结果概要</h2></div>
+  <table class="tasktable">
+    <tbody>
+      <tr><td data-label="项目">物种判定</td><td>{{ d.verdict }}</td></tr>
+      <tr><td data-label="项目">MLST ST</td><td><span class="mono-dim">{{ d.st }}</span></td></tr>
+      <tr><td data-label="项目">血清型</td><td>{{ d.serovar }}</td></tr>
+      <tr><td data-label="项目">DEC 判定</td><td>{{ d.pathotype }}（ipaH：{{ d.ipaH }}）</td></tr>
+      <tr><td data-label="项目">耐药基因（CARD）</td><td>{{ d.n_card }}</td></tr>
+      <tr><td data-label="项目">毒力基因（VFDB）</td><td>{{ d.n_vfdb }}</td></tr>
+      <tr><td data-label="项目">质粒（PlasmidFinder）</td><td>{{ d.n_plasmid }}</td></tr>
+    </tbody>
+  </table>
+</section>
+{% if d.card_genes or d.vfdb_genes %}
+<section class="card" aria-labelledby="genes-title">
+  <div class="card__head"><h2 class="card__title" id="genes-title">检出基因</h2></div>
+  {% if d.card_genes %}
+  <p class="field__hint">耐药（CARD）：</p>
+  <p>{% for g in d.card_genes %}<code>{{ g }}</code> {% endfor %}</p>
+  {% endif %}
+  {% if d.vfdb_genes %}
+  <p class="field__hint">毒力（VFDB）：</p>
+  <p>{% for g in d.vfdb_genes %}<code>{{ g }}</code> {% endfor %}</p>
+  {% endif %}
+</section>
+{% endif %}
+<p><a href="/samples">← 返回样本列表</a></p>
+{% endblock %}
