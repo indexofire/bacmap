@@ -81,10 +81,52 @@ class TestFallbackChain:
         assert result.backend == "fake"
         assert calls == ["fake"]
 
-    def test_timeout_propagates(self, tmp_path: Path):
-        import subprocess
+    def test_timeout_returns_result(self, tmp_path: Path):
+        """深度审计修订：超时转为 SandboxResult(returncode=-1)而非裸抛——
+        保留 stdout/stderr 诊断且不破坏调用方契约（sleep 5s 超 1s 真实触发）。"""
+        result = SandboxExecutor(allow_unsandboxed=True, timeout=1).run(
+            SandboxSpec(image="i", command=["sleep", "5"], workspace=tmp_path)
+        )
+        assert result.returncode != 0
+        assert "timeout" in result.stderr.lower()
 
-        with pytest.raises(subprocess.TimeoutExpired):
-            SandboxExecutor(allow_unsandboxed=True, timeout=1).run(
-                SandboxSpec(image="i", command=["sleep", "5"], workspace=tmp_path)
-            )
+
+class TestSandboxHardening:
+    """深度审计循环 6：超时不得抛 TimeoutExpired 破坏 SandboxResult 契约；
+    工作区路径含空格时直通模式必须仍能正确 cd。"""
+
+    def test_timeout_yields_result_not_exception(self, tmp_path, monkeypatch):
+        import subprocess as sp
+
+        monkeypatch.setenv("BACMAP_ALLOW_UNSANDBOXED", "1")
+        from bacmap.agent.sandbox import SandboxExecutor, SandboxSpec
+
+        spec = SandboxSpec(
+            image="docker://python:3.12-slim",
+            command=["sleep", "3"],
+            workspace=tmp_path,
+        )
+        monkeypatch.setattr(
+            sp, "run",
+            lambda *a, **k: (_ for _ in ()).throw(
+                sp.TimeoutExpired(cmd="sleep", timeout=1)
+            ),
+        )
+        res = SandboxExecutor(timeout=1).run(spec)
+        assert res.returncode != 0
+        assert "timeout" in (res.stderr or "").lower()
+
+    def test_workspace_with_space_unsandboxed(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("BACMAP_ALLOW_UNSANDBOXED", "1")
+        from bacmap.agent.sandbox import SandboxExecutor, SandboxSpec
+
+        ws = tmp_path / "my workspace"
+        ws.mkdir()
+        spec = SandboxSpec(
+            image="docker://python:3.12-slim",
+            command=["sh", "-c", "echo ok > marker.txt"],
+            workspace=ws,
+        )
+        res = SandboxExecutor().run(spec)
+        assert res.returncode == 0
+        assert (ws / "marker.txt").is_file()

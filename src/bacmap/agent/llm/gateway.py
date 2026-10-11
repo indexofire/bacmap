@@ -131,7 +131,24 @@ class LlmGateway:
                 f"{self._config.policy.cloud_max_data_class.name}"
             )
 
-        instructions = _build_role_instructions(role)
+        instructions = None
+        if role:
+            from bacmap.agent import roledef
+
+            try:
+                rd = roledef.load_role_def(role)
+                instructions = roledef.build_system_prompt(role)
+            except (OSError, ValueError) as exc:
+                raise LlmUnavailableError(f"role {role!r} unavailable: {exc}") from exc
+            if endpoint.location not in rd.allowed_locations:
+                raise DataClassViolationError(
+                    f"role {role!r} forbids endpoint location {endpoint.location!r}"
+                )
+            if data_class > DataClass[rd.max_data_class]:
+                raise DataClassViolationError(
+                    f"payload {data_class.name} exceeds role {role!r} "
+                    f"data class ceiling {rd.max_data_class}"
+                )
         agent = self._agent_for(endpoint, output_type, role, instructions)
         sem = self._sems.get(endpoint.name)
         last_exc: Exception | None = None

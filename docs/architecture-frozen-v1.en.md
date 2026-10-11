@@ -687,7 +687,7 @@ These are assumptions the frozen design depends on that have not yet been measur
 9. **Agent**: complete V3, V6, V7, and V9; wire in Strata and LLM APIs, the request queue, resource arbitration, and data classification; implement intent classification and interpretation; regress V11 sub-item (1) with real LLM interpretations
 10. **Open path**: complete V5; implement `mine`, `write`, and their gates (V11 sub-items (5)(6))
 
-After each step, the hermes-bacmap plugin channel remains usable.
+(Revised in v1.4.8: the plugin channel was removed. Throughout the migration, `bacmap mcp --read-only` served as the continuously available external channel.)
 
 ---
 

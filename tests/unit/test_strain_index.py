@@ -268,3 +268,35 @@ class TestExtractGenotypeEdgeCases:
         result = _extract_genotype(payload)
         assert len(result["amr_genes"]) == 1
         assert result["amr_genes"][0]["gene"] == "blaCTX-M-15"
+
+
+class TestDeepAuditFixes:
+    """深度审计循环 5：upsert 失败回滚 / find_similar 无分型守卫。"""
+
+    def test_upsert_failure_rolls_back(self, tmp_path):
+        """失败的 upsert 不得留下被污染的未决事务（被下一次 upsert 提交）。"""
+        idx = StrainGenotypeIndex(tmp_path / "idx.sqlite")
+        idx.upsert(strain_id="A", amr_genes=[{"gene": "tetA", "coverage": 99, "identity": 99}])
+        with pytest.raises(ValueError):
+            idx.upsert(
+                strain_id="A",
+                amr_genes=[{"gene": "bad", "coverage": "99.5%", "identity": 99}],
+            )
+        idx.upsert(strain_id="B", amr_genes=[{"gene": "x", "coverage": 1, "identity": 1}])
+        genes_a = [
+            r["gene_name"]
+            for r in idx._conn.execute(
+                "SELECT gene_name FROM strain_amr_genes WHERE strain_id = 'A'"
+            )
+        ]
+        assert genes_a == ["tetA"]
+
+    def test_find_similar_untyped_returns_empty(self, tmp_path):
+        """无血清型且无 MLST 的菌株：不得把全库其余菌株都当"相似"返回。"""
+        idx = StrainGenotypeIndex(tmp_path / "idx.sqlite")
+        idx.upsert(strain_id="U", species="Salmonella")
+        idx.upsert(strain_id="S1", serotype="Typhimurium", mlst_st="19")
+        idx.upsert(strain_id="S2", serotype="Enteritidis")
+        assert idx.find_similar("U") == []
+        # 有分型的对照组不受影响
+        assert [m.strain_id for m in idx.find_similar("S1")] == []

@@ -92,3 +92,105 @@ class TestDbosTaskEngine:
     def test_status_unknown_task_raises(self, engine):
         with pytest.raises(KeyError):
             engine.status("no-such-task")
+
+
+class TestFastqResolution:
+    """_fastqs 应以 samples.tsv 登记为准（gs/ 约定作回退）——修复前：只认 gs/ 硬编码，
+    登记在别处的样本 input_files 为空，C4 证据链不完整。"""
+
+    def _make_home(self, tmp_path, registered: dict[str, tuple[str, str]] | None):
+        wf = tmp_path / "workflows" / "bacmap"
+        (wf / "config").mkdir(parents=True, exist_ok=True)
+        gs = tmp_path / "gs"
+        if registered is not None:
+            lines = ["sample\tspecies\tR1\tR2"]
+            for s, (r1, r2) in registered.items():
+                lines.append(f"{s}\tX\t{r1}\t{r2}")
+            (wf / "config" / "samples.tsv").write_text("\n".join(lines), encoding="utf-8")
+        else:
+            (gs / "SAM-GS").mkdir(parents=True, exist_ok=True)
+            for r in ("R1", "R2"):
+                (gs / "SAM-GS" / f"SAM-GS_{r}.fastq.gz").write_bytes(b"x")
+        return tmp_path
+
+    def test_registered_path_wins(self, tmp_path):
+        alt = tmp_path / "alt"
+        alt.mkdir()
+        (alt / "SAM-ALT_R1.fastq.gz").write_bytes(b"x")
+        (alt / "SAM-ALT_R2.fastq.gz").write_bytes(b"x")
+        home = self._make_home(tmp_path, {"SAM-ALT": ("../../alt/SAM-ALT_R1.fastq.gz",
+                                                      "../../alt/SAM-ALT_R2.fastq.gz")})
+        got = eng._fastqs(home, ["SAM-ALT"])
+        assert [p.name for p in got] == ["SAM-ALT_R1.fastq.gz", "SAM-ALT_R2.fastq.gz"]
+
+    def test_gs_fallback_when_unregistered(self, tmp_path):
+        home = self._make_home(tmp_path, registered={})
+        gs = home / "gs" / "SAM-GS"
+        gs.mkdir(parents=True)
+        for r in ("R1", "R2"):
+            (gs / f"SAM-GS_{r}.fastq.gz").write_bytes(b"x")
+        got = eng._fastqs(home, ["SAM-GS"])
+        assert [p.name for p in got] == ["SAM-GS_R1.fastq.gz", "SAM-GS_R2.fastq.gz"]
+
+    def test_no_samples_tsv_still_works(self, tmp_path):
+        gs = tmp_path / "gs" / "SAM-ONLY"
+        gs.mkdir(parents=True)
+        for r in ("R1", "R2"):
+            (gs / f"SAM-ONLY_{r}.fastq.gz").write_bytes(b"x")
+        got = eng._fastqs(tmp_path, ["SAM-ONLY"])
+        assert len(got) == 2
+
+
+class TestEngineStateMachineHardening:
+    """深度审计循环 4：approve 状态守卫（防 V11③ 引擎层绕过）/ analyze REJECT 不得静默
+    SUCCEEDED / status 条件更新（防 approve 后被降级回 awaiting）。"""
+
+    def _insert_task(self, e, tid: str, state: str, task_type: str = "curate") -> None:
+        import sqlite3
+
+        now = datetime.now(UTC).isoformat()
+        with sqlite3.connect(e.db) as conn:
+            conn.execute(
+                "INSERT INTO tasks (task_id, task_type, state, params_json, submitted_by,"
+                " created_at, updated_at, workflow_id, current_step)"
+                " VALUES (?,?,?,?,?,?,?,?,?)",
+                (tid, task_type, state, "{}", "t", now, now, "", "curate"),
+            )
+
+    def _approval(self) -> Approval:
+        return Approval(
+            approver="auditor",
+            decision="approve",
+            signature="sig-x",
+            comment="",
+            at=datetime.now(UTC),
+        )
+
+    def test_approve_running_task_rejected(self, engine):
+        self._insert_task(engine, "t-running", "running")
+        with pytest.raises(ValueError, match="awaiting_approval"):
+            engine.approve("t-running", self._approval())
+
+    def test_approve_failed_curate_does_not_publish(self, engine):
+        """审计场景：门拒绝的 curate 任务（FAILED、候选已暂存）——approve 不得绕过发布门。"""
+        self._insert_task(engine, "t-failed", "failed", task_type="curate")
+        with pytest.raises(ValueError):
+            engine.approve("t-failed", self._approval())
+
+    def test_double_approve_rejected(self, engine):
+        self._insert_task(engine, "t-done", "succeeded")
+        with pytest.raises(ValueError):
+            engine.approve("t-done", self._approval())
+
+    def test_analyze_reject_needs_review_not_succeeded(self, engine):
+        """summary 缺失 → 门 reject：修复前任务静默 SUCCEEDED（绿色任务藏红色门）。"""
+        tid = engine.submit(TaskType.ANALYZE, {"samples": ["SAM-NOSUM"]}, "t")
+        st = _wait(engine, tid)
+        assert st.state == TaskState.AWAITING_APPROVAL
+        assert "reject" in (st.message or "")
+
+    def test_status_transition_guard_helper(self, engine):
+        self._insert_task(engine, "t-guard", "running")
+        assert engine._transition_from_running("t-guard", "awaiting_approval", "{}") is True
+        assert engine._transition_from_running("t-guard", "awaiting_approval", "{}") is False
+        assert engine.status("t-guard").state == TaskState.AWAITING_APPROVAL

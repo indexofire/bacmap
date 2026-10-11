@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from bacmap.tools.spec import DataClass
 
@@ -21,9 +21,11 @@ DEFAULT_STRATA_MODEL = "qwen3.8-flash-next-iq3_xxs"
 
 
 class LlmEndpoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str
     kind: str = "openai_compatible"
-    location: str = "local"  # local | lan | cloud
+    location: Literal["local", "lan", "cloud"] = "local"
     base_url: str
     model: str
     tier: str = "T2"

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from bacmap.store.knowledge import KnowledgeStore
 from bacmap.tasks.gates import evaluate_citation
 
@@ -86,3 +88,46 @@ class TestCitationGateBackend:
         )
         assert res.verdict.value == "reject"
         assert res.details["unknown"] == ["22222222"]
+
+
+class TestSearchRobustness:
+    """FTS5 查询健壮性：任意用户输入不得触发语法错误（修复前：AND/引号/括号直接抛异常）。"""
+
+    def test_no_exception_on_fts_hostile_input(self, tmp_path: Path):
+        ks = _store(tmp_path)
+        kid = ks.import_candidate(_pmid_entry(), imported_by="a")
+        for q in ("cgMLST AND", 'quote"unbalanced', "raw (paren", "*", ' NEAR ', ""):
+            hits = ks.search(q)
+            assert isinstance(hits, list)
+        assert [h["id"] for h in ks.search("cgMLST")] == [kid]
+
+    def test_doi_identifier_lowercased_in_known(self, tmp_path: Path):
+        ks = _store(tmp_path)
+        kid = ks.import_candidate(
+            {"title": "t", "identifier": "10.1128/JCM.00123-23"}, imported_by="a"
+        )
+        ks.approve(kid, approver="m")
+        assert ks.known_citations() == ["10.1128/jcm.00123-23"]
+
+
+class TestGosSearchErrorPropagation:
+    """深度审计循环 5：GOS search 不得吞掉 OperationalError（锁/IO 错误静默返回空结果）。"""
+
+    def test_search_propagates_operational_errors(self, tmp_path: Path):
+        import sqlite3
+
+        from bacmap.store.genome_object_service import GenomeObjectService
+
+        gos = GenomeObjectService(tmp_path / "gom.sqlite")
+
+        class _BoomConn:
+            def execute(self, *a, **k):
+                raise sqlite3.OperationalError("database is locked")
+
+            def close(self) -> None:
+                return None
+
+        gos._conn = _BoomConn()  # noqa: SLF001
+        with pytest.raises(sqlite3.OperationalError):
+            gos.search("anything")
+        gos.close()

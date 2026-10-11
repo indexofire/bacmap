@@ -79,8 +79,17 @@ class PodmanRunner:
         return cmd
 
 
-def _run(cmd: list[str], timeout: int) -> SandboxResult:
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+def _run(cmd: list[str], timeout: int, cwd: Path | None = None) -> SandboxResult:
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+    except subprocess.TimeoutExpired as exc:
+        out = exc.stdout if isinstance(exc.stdout, str) else ""
+        return SandboxResult(
+            returncode=-1,
+            stdout=out,
+            stderr=f"[sandbox] timeout after {timeout}s",
+            backend="direct",
+        )
     return SandboxResult(
         returncode=proc.returncode,
         stdout=proc.stdout,
@@ -121,8 +130,7 @@ class SandboxExecutor:
         if runner is None:
             if self._allow_unsandboxed:
                 logger.warning("SANDBOX BYPASSED (BACMAP_ALLOW_UNSANDBOXED=1)——仅限受控开发环境")
-                inner = ["sh", "-c", f"cd {spec.workspace} && exec \"$@\"", "sh", *spec.command]
-                return _run(inner, self.timeout)
+                return _run(list(spec.command), self.timeout, cwd=spec.workspace)
             raise SandboxUnavailableError(
                 f"{reason}; 安装 Apptainer 或设置 BACMAP_ALLOW_UNSANDBOXED=1（不推荐）"
             )

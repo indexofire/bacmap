@@ -118,28 +118,32 @@ class StrainGenotypeIndex:
             ),
         )
 
-        self._conn.execute(
-            "DELETE FROM strain_amr_genes WHERE strain_id = ?",
-            (strain_id,),
-        )
-        if amr_genes:
-            for g in amr_genes:
-                gene = g.get("gene", "").strip()
-                if not gene:
-                    continue
-                self._conn.execute(
-                    """INSERT OR IGNORE INTO strain_amr_genes
-                       (strain_id, gene_name, database, coverage, identity, product)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (
-                        strain_id,
-                        gene,
-                        g.get("database", ""),
-                        float(g.get("coverage", 0)),
-                        float(g.get("identity", 0)),
-                        g.get("product", "")[:200],
-                    ),
-                )
+        try:
+            self._conn.execute(
+                "DELETE FROM strain_amr_genes WHERE strain_id = ?",
+                (strain_id,),
+            )
+            if amr_genes:
+                for g in amr_genes:
+                    gene = g.get("gene", "").strip()
+                    if not gene:
+                        continue
+                    self._conn.execute(
+                        """INSERT OR IGNORE INTO strain_amr_genes
+                           (strain_id, gene_name, database, coverage, identity, product)
+                           VALUES (?, ?, ?, ?, ?, ?)""",
+                        (
+                            strain_id,
+                            gene,
+                            g.get("database", ""),
+                            float(g.get("coverage", 0)),
+                            float(g.get("identity", 0)),
+                            g.get("product", "")[:200],
+                        ),
+                    )
+        except Exception:
+            self._conn.rollback()
+            raise
         self._conn.commit()
 
     def search(
@@ -237,6 +241,8 @@ class StrainGenotypeIndex:
             conditions.append("UPPER(g.mlst_st) = ?")
             params.append(row["mlst_st"].upper())
 
+        if len(conditions) == 1:
+            return []  # 无可用分型键（血清型/MLST 均空）：不得把全库其余菌株当"相似"
         sql = (
             "SELECT DISTINCT g.* FROM strain_genotype_index g"
             + " WHERE "

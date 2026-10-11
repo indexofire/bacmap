@@ -7,6 +7,7 @@ SQLite + FTS5 全文检索；条目先入暂存（approved_by 为空），
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -40,6 +41,9 @@ CREATE TRIGGER IF NOT EXISTS knowledge_fts_ad AFTER DELETE ON knowledge_entries 
     VALUES ('delete', old.id, old.title, old.authors, old.content, old.identifier);
 END;
 """
+
+_FTS_TOKEN_RE = re.compile(r"[\w\u4e00-\u9fff]+")
+_PMID_NORM_RE = re.compile(r"(?i)^pmid[:\s]*(\d{6,9})$")
 
 _FIELDS = (
     "id, kind, title, authors, year, source, identifier, content,"
@@ -117,13 +121,20 @@ class KnowledgeStore:
         return [dict(r) for r in rows]
 
     def search(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
-        """FTS5 全文检索（含未审核条目，结果带 approved 标记供调用方判断）。"""
+        """FTS5 全文检索（含未审核条目，结果带 approved 标记供调用方判断）。
+
+        任意用户输入安全：分词后逐词加引号（FTS5 短语语法），
+        AND/OR/括号/未闭合引号等语法字符不再触发 fts5 syntax error。
+        """
+        match = " ".join(f'"{tok}"' for tok in _FTS_TOKEN_RE.findall(query))
+        if not match:
+            return []
         with self._conn() as conn:
             rows = conn.execute(
                 f"SELECT {_FIELDS} FROM knowledge_entries"
                 " WHERE id IN (SELECT rowid FROM knowledge_fts WHERE knowledge_fts MATCH ?)"
                 " ORDER BY id LIMIT ?",
-                (query, limit),
+                (match, limit),
             ).fetchall()
         return [dict(r) for r in rows]
 
@@ -133,9 +144,6 @@ class KnowledgeStore:
         PMID 式标识符（"PMID:12345678"）规范化为纯数字，与引用门
         _CITE_RE 的捕获形态（gates.evaluate_citation 提取纯数字）对齐。
         """
-        import re
-
-        norm = re.compile(r"(?i)^pmid[:\s]*(\d{6,9})$")
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT identifier FROM knowledge_entries"
@@ -144,6 +152,12 @@ class KnowledgeStore:
             ).fetchall()
         out: set[str] = set()
         for r in rows:
-            m = norm.match(r["identifier"].strip())
-            out.add(m.group(1) if m else r["identifier"].strip())
+            ident = r["identifier"].strip()
+            m = _PMID_NORM_RE.match(ident)
+            if m:
+                out.add(m.group(1))
+            elif ident[:3].lower() == "10.":
+                out.add(ident.lower())
+            else:
+                out.add(ident)
         return sorted(out)

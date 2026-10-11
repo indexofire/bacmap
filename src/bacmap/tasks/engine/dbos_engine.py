@@ -80,12 +80,22 @@ def _load_summary(home: Path, sample: str) -> dict[str, Any]:
 
 
 def _fastqs(home: Path, samples: list[str]) -> list[Path]:
-    out = []
+    """样本 FASTQ 解析：samples.tsv 登记优先（路径相对部署目录 workflows/bacmap），
+    gs/ 约定布局回退——登记在任意位置的样本不再丢失 input_files（C4 证据链）。"""
+    tsv = home / "workflows" / "bacmap" / "config" / "samples.tsv"
+    registered: dict[str, tuple[str, str]] = {}
+    if tsv.is_file():
+        for line in tsv.read_text(encoding="utf-8").splitlines()[1:]:
+            parts = line.split("\t")
+            if len(parts) >= 4 and parts[0].strip():
+                registered[parts[0].strip()] = (parts[2].strip(), parts[3].strip())
+    out: list[Path] = []
     for s in samples:
-        for r in ("R1", "R2"):
-            f = home / "gs" / s / f"{s}_{r}.fastq.gz"
-            if f.exists():
-                out.append(f)
+        if s in registered:
+            pair = [home / "workflows" / "bacmap" / p for p in registered[s]]
+        else:
+            pair = [home / "gs" / s / f"{s}_{r}.fastq.gz" for r in ("R1", "R2")]
+        out.extend(f for f in pair if f.exists())
     return out
 
 
@@ -191,7 +201,7 @@ def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
         if summary:
             _step_ingest_gom(str(home), s, run["run_id"], summary)
         out["gates"][s] = _step_gate(str(home), s, text)
-    if any(g["verdict"] == "needs_human_review" for g in out["gates"].values()):
+    if any(g["verdict"] != "pass" for g in out["gates"].values()):
         out["status"] = "AWAITING_APPROVAL"
     return out
 
@@ -433,11 +443,24 @@ class DbosTaskEngine:
                 state = TaskState.CANCELLED
             else:
                 state = TaskState.FAILED
-            self._update_state(task_id, state, message)
+            self._transition_from_running(task_id, state.value, message)
 
         return TaskStatus(
             task_id=task_id, state=state, current_step=row["current_step"], message=message
         )
+
+    def _transition_from_running(
+        self, task_id: TaskId, new_state: str, message: str | None
+    ) -> bool:
+        """条件状态更新：仅当当前为 running 才写入（防与 approve() 的写竞态把终态降级）。"""
+        now = datetime.now(UTC).isoformat()
+        with self._conn() as conn:
+            cur = conn.execute(
+                "UPDATE tasks SET state = ?, message = ?, updated_at = ?"
+                " WHERE task_id = ? AND state = ?",
+                (new_state, message, now, task_id, "running"),
+            )
+            return cur.rowcount > 0
 
     def cancel(self, task_id: TaskId) -> None:
         with self._conn() as conn:
@@ -458,6 +481,11 @@ class DbosTaskEngine:
             ).fetchone()
         if row is None:
             raise KeyError(f"no such task: {task_id}")
+        if row["state"] != "awaiting_approval":
+            raise ValueError(
+                f"task {task_id} state is {row['state']!r}; "
+                "only awaiting_approval tasks can be approved"
+            )
         decision = getattr(approval.decision, "value", approval.decision)
         with self._conn() as conn:
             conn.execute(

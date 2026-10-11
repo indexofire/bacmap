@@ -261,3 +261,25 @@ class TestArbitration:
         with arb.heavy_step():
             calls.append("step")
         assert calls == ["/unload", "step", "/load"]  # ADR-17 闭环
+
+
+class TestEndpointValidation:
+    """深度审计循环 6：location 自由字符串会让 ADR-16 云端门失效（"Cloud" 绕过）；
+    未知键静默忽略掩盖拼写错误。"""
+
+    def test_location_must_be_literal(self):
+        from pydantic import ValidationError
+
+        from bacmap.agent.llm.endpoints import LlmEndpoint
+
+        for bad in ("Cloud", "cloud ", "CLOUD", "mars"):
+            with pytest.raises(ValidationError):
+                LlmEndpoint(name="x", base_url="http://u", model="m", location=bad)
+
+    def test_unknown_config_keys_rejected(self):
+        from pydantic import ValidationError
+
+        from bacmap.agent.llm.endpoints import LlmEndpoint
+
+        with pytest.raises(ValidationError):
+            LlmEndpoint(name="x", base_url="http://u", model="m", max_concurency=4)

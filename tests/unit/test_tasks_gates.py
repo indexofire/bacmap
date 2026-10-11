@@ -102,3 +102,58 @@ class TestGateRegistry:
         """四道门全部真实实现后，evaluate 均可分发（不再有占位门）。"""
         for name in ("analysis_claims", "baseline_release", "mining", "citation"):
             assert name in gates.GATES, f"gate {name} not registered"
+
+
+class TestCitationGateDoi:
+    """DOI 引用必须被提取并过门（修复前：DOI 完全绕过引用门）。"""
+
+    def test_unknown_doi_rejected(self):
+        res = gates.evaluate_citation(
+            {"draft": "结论见 (doi:10.1128/JCM.00123-23)。", "known_citations": []}
+        )
+        assert res.verdict.value == "reject"
+        assert "10.1128/jcm.00123-23" in res.details["unknown"]
+
+    def test_known_doi_passes(self):
+        res = gates.evaluate_citation(
+            {
+                "draft": "结论见 (doi:10.1128/JCM.00123-23)。",
+                "known_citations": ["10.1128/JCM.00123-23"],
+            }
+        )
+        assert res.verdict.value == "pass"
+
+    def test_doi_case_insensitive_and_trimming(self):
+        res = gates.evaluate_citation(
+            {"draft": "见 doi:10.1093/JAC/dkaa123.", "known_citations": ["10.1093/jac/dkaa123"]}
+        )
+        assert res.verdict.value == "pass"
+        assert res.details["citations_found"] == ["10.1093/jac/dkaa123"]
+
+    def test_pmid_still_works_regression(self):
+        res = gates.evaluate_citation({"draft": "见 PMID:12345678", "known_citations": []})
+        assert res.verdict.value == "reject"
+        assert res.details["unknown"] == ["12345678"]
+
+
+class TestCitationGateDoiResearch:
+    """循环 3（调研驱动）：Crossref 推荐字符类 + CJK 贴邻可匹配。"""
+
+    def test_doi_glued_to_cjk_matches(self):
+        res = gates.evaluate_citation(
+            {"draft": "见文献10.1128/JCM.00123-23。", "known_citations": []}
+        )
+        assert res.verdict.value == "reject"
+        assert "10.1128/jcm.00123-23" in res.details["unknown"]
+
+    def test_no_false_positive_inside_number(self):
+        res = gates.evaluate_citation(
+            {"draft": "样本编号210.1234/abc", "known_citations": []}
+        )
+        assert res.details["citations_found"] == []
+
+    def test_doi_tail_restricted_to_crossref_charset(self):
+        res = gates.evaluate_citation(
+            {"draft": "见 10.1128/JCM.00123-23后面的中文", "known_citations": []}
+        )
+        assert res.details["citations_found"] == ["10.1128/jcm.00123-23"]

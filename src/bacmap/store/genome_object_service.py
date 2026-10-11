@@ -690,7 +690,6 @@ class GenomeObjectService:
         Searches organism, strain_id, and full payload JSON.
         Returns latest version per matching object_id.
         """
-        import sqlite3
 
         if not query.strip():
             return []
@@ -718,11 +717,7 @@ class GenomeObjectService:
         sql += " ORDER BY g.created_at DESC LIMIT ?"
         params.append(limit)
 
-        try:
-            rows = self._conn.execute(sql, params).fetchall()
-        except sqlite3.OperationalError:
-            return []
-
+        rows = self._conn.execute(sql, params).fetchall()
         return [self._row_to_go(r) for r in rows]
 
     def close(self) -> None:

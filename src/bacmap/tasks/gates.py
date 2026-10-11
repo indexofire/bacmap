@@ -5,8 +5,8 @@
 导出、入库前必须通过确定性校验（deterministic verifier）与 NLI 反射
 （nli_reflector），两者均为确定性代码（v1.4.1 更正：无 LLM 审核角色）。
 
-其余三道门（baseline_release / mining / citation）随对应任务载体在
-迁移第 7/10 步落地，当前注册为占位。
+四道门均已落地：analysis_claims（第 6 步）、baseline_release（第 7 步）、
+mining/citation（第 10 步，citation 后端为 store.knowledge 持久知识库）。
 """
 
 from __future__ import annotations
@@ -170,22 +170,32 @@ def evaluate_mining(payload: dict[str, Any]) -> GateResult:
 
 
 _CITE_RE = re.compile(r"PMID:\s?(\d{6,9})|\[(\d{4,8})\]", re.IGNORECASE)
+_DOI_RE = re.compile(r"(?<![0-9A-Za-z.])(10\.\d{4,9}/[-._;()/:A-Za-z0-9]+)")
 
 
 def evaluate_citation(payload: dict[str, Any]) -> GateResult:
     """引用门（ADR-07/V11⑥）：成稿中每条引用必须能在本地知识库找到。
 
     payload: {draft: str, known_citations: list[str]}
-    提取 PMID 形引用，逐条核对 known_citations 集合。
+    提取 PMID 与 DOI 形引用（DOI 大小写不敏感），逐条核对 known_citations 集合。
     """
     now = datetime.now(UTC)
     draft = str(payload.get("draft", ""))
-    known = {str(c).strip() for c in payload.get("known_citations", [])}
+    known = set()
+    for c in payload.get("known_citations", []):
+        k = str(c).strip()
+        if k[:3].lower() == "10.":
+            k = k.lower()
+        known.add(k)
     found: set[str] = set()
     for m in _CITE_RE.finditer(draft):
         pmid = m.group(1) or m.group(2)
         if pmid:
             found.add(pmid)
+    for m in _DOI_RE.finditer(draft):
+        doi = m.group(1).rstrip(".,;:)]}。，；：）】》〉」』").lower()
+        if len(doi) > 8:
+            found.add(doi)
     unknown = sorted(found - known)
     details = {"citations_found": sorted(found), "unknown": unknown}
     verdict = GateVerdict.PASS if not unknown else GateVerdict.REJECT

@@ -132,3 +132,66 @@ class TestMcpRolePrompts:
         result = asyncio.run(build_server().get_prompt("bacmap_role_analyst", {}))
         text = str(result)
         assert "生信分析师" in text
+
+
+class TestRoleEnforcement:
+    """深度审计循环 6：role.yaml 的 allowed_locations / max_data_class 必须由代码强制
+    （此前仅为提示文本——审计判定"docstring 声称代码强制"为假）。"""
+
+    def _cloud_gw(self, factory):
+        from bacmap.agent.llm.endpoints import DataPolicy, LlmConfig, LlmEndpoint
+
+        cfg = LlmConfig(
+            endpoints={
+                "cloudy": LlmEndpoint(
+                    name="cloudy",
+                    location="cloud",
+                    base_url="https://api.example.com/v1",
+                    model="m",
+                )
+            },
+            routing={"interpretation": "cloudy"},
+            policy=DataPolicy(cloud_max_data_class=__import__(
+                "bacmap.tools.spec", fromlist=["DataClass"]
+            ).DataClass.D2),
+        )
+        return LlmGateway(cfg, agent_factory=factory)
+
+    def test_role_forbids_cloud_endpoint(self):
+        gw = self._cloud_gw(lambda ep, ot, _i=None: _FakeAgent())
+        from bacmap.agent.llm.gateway import DataClassViolationError
+
+        with pytest.raises(DataClassViolationError, match="location"):
+            gw.structured("interpretation", "x", _Out, role="analyst")
+
+    def test_role_data_class_ceiling_enforced_locally(self):
+        from bacmap.agent.llm.endpoints import LlmConfig, LlmEndpoint
+        from bacmap.agent.llm.gateway import DataClassViolationError
+        from bacmap.tools.spec import DataClass
+
+        cfg = LlmConfig(
+            endpoints={
+                "local1": LlmEndpoint(
+                    name="local1", base_url="http://127.0.0.1:9/v1", model="m"
+                )
+            },
+            routing={"interpretation": "local1"},
+        )
+        gw = LlmGateway(cfg, agent_factory=lambda ep, ot, _i=None: _FakeAgent())
+        with pytest.raises(DataClassViolationError, match="data class"):
+            gw.structured(
+                "interpretation", "x", _Out, data_class=DataClass.D2, role="literature"
+            )
+
+    def test_role_load_failure_degrades_to_unavailable(self, monkeypatch):
+        import bacmap.agent.llm.gateway as gw_mod
+
+        def _boom(role):
+            raise FileNotFoundError(f"no such role {role}")
+
+        monkeypatch.setattr(gw_mod, "_build_role_instructions", _boom)
+        gw = _gateway(lambda ep, ot, _i=None: _FakeAgent())
+        from bacmap.agent.llm.gateway import LlmUnavailableError
+
+        with pytest.raises(LlmUnavailableError):
+            gw.structured("interpretation", "x", _Out, role="ghost")
