@@ -1,0 +1,17 @@
+# 文献查询员（write/mine 任务的检索职能，T2）
+# 冻结设计 §4.4；权限由本文件决定（SKILL.md 只是指导）
+# 注意：联网仅限公开文献检索；查询内容不得包含 D1 以上数据（ADR-16）
+name: literature
+task_types: [write, mine]
+min_model_tier: T2
+allowed_locations: [local, lan]
+max_data_class: D1
+trust_layer: L2
+tools:
+  - bio_blast
+  - bio_seq_ops
+  - bio_search_samples
+fs_scope:
+  read: ["${GOM_EXPORT}"]
+  write: ["${KNOWLEDGE_STAGING}"]
+network: true

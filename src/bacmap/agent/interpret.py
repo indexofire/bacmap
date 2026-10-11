@@ -62,6 +62,7 @@ def generate_interpretation(
             prompt=prompt,
             output_type=InterpretationOutput,
             data_class=DataClass.D2,
+            role="analyst",
         )
     except LlmUnavailableError:
         return None

@@ -25,6 +25,14 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 2  # 首次 + 2 次重试（ADR-08）
 
 
+def _build_role_instructions(role: str | None) -> str | None:
+    if not role:
+        return None
+    from bacmap.agent.roledef import build_system_prompt
+
+    return build_system_prompt(role)
+
+
 class DataClassViolationError(RuntimeError):
     """payload 数据级别超过端点（cloud）允许上限——拒绝发送。"""
 
@@ -33,7 +41,9 @@ class LlmUnavailableError(RuntimeError):
     """重试耗尽仍无法获得合法结构化输出——上层按无 LLM 降级。"""
 
 
-def _default_agent_factory(endpoint: LlmEndpoint, output_type: type[BaseModel]) -> Any:
+def _default_agent_factory(
+    endpoint: LlmEndpoint, output_type: type[BaseModel], instructions: str | None = None
+) -> Any:
     from pydantic_ai import Agent
     from pydantic_ai.models.openai import OpenAIChatModel
     from pydantic_ai.providers.openai import OpenAIProvider
@@ -45,16 +55,27 @@ def _default_agent_factory(endpoint: LlmEndpoint, output_type: type[BaseModel]) 
         endpoint.model,
         provider=OpenAIProvider(base_url=endpoint.base_url, api_key=api_key),
     )
-    return Agent(model, output_type=output_type, retries=MAX_RETRIES)
+    return Agent(
+        model,
+        output_type=output_type,
+        retries=MAX_RETRIES,
+        instructions=instructions,
+    )
 
 
 class LlmGateway:
-    """结构化输出统一入口。agent_factory 可注入（测试）。"""
+    """结构化输出统一入口。agent_factory 可注入（测试）。
+
+    role 参数（ADR-10 三文件体系）：给定角色时经 roledef.build_system_prompt
+    组装 system instructions 注入该角色的临时智能体实例（缓存按角色隔离）。
+    """
 
     def __init__(
         self,
         config: LlmConfig,
-        agent_factory: Callable[[LlmEndpoint, type[BaseModel]], Any] | None = None,
+        agent_factory: Callable[
+            [LlmEndpoint, type[BaseModel], str | None], Any
+        ] | None = None,
     ) -> None:
         self._config = config
         self._factory = agent_factory or _default_agent_factory
@@ -62,14 +83,24 @@ class LlmGateway:
             name: threading.Semaphore(max(ep.max_concurrency, 1))
             for name, ep in config.endpoints.items()
         }
-        self._agents: dict[tuple[str, str], Any] = {}
+        self._agents: dict[tuple[str, str, str], Any] = {}
         self._lock = threading.Lock()
 
-    def _agent_for(self, endpoint: LlmEndpoint, output_type: type[BaseModel]) -> Any:
-        key = (endpoint.name, f"{output_type.__module__}.{output_type.__qualname__}")
+    def _agent_for(
+        self,
+        endpoint: LlmEndpoint,
+        output_type: type[BaseModel],
+        role: str | None = None,
+        instructions: str | None = None,
+    ) -> Any:
+        key = (
+            endpoint.name,
+            f"{output_type.__module__}.{output_type.__qualname__}",
+            role or "",
+        )
         with self._lock:
             if key not in self._agents:
-                self._agents[key] = self._factory(endpoint, output_type)
+                self._agents[key] = self._factory(endpoint, output_type, instructions)
             return self._agents[key]
 
     def structured(
@@ -78,6 +109,7 @@ class LlmGateway:
         prompt: str,
         output_type: type[BaseModel],
         data_class: DataClass = DataClass.D0,
+        role: str | None = None,
     ) -> BaseModel:
         endpoint = self._config.resolve(purpose)
         if endpoint is None:
@@ -99,7 +131,8 @@ class LlmGateway:
                 f"{self._config.policy.cloud_max_data_class.name}"
             )
 
-        agent = self._agent_for(endpoint, output_type)
+        instructions = _build_role_instructions(role)
+        agent = self._agent_for(endpoint, output_type, role, instructions)
         sem = self._sems.get(endpoint.name)
         last_exc: Exception | None = None
         for attempt in range(MAX_RETRIES + 1):

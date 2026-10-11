@@ -1,0 +1,18 @@
+# 特征库管理员（curate 任务的执行职能，T0 即可；T2 提供清洗建议）
+# 冻结设计 §4.4；权限由本文件决定（SKILL.md 只是指导）
+name: curator
+task_types: [curate]
+min_model_tier: T0
+allowed_locations: [local]
+max_data_class: D3
+trust_layer: L1
+tools:
+  - bio_list_samples
+  - bio_search_samples
+  - bio_query_metadata
+  - bio_query_lab_results
+  - bio_review_flags
+fs_scope:
+  read: ["${GOM_EXPORT}", "${RESULTS_EXPORT}"]
+  write: ["${BASELINE_STAGING}"]
+network: false

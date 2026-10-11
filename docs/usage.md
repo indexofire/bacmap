@@ -67,6 +67,8 @@ Once connected, agents can call **22 tools**:
 | Task submission | `bacmap_submit_task` | **The sole write entry point**; analyze/curate tasks run asynchronously |
 | Task queries | `bacmap_task_status` | Poll status and gate messages |
 
+Agents can also fetch domain guidance via MCP prompts: each delivered role (analyst / curator / miner / literature / writer / epidemiologist) exposes its instructions as a `bacmap_role_<name>` prompt (global principles + permission boundary + SKILL guidance).
+
 Security model (identical for every client):
 
 - The MCP channel has **no direct writes**: store writes happen only through task submission and the six gates;

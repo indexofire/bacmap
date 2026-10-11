@@ -1,0 +1,18 @@
+# 流行病学专家（队列分析解读与挖掘指导，T2）
+# 冻结设计 §4.4；权限由本文件决定（SKILL.md 只是指导）
+name: epidemiologist
+task_types: [analyze, mine]
+min_model_tier: T2
+allowed_locations: [local, lan]
+max_data_class: D2
+trust_layer: L2
+tools:
+  - bio_get_result
+  - bio_search_samples
+  - bio_query_metadata
+  - bio_snp_tree
+  - bio_cgmlst
+fs_scope:
+  read: ["${GOM_EXPORT}", "${RESULTS_EXPORT}"]
+  write: ["${TASK_WORKSPACE}"]
+network: false

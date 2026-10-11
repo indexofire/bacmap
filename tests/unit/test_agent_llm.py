@@ -104,7 +104,7 @@ class TestGateway:
     def test_success_returns_output(self):
         want = IntentResult(tasks=[IntentTask(task_type="analyze", summary="跑样本")])
         agent = _FakeAgent(output=want)
-        gw = LlmGateway(_make_config(), agent_factory=lambda ep, ot: agent)
+        gw = LlmGateway(_make_config(), agent_factory=lambda ep, ot, _i=None: agent)
         out = gw.structured("p", "prompt", IntentResult)
         assert out is want
         assert agent.calls == 1
@@ -112,7 +112,7 @@ class TestGateway:
     def test_cloud_over_limit_refused_without_call(self):
         agent = _FakeAgent(output=IntentResult())
         gw = LlmGateway(
-            _make_config(location="cloud", cloud_max=1), agent_factory=lambda ep, ot: agent
+            _make_config(location="cloud", cloud_max=1), agent_factory=lambda ep, ot, _i=None: agent
         )
         with pytest.raises(DataClassViolationError):
             gw.structured("p", "prompt", IntentResult, data_class=DataClass.D3)
@@ -122,7 +122,7 @@ class TestGateway:
         want = IntentResult(tasks=[])
         agent = _FakeAgent(output=want)
         gw = LlmGateway(
-            _make_config(location="cloud", cloud_max=1), agent_factory=lambda ep, ot: agent
+            _make_config(location="cloud", cloud_max=1), agent_factory=lambda ep, ot, _i=None: agent
         )
         out = gw.structured("p", "prompt", IntentResult, data_class=DataClass.D1)
         assert out is want
@@ -130,27 +130,27 @@ class TestGateway:
     def test_local_endpoint_accepts_all_classes(self):
         want = IntentResult(tasks=[])
         agent = _FakeAgent(output=want)
-        gw = LlmGateway(_make_config(location="local"), agent_factory=lambda ep, ot: agent)
+        gw = LlmGateway(_make_config(location="local"), agent_factory=lambda ep, ot, _i=None: agent)
         out = gw.structured("p", "prompt", IntentResult, data_class=DataClass.D4)
         assert out is want
 
     def test_retry_then_success(self):
         want = IntentResult(tasks=[])
         agent = _FakeAgent(output=want, fail_times=1)
-        gw = LlmGateway(_make_config(), agent_factory=lambda ep, ot: agent)
+        gw = LlmGateway(_make_config(), agent_factory=lambda ep, ot, _i=None: agent)
         out = gw.structured("p", "prompt", IntentResult)
         assert out is want
         assert agent.calls == 2
 
     def test_retry_exhaustion_raises_unavailable(self):
         agent = _FakeAgent(output=None, fail_times=99)
-        gw = LlmGateway(_make_config(), agent_factory=lambda ep, ot: agent)
+        gw = LlmGateway(_make_config(), agent_factory=lambda ep, ot, _i=None: agent)
         with pytest.raises(LlmUnavailableError):
             gw.structured("p", "prompt", IntentResult)
         assert agent.calls == 3  # 首次 + 2 次重试（ADR-08）
 
     def test_no_endpoint_raises_unavailable(self):
-        gw = LlmGateway(LlmConfig(), agent_factory=lambda ep, ot: None)
+        gw = LlmGateway(LlmConfig(), agent_factory=lambda ep, ot, _i=None: None)
         with pytest.raises(LlmUnavailableError, match="no enabled endpoint"):
             gw.structured("p", "prompt", IntentResult)
 
@@ -163,14 +163,17 @@ class TestIntent:
                 IntentTask(task_type="write", summary="写简报"),
             ]
         )
-        gw = LlmGateway(_make_config(), agent_factory=lambda ep, ot: _FakeAgent(output=want))
+        gw = LlmGateway(
+            _make_config(), agent_factory=lambda ep, ot, _i=None: _FakeAgent(output=want)
+        )
         result = classify_intent("把这批沙门菌跑一遍分析，然后写个简报", gw)
         assert result is not None
         assert [t.task_type for t in result.tasks] == ["analyze", "write"]
 
     def test_classify_degrades_to_none(self):
         gw = LlmGateway(
-            _make_config(), agent_factory=lambda ep, ot: _FakeAgent(output=None, fail_times=99)
+            _make_config(),
+            agent_factory=lambda ep, ot, _i=None: _FakeAgent(output=None, fail_times=99),
         )
         assert classify_intent("随便什么", gw) is None  # C3：无 LLM 降级
 
@@ -186,7 +189,9 @@ class TestInterpretation:
         want = InterpretationOutput(
             interpretation_text="该株为沙门菌……", key_findings=["血清型 Typhimurium"]
         )
-        gw = LlmGateway(_make_config(), agent_factory=lambda ep, ot: _FakeAgent(output=want))
+        gw = LlmGateway(
+            _make_config(), agent_factory=lambda ep, ot, _i=None: _FakeAgent(output=want)
+        )
         summary = {"sample": "SAM-001", "steps": {"species": {"verdict": "Salmonella"}}}
         out = generate_interpretation(summary, "SAM-001", gw)
         assert out is not None
@@ -196,7 +201,8 @@ class TestInterpretation:
         from bacmap.agent.interpret import generate_interpretation
 
         gw = LlmGateway(
-            _make_config(), agent_factory=lambda ep, ot: _FakeAgent(output=None, fail_times=99)
+            _make_config(),
+            agent_factory=lambda ep, ot, _i=None: _FakeAgent(output=None, fail_times=99),
         )
         assert generate_interpretation({}, "SAM-1", gw) is None
 
@@ -206,7 +212,7 @@ class TestInterpretation:
 
         gw = LlmGateway(
             _make_config(location="cloud", cloud_max=1),
-            agent_factory=lambda ep, ot: _FakeAgent(),
+            agent_factory=lambda ep, ot, _i=None: _FakeAgent(),
         )
         with pytest.raises(DataClassViolationError):
             generate_interpretation({"steps": {}}, "SAM-1", gw)  # D2 payload → cloud 拒绝

@@ -1,0 +1,19 @@
+# 挖掘分析员（mine 任务的执行职能，T2：多步工具调用+脚本撰写）
+# 冻结设计 §4.4；权限由本文件决定（SKILL.md 只是指导）
+name: miner
+task_types: [mine]
+min_model_tier: T2
+allowed_locations: [local, lan]
+max_data_class: D2
+trust_layer: L2
+tools:
+  - bio_get_result
+  - bio_search_samples
+  - bio_snp_tree
+  - bio_cgmlst
+  - bio_seq_stats
+  - bio_seq_ops
+fs_scope:
+  read: ["${GOM_EXPORT}", "${RESULTS_EXPORT}"]
+  write: ["${TASK_WORKSPACE}"]
+network: false

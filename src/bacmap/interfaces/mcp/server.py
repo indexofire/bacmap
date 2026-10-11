@@ -66,7 +66,28 @@ def build_server(engine: Any = None) -> MCPServer:
     if engine is not None:
         _register_task_tools(server, engine)
 
+    _register_role_prompts(server)
+
     return server
+
+
+def _register_role_prompts(server: MCPServer) -> None:
+    """角色说明书经 MCP prompts 暴露（ADR-12：外部助手获得领域指导）。"""
+    from bacmap.agent import roledef
+
+    for role in roledef.list_roles():
+        def _prompt(role_name: str = role) -> str:
+            return roledef.build_system_prompt(role_name)
+
+        _prompt.__name__ = f"bacmap_role_{role}"
+        _prompt.__doc__ = f"bacmap {role} 角色说明书：全局原则 + 权限边界 + SKILL 指导"
+        server.prompt(
+            name=f"bacmap_role_{role}",
+            description=(
+                f"bacmap {role} 角色说明书：全局原则 + 权限边界 + SKILL 指导。"
+                "外部智能体以该角色使用 bacmap 工具前应先取此说明。"
+            ),
+        )(_prompt)
 
 
 def _register_legacy_tool(server: MCPServer, spec: Any, model: type) -> None:

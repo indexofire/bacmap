@@ -67,6 +67,8 @@ args = ["mcp"]
 | 任务提交 | `bacmap_submit_task` | **写操作唯一入口**；analyze/curate 任务异步执行 |
 | 任务查询 | `bacmap_task_status` | 轮询状态与门消息 |
 
+智能体还可经 MCP prompts 获取领域说明书：每个已交付角色（analyst / curator / miner / literature / writer / epidemiologist）以 `bacmap_role_<名称>` prompt 暴露其说明书（全局原则 + 权限边界 + SKILL 指导）。
+
 安全模型（对任何客户端一致）：
 
 - MCP 通道**无直写**——写库只能经任务提交走六道门；

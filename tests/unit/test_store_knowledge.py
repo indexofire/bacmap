@@ -1,0 +1,88 @@
+"""本地文献知识库测试（引用门后端：暂存→人审→可引用；FTS 检索）。"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from bacmap.store.knowledge import KnowledgeStore
+from bacmap.tasks.gates import evaluate_citation
+
+
+def _store(tmp_path: Path) -> KnowledgeStore:
+    return KnowledgeStore(tmp_path / "data" / "knowledge.sqlite")
+
+
+def _pmid_entry(identifier: str = "PMID:36626432") -> dict:
+    return {
+        "kind": "literature",
+        "title": "Salmonella outbreak investigation via cgMLST",
+        "authors": "Zhang et al.",
+        "year": 2023,
+        "source": "Emerging Infectious Diseases",
+        "identifier": identifier,
+        "content": "cgMLST 溯源在某省沙门氏菌暴发调查中的应用要点。",
+    }
+
+
+class TestKnowledgeStore:
+    def test_import_then_approve_flow(self, tmp_path: Path):
+        ks = _store(tmp_path)
+        kid = ks.import_candidate(_pmid_entry(), imported_by="literature-agent")
+        assert ks.get(kid)["approved_by"] is None
+        assert ks.list_pending() and ks.list_pending()[0]["id"] == kid
+        assert ks.known_citations() == []  # 未人审 → 不可引用
+
+        ks.approve(kid, approver="curator-mark")
+        assert ks.known_citations() == ["36626432"]  # PMID 前缀规范化为纯数字（与引用门对齐）
+        assert ks.list_pending() == []
+
+    def test_fts_search_by_keyword(self, tmp_path: Path):
+        ks = _store(tmp_path)
+        kid = ks.import_candidate(_pmid_entry(), imported_by="a")
+        hits = ks.search("cgMLST")
+        assert [h["id"] for h in hits] == [kid]
+        assert ks.search("不存在的关键词") == []
+
+    def test_title_required(self, tmp_path: Path):
+        ks = _store(tmp_path)
+        try:
+            ks.import_candidate({"title": "  "}, imported_by="a")
+            raise AssertionError("should reject empty title")
+        except ValueError:
+            pass
+
+    def test_approve_missing_raises(self, tmp_path: Path):
+        ks = _store(tmp_path)
+        try:
+            ks.approve(999, approver="a")
+            raise AssertionError("should raise KeyError")
+        except KeyError:
+            pass
+
+    def test_reopen_is_idempotent(self, tmp_path: Path):
+        db = tmp_path / "data" / "knowledge.sqlite"
+        ks1 = KnowledgeStore(db)
+        kid = ks1.import_candidate(_pmid_entry(), imported_by="a")
+        ks2 = KnowledgeStore(db)  # 重开 → DDL 幂等，数据仍在
+        assert ks2.get(kid) is not None
+
+
+class TestCitationGateBackend:
+    def test_gate_pass_with_approved_entry(self, tmp_path: Path):
+        ks = _store(tmp_path)
+        kid = ks.import_candidate(_pmid_entry("PMID:11111111"), imported_by="a")
+        ks.approve(kid, approver="m")
+        draft = "结论见文献 [PMID:11111111]。"
+        res = evaluate_citation(
+            {"draft": draft, "known_citations": ks.known_citations()}
+        )
+        assert res.verdict.value == "pass"
+
+    def test_gate_rejects_unapproved_only_entry(self, tmp_path: Path):
+        ks = _store(tmp_path)
+        ks.import_candidate(_pmid_entry("PMID:22222222"), imported_by="a")
+        res = evaluate_citation(
+            {"draft": "见 [PMID:22222222]", "known_citations": ks.known_citations()}
+        )
+        assert res.verdict.value == "reject"
+        assert res.details["unknown"] == ["22222222"]

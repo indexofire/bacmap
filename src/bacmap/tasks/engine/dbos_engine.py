@@ -271,10 +271,20 @@ def mine_workflow(params: dict[str, Any]) -> dict[str, Any]:
 
 @DBOS.step()
 def _step_write_draft(params: dict[str, Any]) -> dict[str, Any]:
-    """成稿（provided-draft 模式；LLM 生成走 gateway，本步可注入）。"""
+    """成稿（provided-draft 模式；LLM 生成走 gateway，本步可注入）。
+
+    known_citations 缺省时从本地文献知识库装载已人审条目标识符
+    （store.knowledge，引用门后端；ADR-07/V11⑥）。
+    """
+    known = params.get("known_citations")
+    if known is None:
+        from bacmap.store.knowledge import KnowledgeStore
+
+        home = Path(params["home"])
+        known = KnowledgeStore(home / "data" / "knowledge.sqlite").known_citations()
     return {
         "draft": params.get("draft", ""),
-        "known_citations": params.get("known_citations", []),
+        "known_citations": list(known),
     }
 
 
