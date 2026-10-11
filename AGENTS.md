@@ -56,7 +56,7 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟）
 
 ## 外部工具依赖（pixi [pypi-dependencies]）
 
-- `gside`：editable 本地安装（`/home/mark/repo/github/gside`）——改 gside 源码即时生效
+- `gside`：git 源安装（github.com/indexofire/gside）；上游发布 PyPI 后切换为版本约束
 - `gapit ==0.5.4`、`gmlst ==0.5.2`：PyPI 发布版
 - 升级这些工具后必须复核：CLI 接口签名 + bacmap 侧解析器 + V10 式单株冒烟
 

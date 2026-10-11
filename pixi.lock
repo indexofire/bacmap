@@ -443,6 +443,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/1b/e0/57d07f653813b7ea9e3a82064a2b6a112f63004530ac665e0934829473c7/genai_prices-0.1.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/4d/96/1f43472d0534823c2372be53f448b83e69a7f90262031e156a22a08e9034/gmlst-0.5.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/e5/0ae74c83c1cab2c14daadf28bd0143eb14bb81503834af987b66badc7b61/griffelib-2.3.2-py3-none-any.whl
+      - pypi: git+https://github.com/indexofire/gside.git#e4a8353c9294af1a7a2c4bad7ad86dc4492d2e0b
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7e/f5/f66802a942d491edb555dd61e3a9961140fd64c90bce1eafd741609d334d/httpcore-1.0.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl
@@ -491,7 +492,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/a1/38/df03f564f43cec2684823f3cccae1a652ee7face1cbaa76fb223096e64d7/werkzeug-3.1.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/83/97/31bd8b8279e6935a0719f6910ced15e9d5a2cd554b253f6027ce1b5a1c2c/xxhash-4.0.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: ./
-      - pypi: /home/mark/repo/github/gside
   dev:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -974,6 +974,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/1b/e0/57d07f653813b7ea9e3a82064a2b6a112f63004530ac665e0934829473c7/genai_prices-0.1.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/4d/96/1f43472d0534823c2372be53f448b83e69a7f90262031e156a22a08e9034/gmlst-0.5.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/e5/0ae74c83c1cab2c14daadf28bd0143eb14bb81503834af987b66badc7b61/griffelib-2.3.2-py3-none-any.whl
+      - pypi: git+https://github.com/indexofire/gside.git#e4a8353c9294af1a7a2c4bad7ad86dc4492d2e0b
       - pypi: https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d8/9c/6fe8931fd9f381042a9e4c7d5a7b4cbf7016b252bec0c99a49fce42c3326/httpx2-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl
@@ -1014,7 +1015,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/a1/38/df03f564f43cec2684823f3cccae1a652ee7face1cbaa76fb223096e64d7/werkzeug-3.1.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/83/97/31bd8b8279e6935a0719f6910ced15e9d5a2cd554b253f6027ce1b5a1c2c/xxhash-4.0.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: ./
-      - pypi: /home/mark/repo/github/gside
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
   build_number: 20
@@ -2439,10 +2439,9 @@ packages:
   - pkg:pypi/grimp?source=hash-mapping
   size: 2061626
   timestamp: 1788656255129
-- pypi: /home/mark/repo/github/gside
+- pypi: git+https://github.com/indexofire/gside.git#e4a8353c9294af1a7a2c4bad7ad86dc4492d2e0b
   name: gside
   version: 0.1.0
-  sha256: 31a7c72caca7228d0940ebceb8a4c7e52097cef2f106f29515b59cdc3c27ba3d
   requires_dist:
   - biopython>=1.83
   - click>=8.0

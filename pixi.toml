@@ -59,7 +59,7 @@ uvicorn = ">=0.29"
 jinja2 = ">=3.1"
 httpx = ">=0.27"
 pydantic-ai-slim = { version = ">=2.0,<3", extras = ["openai"] }
-gside = { path = "/home/mark/repo/github/gside", editable = true }
+gside = { git = "https://github.com/indexofire/gside.git" }
 bacmap = { path = ".", editable = true }
 
 [feature.dev.dependencies]
