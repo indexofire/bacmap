@@ -31,7 +31,7 @@ bacmap --help         # 统一命令行入口
 | Command | Description |
 |---|---|
 | `bacmap mcp [--read-only] [--home H]` | Start the stdio MCP server (22 tools) |
-| `bacmap web [--host 127.0.0.1] [--port 8800]` | Start the web task console (binds to localhost only by default) |
+| `bacmap web [--host 127.0.0.1] [--port 8800]` | Start the web console: task management plus results browsing / search / reports (localhost only by default) |
 | `bacmap --version` | Print the version |
 
 Equivalent module form: `python -m bacmap.interfaces.mcp` / `python -m bacmap.interfaces.web`.

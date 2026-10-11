@@ -160,7 +160,7 @@ Scan assembled contigs against a gene database (card/vfdb/ecoh/plasmidfinder/res
 
 Version `v0.1.0` | Effect: `compute` | Trust layer: `L1`
 
-Generate HTML report with all results, verifier output, and evidence chain. Returns file path.
+Generate HTML report with all results, verifier output, and evidence chain. Returns file path. Reports are already generated automatically at the end of every analyze task; use this tool to regenerate on demand.
 
 **Parameters**
 

@@ -85,7 +85,7 @@ A typical exchange with an agent:
 
 | Task | What it does | Key gate |
 |---|---|---|
-| `analyze` | Full pipeline: QC→assembly→typing→AMR/virulence→report | Analysis-conclusion gate (contradictory interpretations are flagged for human review) |
+| `analyze` | Full pipeline: QC→assembly→typing→AMR/virulence→report. An HTML report is **generated automatically at the end of the task** (`results/{id}/report/{id}_report.html`) | Analysis-conclusion gate (contradictory interpretations are flagged for human review) |
 | `curate` | Build the local epidemiological baseline library (de-identification, aggregation) | **Release gate**: anything below the gold-standard thresholds is refused release |
 | `mine` | Run custom analysis scripts inside the sandbox | **Signature gate**: unsigned output must not enter reports |
 | `write` | LLM drafts reports / briefs | **Citation gate**: exports are refused if they cite entries absent from the knowledge base |

@@ -29,7 +29,7 @@ bacmap --help         # 统一命令行入口
 | 命令 | 说明 |
 |---|---|
 | `bacmap mcp [--read-only] [--home H]` | 启动 stdio MCP 服务器（22 个工具） |
-| `bacmap web [--host 127.0.0.1] [--port 8800]` | 启动 Web 任务页（默认仅绑本机） |
+| `bacmap web [--host 127.0.0.1] [--port 8800]` | 启动 Web 任务台：任务管理 + 结果浏览 / 检索 / 报告（默认仅绑本机） |
 | `bacmap --version` | 版本号 |
 
 等价模块方式：`python -m bacmap.interfaces.mcp` / `python -m bacmap.interfaces.web`。
