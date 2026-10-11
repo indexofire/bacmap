@@ -18,6 +18,7 @@ Run `bacmap web`, then open `http://127.0.0.1:8800` in a browser:
 
 1. **Submit a task**: pick the task type in the form on the left and fill in the sample list (analyze) or a scope JSON (curate)
 2. **Monitor**: the task table on the right shows live status with six state badges (queued / running / pending approval / completed / failed / canceled); open a detail page and it refreshes itself every 2 seconds
+4. **Query results**: the Samples pages browse completed samples (list, per-sample detail with detected genes, HTML report download); the Search page finds samples by keyword (species / serotype / ST / gene) or structured filters.
 3. **Approve**: when a task reaches `pending approval`, an amber approval card appears on the detail page. Fill in the approver, the decision (approve/reject), and the signature passphrase. After submission the task passes the mining gate / release gate and proceeds
 
 > Approval is one of the six gates: unsigned mining output cannot enter a report, and a
