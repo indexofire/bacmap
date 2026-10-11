@@ -12,3 +12,9 @@ __pycache__/
 
 # opencode 会话续跑状态（本地工具状态）
 .omo/
+
+# mkdocs 构建产物
+site/
+
+# 本地 gold standard 数据（符号链接指向旧项目数据目录，4.1GB 基因组数据不入库）
+tests/fixtures/gold_standard

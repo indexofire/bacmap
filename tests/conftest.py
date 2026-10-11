@@ -187,6 +187,20 @@ def gold_standard_csv_path() -> Path:
     return Path(__file__).parent / "fixtures" / "gold_standard" / "salmonella" / "gold_standard.csv"
 
 
+def _load_gold_standard_csv(csv_path: Path) -> list[dict[str, str]]:
+    """加载 gold standard CSV；数据缺失时 skip 而非 error。
+
+    tests/fixtures/gold_standard 是指向本地数据目录的符号链接（4.1GB 基因组
+    数据，不入库）——fresh clone 上不存在属正常，依赖它的验证测试应跳过。
+    """
+    import csv
+
+    if not csv_path.is_file():
+        pytest.skip(f"gold standard data not present (local-only symlink): {csv_path}")
+    with csv_path.open() as f:
+        return list(csv.DictReader(f))
+
+
 @pytest.fixture(scope="session")
 def gold_standard_set(gold_standard_csv_path: Path) -> list[dict[str, str]]:
     """加载 Salmonella Gold standard 样本集（project.md §12.3 分析验证）。
@@ -195,10 +209,7 @@ def gold_standard_set(gold_standard_csv_path: Path) -> list[dict[str, str]]:
     血清型准确率基准对比。字段定义见
     ``tests/fixtures/gold_standard/salmonella/data_dictionary.md``。
     """
-    import csv
-
-    with gold_standard_csv_path.open() as f:
-        return list(csv.DictReader(f))
+    return _load_gold_standard_csv(gold_standard_csv_path)
 
 
 @pytest.fixture(scope="session")

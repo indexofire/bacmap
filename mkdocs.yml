@@ -1,0 +1,33 @@
+site_name: bacmap
+site_description: Local pathogen genome analysis system (architecture-frozen v1.4.8)
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  palette:
+    - scheme: default
+      primary: teal
+      accent: teal
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Configuration: configuration.md
+  - Usage: usage.md
+  - Tool Reference: tools.md
+  - Architecture (reference translation): architecture-frozen-v1.en.md
+  - 简体中文:
+      - 首页: index.zh-CN.md
+      - 安装指南: installation.zh-CN.md
+      - 配置指南: configuration.zh-CN.md
+      - 使用指南: usage.zh-CN.md
+      - 工具参考: tools.zh-CN.md
+      - 架构（冻结·权威）: architecture-frozen-v1.md
+
+markdown_extensions:
+  - tables
+  - fenced_code
+  - toc:
+      permalink: true
