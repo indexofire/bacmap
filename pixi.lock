@@ -441,9 +441,9 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/a6/6e/babde908b879a3b51ffc230919d06a804912559dd4cf8c94f3fa2af69fec/fonttools-4.66.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/a4/e7/119befcfd60c701d3797ba92cb9f715fa74030febba83a80842f96a85a92/gapit-0.5.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/e0/57d07f653813b7ea9e3a82064a2b6a112f63004530ac665e0934829473c7/genai_prices-0.1.9-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/4d/96/1f43472d0534823c2372be53f448b83e69a7f90262031e156a22a08e9034/gmlst-0.5.2-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/b9/ad/b77dbe074164e76cdef49210f49c47df8d63fb550e4a7f2f468a87143d77/gmlst-0.5.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/e5/0ae74c83c1cab2c14daadf28bd0143eb14bb81503834af987b66badc7b61/griffelib-2.3.2-py3-none-any.whl
-      - pypi: git+https://github.com/indexofire/gside.git#e4a8353c9294af1a7a2c4bad7ad86dc4492d2e0b
+      - pypi: https://files.pythonhosted.org/packages/cc/ce/94c3a9de74a0d7f0951d3ccea4bb42a4c91d8bd92b252a2a3c7dc492499f/gside-0.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7e/f5/f66802a942d491edb555dd61e3a9961140fd64c90bce1eafd741609d334d/httpcore-1.0.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl
@@ -987,9 +987,9 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/a6/6e/babde908b879a3b51ffc230919d06a804912559dd4cf8c94f3fa2af69fec/fonttools-4.66.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/a4/e7/119befcfd60c701d3797ba92cb9f715fa74030febba83a80842f96a85a92/gapit-0.5.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/e0/57d07f653813b7ea9e3a82064a2b6a112f63004530ac665e0934829473c7/genai_prices-0.1.9-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/4d/96/1f43472d0534823c2372be53f448b83e69a7f90262031e156a22a08e9034/gmlst-0.5.2-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/b9/ad/b77dbe074164e76cdef49210f49c47df8d63fb550e4a7f2f468a87143d77/gmlst-0.5.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/e5/0ae74c83c1cab2c14daadf28bd0143eb14bb81503834af987b66badc7b61/griffelib-2.3.2-py3-none-any.whl
-      - pypi: git+https://github.com/indexofire/gside.git#e4a8353c9294af1a7a2c4bad7ad86dc4492d2e0b
+      - pypi: https://files.pythonhosted.org/packages/cc/ce/94c3a9de74a0d7f0951d3ccea4bb42a4c91d8bd92b252a2a3c7dc492499f/gside-0.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d8/9c/6fe8931fd9f381042a9e4c7d5a7b4cbf7016b252bec0c99a49fce42c3326/httpx2-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl
@@ -2393,10 +2393,10 @@ packages:
   - pkg:pypi/gitpython?source=compressed-mapping
   size: 183846
   timestamp: 1790776941235
-- pypi: https://files.pythonhosted.org/packages/4d/96/1f43472d0534823c2372be53f448b83e69a7f90262031e156a22a08e9034/gmlst-0.5.2-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/b9/ad/b77dbe074164e76cdef49210f49c47df8d63fb550e4a7f2f468a87143d77/gmlst-0.5.5-py3-none-any.whl
   name: gmlst
-  version: 0.5.2
-  sha256: 91f248b0476c85d2ffb98b6b6d759056e6028c0e7fde35ae8f48b4815d1e473f
+  version: 0.5.5
+  sha256: d0d1f2313c7cd6a6315b2de097fa21ad9d849d53876396ad232d33ed8109e2d6
   requires_dist:
   - click>=8.1
   - flask>=3.0
@@ -2406,6 +2406,7 @@ packages:
   - rich>=13.0
   - xxhash>=3.0
   - pyright>=1.1.409 ; extra == 'dev'
+  - pytest-cov>=5 ; extra == 'dev'
   - pytest>=8.0 ; extra == 'dev'
   - ruff>=0.4 ; extra == 'dev'
   requires_python: '>=3.12,<3.13'
@@ -2491,21 +2492,22 @@ packages:
   - pkg:pypi/grimp?source=hash-mapping
   size: 2061626
   timestamp: 1788656255129
-- pypi: git+https://github.com/indexofire/gside.git#e4a8353c9294af1a7a2c4bad7ad86dc4492d2e0b
+- pypi: https://files.pythonhosted.org/packages/cc/ce/94c3a9de74a0d7f0951d3ccea4bb42a4c91d8bd92b252a2a3c7dc492499f/gside-0.1.1-py3-none-any.whl
   name: gside
-  version: 0.1.0
+  version: 0.1.1
+  sha256: 0014b55d0ac524ad3eab9d3d4ef18f44a9d94f49561fa55c228cd6310f5c1d76
   requires_dist:
   - biopython>=1.83
   - click>=8.0
   - pyyaml>=6.0
-  - pytest>=8.0 ; extra == 'dev'
-  - pytest-cov>=5.0 ; extra == 'dev'
-  - ruff>=0.5 ; extra == 'dev'
-  - mypy>=1.10 ; extra == 'dev'
-  - pyright>=1.1 ; extra == 'dev'
-  - mkdocs>=1.6 ; extra == 'dev'
   - mkdocs-material>=9.0 ; extra == 'dev'
   - mkdocs-static-i18n>=1.2 ; extra == 'dev'
+  - mkdocs>=1.6 ; extra == 'dev'
+  - mypy>=1.10 ; extra == 'dev'
+  - pyright>=1.1 ; extra == 'dev'
+  - pytest-cov>=5.0 ; extra == 'dev'
+  - pytest>=8.0 ; extra == 'dev'
+  - ruff>=0.5 ; extra == 'dev'
   requires_python: '>=3.12,<3.13'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/gsl-2.7-he838d99_0.tar.bz2
   sha256: 132a918b676dd1f533d7c6f95e567abf7081a6ea3251c3280de35ef600e0da87

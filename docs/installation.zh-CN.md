@@ -29,7 +29,7 @@ bacmap --version      # 验证：应输出版本号
 
 - **conda 工具链**：bwa / minimap2 / samtools / bcftools / blast / bedtools / snakemake 9 等
 - **Python 外部工具**（ADR-20 分工）：
-  - `gside` —— 物种鉴定（git 源安装：github.com/indexofire/gside）
+  - `gside` —— 物种鉴定（PyPI 发布版）
   - `gapit` —— 基因筛查/血清型（PyPI 发布版）
   - `gmlst` —— MLST/cgMLST/MST（PyPI 发布版）
 

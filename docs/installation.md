@@ -31,7 +31,7 @@ What the environment contains (all declared in `pixi.toml`, nothing to install b
 
 - **conda toolchain**: bwa / minimap2 / samtools / bcftools / blast / bedtools / snakemake 9 and more
 - **Python external tools** (ADR-20 division of labor):
-  - `gside`: species identification (installed from its Git repository, github.com/indexofire/gside)
+  - `gside`: species identification (PyPI release)
   - `gapit`: gene screening / serotyping (PyPI release)
   - `gmlst`: MLST/cgMLST/MST (PyPI release)
 
