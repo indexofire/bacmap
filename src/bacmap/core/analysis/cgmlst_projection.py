@@ -312,7 +312,7 @@ def load_thresholds_from_config(config_path: Path, species: str) -> CgmlstThresh
         raise ValueError(f"config file not found: {config_path}")
 
     # Lazy import: PyYAML ships with snakemake in the pixi env (it is not a
-    # direct dependency of the hermes_bacmap package). Mirrors the lazy import
+    # direct dependency of the bacmap package). Mirrors the lazy import
     # in workflows/bacmap/scripts/generate_cgmlst_summary.py:_load_thresholds.
     try:
         import yaml

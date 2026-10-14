@@ -60,11 +60,21 @@ command = "/path/to/.pixi/envs/default/bin/bacmap"
 args = ["mcp"]
 ```
 
-Once connected, agents can call **22 tools**:
+Streamable HTTP (ADR-12) is available for clients that speak it. It is bound to localhost (or a unix socket) and **requires bearer auth**:
+
+```bash
+export BACMAP_MCP_TOKEN="$(openssl rand -hex 24)"
+bacmap mcp --transport http --host 127.0.0.1 --port 8765
+# or a unix socket: bacmap mcp --transport http --uds /run/bacmap-mcp.sock
+```
+
+Point the client at `http://127.0.0.1:8765/mcp` with header `Authorization: Bearer $BACMAP_MCP_TOKEN`. The HTTP transport refuses to start when no token is set.
+
+Once connected, agents can call **23 tools**:
 
 | Category | Tools | Notes |
 |---|---|---|
-| Single-step compute (20) | `bio_fastq_qc` `bio_align` `bio_blast` `bio_samtools` `bio_variant` `bio_gene_scan` `bio_seq_stats` … | Return results synchronously; accept any local path |
+| Single-step compute (21) | `bio_fastq_qc` `bio_align` `bio_blast` `bio_samtools` `bio_variant` `bio_gene_scan` `bio_seq_stats` `bio_compare_runs` … | Return results synchronously; accept any local path |
 | Task submission | `bacmap_submit_task` | **The sole write entry point**; analyze/curate tasks run asynchronously |
 | Task queries | `bacmap_task_status` | Poll status and gate messages |
 

@@ -31,6 +31,10 @@ Environment variables (for tests and multi-instance deployments):
 | `BACMAP_RESULTS_DIR` | `$BACMAP_HOME/results` | Results directory |
 | `BACMAP_WORKFLOWS_DIR` | `$BACMAP_HOME/workflows` | Workflow deployment directory |
 | `BACMAP_WORKFLOW_STATE_DIR` | `$BACMAP_HOME/workflow_state` | Run-state directory |
+| `BACMAP_RUNS_DB` / `BACMAP_GOM_DB` | `$BACMAP_HOME/runs.sqlite` / `gom.sqlite` | Run records / GOM database |
+| `BACMAP_REFS_DIR` | `$BACMAP_HOME/refs` | External tool databases (ADR-20); `refs/manifest.json` registers them into run records |
+| `BACMAP_ENV_LOCK` | `$BACMAP_HOME/pixi.lock` | Environment lock hashed into run records (ADR-18) |
+| `BACMAP_MCP_TOKEN` / `BACMAP_WEB_TOKEN` | none | Bearer token for MCP HTTP transport / Web LAN access (ADR-12/14) |
 | `CHECKM2_DB` / `GTDBTK_DATA_PATH` | none | Location of large identification databases (optional) |
 
 ## 2. LLM endpoints (config.toml)

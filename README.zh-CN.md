@@ -9,12 +9,12 @@
 
 面向**单工作站**（64 GB 内存、本地数据不出网）的病原菌基因组流行病学分析系统：
 
-- **工具注册表**（23 个 `bio_*` 工具）：只读/计算类工具直接暴露，写操作一律经任务提交；
+- **工具注册表**（24 个 `bio_*` 工具）：只读/计算类工具直接暴露，写操作一律经任务提交；
 - **任务引擎**：DBOS 工作流（analyze / curate / mine / write 四类任务，断点可恢复）；
 - **Snakemake 9 管线**：QC → 组装 → 分型 → AMR/毒力 → 报告；
 - **智能体层**：本地 LLM（Strata / OpenAI 兼容端点）意图分类 + 解读撰写，全链路数据分级门控；
 - **外部工具分工**（ADR-20）：物种鉴定归 [gside](https://github.com/indexofire/gside)、基因筛查/血清型归 gapit、MLST/cgMLST/MST 归 gmlst——bacmap 只做编排与判定；
-- **接入方式**：仅 MCP（v1.4.8 裁定，stdio），Hermes / Claude / Codex 等本机客户端均可接入。
+- **接入方式**：MCP（v1.4.8 裁定；默认 stdio，另支持带 Bearer 鉴权的 Streamable HTTP，ADR-12），Hermes / Claude / Codex 等客户端均可接入。
 
 ## 快速开始
 
@@ -28,7 +28,7 @@ bacmap --help         # 统一命令行入口
 
 | 命令 | 说明 |
 |---|---|
-| `bacmap mcp [--read-only] [--home H]` | 启动 stdio MCP 服务器（22 个工具） |
+| `bacmap mcp [--read-only] [--home H]` | 启动 MCP 服务器：stdio（默认）或带 Bearer 鉴权的 Streamable HTTP（ADR-12；23 个工具） |
 | `bacmap web [--host 127.0.0.1] [--port 8800]` | 启动 Web 任务台：任务管理 + 结果浏览 / 检索 / 报告（默认仅绑本机） |
 | `bacmap --version` | 版本号 |
 
@@ -37,7 +37,7 @@ bacmap --help         # 统一命令行入口
 ## 开发
 
 ```bash
-pixi run -e dev test        # pytest（基线：1039 passed / 1 skipped）
+pixi run -e dev test        # pytest（基线：1060 passed / 1 skipped）
 pixi run -e dev lint        # ruff
 pixi run -e dev contracts   # import-linter 依赖方向契约
 ```

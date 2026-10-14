@@ -20,7 +20,7 @@ bacmap：本地病原菌基因组分析系统（单工作站、数据不出网�
 6. **生信分析外部化（ADR-20）**：只依赖基因组的分析一律外部工具
    （gside=物种鉴定、gapit=基因筛查/血清型、gmlst=MLST/cgMLST/MST），
    bacmap 只做编排、适配与"需结合本地数据的判定"。不要在 bacmap 里写生信算法。
-7. **测试基线不得回退**：当前 1039 passed / 1 skipped。删测试来"通过"是最严重违规。
+7. **测试基线不得回退**：当前 1060 passed / 1 skipped。删测试来"通过"是最严重违规。
 8. **dev/ 目录不入库**：开发调研资料（证据/辩论）仅本地阅读（已 gitignore），
    架构等项目说明文档放 docs/ 并随仓库提交。
 9. **文档双语制与及时同步**：英文为默认语言（README.md、docs/<name>.md），
@@ -53,7 +53,7 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟）
 |---|---|---|
 | `core/` | 领域模型、表定义 | 最底层，不依赖任何上层 |
 | `store/` | GOM/知识库持久化 | 只依赖 core |
-| `tools/` | 工具注册表 + 23 个 bio_* 工具 | 只依赖 core/store |
+| `tools/` | 工具注册表 + 24 个 bio_* 工具 | 只依赖 core/store |
 | `workflow/` | Snakemake 规则（11 个 .smk）与脚本 | pending_gapit/pending_gside/pending_external_tool 占位等外部工具 |
 | `tasks/` | DBOS 任务引擎、门、特征库 | 唯一导入 dbos 的模块（ADR-02） |
 | `agent/` | 意图分类、LLM 网关、沙箱、仲裁 | 唯一导入 pydantic-ai 的位置 |

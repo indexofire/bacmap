@@ -2,11 +2,11 @@
 
 **English** | [简体中文](tools.zh-CN.md)
 
-The tool registry in `bacmap.tools.registry` is the single catalog of what bacmap can do. Each entry is a `ToolSpec` with a name, version, description, effect, and trust layer. One source of truth feeds the MCP server and the built-in agents. This page documents all 23 registered tools; all currently sit at version 0.1.0.
+The tool registry in `bacmap.tools.registry` is the single catalog of what bacmap can do. Each entry is a `ToolSpec` with a name, version, description, effect, and trust layer. One source of truth feeds the MCP server and the built-in agents. This page documents all 24 registered tools; all currently sit at version 0.1.0.
 
 Every tool carries an effect label. `read` tools query stored results. `compute` tools run analysis or wrap external binaries without writing persistent state. `write` tools change the GOM or the database, and they are never registered into MCP directly. The MCP server exposes the 20 read/compute tools plus two task tools, `bacmap_submit_task` and `bacmap_task_status`. Submitting a task through that pair is the sole write entry point. In read-only mode (`bacmap mcp --read-only`), even the task tools stay unregistered.
 
-Trust layers mark how much autonomy the calling layer has: L1 is the fixed pipeline, invoke only, no rewriting; L2 is controlled exploration in a sandbox with human review; L3 is free conversation behind gates. The 23 tools split into 7 read, 13 compute, and 3 write. The three write tools are `bio_analyze_pathogen`, `bio_add_lab_result`, and `bio_add_metadata`.
+Trust layers mark how much autonomy the calling layer has: L1 is the fixed pipeline, invoke only, no rewriting; L2 is controlled exploration in a sandbox with human review; L3 is free conversation behind gates. The 24 tools split into 7 read, 14 compute, and 3 write. The three write tools are `bio_analyze_pathogen`, `bio_add_lab_result`, and `bio_add_metadata`.
 
 ## Summary
 
@@ -85,7 +85,7 @@ Align sequencing reads to a reference genome. Wraps BWA-MEM (short-read DNA), mi
 
 Version `v0.1.0` | Effect: `write` | Trust layer: `L1`
 
-Run the full pathogen analysis pipeline (QC, assembly, species identification via invA/uidA/ipaH three-gene routing, MLST, serotyping, AMR, virulence, plasmid, DEC pathotype, report). Works for Salmonella, DEC (E. coli), Shigella, EIEC; species routing is automatic. Returns a summary of results. For pipeline guidance and troubleshooting, load skill: skill_view('hermes_bacmap:run-pipeline').
+Run the full pathogen analysis pipeline (QC, assembly, species identification via invA/uidA/ipaH three-gene routing, MLST, serotyping, AMR, virulence, plasmid, DEC pathotype, report). Works for Salmonella, DEC (E. coli), Shigella, EIEC; species routing is automatic. Returns a summary of results. For pipeline guidance and troubleshooting, read the MCP prompt bacmap_role_analyst.
 
 **Parameters**
 
@@ -113,11 +113,23 @@ Run a BLAST search. Two modes: (1) 'remote' queries the NCBI BLAST API (requires
 
 Version `v0.1.0` | Effect: `compute` | Trust layer: `L1`
 
-Trace a single sample's cgMLST allele profile against the local reference library (EnteroBase HierCC convention, Hamming allele distance, missing-on-either excluded). Returns the top-N nearest references, the per-species verdict (outbreak/related/unrelated/undetermined), the thresholds applied, and any caveats (e.g. S. sonnei HC5/HC10 unreliable, V. parahaemolyticus UNVERIFIED). Use this for high-resolution source attribution when the user asks whether two isolates are part of the same outbreak cluster, or to find the nearest reference strain for a sample. Requires cgMLST typing to have been run and ingested (bio_analyze_pathogen covers this); call bio_analyze_pathogen first if no profile exists. For cgMLST threshold interpretation, load skill: skill_view('hermes_bacmap:interpret-results').
+Trace a single sample's cgMLST allele profile against the local reference library (EnteroBase HierCC convention, Hamming allele distance, missing-on-either excluded). Returns the top-N nearest references, the per-species verdict (outbreak/related/unrelated/undetermined), the thresholds applied, and any caveats (e.g. S. sonnei HC5/HC10 unreliable, V. parahaemolyticus UNVERIFIED). Use this for high-resolution source attribution when the user asks whether two isolates are part of the same outbreak cluster, or to find the nearest reference strain for a sample. Requires cgMLST typing to have been run and ingested (bio_analyze_pathogen covers this); call bio_analyze_pathogen first if no profile exists. For cgMLST threshold interpretation, read the MCP prompt bacmap_role_analyst.
 
 **Parameters**
 
 - `sample_id` *(required)*: `string`. Sample ID whose cgMLST profile should be traced back.
+
+### bio_compare_runs
+
+Version `v0.1.0` | Effect: `compute` | Trust layer: `L1`
+
+Compare two analysis runs of the same sample against each other (ADR-18). It diffs the run records field by field — resolved parameters, reference databases, tool versions, environment lock, input-file hashes, and workflow commit — and also diffs the per-run result summaries, then attributes differences to a category (parameters / databases / tools / inputs / workflow). Returns a verdict: `IDENTICAL` (provenance and results both match), `DIFF_ATTRIBUTED` (provenance differs, differences attributed), or `NOT_REPRODUCIBLE` (provenance identical but results differ — alerts an unreproducible run). Use this to answer "why did the same sample give a different result", or to confirm reproducibility.
+
+**Parameters**
+
+- `sample_id` *(required)*: `string`. Sample/strain ID whose two runs are compared.
+- `run_a` *(required)*: `string`. First `run_id` (from the `analysis_runs` table).
+- `run_b` *(required)*: `string`. Second `run_id`.
 
 ### bio_diagnose
 
@@ -147,7 +159,7 @@ Quality control for FASTQ files: per-base quality statistics, adapter contaminat
 
 Version `v0.1.0` | Effect: `compute` | Trust layer: `L1`
 
-Scan assembled contigs against a gene database (card/vfdb/ecoh/plasmidfinder/resfinder) to detect AMR, virulence, serotype, or plasmid genes. Returns JSON with gene list, identity, coverage. Supports multi-database scanning in one call. For AMR gene clinical significance (ESBL/carbapenemase/AmpC), load skill: skill_view('hermes_bacmap:interpret-results').
+Scan assembled contigs against a gene database (card/vfdb/ecoh/plasmidfinder/resfinder) to detect AMR, virulence, serotype, or plasmid genes. Returns JSON with gene list, identity, coverage. Supports multi-database scanning in one call. For AMR gene clinical significance (ESBL/carbapenemase/AmpC), read the MCP prompt bacmap_role_analyst.
 
 **Parameters**
 
@@ -170,7 +182,7 @@ Generate HTML report with all results, verifier output, and evidence chain. Retu
 
 Version `v0.1.0` | Effect: `read` | Trust layer: `L1`
 
-Retrieve analysis summary for a completed sample. Returns species type (Salmonella/E.coli/Shigella), MLST ST, serotype, ipaH status, DEC pathotype, AMR/virulence/plasmid gene counts. For result interpretation, load skill: skill_view('hermes_bacmap:interpret-results').
+Retrieve analysis summary for a completed sample. Returns species type (Salmonella/E.coli/Shigella), MLST ST, serotype, ipaH status, DEC pathotype, AMR/virulence/plasmid gene counts. For result interpretation, read the MCP prompt bacmap_role_analyst.
 
 **Parameters**
 
@@ -300,7 +312,7 @@ Compute statistics for a sequence file (FASTA, FASTQ, or GenBank). Returns count
 
 Version `v0.1.0` | Effect: `compute` | Trust layer: `L1`
 
-Retrieve the cohort-level SNP phylogenetic tree and pairwise distance matrix. Returns Newick tree string, sample list, SNP site count, missing rate, and all pairwise SNP distances. Use this when the user asks about genetic relatedness, outbreak clusters, phylogenetic relationships, or SNP distances between samples. For SNP distance interpretation thresholds (0-5=outbreak, 6-15=possibly related), load skill: skill_view('hermes_bacmap:interpret-results').
+Retrieve the cohort-level SNP phylogenetic tree and pairwise distance matrix. Returns Newick tree string, sample list, SNP site count, missing rate, and all pairwise SNP distances. Use this when the user asks about genetic relatedness, outbreak clusters, phylogenetic relationships, or SNP distances between samples. For SNP distance interpretation thresholds (0-5=outbreak, 6-15=possibly related), read the MCP prompt bacmap_role_analyst.
 
 **Parameters**: none
 
@@ -324,7 +336,7 @@ Call or manipulate variants. Operations: 'mpileup_call' (bcftools mpileup+call f
 
 Version `v0.1.0` | Effect: `compute` | Trust layer: `L1`
 
-Run deterministic verification on results. Checks species, MLST, serotype, AMR. Flags critical resistance (CTX-M/NDM/KPC/mcr-1) for human review. Optionally pass interpretation_text (your own draft interpretation of the sample) to also run the Layer 3 NLI Reflector: claims in the text are checked against the sample's facts, and a high contradiction rate flags NEEDS_HUMAN_REVIEW. For understanding verification rules, load skill: skill_view('hermes_bacmap:interpret-results').
+Run deterministic verification on results. Checks species, MLST, serotype, AMR. Flags critical resistance (CTX-M/NDM/KPC/mcr-1) for human review. Optionally pass interpretation_text (your own draft interpretation of the sample) to also run the Layer 3 NLI Reflector: claims in the text are checked against the sample's facts, and a high contradiction rate flags NEEDS_HUMAN_REVIEW. For understanding verification rules, read the MCP prompt bacmap_role_analyst.
 
 **Parameters**
 

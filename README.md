@@ -11,7 +11,7 @@ standalone architecture. The frozen design is documented in
 A pathogen genomic epidemiology analysis system for a **single workstation**
 (64 GB RAM, data never leaves the local network):
 
-- **Tool registry** (23 `bio_*` tools): read-only and compute tools are exposed directly; every write operation goes through task submission;
+- **Tool registry** (24 `bio_*` tools): read-only and compute tools are exposed directly; every write operation goes through task submission;
 - **Task engine**: DBOS workflows (four task types, analyze / curate / mine / write, all checkpoint-resumable);
 - **Snakemake 9 pipelines**: QC → assembly → typing → AMR/virulence → report;
 - **Agent layer**: a local LLM (Strata / OpenAI-compatible endpoint) handles intent classification and interpretation drafting, with data-classification gating across the entire chain;
@@ -30,7 +30,7 @@ bacmap --help         # 统一命令行入口
 
 | Command | Description |
 |---|---|
-| `bacmap mcp [--read-only] [--home H]` | Start the stdio MCP server (22 tools) |
+| `bacmap mcp [--read-only] [--home H]` | Start the MCP server: stdio (default) or Streamable HTTP with bearer auth (ADR-12; 23 tools) |
 | `bacmap web [--host 127.0.0.1] [--port 8800]` | Start the web console: task management plus results browsing / search / reports (localhost only by default) |
 | `bacmap --version` | Print the version |
 
@@ -39,7 +39,7 @@ Equivalent module form: `python -m bacmap.interfaces.mcp` / `python -m bacmap.in
 ## Development
 
 ```bash
-pixi run -e dev test        # pytest（基线：1039 passed / 1 skipped）
+pixi run -e dev test        # pytest（基线：1060 passed / 1 skipped）
 pixi run -e dev lint        # ruff
 pixi run -e dev contracts   # import-linter 依赖方向契约
 ```

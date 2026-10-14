@@ -29,7 +29,7 @@ import json
 import sys
 from pathlib import Path
 
-# Make hermes_bacmap importable under the pixi env (package not installed there).
+# Ensure the bacmap package is importable under the pixi env.
 from bacmap.core.utils import parse_cgmlst_profiles  # noqa: E402
 
 

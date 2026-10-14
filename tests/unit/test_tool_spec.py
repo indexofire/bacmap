@@ -41,11 +41,11 @@ class TestToolResultDefaults:
 class TestRegistryAccessors:
     """注册表访问器（get/by_effect/by_trust_layer）与元数据完整性。"""
 
-    def test_all_23_tools_registered_and_have_meta(self):
+    def test_all_tools_registered_and_have_meta(self):
         from bacmap.tools import registry
 
         specs = registry.list_specs()
-        assert len(specs) == 23  # 元数据缺项会被静默丢弃——此处锁死数量
+        assert len(specs) == 24  # 元数据缺项会被静默丢弃——此处锁死数量
 
     def test_get_returns_spec(self):
         from bacmap.tools import registry

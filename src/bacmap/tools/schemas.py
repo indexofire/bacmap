@@ -418,7 +418,7 @@ ANALYZE_PATHOGEN = {
         "Works for Salmonella, DEC (E. coli), Shigella, EIEC — species "
         "routing is automatic. Returns a summary of results. "
         "For pipeline guidance and troubleshooting, load skill: "
-        "skill_view('hermes_bacmap:run-pipeline')."
+        "bacmap_role_analyst."
     ),
     "parameters": {
         "type": "object",
@@ -437,7 +437,7 @@ GET_RESULT = {
         "type (Salmonella/E.coli/Shigella), MLST ST, serotype, ipaH status, "
         "DEC pathotype, AMR/virulence/plasmid gene counts. "
         "For result interpretation, load skill: "
-        "skill_view('hermes_bacmap:interpret-results')."
+        "bacmap_role_analyst."
     ),
     "parameters": {
         "type": "object",
@@ -458,7 +458,7 @@ VERIFY_RESULT = {
         "Reflector: claims in the text are checked against the sample's "
         "facts, and a high contradiction rate flags NEEDS_HUMAN_REVIEW. "
         "For understanding verification rules, load skill: "
-        "skill_view('hermes_bacmap:interpret-results')."
+        "bacmap_role_analyst."
     ),
     "parameters": {
         "type": "object",
@@ -509,7 +509,7 @@ GENE_SCAN = {
         "plasmid genes. Returns JSON with gene list, identity, coverage. "
         "Supports multi-database scanning in one call. "
         "For AMR gene clinical significance (ESBL/carbapenemase/AmpC), "
-        "load skill: skill_view('hermes_bacmap:interpret-results')."
+        "read the MCP prompt bacmap_role_analyst."
     ),
     "parameters": {
         "type": "object",
@@ -550,7 +550,7 @@ SNP_TREE = {
         "outbreak clusters, phylogenetic relationships, or SNP distances "
         "between samples. For SNP distance interpretation thresholds "
         "(0-5=outbreak, 6-15=possibly related), load skill: "
-        "skill_view('hermes_bacmap:interpret-results')."
+        "bacmap_role_analyst."
     ),
     "parameters": {
         "type": "object",
@@ -596,7 +596,7 @@ CGLST_TRACEBACK = {
         "Requires cgMLST typing to have been run and ingested "
         "(bio_analyze_pathogen covers this); call bio_analyze_pathogen "
         "first if no profile exists. For cgMLST threshold interpretation, "
-        "load skill: skill_view('hermes_bacmap:interpret-results')."
+        "read the MCP prompt bacmap_role_analyst."
     ),
     "parameters": {
         "type": "object",
@@ -656,73 +656,6 @@ SEARCH_SAMPLES = {
 }
 
 
-VALIDATE_TAXONOMY = {
-    "name": "bio_validate_taxonomy",
-    "description": (
-        "Validate genome taxonomy and quality. Two modes: 'simple' "
-        "(default, marker-gene based, fast) and 'standard' (CheckM2 "
-        "completeness/contamination + GTDB-Tk taxonomy, requires "
-        "external databases). Use 'standard' when user asks for "
-        "rigorous species verification or contamination check."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "sample_id": {
-                "type": "string",
-                "description": "Sample ID with assembled contigs.",
-            },
-            "mode": {
-                "type": "string",
-                "description": (
-                    "Validation mode: 'simple' (marker genes, default)"
-                    " or 'standard' (CheckM2 + GTDB-Tk)."
-                ),
-                "default": "simple",
-            },
-        },
-        "required": ["sample_id"],
-    },
-}
-
-
-ANNOTATE = {
-    "name": "bio_annotate",
-    "description": (
-        "Annotate assembled contigs using a Python-native Prokka replacement. "
-        "Predicts CDS with pyrodigal (same algorithm as Prodigal), annotates "
-        "via blastp against Prokka protein databases (sprot, IS, AMR), and "
-        "outputs structured JSON optimized for AI interpretation. Use this "
-        "when the user asks to annotate a genome, find genes, or identify "
-        "gene functions in assembled contigs. For gene function interpretation, "
-        "load skill: skill_view('hermes_bacmap:interpret-results')."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "contigs_path": {
-                "type": "string",
-                "description": "Path to assembled contigs FASTA file.",
-            },
-            "sample_id": {
-                "type": "string",
-                "description": (
-                    "Sample identifier for locus_tag prefix"
-                    " (optional, auto-detected from path if omitted)."
-                ),
-            },
-            "output_path": {
-                "type": "string",
-                "description": (
-                    "Output JSON path (optional, default: {sample}/annotation/annotation.json)."
-                ),
-            },
-        },
-        "required": ["contigs_path"],
-    },
-}
-
-
 DIAGNOSE = {
     "name": "bio_diagnose",
     "description": (
@@ -746,32 +679,6 @@ DIAGNOSE = {
                 "description": "Raw stderr text to diagnose (alternative to log_path).",
             },
         },
-    },
-}
-
-
-VPA_SEROTYPE = {
-    "name": "bio_vpa_serotype",
-    "description": (
-        "Predict V. parahaemolyticus O/K serotype from assembled contigs. "
-        "Uses minimap2 alignment + sourmash k-mer containment + gene-level "
-        "verification (Kaptive-style). Returns predicted serotype (e.g. O3:K6), "
-        "confidence level, coverage, identity, missing genes, and alerts. "
-        "Use this when the user asks about V. parahaemolyticus serotyping."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "contigs_path": {
-                "type": "string",
-                "description": "Path to assembled contigs FASTA.",
-            },
-            "sample_id": {
-                "type": "string",
-                "description": "Sample identifier (optional, auto-detected from path).",
-            },
-        },
-        "required": ["contigs_path"],
     },
 }
 
@@ -914,60 +821,27 @@ ADD_LAB_RESULT = {
     },
 }
 
-SPECIES_COMPARE = {
-    "name": "bio_species_compare",
+
+
+COMPARE_RUNS = {
+    "name": "bio_compare_runs",
     "description": (
-        "Compare every species-identification method run on one strain "
-        "(marker genes, ANI, sourmash, GTDB-Tk, kraken2) and show the "
-        "cross-method agreement matrix with the arbitration verdict. "
-        "Conflicts within the same evidence layer are flagged "
-        "NEEDS_REVIEW for human adjudication."
+        "Compare two analysis runs of the same sample (ADR-18). Diffs the run "
+        "records field by field (parameters, reference databases, tool versions, "
+        "input files, workflow commit) and the per-run result summaries, then "
+        "attributes differences to a category. If provenance is identical but "
+        "results differ, returns verdict NOT_REPRODUCIBLE."
     ),
     "parameters": {
         "type": "object",
         "properties": {
-            "strain_id": {
+            "sample_id": {
                 "type": "string",
-                "description": "Strain/sample ID (e.g., SAM-TYP-001).",
+                "description": "Sample/strain id whose two runs are compared.",
             },
+            "run_a": {"type": "string", "description": "First run_id (analysis_runs)."},
+            "run_b": {"type": "string", "description": "Second run_id (analysis_runs)."},
         },
-        "required": ["strain_id"],
-    },
-}
-
-DB_SETUP = {
-    "name": "bio_db_setup",
-    "description": (
-        "Deploy species-identification reference databases by tier. "
-        "action=list shows tiers with sizes and readiness; action=run starts "
-        "the download in the background (non-blocking, log at data/db/setup.log) "
-        "— poll progress with bio_db_status."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "action": {
-                "type": "string",
-                "enum": ["list", "run"],
-                "description": "list = show tiers; run = start background install",
-            },
-            "tier": {
-                "type": "string",
-                "description": "One of: instant, mini, sourmash, full, standard (for run)",
-            },
-        },
-        "required": ["action"],
-    },
-}
-
-DB_STATUS = {
-    "name": "bio_db_status",
-    "description": (
-        "Report installed species-ID databases (from manifests) and the tail "
-        "of any running/finished background setup log."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {},
+        "required": ["sample_id", "run_a", "run_b"],
     },
 }

@@ -2,11 +2,11 @@
 
 [English](tools.md) | **简体中文**
 
-`bacmap.tools.registry` 中的工具注册表是 bacmap 能力的唯一清单。每个条目是一个 `ToolSpec`，带名称、版本、描述、effect 与信任层。同一个事实来源同时供给 MCP 服务器与内置智能体。本页记录全部 23 个注册工具，当前版本统一为 0.1.0。
+`bacmap.tools.registry` 中的工具注册表是 bacmap 能力的唯一清单。每个条目是一个 `ToolSpec`，带名称、版本、描述、effect 与信任层。同一个事实来源同时供给 MCP 服务器与内置智能体。本页记录全部 24 个注册工具，当前版本统一为 0.1.0。
 
 每个工具都标注 effect。`read` 工具只做只读查询；`compute` 工具执行计算或封装外部程序，不写持久状态；`write` 工具会写 GOM 或数据库，绝不直接注册进 MCP。MCP 服务器暴露 20 个 read/compute 工具，外加两个任务工具 `bacmap_submit_task` 与 `bacmap_task_status`。经这一对工具提交任务，就是写操作唯一入口。只读模式（`bacmap mcp --read-only`）下连任务工具也不会注册。
 
-信任层标记调用方的自主程度：L1 是固定管线，只调用、不改写；L2 是受控探索，经沙箱执行并接受人审；L3 是自由对话，受门约束。23 个工具按 effect 分为 7 个 read、13 个 compute、3 个 write。三个 write 工具是 `bio_analyze_pathogen`、`bio_add_lab_result` 与 `bio_add_metadata`。
+信任层标记调用方的自主程度：L1 是固定管线，只调用、不改写；L2 是受控探索，经沙箱执行并接受人审；L3 是自由对话，受门约束。24 个工具按 effect 分为 7 个 read、14 个 compute、3 个 write。三个 write 工具是 `bio_analyze_pathogen`、`bio_add_lab_result` 与 `bio_add_metadata`。
 
 ## 概览
 
@@ -85,7 +85,7 @@
 
 版本 `v0.1.0` | effect: `write` | 信任层: `L1`
 
-运行完整病原分析流水线（QC、组装、经 invA/uidA/ipaH 三基因路由的物种鉴定、MLST、血清分型、耐药 AMR、毒力、质粒、DEC 致病型、报告）。适用于 Salmonella、DEC（E. coli）、Shigella、EIEC；物种路由自动完成。返回结果摘要。流水线使用与排障指引请加载技能：skill_view('hermes_bacmap:run-pipeline')。
+运行完整病原分析流水线（QC、组装、经 invA/uidA/ipaH 三基因路由的物种鉴定、MLST、血清分型、耐药 AMR、毒力、质粒、DEC 致病型、报告）。适用于 Salmonella、DEC（E. coli）、Shigella、EIEC；物种路由自动完成。返回结果摘要。流水线使用与排障指引请读取 MCP prompt bacmap_role_analyst。
 
 **参数**
 
@@ -113,11 +113,23 @@
 
 版本 `v0.1.0` | effect: `compute` | 信任层: `L1`
 
-将单株的 cgMLST 等位基因谱与本地参考库比对溯源（EnteroBase HierCC 约定，Hamming 等位基因距离，任一方缺失即剔除）。返回 top-N 最近参考株、分物种判定（outbreak/related/unrelated/undetermined）、所用阈值及注意事项（如 S. sonnei 的 HC5/HC10 不可靠，V. parahaemolyticus 未经验证）。当用户问两株是否属于同一暴发簇，或要为样本寻找最近的参考菌株时，用它做高分辨率溯源。需要先跑过 cgMLST 分型并入库（bio_analyze_pathogen 已覆盖）；尚无谱时先调用 bio_analyze_pathogen。cgMLST 阈值解读请加载技能：skill_view('hermes_bacmap:interpret-results')。
+将单株的 cgMLST 等位基因谱与本地参考库比对溯源（EnteroBase HierCC 约定，Hamming 等位基因距离，任一方缺失即剔除）。返回 top-N 最近参考株、分物种判定（outbreak/related/unrelated/undetermined）、所用阈值及注意事项（如 S. sonnei 的 HC5/HC10 不可靠，V. parahaemolyticus 未经验证）。当用户问两株是否属于同一暴发簇，或要为样本寻找最近的参考菌株时，用它做高分辨率溯源。需要先跑过 cgMLST 分型并入库（bio_analyze_pathogen 已覆盖）；尚无谱时先调用 bio_analyze_pathogen。cgMLST 阈值解读请读取 MCP prompt bacmap_role_analyst。
 
 **参数**
 
 - `sample_id` *(必填)*: `string`。要溯源 cgMLST 谱的样本 ID。
+
+### bio_compare_runs
+
+版本 `v0.1.0` | effect: `compute` | 信任层: `L1`
+
+比较同一样本的两次分析运行（ADR-18）。逐字段比对运行记录——解析后参数、参考数据库、工具版本、环境锁、输入文件哈希、工作流提交——并比对两次运行的结果汇总，把差异归因到类别（parameters / databases / tools / inputs / workflow）。返回判定：`IDENTICAL`（来源与结果均一致）、`DIFF_ATTRIBUTED`（来源不同，差异已归因）、`NOT_REPRODUCIBLE`（来源完全相同但结果不同——告警不可复现）。用于回答"同一样本为何结果不同"，或确认可复现性。
+
+**参数**
+
+- `sample_id` *(必填)*: `string`。要比较两次运行的样本/菌株 ID。
+- `run_a` *(必填)*: `string`。第一个 `run_id`（来自 `analysis_runs` 表）。
+- `run_b` *(必填)*: `string`。第二个 `run_id`。
 
 ### bio_diagnose
 
@@ -147,7 +159,7 @@ FASTQ 文件质量控制：逐碱基质量统计、接头污染检查、重复�
 
 版本 `v0.1.0` | effect: `compute` | 信任层: `L1`
 
-将组装后的 contigs 对基因数据库（card/vfdb/ecoh/plasmidfinder/resfinder）扫描，检测耐药 AMR、毒力、血清型或质粒基因。返回含基因列表、一致性、覆盖度的 JSON。支持一次调用扫描多个数据库。耐药基因临床意义（ESBL/碳青霉烯酶/AmpC）解读请加载技能：skill_view('hermes_bacmap:interpret-results')。
+将组装后的 contigs 对基因数据库（card/vfdb/ecoh/plasmidfinder/resfinder）扫描，检测耐药 AMR、毒力、血清型或质粒基因。返回含基因列表、一致性、覆盖度的 JSON。支持一次调用扫描多个数据库。耐药基因临床意义（ESBL/碳青霉烯酶/AmpC）解读请读取 MCP prompt bacmap_role_analyst。
 
 **参数**
 
@@ -170,7 +182,7 @@ FASTQ 文件质量控制：逐碱基质量统计、接头污染检查、重复�
 
 版本 `v0.1.0` | effect: `read` | 信任层: `L1`
 
-获取已完成样本的分析摘要。返回物种（Salmonella/E.coli/Shigella）、MLST ST、血清型、ipaH 状态、DEC 致病型、耐药/毒力/质粒基因计数。结果解读请加载技能：skill_view('hermes_bacmap:interpret-results')。
+获取已完成样本的分析摘要。返回物种（Salmonella/E.coli/Shigella）、MLST ST、血清型、ipaH 状态、DEC 致病型、耐药/毒力/质粒基因计数。结果解读请读取 MCP prompt bacmap_role_analyst。
 
 **参数**
 
@@ -300,7 +312,7 @@ FASTQ 文件质量控制：逐碱基质量统计、接头污染检查、重复�
 
 版本 `v0.1.0` | effect: `compute` | 信任层: `L1`
 
-获取队列级 SNP 系统发育树与成对距离矩阵。返回 Newick 树字符串、样本列表、SNP 位点数、缺失率与全部成对 SNP 距离。用户问遗传相关性、暴发簇、系统发育关系或样本间 SNP 距离时使用。SNP 距离解读阈值（0-5=暴发，6-15=可能相关）请加载技能：skill_view('hermes_bacmap:interpret-results')。
+获取队列级 SNP 系统发育树与成对距离矩阵。返回 Newick 树字符串、样本列表、SNP 位点数、缺失率与全部成对 SNP 距离。用户问遗传相关性、暴发簇、系统发育关系或样本间 SNP 距离时使用。SNP 距离解读阈值（0-5=暴发，6-15=可能相关）请读取 MCP prompt bacmap_role_analyst。
 
 **参数**：无
 
@@ -324,7 +336,7 @@ FASTQ 文件质量控制：逐碱基质量统计、接头污染检查、重复�
 
 版本 `v0.1.0` | effect: `compute` | 信任层: `L1`
 
-对结果运行确定性校验。检查物种、MLST、血清型、耐药 AMR。将关键耐药（CTX-M/NDM/KPC/mcr-1）标记给人工复核。可选传入 interpretation_text（你对该样本的解读草稿），同时运行 Layer 3 NLI Reflector：文本中的论断会与样本事实核对，矛盾率高时标记 NEEDS_HUMAN_REVIEW。理解校验规则请加载技能：skill_view('hermes_bacmap:interpret-results')。
+对结果运行确定性校验。检查物种、MLST、血清型、耐药 AMR。将关键耐药（CTX-M/NDM/KPC/mcr-1）标记给人工复核。可选传入 interpretation_text（你对该样本的解读草稿），同时运行 Layer 3 NLI Reflector：文本中的论断会与样本事实核对，矛盾率高时标记 NEEDS_HUMAN_REVIEW。理解校验规则请读取 MCP prompt bacmap_role_analyst。
 
 **参数**
 

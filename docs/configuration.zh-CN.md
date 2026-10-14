@@ -31,6 +31,10 @@ $BACMAP_HOME/
 | `BACMAP_RESULTS_DIR` | `$BACMAP_HOME/results` | 结果目录 |
 | `BACMAP_WORKFLOWS_DIR` | `$BACMAP_HOME/workflows` | 工作流部署目录 |
 | `BACMAP_WORKFLOW_STATE_DIR` | `$BACMAP_HOME/workflow_state` | 运行状态目录 |
+| `BACMAP_RUNS_DB` / `BACMAP_GOM_DB` | `$BACMAP_HOME/runs.sqlite` / `gom.sqlite` | 运行记录 / GOM 数据库 |
+| `BACMAP_REFS_DIR` | `$BACMAP_HOME/refs` | 外部工具数据库（ADR-20）；`refs/manifest.json` 将登记写入运行记录 |
+| `BACMAP_ENV_LOCK` | `$BACMAP_HOME/pixi.lock` | 计入运行记录的环境锁（ADR-18） |
+| `BACMAP_MCP_TOKEN` / `BACMAP_WEB_TOKEN` | 无 | MCP HTTP 传输 / Web 局域网访问的 Bearer token（ADR-12/14） |
 | `CHECKM2_DB` / `GTDBTK_DATA_PATH` | 无 | 大型鉴定库位置（可选） |
 
 ## 2. LLM 端点（config.toml）

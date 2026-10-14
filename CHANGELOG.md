@@ -6,6 +6,9 @@
 ## [未发布]
 
 ### 新增
+- **MCP Streamable HTTP 传输（ADR-12）**：`bacmap mcp --transport http`（仅绑 127.0.0.1 或 unix socket，强制 Bearer token，DNS-rebinding 防护）；stdio 仍为默认。
+- **Web 可选鉴权（ADR-14）**：`BACMAP_WEB_TOKEN` 配置后全站 Bearer 校验，用于局域网访问。
+- **`bio_compare_runs` 运行比较工具（ADR-18）**：比较同一样本两次运行的来源与结果，归因差异，来源相同而结果不同判为 `NOT_REPRODUCIBLE`（注册表 23→24；MCP 暴露 22→23）。
 - 统一控制台命令 `bacmap`（`mcp` / `web` / `version` 子命令，`[project.scripts]` 注册）。
 - 项目四件套：README.md、CHANGELOG.md、AGENTS.md、LICENSE（MIT）。
 - 文档分层：项目说明 `docs/`（架构冻结文档，随仓库发布）；开发调研 `dev/`
@@ -13,7 +16,7 @@
 - 三份用户文档：`docs/installation.md` / `configuration.md` / `usage.md`
   （含 SSH 隧道远程访问方案）。
 - **文档全面双语化（英文为默认语言）**：README 与全部 docs 提供 EN + `.zh-CN.md`
-  双版本，顶部语言切换链接，跨链同语言互指；新增工具参考 `docs/tools.md`（23 工具
+  双版本，顶部语言切换链接，跨链同语言互指；新增工具参考 `docs/tools.md`（24 工具
   全参数，源自运行时注册表）；冻结架构文档补全量英译 `architecture-frozen-v1.en.md`
   （中文版为权威，英文版为参考翻译）。
 - Web 任务台现代化重设计：DESIGN.md 设计系统（257 行契约）+ 858 行本地 CSS，
@@ -39,8 +42,11 @@
 - ADR-16 红线加固：`cloud_max_data_class` 配置层钳制到 D2，D3/D4 直接拒绝。
 - ADR-08/§4.5 配置解析：补全 `LlmEndpoint` 的能力/管理字段（`supports_tools_with_schema`
   /`constrained_decoding`/`request_timeout_s`/`admin_url`），修复按文档编写的 config.toml 被 `extra=forbid` 拒绝。
-- 安全：MCP `bacmap_submit_task` 与 Web 提交对样本 ID 做白名单校验（路径遍历防护）。
+- 安全：MCP `bacmap_submit_task` 与 Web 提交对样本 ID 做白名单校验（路径遍历防护）；MCP HTTP 报告路由同理。
+- ADR-18 运行记录封存：`finalize_run` 落盘 `run_manifest.json`（表与文件同源、写入 `finished_at` 并重算哈希），此前 `write_manifest` 生产从不调用。
+- ADR-20/18 `ref_databases`：部署期登记 `$BACMAP_HOME/refs/manifest.json`，其数据库（名称/版本/校验值）写入每次运行记录。
 - MCP stdio 入口按 mcp 2.x API 重写（原 1.x `create_initialization_options` 从未可用）。
+- 清理失效资源：`schemas.py` 中已删工具（validate_taxonomy/annotate/vpa_serotype/species_compare/db_setup/db_status）的 6 段死 schema；工具描述与 docs/tools 中残留的 `skill_view('hermes_bacmap:...')`（插件通道 v1.4.8 已删）改为 MCP 角色 prompt 指引。
 - DBOS 系统库 URL 按 dbos 3.2 `system_database_url` 字段配置，
   绝对路径锚定 `$BACMAP_HOME/dbos.sqlite`（旧配置被静默忽略导致库落 CWD）。
 - pixi.toml 自声明 editable 安装（`bacmap = { path = ".", editable = true }`），

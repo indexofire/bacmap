@@ -54,9 +54,17 @@ if isinstance(_paths_cfg.get("data_dir"), str):
 
 REF_DIR: Path = DATA_DIR / "reference"
 
+# 外部工具数据库登记目录（ADR-20）：refs/<tool>/…，版本与校验值经 refs/manifest.json
+# 在部署时登记，运行记录（ADR-18 ref_databases）读取它。
+REFS_DIR: Path = _env_path("BACMAP_REFS_DIR", BACMAP_HOME / "refs")
+
 SPECIES_DB_DIR: Path = DATA_DIR / "db"
 
 DB_PATH: Path = _env_path("BACMAP_DB_PATH", DATA_DIR / "bacmap.sqlite")
+
+# 运行记录库（ADR-18 analysis_runs）与 GOM 库（分析对象 + 门事件）。
+RUNS_DB: Path = _env_path("BACMAP_RUNS_DB", BACMAP_HOME / "runs.sqlite")
+GOM_DB: Path = _env_path("BACMAP_GOM_DB", BACMAP_HOME / "gom.sqlite")
 
 RESULTS_DIR: Path = _env_path("BACMAP_RESULTS_DIR", BACMAP_HOME / "results")
 

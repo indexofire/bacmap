@@ -1,8 +1,9 @@
 """ToolSpec 注册表（ADR-04：唯一事实来源）。
 
-由 hermes-bacmap 的 29 项 legacy 表迁移而来，现存 23 项。
+由 hermes-bacmap 的 29 项 legacy 表迁移而来，现存 24 项。
 v1.4.5 去 bio_vpa_serotype（typing→gapit）；v1.4.7 去
-bio_validate_taxonomy / bio_species_compare / bio_db_setup / bio_db_status（物种鉴定→gside）。
+bio_validate_taxonomy / bio_species_compare / bio_db_setup / bio_db_status（物种鉴定→gside）；
+新增 bio_compare_runs（ADR-18 运行比较工具）。
 
 trust_layer / effect / output_data_class 为首版判定（ADR-04 冻结字段，
 取值可经评审修订；字段本身不可删改）。D 级依据 ADR-16。
@@ -43,6 +44,7 @@ _TOOL_REGISTRY: list[HandlerEntry] = [
     ("bio_add_metadata", schemas.ADD_METADATA, services.add_metadata),
     ("bio_query_lab_results", schemas.QUERY_LAB_RESULTS, services.query_lab_results),
     ("bio_add_lab_result", schemas.ADD_LAB_RESULT, services.add_lab_result),
+    ("bio_compare_runs", schemas.COMPARE_RUNS, services.compare_runs),
 ]
 
 _META: dict[str, tuple[TrustLayer, Effect, DataClass, bool]] = {
@@ -69,6 +71,7 @@ _META: dict[str, tuple[TrustLayer, Effect, DataClass, bool]] = {
     "bio_add_metadata": (TrustLayer.L3, Effect.WRITE, DataClass.D4, False),
     "bio_query_lab_results": (TrustLayer.L3, Effect.READ, DataClass.D4, False),
     "bio_add_lab_result": (TrustLayer.L3, Effect.WRITE, DataClass.D4, False),
+    "bio_compare_runs": (TrustLayer.L1, Effect.COMPUTE, DataClass.D2, False),
 }
 
 _SPECS: dict[str, ToolSpec] = {

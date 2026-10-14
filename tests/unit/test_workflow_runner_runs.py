@@ -187,3 +187,61 @@ class TestFinalizeRunManifest:
 
     def test_finalize_unknown_run_returns_none(self, tmp_path: Path):
         assert runs.finalize_run("no-such", tmp_path / "r.sqlite", tmp_path / "runs") is None
+
+
+class TestRefDatabases:
+    """ADR-20 → ADR-18：部署期登记的外部工具数据库写入运行记录。"""
+
+    def test_missing_manifest_is_empty(self, tmp_path: Path):
+        assert runs.load_ref_databases(tmp_path / "refs") == []
+
+    def test_manifest_list_and_object_forms(self, tmp_path: Path):
+        refs = tmp_path / "refs"
+        refs.mkdir()
+        (refs / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "databases": [
+                        {"name": "gapit:card", "version": "3.2.6", "checksum": "abc"},
+                        {"name": "bad-no-version"},
+                    ]
+                }
+            )
+        )
+        out = runs.load_ref_databases(refs)
+        assert len(out) == 1
+        assert out[0].name == "gapit:card" and out[0].version == "3.2.6"
+
+        (refs / "manifest.json").write_text(
+            json.dumps([{"name": "gmlst:senterica_2", "version": "2026-01"}])
+        )
+        out2 = runs.load_ref_databases(refs)
+        assert out2[0].name == "gmlst:senterica_2" and out2[0].checksum == ""
+
+    def test_invalid_json_is_empty(self, tmp_path: Path):
+        refs = tmp_path / "refs"
+        refs.mkdir()
+        (refs / "manifest.json").write_text("{not json")
+        assert runs.load_ref_databases(refs) == []
+
+    def test_create_run_records_ref_databases(
+        self, tmp_path: Path, workflow_dir: Path, monkeypatch
+    ):
+        monkeypatch.setattr(runs, "probe_tool_versions", lambda tools: {})
+        refs = tmp_path / "refs"
+        refs.mkdir()
+        (refs / "manifest.json").write_text(
+            json.dumps({"databases": [{"name": "gapit:vfdb", "version": "2024"}]})
+        )
+        db = tmp_path / "r.sqlite"
+        run = runs.create_run(
+            workflow="bacmap",
+            workflow_dir=workflow_dir,
+            strain_ids=[],
+            db_path=db,
+            refs_dir=refs,
+        )
+        assert [r.name for r in run.ref_databases] == ["gapit:vfdb"]
+        loaded = runs.read_run(run.run_id, db)
+        assert loaded is not None
+        assert [r.name for r in loaded.ref_databases] == ["gapit:vfdb"]

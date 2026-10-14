@@ -60,11 +60,21 @@ command = "/path/to/.pixi/envs/default/bin/bacmap"
 args = ["mcp"]
 ```
 
-接入后智能体可调 **22 个工具**：
+对支持 Streamable HTTP 的客户端（ADR-12）：仅绑本机或 unix socket，且 **强制 Bearer 鉴权**：
+
+```bash
+export BACMAP_MCP_TOKEN="$(openssl rand -hex 24)"
+bacmap mcp --transport http --host 127.0.0.1 --port 8765
+# 或使用 unix socket：bacmap mcp --transport http --uds /run/bacmap-mcp.sock
+```
+
+客户端指向 `http://127.0.0.1:8765/mcp`，带请求头 `Authorization: Bearer $BACMAP_MCP_TOKEN`。未设置 token 时 HTTP 传输拒绝启动。
+
+接入后智能体可调 **23 个工具**：
 
 | 类别 | 工具 | 说明 |
 |---|---|---|
-| 单步计算（20） | `bio_fastq_qc` `bio_align` `bio_blast` `bio_samtools` `bio_variant` `bio_gene_scan` `bio_seq_stats` … | 同步返回结果，可吃任意本地路径 |
+| 单步计算（21） | `bio_fastq_qc` `bio_align` `bio_blast` `bio_samtools` `bio_variant` `bio_gene_scan` `bio_seq_stats` `bio_compare_runs` … | 同步返回结果，可吃任意本地路径 |
 | 任务提交 | `bacmap_submit_task` | **写操作唯一入口**；analyze/curate 任务异步执行 |
 | 任务查询 | `bacmap_task_status` | 轮询状态与门消息 |
 

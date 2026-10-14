@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from bacmap.agent.llm.endpoints import load_llm_config
+from bacmap.interfaces._auth import BearerTokenMiddleware
 from bacmap.interfaces.web.static import STATIC_DIR
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 from bacmap.tasks.spec import Approval, TaskId, TaskType
@@ -131,8 +132,11 @@ def _report_path(engine: DbosTaskEngine, sample_id: str) -> Path:
     return Path(engine.home) / "results" / sample_id / "report" / f"{sample_id}_report.html"
 
 
-def create_app(engine: DbosTaskEngine) -> FastAPI:
+def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI:
     app = FastAPI(title="bacmap", docs_url=None, redoc_url=None)
+    if auth_token:
+        # ADR-14：跨机访问需鉴权；配置 token 时全站 Bearer 校验。
+        app.add_middleware(BearerTokenMiddleware, token=auth_token)
     # 静态资源仅本地（CSS/图标；零外联，ADR-16）
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

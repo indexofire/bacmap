@@ -113,6 +113,44 @@ def resolve_config(workflow_dir: Path, overrides: dict[str, Any] | None = None) 
     return cfg
 
 
+def load_ref_databases(refs_dir: Path) -> list[RefDatabase]:
+    """读取部署期登记的外部工具数据库（ADR-20 → AnalysisRun.ref_databases）。
+
+    manifest 形如 ``$BACMAP_HOME/refs/manifest.json``::
+
+        {"databases": [{"name": "gapit:card", "version": "3.2.6", "checksum": "..."}]}
+
+    接受裸列表或带 ``databases`` 键的对象；文件缺失/条目非法时返回 ``[]``
+    （不猜测、不做昂贵的目录全量哈希——校验值由部署方在登记时写入）。
+    """
+    manifest = refs_dir / "manifest.json"
+    if not manifest.is_file():
+        return []
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    entries = data.get("databases") if isinstance(data, dict) else data
+    if not isinstance(entries, list):
+        return []
+    out: list[RefDatabase] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        version = entry.get("version")
+        if not name or version is None:
+            continue
+        out.append(
+            RefDatabase(
+                name=str(name),
+                version=str(version),
+                checksum=str(entry.get("checksum", "")),
+            )
+        )
+    return out
+
+
 def create_run(
     workflow: str,
     workflow_dir: Path,
@@ -121,8 +159,9 @@ def create_run(
     input_files: list[Path] | None = None,
     db_path: Path | None = None,
     task_id: str = "",
+    refs_dir: Path | None = None,
 ) -> AnalysisRun:
-    from bacmap.config import BACMAP_HOME, env_lock_path
+    from bacmap.config import BACMAP_HOME, REFS_DIR, env_lock_path
 
     resolved = resolve_config(workflow_dir, overrides)
     run = AnalysisRun(
@@ -138,6 +177,7 @@ def create_run(
         ),
         input_files={str(p): file_sha256(p) for p in (input_files or []) if Path(p).is_file()},
         seeds={"iqtree": int(resolved.get("iqtree_seed", 42))},
+        ref_databases=load_ref_databases(refs_dir or REFS_DIR),
         host={"hostname": _hostname()},
     )
     lock = env_lock_path()
@@ -258,3 +298,57 @@ def _hostname() -> str:
     import socket
 
     return socket.gethostname()
+
+
+# ---------------------------------------------------------------------------
+# 运行比较（ADR-18：差异归因 + 不可复现告警）
+# ---------------------------------------------------------------------------
+
+_PROVENANCE_DIMS: dict[str, tuple[str, ...]] = {
+    "parameters": ("resolved_config", "config_sha256", "seeds"),
+    "databases": ("ref_databases",),
+    "tools": ("tool_versions", "env_lock_sha256"),
+    "inputs": ("input_files",),
+    "workflow": ("workflow_commit", "workflow_dirty"),
+}
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if isinstance(value, list):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _jsonable(v) for k, v in value.items()}
+    return value
+
+
+def compare_runs(a: AnalysisRun, b: AnalysisRun) -> dict[str, Any]:
+    """逐字段比较两次运行的来源（参数/数据库/工具/输入/工作流）。
+
+    返回 ``diffs``（每项含 category/field/a/b）与 ``changed_categories``。
+    结果层面的比较由调用方（bio_compare_runs）叠加，用于"来源相同但结果不同
+    → 标记不可复现"的判定（ADR-18）。
+    """
+    diffs: list[dict[str, Any]] = []
+    changed: set[str] = set()
+    for category, fields in _PROVENANCE_DIMS.items():
+        for field in fields:
+            va, vb = getattr(a, field), getattr(b, field)
+            if va != vb:
+                diffs.append(
+                    {
+                        "category": category,
+                        "field": field,
+                        "a": _jsonable(va),
+                        "b": _jsonable(vb),
+                    }
+                )
+                changed.add(category)
+    return {
+        "run_a": a.run_id,
+        "run_b": b.run_id,
+        "same_provenance": not diffs,
+        "changed_categories": sorted(changed),
+        "diffs": diffs,
+    }

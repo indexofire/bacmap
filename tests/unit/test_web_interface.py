@@ -34,7 +34,7 @@ class _Proc:
 
 
 @pytest.fixture
-def client(tmp_path: Path, monkeypatch):
+def engine(tmp_path: Path, monkeypatch):
     rep = tmp_path / "results" / "SAM-001" / "report"
     rep.mkdir(parents=True)
     (rep / "SAM-001_summary.json").write_text(json.dumps(_sal_summary()), encoding="utf-8")
@@ -62,10 +62,14 @@ def client(tmp_path: Path, monkeypatch):
             yield
 
     monkeypatch.setattr(eng, "_memory_arbiter", lambda: _Arb())
-    engine = eng.DbosTaskEngine(tmp_path)
-    app = create_app(engine)
-    yield TestClient(app), tmp_path
+    e = eng.DbosTaskEngine(tmp_path)
+    yield e
     eng.shutdown_dbos()
+
+
+@pytest.fixture
+def client(engine):
+    yield TestClient(create_app(engine)), Path(engine.home)
 
 
 def _poll_fragment(c: TestClient, tid: str, want: str, timeout_s: float = 30.0) -> str:
@@ -197,3 +201,17 @@ class TestResultsPages:
         c, _ = client
         r = c.get("/samples/..%2f..%2fetc%2fpasswd")
         assert r.status_code in (400, 404)
+
+
+class TestWebAuth:
+    """ADR-14：配置 token 时局域网访问需鉴权（未配置则本机直通）。"""
+
+    def test_token_enforced(self, engine):
+        c = TestClient(create_app(engine, auth_token="tok"))
+        assert c.get("/").status_code == 401
+        assert c.get("/", headers={"Authorization": "Bearer wrong"}).status_code == 401
+        assert c.get("/", headers={"Authorization": "Bearer tok"}).status_code == 200
+
+    def test_no_token_means_no_auth(self, engine):
+        c = TestClient(create_app(engine))
+        assert c.get("/").status_code == 200

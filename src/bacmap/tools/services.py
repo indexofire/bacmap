@@ -1,9 +1,9 @@
 """Service-backed tool handlers.
 
 Covers bio_query_metadata, bio_add_metadata, bio_query_lab_results,
-bio_add_lab_result, bio_snp_tree, bio_search_samples, bio_cgmlst. These talk
-to the SQLite GOM database via hermes_bacmap.services (lazy imports). All
-handlers return JSON strings. Errors are {"error": "..."}.
+bio_add_lab_result, bio_snp_tree, bio_search_samples, bio_cgmlst,
+bio_compare_runs. These talk to the SQLite GOM/runs databases and baseline
+store (lazy imports). All handlers return JSON strings. Errors are {"error": "..."}.
 """
 
 from __future__ import annotations
@@ -14,6 +14,8 @@ from typing import Any
 
 from bacmap.config import DATA_DIR as _DATA_DIR
 from bacmap.config import DEPLOYED_WORKFLOWS_DIR as _DEPLOYED_WORKFLOWS_DIR
+from bacmap.config import GOM_DB as _GOM_DB
+from bacmap.config import RUNS_DB as _RUNS_DB
 from bacmap.core.analysis.cgmlst_projection import (
     CgmlstThresholds,
     load_thresholds_from_config,
@@ -25,6 +27,7 @@ from bacmap.core.utils import parse_cgmlst_profile, parse_cgmlst_profiles, parse
 from ._common import (
     _DEFAULT_DB_PATH,
     _RESULTS_DIR,
+    _validate_sample_id,
     logger,
     tool_handler,
 )
@@ -572,3 +575,95 @@ def review_flags(args: dict[str, Any], **kwargs: Any) -> str:
     events.sort(key=lambda e: e["timestamp"], reverse=True)
     return json.dumps({"events": events[:limit], "total": len(events)}, ensure_ascii=False)
 
+
+
+# ---------------------------------------------------------------------------
+# bio_compare_runs —— 运行比较（ADR-18）
+# ---------------------------------------------------------------------------
+
+
+def _diff_mapping(a: Any, b: Any, prefix: str = "") -> list[dict[str, Any]]:
+    """递归逐字段比较两个映射（summary 结构），返回差异列表。"""
+    out: list[dict[str, Any]] = []
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return out
+    for key in sorted(set(a) | set(b)):
+        va, vb = a.get(key), b.get(key)
+        path = f"{prefix}.{key}" if prefix else str(key)
+        if isinstance(va, dict) and isinstance(vb, dict):
+            out.extend(_diff_mapping(va, vb, path))
+        elif va != vb:
+            out.append({"path": path, "a": va, "b": vb})
+    return out
+
+
+def _gom_summary_for_run(sample_id: str, run_id: str) -> dict[str, Any] | None:
+    """从 GOM 取某样本某次运行的 summary（对象 payload:{summary,run_id}）。"""
+    from bacmap.store.genome_object_service import GenomeObjectService, ObjectType
+
+    if not _GOM_DB.is_file():
+        return None
+    with GenomeObjectService(_GOM_DB) as gos:
+        for obj in gos.list_by_type(ObjectType.SAMPLE):
+            if obj.strain_id != sample_id:
+                continue
+            payload = obj.payload or {}
+            if payload.get("run_id") == run_id:
+                summary = payload.get("summary")
+                return summary if isinstance(summary, dict) else None
+    return None
+
+
+@tool_handler
+def compare_runs(args: dict[str, Any], **kwargs: Any) -> str:
+    """比较同一样本的两次运行（ADR-18）：来源逐字段归因 + 结果比对。
+
+    若来源（参数/数据库/工具/输入/工作流）全部相同而结果不同 → NOT_REPRODUCIBLE；
+    否则把差异归因到变化的类别；结果一致 → IDENTICAL。
+    """
+    from bacmap.store import runs as runs_store
+
+    sample_id = str(args.get("sample_id", ""))
+    run_a = str(args.get("run_a", ""))
+    run_b = str(args.get("run_b", ""))
+    if not (sample_id and run_a and run_b):
+        return json.dumps({"error": "sample_id、run_a、run_b 均为必填"}, ensure_ascii=False)
+    if not _validate_sample_id(sample_id):
+        return json.dumps({"error": f"invalid sample_id: {sample_id!r}"})
+
+    rec_a = runs_store.read_run(run_a, _RUNS_DB)
+    rec_b = runs_store.read_run(run_b, _RUNS_DB)
+    missing = [r for r, rec in ((run_a, rec_a), (run_b, rec_b)) if rec is None]
+    if missing:
+        return json.dumps({"error": f"run not found: {missing}"}, ensure_ascii=False)
+    assert rec_a is not None and rec_b is not None
+
+    provenance = runs_store.compare_runs(rec_a, rec_b)
+    summary_a = _gom_summary_for_run(sample_id, run_a)
+    summary_b = _gom_summary_for_run(sample_id, run_b)
+    result_diffs = _diff_mapping(summary_a or {}, summary_b or {})
+    same_results = not result_diffs
+
+    if provenance["same_provenance"] and same_results:
+        verdict = "IDENTICAL"
+    elif provenance["same_provenance"]:
+        verdict = "NOT_REPRODUCIBLE"
+    else:
+        verdict = "DIFF_ATTRIBUTED"
+
+    return json.dumps(
+        {
+            "sample_id": sample_id,
+            "run_a": run_a,
+            "run_b": run_b,
+            "verdict": verdict,
+            "same_provenance": provenance["same_provenance"],
+            "changed_categories": provenance["changed_categories"],
+            "provenance_diffs": provenance["diffs"],
+            "result_change_count": len(result_diffs),
+            "result_diffs": result_diffs[:100],
+            "summary_a_found": summary_a is not None,
+            "summary_b_found": summary_b is not None,
+        },
+        ensure_ascii=False,
+    )
