@@ -14,6 +14,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ class SandboxExecutor:
             allow_unsandboxed = os.environ.get("BACMAP_ALLOW_UNSANDBOXED") == "1"
         self._allow_unsandboxed = allow_unsandboxed
         if runners is None:
-            runners = [ApptainerRunner(), PodmanRunner()]  # type: ignore[list-item]
+            runners = [ApptainerRunner(), PodmanRunner()]
         self._runners = runners
         self.timeout = timeout
 
@@ -144,6 +145,6 @@ class SandboxExecutor:
         )
 
 
-def run_in_sandbox(spec: SandboxSpec, **executor_kwargs: object) -> SandboxResult:
+def run_in_sandbox(spec: SandboxSpec, **executor_kwargs: Any) -> SandboxResult:
     """便捷入口。"""
-    return SandboxExecutor(**executor_kwargs).run(spec)  # type: ignore[arg-type]
+    return SandboxExecutor(**executor_kwargs).run(spec)

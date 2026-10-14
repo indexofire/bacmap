@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          environments: dev
+          cache: true
+
+      # 四道质量门（AGENTS.md 工作流第 2 条）：lint / typecheck / contracts / test
+      - name: lint (ruff)
+        run: pixi run -e dev lint
+      - name: typecheck (mypy)
+        run: pixi run -e dev typecheck
+      - name: contracts (import-linter, ADR-02)
+        run: pixi run -e dev contracts
+      - name: test (pytest)
+        run: pixi run -e dev test
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          environments: dev
+          cache: true
+      - name: docs-build (mkdocs)
+        run: pixi run -e dev docs-build

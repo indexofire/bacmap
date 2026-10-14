@@ -40,6 +40,12 @@ CREATE TRIGGER IF NOT EXISTS knowledge_fts_ad AFTER DELETE ON knowledge_entries 
     INSERT INTO knowledge_fts(knowledge_fts, rowid, title, authors, content, identifier)
     VALUES ('delete', old.id, old.title, old.authors, old.content, old.identifier);
 END;
+CREATE TRIGGER IF NOT EXISTS knowledge_fts_au AFTER UPDATE ON knowledge_entries BEGIN
+    INSERT INTO knowledge_fts(knowledge_fts, rowid, title, authors, content, identifier)
+    VALUES ('delete', old.id, old.title, old.authors, old.content, old.identifier);
+    INSERT INTO knowledge_fts(rowid, title, authors, content, identifier)
+    VALUES (new.id, new.title, new.authors, new.content, new.identifier);
+END;
 """
 
 _FTS_TOKEN_RE = re.compile(r"[\w\u4e00-\u9fff]+")
@@ -94,7 +100,7 @@ class KnowledgeStore:
                     task_id,
                 ),
             )
-            return int(cur.lastrowid)
+            return int(cur.lastrowid or 0)
 
     def approve(self, entry_id: int, approver: str) -> None:
         with self._conn() as conn:

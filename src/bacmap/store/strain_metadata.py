@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -181,7 +181,7 @@ class StrainMetadataService:
         core, extra = self._split_core_extra(data)
         merged_extra = {**existing_extra, **extra}
 
-        now = datetime.now().isoformat()
+        now = datetime.now(UTC).isoformat()
         core["strain_id"] = strain_id
         if not core.get("sample_id"):
             core["sample_id"] = strain_id

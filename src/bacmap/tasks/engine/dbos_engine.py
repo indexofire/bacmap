@@ -104,9 +104,40 @@ def _fastqs(home: Path, samples: list[str]) -> list[Path]:
 # ---------------------------------------------------------------------------
 
 
+def _memory_arbiter() -> Any:
+    """构建本地模型资源仲裁器（ADR-17 / §4.5 ``[llm.resources]``）。
+
+    模型与管线同机（co_located=true）时启用：内存密集步骤前检查可用内存，
+    不足则 POST /unload 释放 Strata，步骤后 /load 恢复；模型独立主机时直通。
+    测试可 monkeypatch 本函数以隔离内存探测与网络。
+    """
+    from bacmap.agent.llm.arbitration import StrataArbiter
+    from bacmap.agent.llm.endpoints import load_llm_config
+    from bacmap.config import BACMAP_HOME
+
+    cfg = load_llm_config(BACMAP_HOME / "config.toml")
+    if not cfg.resources.co_located:
+        return StrataArbiter(enabled=False)
+    admin_url = "http://127.0.0.1:8080"
+    endpoint = cfg.endpoints.get("strata") or next(iter(cfg.endpoints.values()), None)
+    if endpoint is not None:
+        if endpoint.admin_url:
+            admin_url = endpoint.admin_url
+        else:
+            admin_url = endpoint.base_url.rstrip("/")
+            if admin_url.endswith("/v1"):
+                admin_url = admin_url[: -len("/v1")]
+    return StrataArbiter(
+        admin_url=admin_url,
+        enabled=True,
+        min_free_gb=cfg.resources.min_free_ram_gb_for_heavy_steps,
+    )
+
+
 @DBOS.step()
 def _step_run(params: dict[str, Any]) -> dict[str, Any]:
-    proc = _run_snakemake(params)
+    with _memory_arbiter().heavy_step():
+        proc = _run_snakemake(params)
     return {"returncode": proc.returncode}
 
 
@@ -131,8 +162,7 @@ def _step_finish_run(run_id: str, params: dict[str, Any]) -> None:
     from bacmap.store import runs
 
     home = Path(params["home"])
-    dummy = runs.AnalysisRun(run_id=run_id, workflow="bacmap")
-    runs.finish_run(dummy, db_path=home / "runs.sqlite")
+    runs.finalize_run(run_id, home / "runs.sqlite", home / "runs")
 
 
 @DBOS.step()
@@ -178,6 +208,58 @@ def _step_gate(home_s: str, sample: str, interpretation_text: str) -> dict[str, 
     return result.model_dump(mode="json")
 
 
+@DBOS.step()
+def _step_record_gate(home_s: str, object_id: str, gate_result: dict[str, Any]) -> None:
+    """把门评估写入 GOM events（§4.2 / ADR-07：event_type = "gate.<name>"）。"""
+    from bacmap.store.genome_object_service import record_gate_event
+
+    record_gate_event(Path(home_s) / "gom.sqlite", object_id, gate_result)
+
+
+def _ensure_task_object(home: Path, task_id: str) -> str:
+    """为任务建一个 GOM TASK 对象作门事件锚点（幂等，object_id == task_id）。
+
+    mine / write / curate 的门没有样本对象可挂，§4.2 要求每次门评估留痕，
+    故以任务对象为锚。
+    """
+    from bacmap.store.genome_object_service import (
+        GenomeObject,
+        GenomeObjectService,
+        GOMNotFoundError,
+        ObjectType,
+    )
+
+    gos = GenomeObjectService(home / "gom.sqlite")
+    try:
+        gos.get_latest_version(task_id)
+        gos.close()
+        return task_id
+    except GOMNotFoundError:
+        pass
+    obj = GenomeObject(
+        object_id=task_id,
+        object_type=ObjectType.TASK,
+        version=1,
+        schema_version="1.0.0",
+        created_at=datetime.now(UTC),
+        created_by="bacmap.tasks",
+        payload={},
+    )
+    created = gos.create(obj)
+    gos.close()
+    return created.object_id
+
+
+@DBOS.step()
+def _step_gate_audit(home_s: str, task_id: str, gate_result: dict[str, Any]) -> None:
+    """把无样本锚点的门评估写入 GOM 任务对象（§4.2/ADR-07）。"""
+    from bacmap.store.genome_object_service import record_gate_event
+
+    home = Path(home_s)
+    object_id = _ensure_task_object(home, task_id)
+    record_gate_event(home / "gom.sqlite", object_id, gate_result)
+
+
 # ---------------------------------------------------------------------------
 # analyze 工作流（模块级装饰；函数体经模块名引用步骤，测试可替换）
 # ---------------------------------------------------------------------------
@@ -198,9 +280,13 @@ def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
     text = params.get("interpretation_text", "")
     for s in params["samples"]:
         summary = _load_summary(home, s)
+        object_id: str | None = None
         if summary:
-            _step_ingest_gom(str(home), s, run["run_id"], summary)
-        out["gates"][s] = _step_gate(str(home), s, text)
+            object_id = _step_ingest_gom(str(home), s, run["run_id"], summary)
+        gate_out = _step_gate(str(home), s, text)
+        if object_id is not None:
+            _step_record_gate(str(home), object_id, gate_out)
+        out["gates"][s] = gate_out
         out.setdefault("reports", {})[s] = _step_report(s)
     if any(g["verdict"] != "pass" for g in out["gates"].values()):
         out["status"] = "AWAITING_APPROVAL"
@@ -292,9 +378,11 @@ def mine_workflow(params: dict[str, Any]) -> dict[str, Any]:
             "sandbox_returncode": result["returncode"],
             "gates": {},
         }
+    gate = _step_mining_gate(result["artifacts"], None)
+    _step_gate_audit(params["home"], params["task_id"], gate)
     return {
         "status": "AWAITING_APPROVAL",
-        "gates": _step_mining_gate(result["artifacts"], None),
+        "gates": gate,
         "artifacts": result["artifacts"],
         "workspace": result["workspace"],
     }
@@ -332,6 +420,7 @@ def write_workflow(params: dict[str, Any]) -> dict[str, Any]:
     """成稿 → 引用门（V11⑥：不在知识库的引用 → 拒绝）→ AWAITING_APPROVAL。"""
     draft_result = _step_write_draft(params)
     gate = _step_citation_gate(draft_result["draft"], draft_result["known_citations"])
+    _step_gate_audit(params["home"], params["task_id"], gate)
     if gate["verdict"] != "pass":
         return {
             "status": "FAILED",
@@ -372,7 +461,10 @@ def _step_curate_build(params: dict[str, Any]) -> dict[str, Any]:
 
 @DBOS.workflow()
 def curate_workflow(params: dict[str, Any]) -> dict[str, Any]:
-    return _step_curate_build(params)
+    out = _step_curate_build(params)
+    if isinstance(out.get("gate"), dict):
+        _step_gate_audit(params["home"], params["task_id"], out["gate"])
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -447,7 +539,7 @@ class DbosTaskEngine:
         message: str | None = row["message"]
 
         if state == TaskState.RUNNING and row["workflow_id"]:
-            handle = DBOS.retrieve_workflow(row["workflow_id"])
+            handle: Any = DBOS.retrieve_workflow(row["workflow_id"])
             raw_status = handle.get_status()
             ws = str(getattr(raw_status, "status", raw_status)).upper()
             if ws in ("PENDING", "RUNNING"):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import time
 from datetime import UTC, datetime
@@ -15,6 +16,14 @@ from bacmap.tasks.spec import Approval, TaskState, TaskType
 class _Proc:
     def __init__(self, rc: int) -> None:
         self.returncode = rc
+
+
+class _NoopArbiter:
+    """测试用仲裁器：直通，不探测内存/不访问管理端点。"""
+
+    @contextlib.contextmanager
+    def heavy_step(self):
+        yield
 
 
 def _sal_summary() -> dict:
@@ -38,6 +47,7 @@ def engine(tmp_path, monkeypatch):
     monkeypatch.setattr(eng, "_run_snakemake", lambda params: _Proc(0))
     monkeypatch.setattr(eng, "_step_create_run", lambda params: {"run_id": "test-run-1"})
     monkeypatch.setattr(eng, "_step_finish_run", lambda run_id, params: None)
+    monkeypatch.setattr(eng, "_memory_arbiter", lambda: _NoopArbiter())
     e = eng.DbosTaskEngine(tmp_path)
     yield e
     eng.shutdown_dbos()
@@ -208,3 +218,88 @@ class TestAnalyzeAutoReport:
         st = _wait(engine, tid)
         assert calls == ["SAM-001"]
         assert st.state in (TaskState.SUCCEEDED, TaskState.AWAITING_APPROVAL)
+
+
+class TestMemoryArbiterWiring:
+    """ADR-17：analyze 的内存密集步骤必须经资源仲裁（此前仲裁器未接线）。"""
+
+    def test_analyze_wraps_run_in_heavy_step(self, tmp_path, monkeypatch):
+        rep = tmp_path / "results" / "SAM-001" / "report"
+        rep.mkdir(parents=True)
+        (rep / "SAM-001_summary.json").write_text(json.dumps(_sal_summary()), encoding="utf-8")
+        events: list[str] = []
+
+        class _Recorder:
+            @contextlib.contextmanager
+            def heavy_step(self):
+                events.append("enter")
+                try:
+                    yield
+                finally:
+                    events.append("exit")
+
+        monkeypatch.setattr(eng, "_memory_arbiter", lambda: _Recorder())
+        monkeypatch.setattr(eng, "_run_snakemake", lambda params: _Proc(0))
+        monkeypatch.setattr(eng, "_step_create_run", lambda params: {"run_id": "r1"})
+        monkeypatch.setattr(eng, "_step_finish_run", lambda run_id, params: None)
+        e = eng.DbosTaskEngine(tmp_path)
+        try:
+            tid = e.submit(TaskType.ANALYZE, {"samples": ["SAM-001"]}, "tester")
+            _wait(e, tid)
+        finally:
+            eng.shutdown_dbos()
+        assert events.count("enter") >= 1
+        assert events.count("enter") == events.count("exit")
+
+    def test_memory_arbiter_disabled_when_not_colocated(self, tmp_path, monkeypatch):
+        import bacmap.config as cfgmod
+
+        monkeypatch.setattr(cfgmod, "BACMAP_HOME", tmp_path)
+        (tmp_path / "config.toml").write_text("[llm.resources]\nco_located = false\n")
+        arb = eng._memory_arbiter()
+        assert arb._enabled is False
+
+    def test_memory_arbiter_admin_url_from_endpoint(self, tmp_path, monkeypatch):
+        import bacmap.config as cfgmod
+
+        monkeypatch.setattr(cfgmod, "BACMAP_HOME", tmp_path)
+        (tmp_path / "config.toml").write_text(
+            """
+[llm.endpoints.strata]
+base_url = "http://127.0.0.1:9999/v1"
+model = "m"
+admin_url = "http://127.0.0.1:9999"
+
+[llm.resources]
+co_located = true
+min_free_ram_gb_for_heavy_steps = 12
+""",
+            encoding="utf-8",
+        )
+        arb = eng._memory_arbiter()
+        assert arb._enabled is True
+        assert arb._admin_url == "http://127.0.0.1:9999"
+        assert arb._min_free_gb == 12
+
+
+class TestGateEventsPersisted:
+    """§4.2/ADR-07：每次门评估写入 GOM events（event_type = "gate.<name>"）。"""
+
+    def test_analyze_records_analysis_claims_gate_event(self, engine, tmp_path):
+        from bacmap.store.genome_object_service import GenomeObjectService, ObjectType
+
+        tid = engine.submit(
+            TaskType.ANALYZE,
+            {"samples": ["SAM-001"], "interpretation_text": "该菌株为 Salmonella。"},
+            "tester",
+        )
+        _wait(engine, tid)
+
+        with GenomeObjectService(tmp_path / "gom.sqlite") as gos:
+            objs = gos.list_by_type(ObjectType.SAMPLE)
+            assert objs, "analyze 应写入样本 GOM 对象"
+            events = gos.list_events(objs[0].object_id)
+        gate_types = {e.event_type for e in events}
+        assert "gate.analysis_claims" in gate_types
+        gate_events = [e for e in events if e.event_type == "gate.analysis_claims"]
+        assert gate_events[0].event_payload.get("verdict")

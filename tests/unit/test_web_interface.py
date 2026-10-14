@@ -54,6 +54,14 @@ def client(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(eng, "_generate_report_for", lambda s: {"sample_id": s})
     monkeypatch.setattr(eng, "_step_create_run", lambda p: {"run_id": "web-run-1"})
     monkeypatch.setattr(eng, "_step_finish_run", lambda rid, p: None)
+    import contextlib
+
+    class _Arb:
+        @contextlib.contextmanager
+        def heavy_step(self):
+            yield
+
+    monkeypatch.setattr(eng, "_memory_arbiter", lambda: _Arb())
     engine = eng.DbosTaskEngine(tmp_path)
     app = create_app(engine)
     yield TestClient(app), tmp_path
@@ -178,3 +186,14 @@ class TestResultsPages:
     def test_report_file_route_404_when_absent(self, client):
         c, _ = client
         assert c.get("/samples/SAM-001/report").status_code == 404
+
+    def test_report_route_rejects_path_traversal(self, client):
+        c, _ = client
+        # urllib 对 ..%2f 的处理因版本而异；用编码斜杠确保路径参数带 .. 语义
+        r = c.get("/samples/..%2f..%2fetc%2fpasswd/report")
+        assert r.status_code in (400, 404)
+
+    def test_sample_detail_rejects_path_traversal(self, client):
+        c, _ = client
+        r = c.get("/samples/..%2f..%2fetc%2fpasswd")
+        assert r.status_code in (400, 404)

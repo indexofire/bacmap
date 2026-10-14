@@ -6,7 +6,7 @@
 
 - **Date**: 2026-10-09 (v1.1 through v1.4.7 revised the same day; see Section 10)
 - **Status**: Frozen. Becomes "Confirmed" once all verification items in Section 8 pass
-- **Basis**: [Round 1 debate](debate-standalone-architecture.md), [Round 2 debate](debate-round2-harness-vs-delivery.md), [research evidence](research-framework-evidence.md) (cited below as "evidence §x")
+- **Basis**: Round 1 debate (`dev/debate-standalone-architecture.md`, local-only, not committed), Round 2 debate (`dev/debate-round2-harness-vs-delivery.md`), research evidence (`dev/research-framework-evidence.md`) (cited below as "evidence §x")
 - **Change rule**: for any decision marked "frozen" in this document, a change requires adding a new ADR revision record (Section 10) stating the reason, evidence, and migration cost; parts marked "replaceable" may have their implementation swapped freely as long as the interface stays unchanged
 
 ---

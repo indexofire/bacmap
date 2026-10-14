@@ -10,12 +10,14 @@ trust_layer / effect / output_data_class 为首版判定（ADR-04 冻结字段�
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from bacmap.tools import cli, pipeline, schemas, seq, services
 from bacmap.tools.spec import DataClass, Effect, ToolSpec, TrustLayer
 
 _V = "0.1.0"  # 迁移期统一版本；改写为类型化输入时逐工具起版本
 
-HandlerEntry = tuple[str, dict, object]
+HandlerEntry = tuple[str, dict, Callable[..., str]]
 
 _TOOL_REGISTRY: list[HandlerEntry] = [
     ("bio_seq_stats", schemas.SEQ_STATS, seq.seq_stats),
@@ -100,8 +102,3 @@ def by_effect(effect: Effect) -> list[ToolSpec]:
 
 def by_trust_layer(layer: TrustLayer) -> list[ToolSpec]:
     return [s for s in _SPECS.values() if s.trust_layer == layer]
-
-
-def legacy_table() -> list[HandlerEntry]:
-    """Hermes 插件适配器消费的 (name, schema, handler) 三元组（即 _TOOL_REGISTRY 本体）。"""
-    return _TOOL_REGISTRY

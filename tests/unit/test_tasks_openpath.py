@@ -201,3 +201,51 @@ class TestWriteWorkflow:
             Approval(approver="editor", decision="reject", signature="sig", at=datetime.now(UTC)),
         )
         assert engine.status(tid).state == TaskState.FAILED
+
+
+class TestGateAuditTrail:
+    """§4.2/ADR-07：无样本锚点的门（mine/write/curate）以 GOM TASK 对象留痕。"""
+
+    def _wait(self, e, tid, timeout_s=30):
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            st = e.status(tid)
+            if st.state != TaskState.RUNNING:
+                return st
+            time.sleep(0.2)
+        return e.status(tid)
+
+    def test_mine_records_gate_event_on_task_object(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr(eng, "_run_sandbox", lambda spec: _FakeSandboxResult(0))
+        e = eng.DbosTaskEngine(tmp_path)
+        try:
+            tid = e.submit(TaskType.MINE, {"script": "pass"}, "analyst")
+            self._wait(e, tid)
+        finally:
+            eng.shutdown_dbos()
+
+        from bacmap.store.genome_object_service import GenomeObjectService
+
+        with GenomeObjectService(tmp_path / "gom.sqlite") as gos:
+            events = gos.list_events(tid)
+        assert any(ev.event_type == "gate.mining" for ev in events), [
+            ev.event_type for ev in events
+        ]
+
+    def test_write_records_citation_gate_event(self, tmp_path: Path):
+        e = eng.DbosTaskEngine(tmp_path)
+        try:
+            tid = e.submit(
+                TaskType.WRITE,
+                {"draft": "见 [12345678]。", "known_citations": ["12345678"]},
+                "writer",
+            )
+            self._wait(e, tid)
+        finally:
+            eng.shutdown_dbos()
+
+        from bacmap.store.genome_object_service import GenomeObjectService
+
+        with GenomeObjectService(tmp_path / "gom.sqlite") as gos:
+            events = gos.list_events(tid)
+        assert any(ev.event_type == "gate.citation" for ev in events)

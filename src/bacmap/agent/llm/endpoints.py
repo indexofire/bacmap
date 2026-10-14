@@ -12,7 +12,7 @@ import tomllib
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from bacmap.tools.spec import DataClass
 
@@ -32,16 +32,42 @@ class LlmEndpoint(BaseModel):
     max_concurrency: int = 1
     api_key_env: str | None = None
     enabled: bool = True
+    # 冻结设计 §4.5 声明的能力/管理字段（此前缺失，extra="forbid" 会拒绝按
+    # 文档编写的 config.toml——修复为可解析；默认值对齐 §4.5 示例）。
+    supports_tools_with_schema: bool = False
+    constrained_decoding: bool = False
+    request_timeout_s: int = 300
+    admin_url: str | None = None  # Strata /load、/unload 管理端点（ADR-17）
+
+
+class LlmResources(BaseModel):
+    """资源仲裁配置（冻结设计 §4.5/ADR-17）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    co_located: bool = True
+    min_free_ram_gb_for_heavy_steps: float = 24.0
 
 
 class DataPolicy(BaseModel):
     cloud_max_data_class: DataClass = DataClass.D1
+
+    @field_validator("cloud_max_data_class")
+    @classmethod
+    def _clamp_cloud_limit(cls, v: DataClass) -> DataClass:
+        """ADR-16 红线：cloud 端点最多放宽到 D2；D3/D4 永不，配置层直接拒绝。"""
+        if v > DataClass.D2:
+            raise ValueError(
+                f"cloud_max_data_class 最多可放宽到 D2（ADR-16），收到 {v.name}"
+            )
+        return v
 
 
 class LlmConfig(BaseModel):
     endpoints: dict[str, LlmEndpoint] = Field(default_factory=dict)
     routing: dict[str, str] = Field(default_factory=dict)
     policy: DataPolicy = DataPolicy()
+    resources: LlmResources = LlmResources()
 
     def resolve(self, purpose: str) -> LlmEndpoint | None:
         name = self.routing.get(purpose)
@@ -77,8 +103,17 @@ def load_llm_config(config_path: Path) -> LlmConfig:
         return default_config()
     data: dict[str, Any] = tomllib.loads(config_path.read_text(encoding="utf-8"))
     llm = data.get("llm")
-    if not isinstance(llm, dict) or not llm.get("endpoints"):
+    if not isinstance(llm, dict):
         return default_config()
+
+    resources_raw = llm.get("resources", {})
+    resources = (
+        LlmResources(**resources_raw) if isinstance(resources_raw, dict) else LlmResources()
+    )
+
+    if not llm.get("endpoints"):
+        # 无端点段时端点/路由取默认，但 resources 独立生效（ADR-17）。
+        return default_config().model_copy(update={"resources": resources})
 
     endpoints: dict[str, LlmEndpoint] = {}
     for name, raw in llm["endpoints"].items():
@@ -93,4 +128,4 @@ def load_llm_config(config_path: Path) -> LlmConfig:
     else:
         limit = DataClass(raw_limit)
     policy = DataPolicy(cloud_max_data_class=limit)
-    return LlmConfig(endpoints=endpoints, routing=routing, policy=policy)
+    return LlmConfig(endpoints=endpoints, routing=routing, policy=policy, resources=resources)

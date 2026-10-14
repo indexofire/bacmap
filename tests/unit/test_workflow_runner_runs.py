@@ -141,3 +141,49 @@ class TestRunnerSubprocess:
         assert "--rerun-incomplete" in cmd
         assert cmd[-1] == "results/S/report/s.json"
         assert recorded["cwd"] == str(tmp_path)
+
+
+class TestFinalizeRunManifest:
+    """ADR-18 §4.6：运行记录封存——表与 run_manifest.json 内容一致且带哈希。"""
+
+    def test_finalize_writes_manifest_and_matches_table(
+        self, tmp_path: Path, workflow_dir: Path, monkeypatch
+    ):
+        monkeypatch.setattr(runs, "probe_tool_versions", lambda tools: {"snakemake": "9"})
+        db = tmp_path / "runs.sqlite"
+        run = runs.create_run(
+            workflow="bacmap", workflow_dir=workflow_dir, strain_ids=[], db_path=db
+        )
+        out = runs.finalize_run(run.run_id, db, tmp_path / "runs")
+        assert out is not None and out.finished_at is not None
+
+        manifest = tmp_path / "runs" / run.run_id / "run_manifest.json"
+        payload = json.loads(manifest.read_text())
+        assert payload["manifest_sha256"] == out.manifest_sha256
+
+        conn = sqlite3.connect(db)
+        row = conn.execute(
+            "SELECT manifest_sha256, finished_at FROM analysis_runs WHERE run_id=?",
+            (run.run_id,),
+        ).fetchone()
+        conn.close()
+        assert row[0] == out.manifest_sha256
+        assert row[1] == out.finished_at.isoformat()
+
+    def test_read_run_roundtrip(self, tmp_path: Path, workflow_dir: Path, monkeypatch):
+        monkeypatch.setattr(runs, "probe_tool_versions", lambda tools: {})
+        db = tmp_path / "runs.sqlite"
+        run = runs.create_run(
+            workflow="bacmap",
+            workflow_dir=workflow_dir,
+            strain_ids=["S1", "S2"],
+            db_path=db,
+            task_id="t-9",
+        )
+        loaded = runs.read_run(run.run_id, db)
+        assert loaded is not None
+        assert loaded.strain_ids == ["S1", "S2"]
+        assert loaded.task_id == "t-9"
+
+    def test_finalize_unknown_run_returns_none(self, tmp_path: Path):
+        assert runs.finalize_run("no-such", tmp_path / "r.sqlite", tmp_path / "runs") is None

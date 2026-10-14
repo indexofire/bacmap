@@ -14,10 +14,10 @@ from pathlib import Path
 from typing import Any
 
 from bacmap.config import DB_PATH as _REFLECTION_DB_PATH
+from bacmap.config import DEPLOYED_WORKFLOWS_DIR as _DEPLOYED_WORKFLOWS_DIR
 from bacmap.core.utils import parse_mlst
 
 from ._common import (
-    _PROJECT_ROOT,
     _RESULTS_DIR,
     _run_project_script,
     _validate_sample_id,
@@ -195,7 +195,7 @@ def list_samples(args: dict[str, Any], **kwargs: Any) -> str:
     """List all samples and their analysis status."""
     import csv
 
-    samples_tsv = _PROJECT_ROOT / "workflows/bacmap/config/samples.tsv"
+    samples_tsv = _DEPLOYED_WORKFLOWS_DIR / "config" / "samples.tsv"
     if not samples_tsv.exists():
         return json.dumps({"error": "samples.tsv not found"})
 
@@ -285,6 +285,6 @@ def diagnose_failure(args: dict[str, Any], **kwargs: Any) -> str:
     elif log_path:
         result = diagnose_from_log(log_path)
     else:
-        result = diagnose_from_log(str(_PROJECT_ROOT / "workflows/bacmap/.snakemake/log"))
+        result = diagnose_from_log(str(_DEPLOYED_WORKFLOWS_DIR / ".snakemake" / "log"))
 
     return json.dumps(result.to_dict(), ensure_ascii=False)

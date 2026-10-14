@@ -2,7 +2,7 @@
 
 [English](tools.md) | **简体中文**
 
-`bacmap.tools.registry` 中的工具注册表是 bacmap 能力的唯一清单。每个条目是一个 `ToolSpec`，带名称、版本、描述、effect 与信任层。同一个事实来源同时供给 MCP 服务器、Hermes 插件与内置智能体。本页记录全部 23 个注册工具，当前版本统一为 0.1.0。
+`bacmap.tools.registry` 中的工具注册表是 bacmap 能力的唯一清单。每个条目是一个 `ToolSpec`，带名称、版本、描述、effect 与信任层。同一个事实来源同时供给 MCP 服务器与内置智能体。本页记录全部 23 个注册工具，当前版本统一为 0.1.0。
 
 每个工具都标注 effect。`read` 工具只做只读查询；`compute` 工具执行计算或封装外部程序，不写持久状态；`write` 工具会写 GOM 或数据库，绝不直接注册进 MCP。MCP 服务器暴露 20 个 read/compute 工具，外加两个任务工具 `bacmap_submit_task` 与 `bacmap_task_status`。经这一对工具提交任务，就是写操作唯一入口。只读模式（`bacmap mcp --read-only`）下连任务工具也不会注册。
 

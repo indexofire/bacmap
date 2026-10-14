@@ -86,7 +86,7 @@ Requests over the limit are intercepted by the LlmGateway **before they are sent
 
 ## 5. Sample registration (samples.tsv)
 
-The full analyze task requires samples to be registered. Edit `$BACMAP_HOME/workflows/config/samples.tsv`:
+The full analyze task requires samples to be registered. Edit `$BACMAP_HOME/workflows/bacmap/config/samples.tsv`:
 
 ```tsv
 sample	species	R1	R2

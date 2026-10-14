@@ -91,10 +91,13 @@ def _register_role_prompts(server: MCPServer) -> None:
 
 
 def _register_legacy_tool(server: MCPServer, spec: Any, model: type) -> None:
-    def _fn(params: model) -> str:  # type: ignore[valid-type]
+    def _fn(params: Any) -> str:
         raw = spec.legacy_handler(params.model_dump(exclude_none=True))
         return str(raw)
 
+    # 运行时注解必须是动态生成的输入模型：MCP SDK 据此构建 JSON Schema。
+    # 静态上用 Any（动态模型无静态类型），故此处显式补注解，而非抑制类型检查。
+    _fn.__annotations__["params"] = model
     _fn.__name__ = spec.name
     _fn.__doc__ = spec.description
     server.tool(name=spec.name, description=spec.description)(_fn)
@@ -123,6 +126,15 @@ def _register_task_tools(server: MCPServer, engine: Any) -> None:
             tt = TaskType(task_type)
         except ValueError:
             return json.dumps({"error": f"unknown task_type: {task_type!r}"}, ensure_ascii=False)
+        if samples:
+            # P2-2：样本 ID 直接进 results/ 路径拼接——白名单校验，拒绝遍历串。
+            from bacmap.tools._common import _validate_sample_id
+
+            bad = [s for s in samples if not _validate_sample_id(s)]
+            if bad:
+                return json.dumps(
+                    {"error": f"invalid sample id(s): {bad!r}"}, ensure_ascii=False
+                )
         params: dict[str, Any] = {}
         if samples:
             params["samples"] = samples

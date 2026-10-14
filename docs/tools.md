@@ -2,7 +2,7 @@
 
 **English** | [简体中文](tools.zh-CN.md)
 
-The tool registry in `bacmap.tools.registry` is the single catalog of what bacmap can do. Each entry is a `ToolSpec` with a name, version, description, effect, and trust layer. One source of truth feeds the MCP server, the Hermes plugin, and the built-in agents. This page documents all 23 registered tools; all currently sit at version 0.1.0.
+The tool registry in `bacmap.tools.registry` is the single catalog of what bacmap can do. Each entry is a `ToolSpec` with a name, version, description, effect, and trust layer. One source of truth feeds the MCP server and the built-in agents. This page documents all 23 registered tools; all currently sit at version 0.1.0.
 
 Every tool carries an effect label. `read` tools query stored results. `compute` tools run analysis or wrap external binaries without writing persistent state. `write` tools change the GOM or the database, and they are never registered into MCP directly. The MCP server exposes the 20 read/compute tools plus two task tools, `bacmap_submit_task` and `bacmap_task_status`. Submitting a task through that pair is the sole write entry point. In read-only mode (`bacmap mcp --read-only`), even the task tools stay unregistered.
 

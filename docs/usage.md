@@ -98,7 +98,7 @@ Checkpoint resume: the task engine is built on DBOS. Kill a running process and 
 # ① 布局数据并注册
 cp /mnt/seq_run/SAM-NEW-100_R{1,2}.fastq.gz ~/.local/share/bacmap/gs/SAM-NEW-100/
 echo -e "SAM-NEW-100\tSalmonella\tgs/SAM-NEW-100/SAM-NEW-100_R1.fastq.gz\tgs/SAM-NEW-100/SAM-NEW-100_R2.fastq.gz" \
-  >> ~/.local/share/bacmap/workflows/config/samples.tsv
+  >> ~/.local/share/bacmap/workflows/bacmap/config/samples.tsv
 
 # ② 提交（Web 表单选 analyze 填 SAM-NEW-100，或智能体对话）
 # ③ 监控直至完成；待审批任务在详情页签字

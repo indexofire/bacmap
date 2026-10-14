@@ -5,7 +5,7 @@ list_samples, gene_scan, vpa_serotype, snp_tree, search_samples,
 validate_taxonomy, annotate_genome, diagnose_failure.
 
 We patch lazily-imported functions on their source module attributes and
-monkeypatch tools.pipeline._RESULTS_DIR / _PROJECT_ROOT / _run_project_script
+monkeypatch tools.pipeline._RESULTS_DIR / _DEPLOYED_WORKFLOWS_DIR / _run_project_script
 and tools.services._DEFAULT_DB_PATH / _RESULTS_DIR to point to tmp paths or
 canned outputs.
 """
@@ -55,8 +55,8 @@ def tmp_results(tmp_path: Path, monkeypatch) -> Path:
 
 @pytest.fixture
 def tmp_project_root(tmp_path: Path, monkeypatch) -> Path:
-    """Redirect tools.pipeline._PROJECT_ROOT to a tmp directory."""
-    monkeypatch.setattr(tools_pipeline, "_PROJECT_ROOT", tmp_path)
+    """Redirect tools.pipeline._DEPLOYED_WORKFLOWS_DIR to a tmp directory."""
+    monkeypatch.setattr(tools_pipeline, "_DEPLOYED_WORKFLOWS_DIR", tmp_path)
     return tmp_path
 
 
@@ -260,7 +260,7 @@ class TestGenerateReport:
 
 class TestListSamples:
     def _make_samples_tsv(self, project_root: Path, rows: list[tuple[str, str]]):
-        cfg = project_root / "workflows" / "bacmap" / "config"
+        cfg = project_root / "config"
         cfg.mkdir(parents=True, exist_ok=True)
         tsv = cfg / "samples.tsv"
         lines = ["sample\tspecies"] + [f"{s}\t{sp}" for s, sp in rows]
@@ -685,21 +685,22 @@ class TestDiagnoseFailure:
         log_path.write_text(
             "Running rule shovill\nError locking directory workflows/bacmap\nTraceback shown.\n"
         )
-        monkeypatch.setattr(tools_pipeline, "_PROJECT_ROOT", tmp_path)
+        monkeypatch.setattr(tools_pipeline, "_DEPLOYED_WORKFLOWS_DIR", tmp_path)
         r = _parse(tools.diagnose_failure({"log_path": str(log_path)}))
         assert r["error_type"] == "lock"
 
     def test_log_path_no_errors(self, tmp_path, monkeypatch):
         log_path = tmp_path / "snakemake.log"
         log_path.write_text("all good today\n")
-        monkeypatch.setattr(tools_pipeline, "_PROJECT_ROOT", tmp_path)
+        monkeypatch.setattr(tools_pipeline, "_DEPLOYED_WORKFLOWS_DIR", tmp_path)
         r = _parse(tools.diagnose_failure({"log_path": str(log_path)}))
         assert r["error_type"] == "no_error"
 
     def test_fallback_to_default_log_dir(self, tmp_path, monkeypatch):
-        # When neither stderr_text nor log_path given, handler uses
-        # workflows/bacmap/.snakemake/log. We point _PROJECT_ROOT to tmp
-        # so the lookup happens in an empty dir → no_log.
+        # When neither stderr_text nor log_path given, handler uses the
+        # deployed $BACMAP_HOME/workflows/bacmap/.snakemake/log dir. Point the
+        # deployed dir + failure_diagnostics fallback to tmp → no_log.
+        monkeypatch.setattr(tools_pipeline, "_DEPLOYED_WORKFLOWS_DIR", tmp_path / "deployed")
         monkeypatch.setattr(failure_diagnostics, "WORKFLOW_LOG_DIR", tmp_path / "no_log")
         r = _parse(tools.diagnose_failure({}))
         assert r["error_type"] == "no_log"

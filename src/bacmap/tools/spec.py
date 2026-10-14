@@ -1,6 +1,6 @@
 """工具契约（冻结设计 §4.1/§4.7，ADR-04）。
 
-ToolSpec 是 MCP server、Hermes 插件、内置智能体三方共用的唯一事实来源。
+ToolSpec 是 MCP server 与内置智能体共用的唯一事实来源。
 迁移期：legacy handler（dict→JSON str）经适配器转为 ToolResult；
 后续逐个改写为类型化输入（input_model + typed_handler）。
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from enum import IntEnum, StrEnum
 from pathlib import Path
-from typing import Any, Literal, NewType, Protocol
+from typing import Any, Literal, NewType
 
 from pydantic import BaseModel, ConfigDict
 
@@ -61,7 +61,7 @@ class ToolContext(BaseModel):
     workspace: Path
 
 
-LegacyHandler = Callable[[dict[str, Any], Any], str]
+LegacyHandler = Callable[..., str]
 
 
 class ToolSpec(BaseModel):
@@ -84,10 +84,10 @@ class ToolSpec(BaseModel):
         if self.legacy_handler is None:
             return ToolResult(ok=False, error=f"{self.name}: no legacy handler")
         raw = self.legacy_handler(args, **kwargs)
-        return _parse_legacy_json(raw, self.name)
+        return parse_legacy_json(raw, self.name)
 
 
-def _parse_legacy_json(raw: str, name: str) -> ToolResult:
+def parse_legacy_json(raw: str, name: str) -> ToolResult:
     import json
 
     try:
@@ -103,10 +103,3 @@ def _parse_legacy_json(raw: str, name: str) -> ToolResult:
     if "error" in payload and payload.get("error"):
         return ToolResult(ok=False, error=str(payload["error"]), data=payload)
     return ToolResult(ok=True, data=payload)
-
-
-class ToolRegistry(Protocol):
-    def get(self, name: str) -> ToolSpec: ...
-    def list(self) -> list[ToolSpec]: ...
-    def by_effect(self, effect: Effect) -> list[ToolSpec]: ...
-    def by_trust_layer(self, layer: TrustLayer) -> list[ToolSpec]: ...

@@ -243,7 +243,7 @@ def publish(db_path: Path, manifest: dict, created_by: str, signature: str) -> i
                 json.dumps(stats, ensure_ascii=False),
             ),
         )
-        return int(cur.lastrowid)
+        return int(cur.lastrowid or 0)
 
 
 def get_release(db_path: Path, version: int) -> dict | None:

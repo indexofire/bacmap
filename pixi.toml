@@ -73,6 +73,7 @@ mkdocs-material = ">=9.5"
 
 [feature.dev.tasks]
 docs-build = { cmd = "mkdocs build" }
+typecheck = { cmd = "mypy src/bacmap", env = { PYTHONPATH = "$PIXI_PROJECT_ROOT/src" } }
 
 [environments]
 dev = ["dev"]

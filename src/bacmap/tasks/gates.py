@@ -210,15 +210,6 @@ def _citation_adapter(subject: GateSubject) -> GateResult:
     return evaluate_citation(subject.payload)
 
 
-def _not_implemented(gate_name: str) -> Any:
-    def _raise(subject: GateSubject) -> GateResult:
-        raise NotImplementedError(
-            f"gate '{gate_name}' 的载体任务尚未落地（见迁移第 7/10 步）"
-        )
-
-    return _raise
-
-
 def _analysis_claims_adapter(subject: GateSubject) -> GateResult:
     p = subject.payload
     return evaluate_analysis_claims(

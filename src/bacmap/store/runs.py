@@ -122,7 +122,7 @@ def create_run(
     db_path: Path | None = None,
     task_id: str = "",
 ) -> AnalysisRun:
-    from bacmap.config import BACMAP_HOME
+    from bacmap.config import BACMAP_HOME, env_lock_path
 
     resolved = resolve_config(workflow_dir, overrides)
     run = AnalysisRun(
@@ -140,8 +140,8 @@ def create_run(
         seeds={"iqtree": int(resolved.get("iqtree_seed", 42))},
         host={"hostname": _hostname()},
     )
-    lock = Path(__file__).resolve().parents[3] / "pixi.lock"
-    if lock.is_file():
+    lock = env_lock_path()
+    if lock is not None:
         run.env_lock_sha256 = file_sha256(lock)
     run.manifest_sha256 = hashlib.sha256(
         _manifest_body(run).encode()
@@ -182,6 +182,61 @@ def finish_run(run: AnalysisRun, db_path: Path | None = None) -> None:
             (run.finished_at.isoformat(), run.run_id),
         )
     conn.close()
+
+
+def read_run(run_id: str, db_path: Path) -> AnalysisRun | None:
+    """从 analysis_runs 表读回一条运行记录（用于封存 manifest，ADR-18）。"""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute(_SCHEMA_SQL)
+    row = conn.execute("SELECT * FROM analysis_runs WHERE run_id = ?", (run_id,)).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return AnalysisRun(
+        run_id=row["run_id"],
+        task_id=row["task_id"],
+        strain_ids=json.loads(row["strain_ids"]),
+        workflow=row["workflow"],
+        workflow_commit=row["workflow_commit"],
+        workflow_dirty=bool(row["workflow_dirty"]),
+        started_at=datetime.fromisoformat(row["started_at"]),
+        finished_at=datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else None,
+        ingested_at=datetime.fromisoformat(row["ingested_at"]) if row["ingested_at"] else None,
+        resolved_config=json.loads(row["resolved_config"]),
+        config_sha256=row["config_sha256"],
+        ref_databases=[RefDatabase(**d) for d in json.loads(row["ref_databases"])],
+        tool_versions=json.loads(row["tool_versions"]),
+        env_lock_sha256=row["env_lock_sha256"],
+        input_files=json.loads(row["input_files"]),
+        seeds=json.loads(row["seeds"]),
+        nondeterministic_steps=json.loads(row["nondeterministic_steps"]),
+        host=json.loads(row["host"]),
+        baseline_version=row["baseline_version"],
+        manifest_sha256=row["manifest_sha256"],
+    )
+
+
+def finalize_run(run_id: str, db_path: Path, runs_root: Path) -> AnalysisRun | None:
+    """封存运行记录：补 finished_at、重算 manifest_sha256、落盘 run_manifest.json。
+
+    表与文件内容一致（ADR-18 §4.6）：先写文件再用其哈希回写表，两者同源。
+    """
+    run = read_run(run_id, db_path)
+    if run is None:
+        return None
+    if run.finished_at is None:
+        run.finished_at = datetime.now(UTC)
+    run.manifest_sha256 = hashlib.sha256(_manifest_body(run).encode()).hexdigest()
+    write_manifest(run, runs_root)
+    conn = sqlite3.connect(db_path)
+    with conn:
+        conn.execute(
+            "UPDATE analysis_runs SET finished_at = ?, manifest_sha256 = ? WHERE run_id = ?",
+            (run.finished_at.isoformat(), run.manifest_sha256, run.run_id),
+        )
+    conn.close()
+    return run
 
 
 def write_manifest(run: AnalysisRun, runs_root: Path) -> Path:

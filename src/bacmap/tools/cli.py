@@ -88,7 +88,7 @@ def _blast_remote(
             expect=evalue,
             hitlist_size=max_hits,
         )
-        blast_records = list(NCBIXML.parse(result_handle))  # type: ignore[no-untyped-call]
+        blast_records = list(NCBIXML.parse(result_handle))
     except Exception as e:
         logger.exception("blast_remote failed")
         return json.dumps({"error": f"NCBI BLAST failed: {e}"})

@@ -38,7 +38,7 @@ def seq_stats(args: dict[str, Any], **kwargs: Any) -> str:
     try:
         from Bio import SeqIO
 
-        records = list(SeqIO.parse(path, fmt))  # type: ignore[no-untyped-call]
+        records = list(SeqIO.parse(path, fmt))
     except Exception as e:
         logger.exception("seq_stats failed to parse %s file", fmt)
         return json.dumps({"error": f"Failed to parse {fmt} file: {e}"})
@@ -184,7 +184,7 @@ def _get_sequence(args: dict[str, Any]) -> tuple[str, str]:
     from Bio import SeqIO
 
     rid = args.get("record_id")
-    for rec in SeqIO.parse(path, _detect_format(path)):  # type: ignore[no-untyped-call]
+    for rec in SeqIO.parse(path, _detect_format(path)):
         if rid is None or rec.id == rid:
             return str(rec.seq).upper(), ""
     return "", f"Record '{rid}' not found in {path}."
@@ -212,7 +212,7 @@ def seq_ops(args: dict[str, Any], **kwargs: Any) -> str:
         from Bio.Seq import Seq
 
         frame = args.get("frame", 0)
-        protein = str(Seq(seq[frame:]).translate())  # type: ignore[no-untyped-call]
+        protein = str(Seq(seq[frame:]).translate())
         return json.dumps(
             {
                 "input_length": len(seq),
@@ -381,7 +381,7 @@ def fastq_qc(args: dict[str, Any], **kwargs: Any) -> str:
             quals_per_pos: dict[int, list[float]] = {}
             ids = []
             n = 0
-            for rec in SeqIO.parse(path, "fastq"):  # type: ignore[no-untyped-call]
+            for rec in SeqIO.parse(path, "fastq"):
                 if sample_reads and n >= sample_reads:
                     break
                 lengths.append(len(rec))
@@ -438,10 +438,10 @@ def fastq_qc(args: dict[str, Any], **kwargs: Any) -> str:
 def _check_adapters(fastq_path: str, adapter_fasta: str) -> dict[str, Any]:
     from Bio import SeqIO
 
-    adapters = [str(r.seq) for r in SeqIO.parse(adapter_fasta, "fasta")]  # type: ignore[no-untyped-call]
+    adapters = [str(r.seq) for r in SeqIO.parse(adapter_fasta, "fasta")]
     counts = {a[:20]: 0 for a in adapters}
     total = 0
-    for rec in SeqIO.parse(fastq_path, "fastq"):  # type: ignore[no-untyped-call]
+    for rec in SeqIO.parse(fastq_path, "fastq"):
         if total >= 50000:
             break
         seq = str(rec.seq)
@@ -516,7 +516,7 @@ def seq_convert(args: dict[str, Any], **kwargs: Any) -> str:
     try:
         from Bio import SeqIO
 
-        records = list(SeqIO.parse(inp, in_fmt))  # type: ignore[no-untyped-call]
+        records = list(SeqIO.parse(inp, in_fmt))
         if not records:
             return json.dumps({"error": f"No records in {inp} ({in_fmt})"})
         # GenBank/EMBL require molecule_type annotation — add a default if missing

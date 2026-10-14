@@ -63,6 +63,11 @@ RESULTS_DIR: Path = _env_path("BACMAP_RESULTS_DIR", BACMAP_HOME / "results")
 # 工作流文件目录（第 4 步迁入工作流后使用；脚本过渡期同样指向此处）。
 WORKFLOWS_DIR: Path = _env_path("BACMAP_WORKFLOWS_DIR", BACMAP_HOME / "workflows")
 
+# WorkflowRunner.deploy() 的落点：包内工作流模板复制到这里后运行（ADR-03/05）。
+# samples.tsv、config.yaml、.snakemake/ 断点状态都在此目录下——所有数据类路径
+# 一律经它解析，绝不由源码位置推导（ADR-03）。
+DEPLOYED_WORKFLOWS_DIR: Path = WORKFLOWS_DIR / "bacmap"
+
 # Snakemake 运行状态（.snakemake/ 日志等），迁移第 4 步起使用。
 WORKFLOW_STATE_DIR: Path = _env_path("BACMAP_WORKFLOW_STATE_DIR", BACMAP_HOME / "workflow_state")
 WORKFLOW_LOG_DIR: Path = WORKFLOW_STATE_DIR / "log"
@@ -80,3 +85,26 @@ def pixi_path() -> str:
 def which(tool: str) -> str | None:
     """在当前 PATH 中解析生信工具（ADR-03：不做路径注入）。"""
     return shutil.which(tool, path=pixi_path() or None)
+
+
+def env_lock_path() -> Path | None:
+    """定位当前运行环境的 ``pixi.lock``（ADR-18 的 ``env_lock_sha256`` 来源）。
+
+    绝不从源码目录推导（ADR-03）。解析顺序：
+    1. ``BACMAP_ENV_LOCK`` 显式指定的路径；
+    2. ``$BACMAP_HOME/pixi.lock``（部署方随环境落盘）；
+    3. ``$PIXI_PROJECT_ROOT/pixi.lock``（开发期由 pixi 任务注入）。
+    都不可得时返回 ``None``（运行记录该项留空，而非猜测）。
+    """
+    explicit = os.environ.get("BACMAP_ENV_LOCK")
+    if explicit:
+        return Path(explicit).resolve()
+    candidates = [BACMAP_HOME / "pixi.lock"]
+    project_root = os.environ.get("PIXI_PROJECT_ROOT")
+    if project_root:
+        candidates.append(Path(project_root) / "pixi.lock")
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+

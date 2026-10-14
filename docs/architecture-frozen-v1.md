@@ -4,7 +4,7 @@
 
 - **日期**：2026-10-09（v1.1–v1.4.7 同日修订，见第 10 节）
 - **状态**：冻结（Frozen）。第 8 节的验证项全部通过后，转为"已确认"
-- **依据**：[第一轮辩论](debate-standalone-architecture.md)、[第二轮辩论](debate-round2-harness-vs-delivery.md)、[调研证据](research-framework-evidence.md)（下文以"证据 §x"引用）
+- **依据**：第一轮辩论（`dev/debate-standalone-architecture.md`，本地资料不入库）、第二轮辩论（`dev/debate-round2-harness-vs-delivery.md`）、调研证据（`dev/research-framework-evidence.md`）（下文以"证据 §x"引用）
 - **变更规则**：本文中标为"冻结"的决策，修改必须新增一条 ADR 修订记录（第 10 节），写明原因、证据与迁移成本；标为"可替换"的部分，只要不改接口即可自由替换实现
 
 ---

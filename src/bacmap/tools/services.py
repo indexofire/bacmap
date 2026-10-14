@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from pathlib import Path
 from typing import Any
 
+from bacmap.config import DATA_DIR as _DATA_DIR
+from bacmap.config import DEPLOYED_WORKFLOWS_DIR as _DEPLOYED_WORKFLOWS_DIR
 from bacmap.core.analysis.cgmlst_projection import (
     CgmlstThresholds,
     load_thresholds_from_config,
@@ -23,7 +24,6 @@ from bacmap.core.utils import parse_cgmlst_profile, parse_cgmlst_profiles, parse
 
 from ._common import (
     _DEFAULT_DB_PATH,
-    _PROJECT_ROOT,
     _RESULTS_DIR,
     logger,
     tool_handler,
@@ -383,7 +383,7 @@ def _payload_to_cgmlst_profile(payload: dict[str, Any], fallback_sample_id: str)
 def _load_reference_profiles(species: str) -> list[CgmlstProfile] | str:
     species_key = species.lower().replace(".", "")
     ref_path = (
-        _PROJECT_ROOT / "data" / "reference" / "cgmlst" / species_key / "reference_profiles.tsv"
+        _DATA_DIR / "reference" / "cgmlst" / species_key / "reference_profiles.tsv"
     )
     if not ref_path.exists():
         return f"cgmlst reference library not found for species {species!r} (looked at {ref_path})"
@@ -396,7 +396,7 @@ def _load_reference_profiles(species: str) -> list[CgmlstProfile] | str:
 
 
 def _load_species_thresholds(species: str) -> CgmlstThresholds | str:
-    config_path = _PROJECT_ROOT / "workflows" / "bacmap" / "config" / "config.yaml"
+    config_path = _DEPLOYED_WORKFLOWS_DIR / "config" / "config.yaml"
     try:
         return load_thresholds_from_config(config_path, species)
     except (ValueError, RuntimeError, OSError):
@@ -571,13 +571,4 @@ def review_flags(args: dict[str, Any], **kwargs: Any) -> str:
                 )
     events.sort(key=lambda e: e["timestamp"], reverse=True)
     return json.dumps({"events": events[:limit], "total": len(events)}, ensure_ascii=False)
-
-
-
-
-def _scripts_dir() -> Path:
-    from bacmap.config import PROJECT_ROOT
-
-    return PROJECT_ROOT / "scripts"
-
 

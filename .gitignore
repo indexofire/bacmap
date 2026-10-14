@@ -10,6 +10,11 @@ dev/
 __pycache__/
 *.pyc
 
+# 覆盖率产物
+.coverage
+.coverage.*
+htmlcov/
+
 # opencode 会话续跑状态（本地工具状态）
 .omo/
 

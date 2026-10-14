@@ -20,7 +20,7 @@ bacmap：本地病原菌基因组分析系统（单工作站、数据不出网�
 6. **生信分析外部化（ADR-20）**：只依赖基因组的分析一律外部工具
    （gside=物种鉴定、gapit=基因筛查/血清型、gmlst=MLST/cgMLST/MST），
    bacmap 只做编排、适配与"需结合本地数据的判定"。不要在 bacmap 里写生信算法。
-7. **测试基线不得回退**：当前 948 passed / 1 skipped。删测试来"通过"是最严重违规。
+7. **测试基线不得回退**：当前 1039 passed / 1 skipped。删测试来"通过"是最严重违规。
 8. **dev/ 目录不入库**：开发调研资料（证据/辩论）仅本地阅读（已 gitignore），
    架构等项目说明文档放 docs/ 并随仓库提交。
 9. **文档双语制与及时同步**：英文为默认语言（README.md、docs/<name>.md），
@@ -38,6 +38,7 @@ bacmap：本地病原菌基因组分析系统（单工作站、数据不出网�
 pixi install                    # 运行时环境（default）
 pixi run -e dev test            # pytest —— 注意必须 -e dev（default 无 pytest）
 pixi run -e dev lint            # ruff（src + tests）
+pixi run -e dev typecheck       # mypy（src/bacmap，ADR-02/规则 3）
 pixi run -e dev contracts       # import-linter
 pixi shell                      # 激活后可用 bacmap / gside / gapit / gmlst / snakemake
 bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟）
@@ -75,7 +76,7 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟）
 ## 工作流（改动前必读）
 
 1. 动手前读冻结文档中对应 ADR 条款；不确定是否冻结 → 当作冻结处理。
-2. 完成后：`pixi run -e dev test && pixi run -e dev lint && pixi run -e dev contracts`
-   三绿才算完；涉及行为变化的补证据小节（evidence §10.x，编号顺延）；
+2. 完成后：`pixi run -e dev test && pixi run -e dev lint && pixi run -e dev typecheck && pixi run -e dev contracts`
+   四绿才算完（CI `.github/workflows/ci.yml` 同序执行）；涉及行为变化的补证据小节（evidence §10.x，编号顺延）；
    按第 10 条同步文档后跑一次 `pixi run -e dev docs-build` 确认文档站可构建。
 3. 提交信息跟随仓库风格（简短祈使句）；不主动 commit/push，除非用户明示。

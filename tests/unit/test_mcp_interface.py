@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import time
 from pathlib import Path
@@ -14,6 +15,16 @@ from bacmap.interfaces.mcp.server import build_server
 from bacmap.tasks.spec import TaskState
 
 WRITE_TOOLS = {"bio_analyze_pathogen", "bio_add_metadata", "bio_add_lab_result"}
+
+
+class _NoopArbiter:
+    @contextlib.contextmanager
+    def heavy_step(self):
+        yield
+
+
+def _noop_arbiter() -> _NoopArbiter:
+    return _NoopArbiter()
 
 
 def _list_tool_names(server) -> set[str]:
@@ -97,6 +108,7 @@ class TestTaskToolsRoundtrip:
         monkeypatch.setattr(eng, "_step_create_run", lambda params: {"run_id": "mcp-run-1"})
         monkeypatch.setattr(eng, "_step_finish_run", lambda run_id, params: None)
         monkeypatch.setattr(eng, "_generate_report_for", lambda s: {"sample_id": s})
+        monkeypatch.setattr(eng, "_memory_arbiter", _noop_arbiter)
         engine = eng.DbosTaskEngine(tmp_path)
         srv = build_server(engine)
         yield srv
@@ -123,6 +135,23 @@ class TestTaskToolsRoundtrip:
 
     def test_unknown_task_type_error(self, server):
         out = _call(server, "bacmap_submit_task", {"task_type": "deploy"})
+        assert "error" in out
+
+    def test_submit_rejects_path_traversal_sample(self, server):
+        out = _call(
+            server,
+            "bacmap_submit_task",
+            {"task_type": "analyze", "samples": ["../../etc/passwd"]},
+        )
+        assert "error" in out
+        assert "invalid sample" in out["error"]
+
+    def test_submit_rejects_mixed_invalid_samples(self, server):
+        out = _call(
+            server,
+            "bacmap_submit_task",
+            {"task_type": "analyze", "samples": ["SAM-001", "bad/slash"]},
+        )
         assert "error" in out
 
     def test_unknown_task_status_error(self, server):

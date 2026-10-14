@@ -484,7 +484,7 @@ class GenomeObjectService:
             object_type=old.object_type,
             version=latest + 1,
             schema_version=old.schema_version,
-            created_at=datetime.now(),
+            created_at=datetime.now(UTC),
             created_by=old.created_by,
             payload=payload,
             pipeline_version=pipeline_version
@@ -614,9 +614,11 @@ class GenomeObjectService:
         ]
 
     def log_event(self, object_id: str, event_type: str, event_payload: dict[str, Any]) -> Event:
-        if event_type not in _VALID_EVENT_TYPES:
+        # 门事件按冻结设计 §4.2 记为 event_type = "gate.<name>"；其余走白名单。
+        if not (event_type in _VALID_EVENT_TYPES or event_type.startswith("gate.")):
             raise GOMValidationError(
                 f"Invalid event_type: {event_type!r}. Must be one of {sorted(_VALID_EVENT_TYPES)}"
+                " or 'gate.<name>'"
             )
         try:
             self.get_latest_version(object_id)
@@ -721,9 +723,10 @@ class GenomeObjectService:
         return [self._row_to_go(r) for r in rows]
 
     def close(self) -> None:
-        if hasattr(self, "_conn") and self._conn is not None:
-            self._conn.close()
-            self._conn = None  # type: ignore[assignment]
+        conn = self.__dict__.get("_conn")
+        if conn is not None:
+            conn.close()
+            del self.__dict__["_conn"]
 
     def __enter__(self) -> GenomeObjectService:
         return self
@@ -734,6 +737,18 @@ class GenomeObjectService:
 
 def new_object_id() -> str:
     return str(uuid4())
+
+
+def record_gate_event(
+    gom_db: Path, object_id: str, gate_result: dict[str, Any]
+) -> Event:
+    """把一次门评估写入 GOM ``events``（§4.2 / ADR-07：``gate.<name>``）。
+
+    每道门评估都应留痕；本函数是唯一写入口，由任务引擎在门评估后调用。
+    """
+    with GenomeObjectService(gom_db) as gos:
+        gate = str(gate_result.get("gate", "unknown"))
+        return gos.log_event(object_id, f"gate.{gate}", gate_result)
 
 
 def new_artifact_id() -> str:

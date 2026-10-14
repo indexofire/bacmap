@@ -29,10 +29,13 @@ class TestFailureDiagnosticsLoopLeak:
 
 
 class TestFailureDiagnosticsAbsolutePath:
-    def test_log_dir_uses_project_root(self):
+    def test_log_dir_comes_from_config(self):
         import inspect
 
         from bacmap.core.analysis import failure_diagnostics
 
+        # ADR-03：日志目录来自 config（BACMAP_HOME），不由源码位置推导。
         src = inspect.getsource(failure_diagnostics.diagnose_from_log)
-        assert 'Path("workflows' not in src or "_PROJECT_ROOT" in src or "parents[" in src
+        assert "WORKFLOW_LOG_DIR" in src
+        assert "parents[" not in src
+        assert "_PROJECT_ROOT" not in src

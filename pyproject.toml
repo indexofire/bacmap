@@ -52,6 +52,13 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q"
 
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_ignores = true
+# Snakemake 脚本注入全局 snakemake 对象，非普通模块；由运行时契约保证。
+exclude = ['^src/bacmap/workflow/scripts/']
+
 # ADR-02：依赖方向契约。core/store/tools 不得导入 agent/tasks/interfaces/workflow。
 [tool.importlinter]
 root_packages = ["bacmap"]

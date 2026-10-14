@@ -99,6 +99,80 @@ cloud_max_data_class = "D1"
         assert cfg.resolve("p").name == "e"
         assert cfg.resolve("unknown") is not None  # 回退到首个可用端点
 
+    def test_full_section_45_config_parses(self, tmp_path: Path):
+        """§4.5 文档样例的完整字段必须可解析（extra=forbid 曾拒绝能力/管理字段）。"""
+        cfg_file = tmp_path / "config.toml"
+        cfg_file.write_text(
+            """
+[llm.endpoints.strata]
+kind = "openai_compatible"
+location = "local"
+base_url = "http://127.0.0.1:8080/v1"
+model = "qwen3.8-flash-next-iq3_xxs"
+tier = "T2"
+max_concurrency = 1
+supports_tools_with_schema = false
+constrained_decoding = false
+request_timeout_s = 300
+admin_url = "http://127.0.0.1:8080"
+
+[llm.routing]
+intent_classifier = "strata"
+
+[llm.data_policy]
+cloud_max_data_class = "D1"
+
+[llm.resources]
+co_located = true
+min_free_ram_gb_for_heavy_steps = 24
+""",
+            encoding="utf-8",
+        )
+        cfg = load_llm_config(cfg_file)
+        ep = cfg.endpoints["strata"]
+        assert ep.admin_url == "http://127.0.0.1:8080"
+        assert ep.request_timeout_s == 300
+        assert cfg.resources.co_located is True
+        assert cfg.resources.min_free_ram_gb_for_heavy_steps == 24.0
+
+    def test_cloud_limit_clamped_to_d2(self):
+        """ADR-16：cloud 上限最多 D2，D3/D4 配置直接拒绝。"""
+        assert DataPolicy(cloud_max_data_class=DataClass.D2).cloud_max_data_class == DataClass.D2
+        with pytest.raises(ValidationError):
+            DataPolicy(cloud_max_data_class=DataClass.D3)
+        with pytest.raises(ValidationError):
+            DataPolicy(cloud_max_data_class=DataClass.D4)
+
+    def test_load_config_rejects_d3_cloud_limit(self, tmp_path: Path):
+        cfg_file = tmp_path / "config.toml"
+        cfg_file.write_text(
+            """
+[llm.endpoints.x]
+base_url = "http://x/v1"
+model = "m"
+
+[llm.data_policy]
+cloud_max_data_class = "D3"
+""",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValidationError):
+            load_llm_config(cfg_file)
+
+    def test_unknown_field_still_rejected(self, tmp_path: Path):
+        cfg_file = tmp_path / "config.toml"
+        cfg_file.write_text(
+            """
+[llm.endpoints.x]
+base_url = "http://x/v1"
+model = "m"
+bogus_field = 1
+""",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValidationError):
+            load_llm_config(cfg_file)
+
 
 class TestGateway:
     def test_success_returns_output(self):

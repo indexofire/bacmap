@@ -131,3 +131,25 @@ class TestGosSearchErrorPropagation:
         with pytest.raises(sqlite3.OperationalError):
             gos.search("anything")
         gos.close()
+
+
+class TestFtsUpdateTrigger:
+    """知识库 FTS 索引随 UPDATE 同步（此前缺 AU 触发器，更新后检索失真）。"""
+
+    def test_updated_title_is_reindexed(self, tmp_path: Path):
+        import sqlite3
+
+        ks = _store(tmp_path)
+        kid = ks.import_candidate(_pmid_entry(), imported_by="a")
+        assert ks.search("cgMLST")
+
+        conn = sqlite3.connect(ks.db)
+        with conn:
+            conn.execute(
+                "UPDATE knowledge_entries SET title = ? WHERE id = ?",
+                ("Vibrio parahaemolyticus surveillance", kid),
+            )
+        conn.close()
+
+        assert [h["id"] for h in ks.search("parahaemolyticus")] == [kid]
+        assert ks.search("Salmonella outbreak") == []

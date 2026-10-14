@@ -85,7 +85,7 @@ cloud_max_data_class = "D1"            # 见 §3，不可通过配置放宽超�
 
 ## 5. 样本注册（samples.tsv）
 
-analyze 全流程任务要求样本已注册。编辑 `$BACMAP_HOME/workflows/config/samples.tsv`：
+analyze 全流程任务要求样本已注册。编辑 `$BACMAP_HOME/workflows/bacmap/config/samples.tsv`：
 
 ```tsv
 sample	species	R1	R2

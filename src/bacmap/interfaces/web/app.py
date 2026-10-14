@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as pkg_version
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -25,17 +25,21 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from bacmap.agent.llm.endpoints import load_llm_config
-from bacmap.config import BACMAP_HOME, DATA_DIR, RESULTS_DIR, WORKFLOWS_DIR
 from bacmap.interfaces.web.static import STATIC_DIR
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
-from bacmap.tasks.spec import Approval, TaskType
+from bacmap.tasks.spec import Approval, TaskId, TaskType
+from bacmap.tools._common import _validate_sample_id
 
 _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
 def _overview_data(engine: DbosTaskEngine) -> dict[str, Any]:
-    """系统概览只读数据——端点/路由/数据策略/版本/路径/沙箱/任务分布，零密钥。"""
-    cfg = load_llm_config(BACMAP_HOME / "config.toml")
+    """系统概览只读数据——端点/路由/数据策略/版本/路径/沙箱/任务分布，零密钥。
+
+    路径随实例 ``engine.home`` 解析（与 ``--home`` 一致），不读模块级常量。
+    """
+    home = Path(engine.home)
+    cfg = load_llm_config(home / "config.toml")
     endpoints = [
         {
             "name": e.name,
@@ -67,10 +71,10 @@ def _overview_data(engine: DbosTaskEngine) -> dict[str, Any]:
         "cloud_max_data_class": cfg.policy.cloud_max_data_class.name,
         "versions": versions,
         "paths": {
-            "BACMAP_HOME": str(BACMAP_HOME),
-            "data/": str(DATA_DIR),
-            "results/": str(RESULTS_DIR),
-            "workflows/": str(WORKFLOWS_DIR),
+            "BACMAP_HOME": str(home),
+            "data/": str(home / "data"),
+            "results/": str(home / "results"),
+            "workflows/": str(home / "workflows"),
         },
         "sandbox": sandbox,
         "task_counts": dict(counts),
@@ -149,6 +153,8 @@ def create_app(engine: DbosTaskEngine) -> FastAPI:
 
     @app.get("/samples/{sample_id}", response_class=HTMLResponse)
     def sample_detail(request: Request, sample_id: str) -> HTMLResponse:
+        if not _validate_sample_id(sample_id):
+            raise HTTPException(400, "非法样本 ID")
         summary = next(
             (s for s in _load_summaries(engine) if s["_sample_id"] == sample_id), None
         )
@@ -160,6 +166,8 @@ def create_app(engine: DbosTaskEngine) -> FastAPI:
 
     @app.get("/samples/{sample_id}/report")
     def sample_report(sample_id: str) -> FileResponse:
+        if not _validate_sample_id(sample_id):
+            raise HTTPException(400, "非法样本 ID")
         path = _report_path(engine, sample_id)
         if not path.is_file():
             raise HTTPException(404, "该样本尚未生成 HTML 报告")
@@ -216,9 +224,11 @@ def create_app(engine: DbosTaskEngine) -> FastAPI:
             raise HTTPException(400, f"未知任务类型: {task_type}") from exc
         params: dict[str, Any] = {}
         if samples.strip():
-            params["samples"] = [
-                s.strip() for s in samples.replace("\n", ",").split(",") if s.strip()
-            ]
+            sample_list = [s.strip() for s in samples.replace("\n", ",").split(",") if s.strip()]
+            bad = [s for s in sample_list if not _validate_sample_id(s)]
+            if bad:
+                raise HTTPException(400, f"非法样本 ID: {bad!r}")
+            params["samples"] = sample_list
         if scope.strip():
             try:
                 params["scope"] = json.loads(scope)
@@ -232,7 +242,7 @@ def create_app(engine: DbosTaskEngine) -> FastAPI:
 
     def _status_or_404(task_id: str):
         try:
-            return engine.status(task_id)
+            return engine.status(TaskId(task_id))
         except KeyError as exc:
             raise HTTPException(404, "任务不存在") from exc
 
@@ -259,12 +269,15 @@ def create_app(engine: DbosTaskEngine) -> FastAPI:
     ) -> RedirectResponse:
         if decision not in ("approve", "reject"):
             raise HTTPException(400, "decision 必须是 approve|reject")
+        typed_decision: Literal["approve", "reject"] = (
+            "approve" if decision == "approve" else "reject"
+        )
         try:
             engine.approve(
-                task_id,
+                TaskId(task_id),
                 Approval(
                     approver=approver,
-                    decision=decision,  # type: ignore[arg-type]
+                    decision=typed_decision,
                     signature=signature,
                     at=datetime.now(UTC),
                 ),

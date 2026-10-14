@@ -27,18 +27,17 @@ from bacmap.config import (
 )
 
 # ADR-03：解释器与工具取自当前运行环境（pixi 激活后即正确）。
-# 旧名 PIXI_PYTHON/PIXI_BIN 保留（handlers 与测试 monkeypatch 引用），
-# _PROJECT_ROOT 已废除——脚本随包分发于 tools/_scripts/。
+# 旧名 PIXI_PYTHON/PIXI_BIN 保留（handlers 与测试 monkeypatch 引用）。
+# 数据类路径（results / DB / workflows）一律来自 bacmap.config，本模块不再
+# 暴露 _PROJECT_ROOT——包内脚本经 __file__ 定位属代码资源，非数据路径。
 
 PIXI_PYTHON = sys.executable
 PIXI_BIN = str(Path(PIXI_PYTHON).resolve().parent)
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]  # 仓库根，仅供测试兼容
 
 __all__ = [
     "_BIOPYTHON_AVAILABLE",
     "_DEFAULT_DB_PATH",
     "_PIXI_ENV",
-    "_PROJECT_ROOT",
     "_RESULTS_DIR",
     "_detect_format",
     "_ensure_biopython",
