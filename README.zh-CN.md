@@ -3,7 +3,7 @@
 # bacmap
 
 本地病原菌基因组分析系统（含内置智能体层）——standalone 架构，冻结设计见
-[docs/architecture-frozen-v1.md](docs/architecture-frozen-v1.md)（v1.4.8）。
+[docs/architecture-frozen-v1.md](docs/architecture-frozen-v1.md)（v1.4.9）。
 
 ## 定位
 
@@ -37,7 +37,7 @@ bacmap --help         # 统一命令行入口
 ## 开发
 
 ```bash
-pixi run -e dev test        # pytest（基线：1090 passed / 1 skipped）
+pixi run -e dev test        # pytest（基线：1101 passed / 1 skipped）
 pixi run -e dev lint        # ruff
 pixi run -e dev contracts   # import-linter 依赖方向契约
 ```

@@ -4,7 +4,7 @@
 
 A local pathogen genome analysis system (with a built-in agent layer), built on a
 standalone architecture. The frozen design is documented in
-[docs/architecture-frozen-v1.md](docs/architecture-frozen-v1.md) (v1.4.8).
+[docs/architecture-frozen-v1.md](docs/architecture-frozen-v1.md) (v1.4.9).
 
 ## Overview
 
@@ -39,7 +39,7 @@ Equivalent module form: `python -m bacmap.interfaces.mcp` / `python -m bacmap.in
 ## Development
 
 ```bash
-pixi run -e dev test        # pytest（基线：1090 passed / 1 skipped）
+pixi run -e dev test        # pytest（基线：1101 passed / 1 skipped）
 pixi run -e dev lint        # ruff
 pixi run -e dev contracts   # import-linter 依赖方向契约
 ```

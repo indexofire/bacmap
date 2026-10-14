@@ -136,3 +136,9 @@ External tool databases are registered once at deployment time in
 Use `bio_compare_runs` to diff two runs of the same sample: it attributes differences to
 parameters / databases / tools / inputs / workflow, and flags `NOT_REPRODUCIBLE` when the
 provenance is identical but the results differ.
+
+The `vpara_virulence` gapit database (V. parahaemolyticus virulence markers tdh/trh/tlh)
+is built automatically at deploy time from the packaged
+`workflow/refs/vpara_virulence.fasta` and registered here; an updated database can replace
+it at any time and will be recorded on the next run. The `vpara_virulence` rule fails
+explicitly if the database is missing (no silent degradation).

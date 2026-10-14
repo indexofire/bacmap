@@ -29,6 +29,11 @@
   工具调用参数 45/46、挖掘样例 3/3、许可证确认、IQ3_XXS 单档+仲裁裁决。
 
 ### 变更
+- **vpara_virulence 换装 gapit（ADR-20，冻结文档 v1.4.9）**：删除内联 blastn 筛查，
+  改用 gapit 自定义库 `vpara_virulence`（tdh/trh/tlh）；部署期
+  `workflow/scripts/build_gapit_db.py` 自动建库于 `$BACMAP_HOME/refs/gapit/` 并登记
+  `refs/manifest.json`；规则输出归一化为既有 `virulence.json` 契约，新增
+  tool/database/hits 溯源字段；打包参考序列 `workflow/refs/vpara_virulence.fasta`。
 - gmlst 0.1.1 → **0.5.5**（PyPI；`typing cgmlst -s --format tsv` / `visual matrix|mst` 接口兼容）。
 - 架构文档升至 **v1.4.8**：用户裁定取消 Hermes 插件通道，接入方式仅保留 MCP
   （`bacmap.adapters` 包、`hermes_agent.plugins` entry-point、Hermes 侧插件全部移除）。

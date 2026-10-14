@@ -2,8 +2,10 @@ import sys
 
 # V. parahaemolyticus 相关规则
 # v1.4.7：vpara_targets（物种靶点判定）与 vpara_serotype（O/K 血清型）分别外移
-# gside / gapit（用户裁定），集成前输出占位；vpara_virulence 保留
-# （blastn 外部二进制编排，与 abricate 规则同类，第 5 步随 gapit 复评）。
+# gside / gapit（用户裁定），集成前输出占位。
+# v1.4.9：vpara_virulence 完成 gapit 换装（ADR-20）——改用 gapit 自定义库
+# `vpara_virulence`（tdh/trh/tlh），DB 由部署期 build_gapit_db.py 构建于
+# `$BACMAP_HOME/refs/gapit/`。
 
 rule vpara_targets:
     input:
@@ -24,19 +26,14 @@ rule vpara_virulence:
         result = str(WORKDIR) + "/{sample}/vpara/virulence.json"
     params:
         python = sys.executable,
-        db = str(PROJECT_ROOT / "data/reference/virulence/vpara_targets_blastdb")
+        script = str(PROJECT_ROOT / "workflows/bacmap/scripts/vpara_virulence.py"),
+        db = config["databases"].get("vpara_virulence", "vpara_virulence"),
+        datadir = str(PROJECT_ROOT / "refs" / "gapit"),
     shell:
         "mkdir -p $(dirname {output.result}) && "
-        "{params.python} -c \""
-        "import json, subprocess; "
-        "contigs='{input.contigs}'; "
-        "genes={{}}; "
-        "for g in ['tdh','trh','tlh']: "
-        "  r=subprocess.run(['blastn','-query',contigs,'-db','{params.db}','-outfmt','6 sseqid pident','-evalue','1e-50','-word_size','28'],capture_output=True,text=True,timeout=60); "
-        "  hits=[l for l in r.stdout.split('\\n') if g.upper() in l.upper()]; "
-        "  genes[g]=len(hits)>0; "
-        "json.dump({{k:v for k,v in genes.items()}},open('{output.result}','w')); "
-        "\" || echo '{{\"tdh\":false,\"trh\":false,\"tlh\":false}}' > {output.result}"
+        "{params.python} {params.script} "
+        "--contigs {input.contigs} --db {params.db} --datadir {params.datadir} "
+        "--out {output.result}"
 
 
 rule vpara_serotype:

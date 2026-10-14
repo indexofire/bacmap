@@ -133,3 +133,7 @@ nondeterministic_steps: []    # 无法固定随机性的步骤名，如 [assembl
 
 用 `bio_compare_runs` 比较同一样本的两次运行：把差异归因到 参数/数据库/工具/输入/工作流，
 并在来源完全相同而结果不同时判为 `NOT_REPRODUCIBLE`。
+
+`vpara_virulence` 的 gapit 库（副溶血性弧菌毒力标记 tdh/trh/tlh）在部署期由打包的
+`workflow/refs/vpara_virulence.fasta` 自动构建并登记于此；更新后的数据库可随时替换，
+下次运行即记录新版本。数据库缺失时 `vpara_virulence` 规则显式失败（不静默降级）。

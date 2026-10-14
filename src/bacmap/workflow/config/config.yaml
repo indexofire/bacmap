@@ -25,6 +25,9 @@ databases:
   card: "card"
   plasmidfinder: "plasmidfinder"
   resfinder: "resfinder"
+  # gapit 自定义库（ADR-20）：部署期由 scripts/build_gapit_db.py 构建于
+  # $BACMAP_HOME/refs/gapit/；供 vpara_virulence 规则筛查。
+  vpara_virulence: "vpara_virulence"
 
 tools:
   fastp:
