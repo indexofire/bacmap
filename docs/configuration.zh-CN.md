@@ -113,3 +113,23 @@ mcp_servers:
 ```
 
 详见[使用指南](usage.zh-CN.md)。
+
+## 7. 运行记录与外部数据库（ADR-18/20）
+
+每次 analyze 运行写入一条不可修改的记录（`analysis_runs` 表 + `runs/<run_id>/run_manifest.json`）。
+`$BACMAP_HOME/workflows/bacmap/config/config.yaml` 中的两个可选键喂给它：
+
+```yaml
+iqtree_seed: 42
+seeds: {}                     # 额外固定种子，如 {bwa: 11}
+nondeterministic_steps: []    # 无法固定随机性的步骤名，如 [assembly_shovill]
+```
+
+外部工具数据库在部署期一次性登记于 `$BACMAP_HOME/refs/manifest.json`，条目会写入每次运行记录：
+
+```json
+{ "databases": [ { "name": "gapit:card", "version": "3.2.6", "checksum": "<sha256>" } ] }
+```
+
+用 `bio_compare_runs` 比较同一样本的两次运行：把差异归因到 参数/数据库/工具/输入/工作流，
+并在来源完全相同而结果不同时判为 `NOT_REPRODUCIBLE`。

@@ -11,6 +11,7 @@ approve() 后落 SUCCEEDED。
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import sys
 import uuid
@@ -18,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from dbos import DBOS
+from dbos import DBOS, SetWorkflowID
 from pydantic import BaseModel
 
 from bacmap.tasks.spec import (
@@ -32,6 +33,7 @@ from bacmap.tasks.spec import (
 )
 
 _dbos_ready = False
+logger = logging.getLogger(__name__)
 
 
 def init_dbos(db_path: Path) -> None:
@@ -503,11 +505,22 @@ class DbosTaskEngine:
         p = params.model_dump() if isinstance(params, BaseModel) else dict(params)
         p.setdefault("home", str(self.home))
         p.setdefault("cores", 8)
+
+        # 防御纵深：样本 ID 白名单（MCP/Web 已校验；引擎是最终写入口）。
+        samples = p.get("samples")
+        if samples:
+            from bacmap.tools._common import _validate_sample_id
+
+            bad = [s for s in samples if not _validate_sample_id(str(s))]
+            if bad:
+                raise ValueError(f"invalid sample id(s): {bad!r}")
+
         task_id = uuid.uuid4().hex
         p["task_id"] = task_id
-
-        handle = DBOS.start_workflow(workflows[task_type], p)
         now = datetime.now(UTC).isoformat()
+
+        # 先落任务行（可见性）：workflow_id 用确定性的 SetWorkflowID(task_id)，
+        # 因此可在启动前就写死映射；启动失败回滚为 FAILED，不留孤儿工作流。
         with self._conn() as conn:
             conn.execute(
                 "INSERT INTO tasks (task_id, task_type, state, params_json, submitted_by,"
@@ -521,10 +534,16 @@ class DbosTaskEngine:
                     submitted_by,
                     now,
                     now,
-                    handle.workflow_id,
-                    "analyze",
+                    task_id,
+                    task_type.value,
                 ),
             )
+        try:
+            with SetWorkflowID(task_id):
+                DBOS.start_workflow(workflows[task_type], p)
+        except Exception:
+            self._update_state(TaskId(task_id), TaskState.FAILED, "workflow start failed")
+            raise
         return TaskId(task_id)
 
     def status(self, task_id: TaskId) -> TaskStatus:
@@ -539,24 +558,29 @@ class DbosTaskEngine:
         message: str | None = row["message"]
 
         if state == TaskState.RUNNING and row["workflow_id"]:
-            handle: Any = DBOS.retrieve_workflow(row["workflow_id"])
-            raw_status = handle.get_status()
-            ws = str(getattr(raw_status, "status", raw_status)).upper()
-            if ws in ("PENDING", "RUNNING"):
-                pass
-            elif ws == "SUCCESS":
-                result = handle.get_result()
-                status_val = str(result.get("status", "SUCCEEDED"))
-                state = {
-                    "AWAITING_APPROVAL": TaskState.AWAITING_APPROVAL,
-                    "FAILED": TaskState.FAILED,
-                }.get(status_val, TaskState.SUCCEEDED)
-                message = json.dumps(result.get("gates", {}), ensure_ascii=False)
-            elif ws == "CANCELLED":
-                state = TaskState.CANCELLED
-            else:
-                state = TaskState.FAILED
-            self._transition_from_running(task_id, state.value, message)
+            handle: Any = None
+            try:
+                handle = DBOS.retrieve_workflow(row["workflow_id"])
+            except Exception:  # 工作流尚未注册/已清理：保持 RUNNING，不炸查询
+                logger.warning("retrieve_workflow failed for %s", row["workflow_id"], exc_info=True)
+            if handle is not None:
+                raw_status = handle.get_status()
+                ws = str(getattr(raw_status, "status", raw_status)).upper()
+                if ws in ("PENDING", "RUNNING"):
+                    pass
+                elif ws == "SUCCESS":
+                    result = handle.get_result()
+                    status_val = str(result.get("status", "SUCCEEDED"))
+                    state = {
+                        "AWAITING_APPROVAL": TaskState.AWAITING_APPROVAL,
+                        "FAILED": TaskState.FAILED,
+                    }.get(status_val, TaskState.SUCCEEDED)
+                    message = json.dumps(result.get("gates", {}), ensure_ascii=False)
+                elif ws == "CANCELLED":
+                    state = TaskState.CANCELLED
+                else:
+                    state = TaskState.FAILED
+                self._transition_from_running(task_id, state.value, message)
 
         return TaskStatus(
             task_id=task_id, state=state, current_step=row["current_step"], message=message

@@ -171,22 +171,39 @@ def evaluate_mining(payload: dict[str, Any]) -> GateResult:
 
 _CITE_RE = re.compile(r"PMID:\s?(\d{6,9})|\[(\d{4,8})\]", re.IGNORECASE)
 _DOI_RE = re.compile(r"(?<![0-9A-Za-z.])(10\.\d{4,9}/[-._;()/:A-Za-z0-9]+)")
+_KNOWN_PMID_RE = re.compile(r"(?i)^pmid[:\s]*(\d+)$")
+
+
+def _normalize_known(citation: str) -> str:
+    """知识库侧标识符归一，与成稿侧提取结果可比：
+    - ``PMID:12345678`` / ``pmid 12345678`` → ``12345678``（纯数字）
+    - 方括号包裹 ``[12345678]`` → ``12345678``
+    - DOI（``10.…``）→ 小写
+    """
+    k = str(citation).strip()
+    m = _KNOWN_PMID_RE.match(k)
+    if m:
+        return m.group(1)
+    if k.startswith("[") and k.endswith("]"):
+        k = k[1:-1].strip()
+    if k[:3].lower() == "10.":
+        return k.lower()
+    return k
 
 
 def evaluate_citation(payload: dict[str, Any]) -> GateResult:
     """引用门（ADR-07/V11⑥）：成稿中每条引用必须能在本地知识库找到。
 
     payload: {draft: str, known_citations: list[str]}
-    提取 PMID 与 DOI 形引用（DOI 大小写不敏感），逐条核对 known_citations 集合。
+    提取 PMID（``PMID:`` 前缀或 ``[数字]``）与 DOI（大小写不敏感）形引用，
+    逐条核对 known_citations（标识符两侧均归一，PMID 前缀/方括号不影响比对）。
+
+    已知边界：3 位及以下的编号式引用（如 ``[1]``）不视为可核引用，不参与判定
+    （避免把列表编号误判为未知引用）。
     """
     now = datetime.now(UTC)
     draft = str(payload.get("draft", ""))
-    known = set()
-    for c in payload.get("known_citations", []):
-        k = str(c).strip()
-        if k[:3].lower() == "10.":
-            k = k.lower()
-        known.add(k)
+    known = {_normalize_known(c) for c in payload.get("known_citations", [])}
     found: set[str] = set()
     for m in _CITE_RE.finditer(draft):
         pmid = m.group(1) or m.group(2)

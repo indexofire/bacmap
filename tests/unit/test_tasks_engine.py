@@ -303,3 +303,31 @@ class TestGateEventsPersisted:
         assert "gate.analysis_claims" in gate_types
         gate_events = [e for e in events if e.event_type == "gate.analysis_claims"]
         assert gate_events[0].event_payload.get("verdict")
+
+
+class TestSubmitHardening:
+    """提交健壮性：workflow_id 确定性映射、current_step 正确、样本校验、启动失败回滚。"""
+
+    def test_workflow_id_equals_task_id_and_step(self, engine):
+        tid = engine.submit(TaskType.MINE, {"script": "pass"}, "tester")
+        with engine._conn() as conn:
+            row = conn.execute(
+                "SELECT workflow_id, current_step FROM tasks WHERE task_id = ?", (tid,)
+            ).fetchone()
+        assert row["workflow_id"] == tid
+        assert row["current_step"] == "mine"
+
+    def test_invalid_sample_id_rejected(self, engine):
+        with pytest.raises(ValueError):
+            engine.submit(TaskType.ANALYZE, {"samples": ["../evil"]}, "tester")
+
+    def test_start_failure_marks_task_failed(self, engine, monkeypatch):
+        def boom(*a, **k):
+            raise RuntimeError("start failed")
+
+        monkeypatch.setattr(eng.DBOS, "start_workflow", boom)
+        with pytest.raises(RuntimeError):
+            engine.submit(TaskType.CURATE, {}, "tester")
+        with engine._conn() as conn:
+            n = conn.execute("SELECT COUNT(*) AS c FROM tasks WHERE state='failed'").fetchone()["c"]
+        assert n >= 1

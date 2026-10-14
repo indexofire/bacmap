@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from bacmap.tools.spec import ToolResult, parse_legacy_json
 
 
@@ -65,3 +67,34 @@ class TestRegistryAccessors:
         from bacmap.tools.spec import TrustLayer
 
         assert registry.by_trust_layer(TrustLayer.L1)
+
+
+class TestRegistrySelfCheck:
+    """注册表导入期自检：元数据缺失/陈旧、schema 名字不一致、重复 → RuntimeError。"""
+
+    def test_missing_meta_raises(self, monkeypatch):
+        from bacmap.tools import registry
+
+        entries = registry._TOOL_REGISTRY + [
+            ("bio_ghost", {"name": "bio_ghost", "description": "x"}, lambda a, **k: "{}")
+        ]
+        monkeypatch.setattr(registry, "_TOOL_REGISTRY", entries)
+        with pytest.raises(RuntimeError, match="no _META"):
+            registry._build_specs()
+
+    def test_schema_name_mismatch_raises(self, monkeypatch):
+        from bacmap.tools import registry
+
+        name, schema, handler = registry._TOOL_REGISTRY[0]
+        monkeypatch.setattr(
+            registry, "_TOOL_REGISTRY", [(name, {**schema, "name": "wrong"}, handler)]
+        )
+        with pytest.raises(RuntimeError, match="schema name mismatch"):
+            registry._build_specs()
+
+    def test_stale_meta_raises(self, monkeypatch):
+        from bacmap.tools import registry
+
+        monkeypatch.setattr(registry, "_TOOL_REGISTRY", [])
+        with pytest.raises(RuntimeError, match="stale _META"):
+            registry._build_specs()

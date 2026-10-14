@@ -105,6 +105,16 @@ class TestDeploy:
         wf_runner.deploy(force=True)
         assert (d1 / "config" / "samples.tsv").read_text() == "user\tdata\n"
 
+    def test_deploy_fails_without_project_root_marker(self, tmp_path: Path, monkeypatch):
+        pkg = tmp_path / "pkg"
+        (pkg / "config").mkdir(parents=True)
+        (pkg / "config" / "config.yaml").write_text("threads: 8\n")
+        monkeypatch.setattr(wf_runner, "WORKFLOW_PKG_DIR", pkg)
+        monkeypatch.setattr(wf_runner, "WORKFLOWS_DIR", tmp_path / "workflows")
+        monkeypatch.setattr(wf_runner, "BACMAP_HOME", tmp_path / "home")
+        with pytest.raises(RuntimeError, match="project_root"):
+            wf_runner.deploy()
+
     def test_idempotent_when_unchanged(self, tmp_path: Path, monkeypatch):
         pkg = tmp_path / "pkg_workflow"
         (pkg / "config").mkdir(parents=True)
@@ -245,3 +255,80 @@ class TestRefDatabases:
         loaded = runs.read_run(run.run_id, db)
         assert loaded is not None
         assert [r.name for r in loaded.ref_databases] == ["gapit:vfdb"]
+
+
+class TestSeedsAndNondeterminism:
+    """ADR-18：随机种子与 nondeterministic_steps 由 config.yaml 声明。"""
+
+    def test_seeds_extend_iqtree_default(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr(runs, "probe_tool_versions", lambda tools: {})
+        wf = tmp_path / "wf"
+        (wf / "config").mkdir(parents=True)
+        (wf / "config" / "config.yaml").write_text(
+            "iqtree_seed: 7\nseeds:\n  bwa: 11\n  samtools: 3\n"
+        )
+        run = runs.create_run(
+            workflow="bacmap", workflow_dir=wf, strain_ids=[], db_path=tmp_path / "r.sqlite"
+        )
+        assert run.seeds == {"iqtree": 7, "bwa": 11, "samtools": 3}
+
+    def test_nondeterministic_steps_declared(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr(runs, "probe_tool_versions", lambda tools: {})
+        wf = tmp_path / "wf"
+        (wf / "config").mkdir(parents=True)
+        (wf / "config" / "config.yaml").write_text(
+            "nondeterministic_steps:\n  - assembly_shovill\n  - \n"
+        )
+        run = runs.create_run(
+            workflow="bacmap", workflow_dir=wf, strain_ids=[], db_path=tmp_path / "r.sqlite"
+        )
+        assert run.nondeterministic_steps == ["assembly_shovill"]
+
+    def test_defaults_empty_nondeterministic(self, tmp_path: Path, workflow_dir: Path, monkeypatch):
+        monkeypatch.setattr(runs, "probe_tool_versions", lambda tools: {})
+        run = runs.create_run(
+            workflow="bacmap",
+            workflow_dir=workflow_dir,
+            strain_ids=[],
+            db_path=tmp_path / "r.sqlite",
+        )
+        assert run.nondeterministic_steps == []
+        assert run.seeds == {"iqtree": 42}
+
+
+class TestManifestSelfVerify:
+    """ADR-18：run_manifest.json 的 manifest_sha256 是可复算的自校验哈希。"""
+
+    def _finalized(self, tmp_path, workflow_dir, monkeypatch):
+        monkeypatch.setattr(runs, "probe_tool_versions", lambda t: {})
+        db = tmp_path / "r.sqlite"
+        run = runs.create_run(
+            workflow="bacmap", workflow_dir=workflow_dir, strain_ids=[], db_path=db
+        )
+        out = runs.finalize_run(run.run_id, db, tmp_path / "runs")
+        assert out is not None
+        return out
+
+    def test_verify_after_write(self, tmp_path, workflow_dir, monkeypatch):
+        out = self._finalized(tmp_path, workflow_dir, monkeypatch)
+        assert runs.verify_run_manifest(out.run_id, tmp_path / "runs") is True
+
+    def test_tamper_is_detected(self, tmp_path, workflow_dir, monkeypatch):
+        out = self._finalized(tmp_path, workflow_dir, monkeypatch)
+        path = tmp_path / "runs" / out.run_id / "run_manifest.json"
+        payload = json.loads(path.read_text())
+        payload["workflow"] = "tampered"
+        path.write_text(json.dumps(payload))
+        assert runs.verify_run_manifest(out.run_id, tmp_path / "runs") is False
+
+    def test_missing_or_malformed_is_false(self, tmp_path):
+        assert runs.verify_run_manifest("nope", tmp_path / "runs") is False
+        d = tmp_path / "runs" / "x"
+        d.mkdir(parents=True)
+        (d / "run_manifest.json").write_text("{not json")
+        assert runs.verify_run_manifest("x", tmp_path / "runs") is False
+
+    def test_write_is_atomic_no_tmp_left(self, tmp_path, workflow_dir, monkeypatch):
+        out = self._finalized(tmp_path, workflow_dir, monkeypatch)
+        leftovers = list((tmp_path / "runs" / out.run_id).glob("*.tmp"))
+        assert leftovers == []

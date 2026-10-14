@@ -376,7 +376,7 @@ class GenomeObjectService:
         payload_json = row.pop("payload_json")
         self._begin()
         try:
-            self._conn.execute(
+            cur = self._conn.execute(
                 """INSERT INTO genome_objects
                    (object_id, object_type, version, schema_version, created_at, created_by,
                     payload_json, organism, strain_id, pipeline_version, database_signature)
@@ -395,10 +395,19 @@ class GenomeObjectService:
                     row["database_signature"],
                 ),
             )
+            # FTS rowid 显式对齐 genome_objects.rowid（search 依赖该不变量），
+            # 不依赖两张表"各自自增恰好同步"的偶然性。
             self._conn.execute(
-                """INSERT INTO genome_objects_fts (object_type, organism, strain_id, payload_text)
-                   VALUES (?, ?, ?, ?)""",
-                (row["object_type"], row["organism"] or "", row["strain_id"] or "", payload_json),
+                """INSERT INTO genome_objects_fts
+                   (rowid, object_type, organism, strain_id, payload_text)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    int(cur.lastrowid or 0),
+                    row["object_type"],
+                    row["organism"] or "",
+                    row["strain_id"] or "",
+                    payload_json,
+                ),
             )
             self._commit()
         except Exception:

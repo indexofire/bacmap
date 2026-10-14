@@ -259,3 +259,20 @@ class TestCurateTaskRoundtrip:
         )
         assert engine.status(tid).state == TaskState.FAILED
         assert baseline.list_releases(fixture_home / "baseline.sqlite") == []
+
+
+class TestBuildCandidateArbitraryIds:
+    """样本 ID 不限 SAM-*（与 bio_list_samples/Web 扫描口径一致）。"""
+
+    def test_non_sam_sample_id_included(self, tmp_path):
+        rep = tmp_path / "results" / "CTX008" / "report"
+        rep.mkdir(parents=True)
+        (rep / "CTX008_summary.json").write_text(json.dumps(_sal_summary("CTX008")))
+        (tmp_path / "data").mkdir()
+        meta = StrainMetadataService(tmp_path / "data" / "metadata.sqlite")
+        meta.upsert(
+            "CTX008",
+            {"isolation_date": "2025-01-01", "province": "GD", "sample_source": "food"},
+        )
+        c = baseline.build_candidate(tmp_path)
+        assert [s["strain_id"] for s in c["strains"]] == ["CTX008"]

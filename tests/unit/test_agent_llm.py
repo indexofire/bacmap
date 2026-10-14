@@ -357,3 +357,45 @@ class TestEndpointValidation:
 
         with pytest.raises(ValidationError):
             LlmEndpoint(name="x", base_url="http://u", model="m", max_concurency=4)
+
+
+class TestTierAndCache:
+    """ADR-09 档位强制 + 智能体缓存键（instructions 参与）。"""
+
+    def test_role_min_tier_enforced(self):
+        cfg = LlmConfig(
+            endpoints={
+                "e": LlmEndpoint(name="e", base_url="http://x/v1", model="m", tier="T1")
+            },
+            routing={"p": "e"},
+        )
+        gw = LlmGateway(cfg, agent_factory=lambda ep, ot, i=None: _FakeAgent(output=IntentResult()))
+        with pytest.raises(LlmUnavailableError):
+            gw.structured("p", "x", IntentResult, role="miner")  # miner 需 T2
+
+    def test_role_min_tier_satisfied(self):
+        cfg = LlmConfig(
+            endpoints={
+                "e": LlmEndpoint(name="e", base_url="http://x/v1", model="m", tier="T2")
+            },
+            routing={"p": "e"},
+        )
+        agent = _FakeAgent(output=IntentResult())
+        gw = LlmGateway(cfg, agent_factory=lambda ep, ot, i=None: agent)
+        out = gw.structured("p", "x", IntentResult, role="miner")
+        assert isinstance(out, IntentResult)
+
+    def test_agent_cache_keyed_by_instructions(self):
+        calls: list[str | None] = []
+
+        def factory(ep, ot, instructions=None):
+            calls.append(instructions)
+            return _FakeAgent(output=IntentResult())
+
+        gw = LlmGateway(_make_config(), agent_factory=factory)
+        ep = gw._config.endpoints["e"]
+        a = gw._agent_for(ep, IntentResult, None, "instr-A")
+        b = gw._agent_for(ep, IntentResult, None, "instr-B")
+        c = gw._agent_for(ep, IntentResult, None, "instr-A")
+        assert a is c and a is not b
+        assert calls == ["instr-A", "instr-B"]

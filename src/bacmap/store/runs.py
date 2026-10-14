@@ -9,7 +9,9 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import os
 import sqlite3
 import subprocess
 from datetime import UTC, datetime
@@ -164,6 +166,21 @@ def create_run(
     from bacmap.config import BACMAP_HOME, REFS_DIR, env_lock_path
 
     resolved = resolve_config(workflow_dir, overrides)
+
+    # 随机种子（ADR-18）：iqtree 固定种子为基线，config.yaml 的 seeds 段可覆盖/扩展。
+    seeds: dict[str, int] = {"iqtree": int(resolved.get("iqtree_seed", 42))}
+    configured_seeds = resolved.get("seeds")
+    if isinstance(configured_seeds, dict):
+        seeds.update(
+            {str(k): int(v) for k, v in configured_seeds.items() if isinstance(v, (int, float))}
+        )
+
+    # 无法固定随机性的步骤由 config.yaml 显式声明（ADR-18），不猜测。
+    nondeterministic = [
+        str(s)
+        for s in (resolved.get("nondeterministic_steps") or [])
+        if s is not None and str(s).strip()
+    ]
     run = AnalysisRun(
         task_id=task_id,
         strain_ids=strain_ids,
@@ -176,16 +193,15 @@ def create_run(
             ["snakemake", "fastp", "spades.py", "blastn", "gmlst", "abricate", "iqtree"]
         ),
         input_files={str(p): file_sha256(p) for p in (input_files or []) if Path(p).is_file()},
-        seeds={"iqtree": int(resolved.get("iqtree_seed", 42))},
+        seeds=seeds,
+        nondeterministic_steps=nondeterministic,
         ref_databases=load_ref_databases(refs_dir or REFS_DIR),
         host={"hostname": _hostname()},
     )
     lock = env_lock_path()
     if lock is not None:
         run.env_lock_sha256 = file_sha256(lock)
-    run.manifest_sha256 = hashlib.sha256(
-        _manifest_body(run).encode()
-    ).hexdigest()
+    run.manifest_sha256 = compute_manifest_sha256(run)
 
     conn = sqlite3.connect(db_path or (BACMAP_HOME / "runs.sqlite"))
     with conn:
@@ -267,7 +283,7 @@ def finalize_run(run_id: str, db_path: Path, runs_root: Path) -> AnalysisRun | N
         return None
     if run.finished_at is None:
         run.finished_at = datetime.now(UTC)
-    run.manifest_sha256 = hashlib.sha256(_manifest_body(run).encode()).hexdigest()
+    run.manifest_sha256 = compute_manifest_sha256(run)
     write_manifest(run, runs_root)
     conn = sqlite3.connect(db_path)
     with conn:
@@ -279,19 +295,58 @@ def finalize_run(run_id: str, db_path: Path, runs_root: Path) -> AnalysisRun | N
     return run
 
 
+def manifest_payload(run: AnalysisRun) -> dict[str, Any]:
+    """manifest 的规范载荷：运行记录全部字段，去掉 ``manifest_sha256`` 自身。"""
+    data = run.model_dump(mode="json")
+    data.pop("manifest_sha256", None)
+    return data
+
+
+def _canonical_json(payload: dict[str, Any]) -> bytes:
+    """RFC 8785 式规范 JSON：键排序、无多余空白、UTF-8 —— 保证可复现哈希。"""
+    return json.dumps(
+        payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+
+
+def compute_manifest_sha256(run: AnalysisRun) -> str:
+    """manifest 载荷的规范 JSON 的 SHA256（可被 verify_run_manifest 复算）。"""
+    return hashlib.sha256(_canonical_json(manifest_payload(run))).hexdigest()
+
+
 def write_manifest(run: AnalysisRun, runs_root: Path) -> Path:
-    """运行目录内的 run_manifest.json（与表内容一致，自校验）。"""
+    """写 ``runs/<run_id>/run_manifest.json``：原子写入，内容自校验。
+
+    文件带 ``manifest_sha256``；校验时移除该字段、按规范 JSON 复算即可比对
+    （``verify_run_manifest``）。写入经临时文件 + ``os.replace``，避免半截文件。
+    """
     d = runs_root / run.run_id
     d.mkdir(parents=True, exist_ok=True)
     path = d / "run_manifest.json"
-    payload = json.loads(_manifest_body(run))
+    payload = manifest_payload(run)
     payload["manifest_sha256"] = run.manifest_sha256
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+    text = json.dumps(payload, sort_keys=True, ensure_ascii=False, indent=2) + "\n"
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
     return path
 
 
-def _manifest_body(run: AnalysisRun) -> str:
-    return run.model_dump_json(exclude={"finished_at", "ingested_at", "manifest_sha256"})
+def verify_run_manifest(run_id: str, runs_root: Path) -> bool:
+    """复算 manifest 自校验哈希；缺失或损坏返回 False。"""
+    path = runs_root / run_id / "run_manifest.json"
+    if not path.is_file():
+        return False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    claimed = payload.pop("manifest_sha256", None)
+    if not isinstance(claimed, str):
+        return False
+    return hmac.compare_digest(claimed, hashlib.sha256(_canonical_json(payload)).hexdigest())
 
 
 def _hostname() -> str:

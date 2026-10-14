@@ -34,6 +34,16 @@
   （`bacmap.adapters` 包、`hermes_agent.plugins` entry-point、Hermes 侧插件全部移除）。
 
 ### 修复
+- 运行记录封存加固：`run_manifest.json` 的 `manifest_sha256` 改为**可复算的规范 JSON 哈希**（键排序、无空白），并原子写入；新增 `verify_run_manifest`。
+- 引用门：知识库侧标识符归一（`PMID:` 前缀/方括号/DOI 大小写），消除 `PMID:123` ↔ `[123]` 的误拒。
+- GOM：FTS5 `rowid` 显式对齐 `genome_objects.rowid`（原依赖两表自增巧合）。
+- 任务提交：先落任务行再启动工作流（`SetWorkflowID` 确定性映射），启动失败回滚为 FAILED，杜绝孤儿工作流；`current_step` 按任务类型写入（此前恒为 analyze）；引擎层补样本 ID 校验。
+- 工具注册表：导入期自检元数据缺失/陈旧、schema 名字不一致、重复注册（快速失败）。
+- MCP/Web：提交接口收敛到 analyze/curate（mine/write 需 script/draft，经内建智能体或 Web 开放路径），拒绝空任务。
+- 本地流行特征库：候选扫描不再硬编码 `SAM-*`，覆盖任意样本 ID（与 bio_list_samples/Web 一致）。
+- LLM 网关：补齐 ADR-09 档位强制（端点档位低于角色 min_model_tier 即拒绝）；智能体缓存键纳入 instructions。
+- Snakemake 部署：`project_root` 重写标记缺失时快速失败（原先静默留错路径）。
+- ADR-18 运行记录：`seeds`/`nondeterministic_steps` 支持 config.yaml 声明。
 - ADR-03 路径合规：`bio_list_samples` / `bio_diagnose` / `bio_cgmlst` 及运行记录
   的 `env_lock_sha256` 不再由源码位置推导，统一经 `BACMAP_HOME`（`DEPLOYED_WORKFLOWS_DIR`
   /`DATA_DIR`/`env_lock_path()`）解析；删除失效的 `_PROJECT_ROOT`、`_scripts_dir`、`core/db.py`。

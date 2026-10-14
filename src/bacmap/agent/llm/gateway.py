@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import threading
@@ -23,6 +24,12 @@ from bacmap.tools.spec import DataClass
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 2  # 首次 + 2 次重试（ADR-08）
+
+_TIER_RANK = {"T0": 0, "T1": 1, "T2": 2}
+
+
+def _tier_rank(tier: str) -> int:
+    return _TIER_RANK.get(str(tier).upper(), 2)
 
 
 def _build_role_instructions(role: str | None) -> str | None:
@@ -83,7 +90,7 @@ class LlmGateway:
             name: threading.Semaphore(max(ep.max_concurrency, 1))
             for name, ep in config.endpoints.items()
         }
-        self._agents: dict[tuple[str, str, str], Any] = {}
+        self._agents: dict[tuple[str, str, str, str], Any] = {}
         self._lock = threading.Lock()
 
     def _agent_for(
@@ -97,6 +104,8 @@ class LlmGateway:
             endpoint.name,
             f"{output_type.__module__}.{output_type.__qualname__}",
             role or "",
+            # 说明书纳入键：同一 (端点, 输出类型, 角色) 但 instructions 不同时不串用。
+            hashlib.sha256((instructions or "").encode("utf-8")).hexdigest()[:12],
         )
         with self._lock:
             if key not in self._agents:
@@ -148,6 +157,12 @@ class LlmGateway:
                 raise DataClassViolationError(
                     f"payload {data_class.name} exceeds role {role!r} "
                     f"data class ceiling {rd.max_data_class}"
+                )
+            # ADR-09：端点能力档位不得低于角色的 min_model_tier（档位单调 T0<T1<T2）。
+            if _tier_rank(endpoint.tier) < _tier_rank(rd.min_model_tier):
+                raise LlmUnavailableError(
+                    f"role {role!r} requires >= {rd.min_model_tier} but endpoint "
+                    f"{endpoint.name!r} is {endpoint.tier}"
                 )
         agent = self._agent_for(endpoint, output_type, role, instructions)
         sem = self._sems.get(endpoint.name)

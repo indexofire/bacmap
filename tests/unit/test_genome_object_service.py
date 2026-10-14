@@ -515,3 +515,30 @@ class TestFactoryFunctions:
     def test_new_event_id_is_uuid_v4(self):
         eid = new_event_id()
         assert len(eid) == 36
+
+
+class TestSearchFtsAlignment:
+    """FTS5 rowid 必须显式对齐 genome_objects.rowid（search 依赖该不变量）。"""
+
+    def test_fts_rowid_matches_base_rowid(self, tmp_db_path, sample_sample_object):
+        with GenomeObjectService(tmp_db_path) as gos:
+            gos.create(sample_sample_object)
+            base = {r[0] for r in gos._conn.execute("SELECT rowid FROM genome_objects")}
+            fts = {r[0] for r in gos._conn.execute("SELECT rowid FROM genome_objects_fts")}
+            assert base == fts != set()
+
+    def test_search_finds_by_strain_id(self, tmp_db_path, sample_sample_object):
+        with GenomeObjectService(tmp_db_path) as gos:
+            gos.create(sample_sample_object)
+            hits = gos.search("SH2024-001")
+        assert [h.object_id for h in hits] == [sample_sample_object.object_id]
+
+    def test_search_ignores_non_matching_term(self, tmp_db_path, sample_sample_object):
+        with GenomeObjectService(tmp_db_path) as gos:
+            gos.create(sample_sample_object)
+            assert gos.search("nonexistenttermzzz") == []
+
+    def test_search_blank_query_returns_empty(self, tmp_db_path, sample_sample_object):
+        with GenomeObjectService(tmp_db_path) as gos:
+            gos.create(sample_sample_object)
+            assert gos.search("   ") == []

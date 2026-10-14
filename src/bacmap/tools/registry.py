@@ -74,21 +74,37 @@ _META: dict[str, tuple[TrustLayer, Effect, DataClass, bool]] = {
     "bio_compare_runs": (TrustLayer.L1, Effect.COMPUTE, DataClass.D2, False),
 }
 
-_SPECS: dict[str, ToolSpec] = {
-    name: ToolSpec(
-        name=name,
-        version=_V,
-        description=str(schema.get("description", name)),
-        trust_layer=meta[0],
-        effect=meta[1],
-        output_data_class=meta[2],
-        long_running=meta[3],
-        legacy_schema=schema,
-        legacy_handler=handler,
-    )
-    for name, schema, handler in _TOOL_REGISTRY
-    if (meta := _META.get(name)) is not None
-}
+def _build_specs() -> dict[str, ToolSpec]:
+    """构建注册表并在导入期自检（元数据缺失/陈旧、名字不一致、重复 → 立即失败）。"""
+    specs: dict[str, ToolSpec] = {}
+    for name, schema, handler in _TOOL_REGISTRY:
+        meta = _META.get(name)
+        if meta is None:
+            raise RuntimeError(f"tool registry: {name!r} has no _META entry")
+        if schema.get("name") != name:
+            raise RuntimeError(
+                f"tool registry: {name!r} schema name mismatch: {schema.get('name')!r}"
+            )
+        if name in specs:
+            raise RuntimeError(f"tool registry: duplicate tool {name!r}")
+        specs[name] = ToolSpec(
+            name=name,
+            version=_V,
+            description=str(schema.get("description", name)),
+            trust_layer=meta[0],
+            effect=meta[1],
+            output_data_class=meta[2],
+            long_running=meta[3],
+            legacy_schema=schema,
+            legacy_handler=handler,
+        )
+    stale = set(_META) - set(specs)
+    if stale:
+        raise RuntimeError(f"tool registry: stale _META entries {sorted(stale)}")
+    return specs
+
+
+_SPECS: dict[str, ToolSpec] = _build_specs()
 
 
 def get(name: str) -> ToolSpec:

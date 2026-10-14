@@ -114,3 +114,25 @@ mcp_servers:
 ```
 
 See the [usage guide](usage.md) for details.
+
+## 7. Run records and external databases (ADR-18/20)
+
+Every analyze run writes an immutable record (`analysis_runs` + `runs/<run_id>/run_manifest.json`).
+Two optional keys in `$BACMAP_HOME/workflows/bacmap/config/config.yaml` feed it:
+
+```yaml
+iqtree_seed: 42
+seeds: {}                     # extra fixed seeds, e.g. {bwa: 11}
+nondeterministic_steps: []    # steps whose randomness cannot be fixed, e.g. [assembly_shovill]
+```
+
+External tool databases are registered once at deployment time in
+`$BACMAP_HOME/refs/manifest.json`; the entries are copied into every run record:
+
+```json
+{ "databases": [ { "name": "gapit:card", "version": "3.2.6", "checksum": "<sha256>" } ] }
+```
+
+Use `bio_compare_runs` to diff two runs of the same sample: it attributes differences to
+parameters / databases / tools / inputs / workflow, and flags `NOT_REPRODUCIBLE` when the
+provenance is identical but the results differ.

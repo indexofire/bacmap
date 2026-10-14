@@ -7,6 +7,7 @@ parameters.properties 下）生成 pydantic 模型，经单参数 `params` 传�
 传输：stdio（本机客户端，如 Hermes / Claude / Codex）。
 """
 
+import logging
 import re
 from typing import Any
 
@@ -15,6 +16,8 @@ from pydantic import create_model
 
 from bacmap.tools import registry as tool_registry
 from bacmap.tools.spec import Effect
+
+logger = logging.getLogger(__name__)
 
 _TYPE_MAP: dict[str, type] = {
     "string": str,
@@ -33,7 +36,16 @@ def _model_from_schema(tool_name: str, schema: dict[str, Any] | None) -> type:
     required = set(params.get("required", []) or [])
     fields: dict[str, Any] = {}
     for key, prop in props.items():
-        base = _TYPE_MAP.get(str(prop.get("type", "string")), str)
+        raw_type = str(prop.get("type", "string"))
+        if raw_type not in _TYPE_MAP:
+            logger.warning(
+                "MCP schema: unknown type %r for %s.%s — defaulting to string",
+                raw_type,
+                tool_name,
+                key,
+            )
+            raw_type = "string"
+        base = _TYPE_MAP[raw_type]
         if key in required:
             fields[key] = (base, ...)
         else:
@@ -126,6 +138,14 @@ def _register_task_tools(server: MCPServer, engine: Any) -> None:
             tt = TaskType(task_type)
         except ValueError:
             return json.dumps({"error": f"unknown task_type: {task_type!r}"}, ensure_ascii=False)
+        # MCP 提交仅支持 analyze/curate（mine/write 属开放路径，需要 script/draft 等
+        # 参数，经内建智能体或 Web 提交；此处暴露会退化为空任务）。
+        if tt not in (TaskType.ANALYZE, TaskType.CURATE):
+            return json.dumps(
+                {"error": f"task_type {tt.value!r} is not submittable via MCP "
+                          f"(use analyze or curate)"},
+                ensure_ascii=False,
+            )
         if samples:
             # P2-2：样本 ID 直接进 results/ 路径拼接——白名单校验，拒绝遍历串。
             from bacmap.tools._common import _validate_sample_id

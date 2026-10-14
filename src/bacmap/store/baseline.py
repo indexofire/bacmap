@@ -120,7 +120,9 @@ def build_candidate(
 
     strains: list[dict[str, Any]] = []
     excluded: list[dict[str, str]] = []
-    for sdir in sorted((home / "results").glob("SAM-*/report/*_summary.json")):
+    # 样本 ID 任意（samples.tsv 与 MCP 白名单 [A-Za-z0-9._-]+ 均不限于 SAM-*）；
+    # 与 bio_list_samples / Web 的 results 扫描口径一致（*/report/*_summary.json）。
+    for sdir in sorted((home / "results").glob("*/report/*_summary.json")):
         strain_id = sdir.parent.parent.name
         if scope.get("strains") and strain_id not in scope["strains"]:
             continue
@@ -221,7 +223,7 @@ def load_candidate(db_path: Path, task_id: str) -> dict | None:
         ).fetchone()
     if row is None:
         return None
-    return {"manifest": json.loads(row[0]), "gate": json.loads(row[1])}
+    return {"manifest": json.loads(row["manifest_json"]), "gate": json.loads(row["gate_json"])}
 
 
 def publish(db_path: Path, manifest: dict, created_by: str, signature: str) -> int:

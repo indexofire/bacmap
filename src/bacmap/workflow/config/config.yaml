@@ -1,8 +1,12 @@
-# Hermes-bacmap 分析流程配置
+# bacmap 分析流程配置
 # 路径可通过环境变量覆盖: BACMAP_RESULTS_DIR, BACMAP_DATA_DIR
 
 threads: 8
 iqtree_seed: 42
+# 运行记录（ADR-18）：seeds 覆盖/扩展固定种子；nondeterministic_steps 列出
+# 无法固定随机性、需在运行记录中标记的步骤名。留空即取默认。
+seeds: {}
+nondeterministic_steps: []
 workdir: "results"
 project_root: "../.."
 

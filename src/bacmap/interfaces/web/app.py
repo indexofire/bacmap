@@ -226,6 +226,10 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
             tt = TaskType(task_type)
         except ValueError as exc:
             raise HTTPException(400, f"未知任务类型: {task_type}") from exc
+        # 表单仅提供 analyze|curate；mine/write 属开放路径，需 script/draft 参数，
+        # 不经本表单提交（防止伪造 POST 产生空任务）。
+        if tt not in (TaskType.ANALYZE, TaskType.CURATE):
+            raise HTTPException(400, f"任务类型 {tt.value!r} 不支持 Web 提交")
         params: dict[str, Any] = {}
         if samples.strip():
             sample_list = [s.strip() for s in samples.replace("\n", ",").split(",") if s.strip()]

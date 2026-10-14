@@ -146,6 +146,11 @@ class TestTaskToolsRoundtrip:
         assert "error" in out
         assert "invalid sample" in out["error"]
 
+    def test_submit_rejects_open_path_task_types(self, server):
+        for tt in ("mine", "write"):
+            out = _call(server, "bacmap_submit_task", {"task_type": tt})
+            assert "error" in out, (tt, out)
+
     def test_submit_rejects_mixed_invalid_samples(self, server):
         out = _call(
             server,

@@ -39,7 +39,7 @@ Equivalent module form: `python -m bacmap.interfaces.mcp` / `python -m bacmap.in
 ## Development
 
 ```bash
-pixi run -e dev test        # pytest（基线：1060 passed / 1 skipped）
+pixi run -e dev test        # pytest（基线：1090 passed / 1 skipped）
 pixi run -e dev lint        # ruff
 pixi run -e dev contracts   # import-linter 依赖方向契约
 ```

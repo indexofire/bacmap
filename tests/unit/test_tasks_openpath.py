@@ -249,3 +249,42 @@ class TestGateAuditTrail:
         with GenomeObjectService(tmp_path / "gom.sqlite") as gos:
             events = gos.list_events(tid)
         assert any(ev.event_type == "gate.citation" for ev in events)
+
+
+class TestCitationKnownNormalization:
+    """引用门：知识库侧标识符归一（PMID 前缀/方括号/DOI 大小写）与成稿侧可比。"""
+
+    def test_pmid_prefix_in_known_matches_bracket_citation(self):
+        r = gates.evaluate_citation(
+            {"draft": "检出 blaCTX-M-15 [12345678]。", "known_citations": ["PMID:12345678"]}
+        )
+        assert r.verdict == GateVerdict.PASS
+
+    def test_lowercase_pmid_prefix_draft(self):
+        r = gates.evaluate_citation(
+            {"draft": "见 pmid: 12345678。", "known_citations": ["12345678"]}
+        )
+        assert r.verdict == GateVerdict.PASS
+
+    def test_bracketed_known_normalized(self):
+        r = gates.evaluate_citation(
+            {"draft": "见 PMID:12345678。", "known_citations": ["[12345678]"]}
+        )
+        assert r.verdict == GateVerdict.PASS
+
+    def test_doi_case_insensitive_both_sides(self):
+        r = gates.evaluate_citation(
+            {"draft": "见 10.1128/JCM.00123-24。", "known_citations": ["10.1128/jcm.00123-24"]}
+        )
+        assert r.verdict == GateVerdict.PASS
+
+    def test_unknown_pmid_still_rejected(self):
+        r = gates.evaluate_citation(
+            {"draft": "见 PMID:99999999。", "known_citations": ["PMID:12345678"]}
+        )
+        assert r.verdict == GateVerdict.REJECT
+        assert "99999999" in r.details["unknown"]
+
+    def test_short_list_number_not_treated_as_citation(self):
+        r = gates.evaluate_citation({"draft": "步骤 [1] 与 [2] 见正文。", "known_citations": []})
+        assert r.verdict == GateVerdict.PASS

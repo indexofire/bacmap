@@ -38,7 +38,7 @@ What the environment contains (all declared in `pixi.toml`, nothing to install b
 ## 3. Development environment (optional, needed to contribute code)
 
 ```bash
-pixi run -e dev test          # pytest（当前基线 1060 passed / 1 skipped）
+pixi run -e dev test          # pytest（当前基线 1090 passed / 1 skipped）
 pixi run -e dev lint          # ruff
 pixi run -e dev contracts     # import-linter 依赖方向契约
 ```

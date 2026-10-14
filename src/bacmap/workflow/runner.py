@@ -60,8 +60,18 @@ def deploy(force: bool = False) -> Path:
 
     cfg = DEPLOYED_DIR / "config" / "config.yaml"
     text = cfg.read_text()
-    text = text.replace('project_root: "../.."', f'project_root: "{BACMAP_HOME}"')
-    cfg.write_text(text)
+    marker = 'project_root: "../.."'
+    already = f'project_root: "{BACMAP_HOME}"'
+    if marker in text:
+        rewritten = text.replace(marker, already)
+    elif already in text:
+        rewritten = text  # 重部署：已指向 BACMAP_HOME
+    else:
+        # 模板缺少可重写的 project_root 标记 → 部署路径会错，快速失败而非静默。
+        raise RuntimeError(
+            f'deploy: config.yaml 缺少 {marker!r} 标记，无法重写为 BACMAP_HOME'
+        )
+    cfg.write_text(rewritten)
 
     stamp.write_text(pkg_hash)
     return DEPLOYED_DIR
