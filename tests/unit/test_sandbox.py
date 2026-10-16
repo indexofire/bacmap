@@ -130,3 +130,33 @@ class TestSandboxHardening:
         res = SandboxExecutor().run(spec)
         assert res.returncode == 0
         assert (ws / "marker.txt").is_file()
+
+
+class TestContainerWorkdirAndPassthrough:
+    """容器内工作目录 + 直通解释器映射（否则沙箱执行必然失败）。"""
+
+    def test_apptainer_sets_workdir(self, tmp_path: Path):
+        cmd = ApptainerRunner().build_cmd(_spec(tmp_path))
+        assert "--pwd" in cmd and cmd[cmd.index("--pwd") + 1] == "/workspace"
+
+    def test_podman_sets_workdir(self, tmp_path: Path):
+        cmd = PodmanRunner().build_cmd(_spec(tmp_path))
+        assert "-w" in cmd and cmd[cmd.index("-w") + 1] == "/workspace"
+
+    def test_passthrough_maps_python_to_host_interpreter(self, tmp_path: Path, monkeypatch):
+        import sys
+
+        import bacmap.agent.sandbox as sb
+
+        monkeypatch.setattr(sb, "_which", lambda b: None)
+        captured: dict = {}
+
+        def fake_run(cmd, timeout, cwd=None):
+            captured["cmd"] = cmd
+            return sb.SandboxResult(0, "", "", "direct")
+
+        monkeypatch.setattr(sb, "_run", fake_run)
+        sb.SandboxExecutor(allow_unsandboxed=True).run(
+            sb.SandboxSpec(image="i", command=["python", "script.py"], workspace=tmp_path)
+        )
+        assert captured["cmd"][0] == sys.executable

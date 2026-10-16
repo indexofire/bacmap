@@ -12,6 +12,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -59,6 +60,7 @@ class ApptainerRunner:
 
     def build_cmd(self, spec: SandboxSpec) -> list[str]:
         cmd = ["apptainer", "exec", "--containall", "--cleanenv", "--network", "none"]
+        cmd += ["--pwd", "/workspace"]
         cmd += ["--bind", f"{spec.workspace}:/workspace"]
         for host, guest in spec.readonly_mounts.items():
             cmd += ["--bind", f"{host}:{guest}:ro"]
@@ -73,6 +75,7 @@ class PodmanRunner:
 
     def build_cmd(self, spec: SandboxSpec) -> list[str]:
         cmd = ["podman", "run", "--rm", "--network=none"]
+        cmd += ["-w", "/workspace"]
         cmd += ["-v", f"{spec.workspace}:/workspace:Z"]
         for host, guest in spec.readonly_mounts.items():
             cmd += ["-v", f"{host}:{guest}:ro,Z"]
@@ -131,7 +134,11 @@ class SandboxExecutor:
         if runner is None:
             if self._allow_unsandboxed:
                 logger.warning("SANDBOX BYPASSED (BACMAP_ALLOW_UNSANDBOXED=1)——仅限受控开发环境")
-                return _run(list(spec.command), self.timeout, cwd=spec.workspace)
+                # 容器命令用镜像内的 `python`；直通时映射为本机解释器。
+                cmd = list(spec.command)
+                if cmd and cmd[0] in ("python", "python3"):
+                    cmd[0] = sys.executable
+                return _run(cmd, self.timeout, cwd=spec.workspace)
             raise SandboxUnavailableError(
                 f"{reason}; 安装 Apptainer 或设置 BACMAP_ALLOW_UNSANDBOXED=1（不推荐）"
             )

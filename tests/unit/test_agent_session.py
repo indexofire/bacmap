@@ -258,3 +258,19 @@ class TestSandboxTool:
         monkeypatch.setattr(sb, "SandboxExecutor", lambda *a, **k: _Boom())
         out = _json.loads(st.run_script(tmp_path, "print(1)"))
         assert "error" in out and "沙箱不可用" in out["error"]
+
+
+class TestAssistantRoleToolAlignment:
+    """assistant.role.yaml 的工具白名单必须与实际会话工具一致（防漂移）。"""
+
+    def test_role_tools_match_session_tools(self, tmp_path):
+        from bacmap.agent import roledef
+        from bacmap.agent.sandbox.tool import build_sandbox_tool
+        from bacmap.agent.session import READ_TOOL_NAMES
+
+        gw = LlmGateway(_cfg(), tool_agent_factory=_factory(AnalysisPlan(reply="x")))
+        session = AgentSession(gw, extra_tools=[build_sandbox_tool(tmp_path)])
+        session_names = {t.name for t in session._tools}
+        role_tools = set(roledef.load_role_def("assistant").tools)
+        assert role_tools == session_names
+        assert set(READ_TOOL_NAMES) | {"sandbox_run"} == role_tools

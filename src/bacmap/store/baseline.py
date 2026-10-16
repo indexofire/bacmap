@@ -66,7 +66,7 @@ def _summary_serotype(summary: dict[str, Any]) -> str:
 
 def _summary_mlst_st(summary: dict[str, Any]) -> str:
     raw = (summary.get("steps", {}) or {}).get("mlst", "")
-    if not raw:
+    if not isinstance(raw, str) or not raw:
         return ""
     st = str(parse_mlst(raw).get("st", ""))
     return "" if st in ("N/A", "-") else st

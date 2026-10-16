@@ -97,7 +97,7 @@ _HELP = (
     "  输入自然语言分析需求；助手会查询样本、规划任务，写操作需确认后提交。\n"
     "  斜杠命令：/help /new /clear /tasks /samples /search <kw> /model "
     "/analyze <样本> /curate [scope] /quit\n"
-    "  Leader（Ctrl+X）：n 新会话 · l 任务 · s 样本 · m 模型 · t 主题 · h 帮助 · q 退出\n"
+    "  Leader（Ctrl+G）：n 新会话 · l 任务 · s 样本 · m 模型 · t 主题 · h 帮助 · q 退出\n"
     "  其它：Enter 发送 · Shift/Alt+Enter 换行 · Esc 中断 · Ctrl+Y 确认计划 · "
     "Ctrl+F 跟随开关 · Ctrl+B 侧栏 · Ctrl+R 刷新 · Ctrl+L 清屏 · Ctrl+P 命令面板"
 )
@@ -116,7 +116,7 @@ class BacmapTUI(App[None]):
         ("ctrl+p", "command_palette", "命令面板"),
         ("ctrl+f", "toggle_follow", "跟随"),
         ("ctrl+y", "confirm_plan", "确认计划"),
-        ("ctrl+x", "leader", "Leader"),
+        ("ctrl+g", "leader", "Leader"),
         ("escape", "interrupt", "中断/清空"),
     ]
 
@@ -138,6 +138,7 @@ class BacmapTUI(App[None]):
         self._pending_plan: Any = None
         self._chat_task: Any = None  # 在途会话 asyncio.Task（Esc 可取消）
         self._leader = False
+        self._focus_before_leader: Any = None
         self._reply_seq = 0  # 递增令牌：Esc 后丢弃迟到的回复
         self._sidebar_wanted = True  # 用户的侧栏意图（宽终端时生效）
         self._follow = True  # 会话是否跟随最新（tui-design：follow 显式）
@@ -285,8 +286,7 @@ class BacmapTUI(App[None]):
         if self._cancel_chat():
             self._chat_append("[#d29922]已取消在途请求[/]")
         if self._leader:
-            self._leader = False
-            self._set_hint("")
+            self._end_leader()
             return
         if self._pending_plan is not None:
             self._pending_plan = None
@@ -294,11 +294,21 @@ class BacmapTUI(App[None]):
             self._chat_append("[#8b949e]已忽略待确认计划[/]")
 
     def action_leader(self) -> None:
+        self._focus_before_leader = self.focused
+        # 光标在输入框时，字母键会被 Input 吞掉；Leader 期间把焦点让给 App。
+        self.screen.set_focus(None)
         self._leader = True
         self._set_hint(
             "[b #d29922]Leader[/] 已激活：n 新会话 · l 任务 · s 样本 · "
             "m 模型 · t 主题 · h 帮助 · q 退出"
         )
+
+    def _end_leader(self) -> None:
+        self._leader = False
+        self._set_hint("")
+        prior = getattr(self, "_focus_before_leader", None)
+        if prior is not None:
+            self.screen.set_focus(prior)
 
     def action_focus_tasks(self) -> None:
         self.query_one("#tasks-table", DataTable).focus()
@@ -332,9 +342,8 @@ class BacmapTUI(App[None]):
     def on_key(self, event: Any) -> None:
         if not self._leader:
             return
-        self._leader = False
         handler = getattr(self, self._LEADER_CHORDS.get(event.key, ""), None)
-        self._set_hint("")
+        self._end_leader()
         if handler is not None:
             event.prevent_default()
             event.stop()

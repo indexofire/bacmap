@@ -104,7 +104,7 @@ def interactive_menu(engine: Any) -> None:
                     "关键词（物种/血清型/ST/基因，可空）", default="", console=console
                 )
                 console.print(_sample_table(search_rows(sample_rows(engine), query=query)))
-        except (KeyError, ValueError) as exc:
+        except (KeyError, ValueError, NotImplementedError) as exc:
             console.print(f"[red]操作失败：{exc}[/red]")
 
     console.print("已退出 bacmap 控制台。")

@@ -124,7 +124,7 @@ class TestTuiLayout:
             async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
                 app.query_one("#tasks-table", DataTable).focus()  # 避免 Input 吞键
-                await pilot.press("ctrl+x")
+                await pilot.press("ctrl+g")
                 assert app._leader is True
                 before = app.theme
                 await pilot.press("t")
@@ -346,9 +346,62 @@ class TestTuiTheme:
                 await pilot.pause()
                 assert app.theme == "bacmap-dark"
                 app.query_one("#tasks-table", DataTable).focus()
-                await pilot.press("ctrl+x")
+                await pilot.press("ctrl+g")
                 await pilot.press("t")
                 await pilot.pause()
                 assert app.theme == "bacmap-light"
 
         asyncio.run(_run())
+
+
+class TestLeaderWhilePromptFocused:
+    """Leader 和弦在输入框聚焦时也必须生效（否则字母被 Input 吞掉）。"""
+
+    def test_leader_chord_with_prompt_focused(self, engine):
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                inp = app.query_one("#prompt", Input)
+                inp.focus()
+                await pilot.press("ctrl+g")
+                assert app._leader is True
+                assert app.screen.focused is None  # 焦点让给 App
+                before = app.theme
+                await pilot.press("t")
+                await pilot.pause()
+                assert app.theme != before  # 和弦生效
+                assert app.screen.focused is inp  # 焦点还原
+
+        asyncio.run(_run())
+
+    def test_escape_exits_leader_and_restores_focus(self, engine):
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                inp = app.query_one("#prompt", Input)
+                inp.focus()
+                await pilot.press("ctrl+g")
+                assert app._leader is True
+                await pilot.press("escape")
+                await pilot.pause()
+                assert app._leader is False
+                assert app.screen.focused is inp
+
+        asyncio.run(_run())
+
+
+class TestNonStringMlst:
+    """summary 的 mlst 字段非字符串时不得让展示层崩溃。"""
+
+    def test_digest_tolerates_dict_mlst(self):
+        from bacmap.interfaces.views import sample_digest
+
+        d = sample_digest({"sample": "X", "steps": {"mlst": {"st": "19"}}})
+        assert d["st"] == "N/A"
+
+    def test_baseline_mlst_dict_tolerated(self):
+        from bacmap.store.baseline import _summary_mlst_st
+
+        assert _summary_mlst_st({"steps": {"mlst": {"st": "19"}}}) == ""

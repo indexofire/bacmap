@@ -12,11 +12,18 @@
 
 from __future__ import annotations
 
+import re
+
 SALMONELLA = "Salmonella"
 ECOLI = "E. coli"
 SHIGELLA = "Shigella"
 VPARA = "V. parahaemolyticus"
 UNKNOWN = "unknown"
+
+# 视为"无物种结论"的占位（gside 失败/占位输出）
+_UNKNOWN_TOKENS = frozenset({"", "unknown", "n/a", "na", "none", "unidentified", "pending_gside"})
+# gside D1_marker 的常见病原登记名：Genus_species（可多段，如 Vibrio_cholerae_O1）
+_GSIDE_LABEL_RE = re.compile(r"[A-Za-z]+(?:_[A-Za-z0-9]+)+")
 
 # 子串 → 规范名（顺序敏感：物种专名先于属名缩写）
 _VERDICT_NEEDLES: tuple[tuple[str, str], ...] = (
@@ -30,15 +37,22 @@ _VERDICT_NEEDLES: tuple[tuple[str, str], ...] = (
 
 
 def canonical_from_verdict(verdict: str, ipah: str = "") -> str:
-    """verdict → 规范物种名；not_X 按 ipaH 分流（阳性→Shigella，否则 E. coli）。"""
+    """verdict → 规范物种名；not_X 按 ipaH 分流（阳性→Shigella，否则 E. coli）。
+
+    gside 的 D1_marker 覆盖常见病原，登记名为 ``Genus_species``（如
+    ``Klebsiella_pneumoniae``）——识别为已知物种并规范化为可读名，避免把
+    非四病原的一致结果误判为 unknown（分析结论门/特征库纳入会因此误拒）。
+    """
     v = verdict.strip()
-    if not v:
+    if v.lower() in _UNKNOWN_TOKENS:
         return UNKNOWN
     if v.startswith("not_"):
         return SHIGELLA if "positive" in ipah.lower() else ECOLI
     for needle, canonical in _VERDICT_NEEDLES:
         if needle in v:
             return canonical
+    if _GSIDE_LABEL_RE.fullmatch(v):
+        return v.replace("_", " ")
     return UNKNOWN
 
 

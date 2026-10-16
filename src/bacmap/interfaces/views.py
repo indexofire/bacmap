@@ -71,8 +71,8 @@ def sample_digest(summary: dict[str, Any]) -> dict[str, Any]:
     steps = summary.get("steps", {}) or {}
     sp = steps.get("species", {}) or {}
     verdict = sp.get("verdict", "N/A") if isinstance(sp, dict) else str(sp)
-    mlst_raw = steps.get("mlst", "") or ""
-    st = parse_mlst(mlst_raw)["st"] if mlst_raw else "N/A"
+    mlst_raw = steps.get("mlst", "")
+    st = parse_mlst(mlst_raw)["st"] if isinstance(mlst_raw, str) and mlst_raw else "N/A"
     sero = steps.get("serotype", {}) or {}
     serovar = sero.get("sistr", "N/A") if isinstance(sero, dict) else "N/A"
     amr = steps.get("amr", {}) or {}

@@ -65,7 +65,7 @@ the **conversation**, a **plan hint**, and the **prompt**, with a **footer** of 
   pending plan · `Ctrl+C` quit · `Ctrl+B` toggle sidebar · `Ctrl+R` refresh · `Ctrl+L` clear
   conversation · `Ctrl+F` toggle follow (stop auto-scroll while reading back) · `Ctrl+P`
   command palette · `Ctrl+Y` confirm the pending plan.
-- **Leader `Ctrl+X`** chords: `n` new session · `l` tasks · `s` samples · `m` model/endpoint ·
+- **Leader `Ctrl+G`** chords: `n` new session · `l` tasks · `s` samples · `m` model/endpoint ·
   `t` theme · `h` help · `q` quit.
 - **Slash commands** in the prompt: `/help /new /clear /tasks /samples /search <kw> /model`
   `/analyze <样本> /curate [scope] /quit` (the `/analyze` and `/curate` commands are the

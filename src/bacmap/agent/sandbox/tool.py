@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 import json
-import sys
 import uuid
 from pathlib import Path
 from typing import Any
@@ -63,7 +62,7 @@ def run_script(workspace_root: Path, script: str, description: str = "") -> str:
     )
     spec = SandboxSpec(
         image=_sandbox_image(),
-        command=[sys.executable, "script.py"],
+        command=["python", "script.py"],
         workspace=workdir,
     )
     try:

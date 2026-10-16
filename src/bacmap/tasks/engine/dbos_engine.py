@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -354,7 +353,7 @@ def _build_sandbox_spec(image: str | None, script_name: str, workspace: Path) ->
 
     return SandboxSpec(
         image=image or "docker://python:3.12-slim",
-        command=[sys.executable, script_name],
+        command=["python", script_name],
         workspace=workspace,
     )
 
