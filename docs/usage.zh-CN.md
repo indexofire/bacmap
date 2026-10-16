@@ -8,18 +8,74 @@ bacmap 有三个人口：**CLI**（运维）、**Web 任务台**（人）、**MC
 
 ```bash
 bacmap --version
-bacmap web [--host 127.0.0.1] [--port 8800]   # Web 任务台（默认仅绑本机）
-bacmap mcp [--read-only] [--home H]           # stdio MCP 服务器（智能体接入用）
+bacmap ask "跑 SAM-001 的分析并和去年暴发株比较"   # LLM 规划 → 确认 → 提交
+bacmap chat                                        # 多轮对话式分析助手
+bacmap tui [--home H]                              # 全屏 TUI（Textual）
+bacmap console [--home H]                          # 交互式菜单
+bacmap overview [--json]                           # 系统概览
+bacmap task ls|show|submit|approve|cancel          # 任务查询与写操作（显式、无 LLM）
+bacmap sample ls|show                              # 样本浏览
+bacmap search --query <kw>                          # 样本检索
+bacmap web [--host 127.0.0.1] [--port 8800]        # Web 控制台（含助手）
+bacmap mcp [--read-only] [--home H]                # MCP 服务器（stdio/HTTP）
 ```
 
-## 2. Web 任务台（人的主界面）
+查询类子命令支持 `--json`；写操作与 Web/MCP 走同一套门与审批。
+
+## 2. LLM 驱动的分析助手（CLI ask/chat、TUI 对话页、Web /assistant）
+
+内置助手把自然语言分析需求转成可执行计划，三端共用同一 **agent 会话**（`agent/session.py`，
+ADR-10 规划型 + ADR-11 开放路径）：
+
+1. **理解 + 查现状**：LLM 可调用只读工具（`bio_list_samples` / `bio_get_result` /
+   `bio_search_samples` / `bio_query_metadata` / `bio_review_flags` / `bio_compare_runs`）。
+2. **规划**：返回封闭任务类型组成的结构化计划——多数请求是 `analyze`（标准 Snakemake 流程）
+   或 `curate`；**深度挖掘**用 `mine`（自行编写 Python 脚本绘图/统计，沙箱执行），
+   复杂挖掘可拆成多个顺序 `mine` 任务；文本产物用 `write`。
+3. **澄清**：需求含糊时提问，不猜测。
+4. **分级确认**：读类/已有结果的查询在规划阶段直接完成；**写操作仅在确认后提交**
+   （CLI 交互确认，`--yes` 跳过；TUI 按 `Ctrl+Y` 或点按钮；Web 点确认按钮）。
+5. **降级（C3）**：LLM 端点不可用时助手明确告知，回退到显式子命令/任务表单——确定性路径始终可用。
+
+示例：
+
+```bash
+$ bacmap ask "把本地沙门菌按 ST 统计并画图"
+bacmap › 建议先统计再绘图。
+建议执行的分析计划：
+  1. mine —— 按 ST 聚合本地沙门菌并输出统计 CSV
+  2. mine —— 由统计 CSV 绘制 ST 分布图
+确认提交该计划？ [y/N]
+```
+
+## 3. TUI 与交互菜单
+
+`bacmap tui` 启动**会话优先**的 Textual 工作台（参考 opencode TUI 与 hermes agent REPL）：
+顶部**状态头**（LLM 端点）、可折叠**侧栏**（任务/样本）、**会话区**、**计划提示**、
+**输入框**，底部**按键提示栏**。
+
+- **直接按键**：`Enter` 发送 · `Shift/Alt+Enter` 换行 · `Esc` 中断/忽略待确认计划 ·
+  `Ctrl+C` 退出 · `Ctrl+B` 侧栏 · `Ctrl+R` 刷新 · `Ctrl+L` 清屏 · `Ctrl+F` 跟随开关
+  （回看时停止自动滚动）· `Ctrl+P` 命令面板 · `Ctrl+Y` 确认计划。
+- **Leader `Ctrl+X` 和弦**：`n` 新会话 · `l` 任务 · `s` 样本 · `m` 模型/端点 · `t` 主题 ·
+  `h` 帮助 · `q` 退出。
+- **斜杠命令**：`/help /new /clear /tasks /samples /search <kw> /model /analyze <样本>
+  /curate [scope] /quit`（`/analyze`、`/curate` 为显式无 LLM 路径）。
+
+输入框即助手：规划 → 确认（`Ctrl+Y`）→ 提交。窄终端下侧栏自动折叠，宽度恢复时还原用户偏好。
+`bacmap console` 仍是编号菜单，面向偏好引导式操作的用户。
+
+## 4. Web 控制台（任务 / 助手 / 样本 / 检索）
 
 `bacmap web` 后浏览器打开 `http://127.0.0.1:8800`：
 
-1. **提交任务**——左侧表单选任务类型、填样本列表（analyze）或范围 JSON（curate）
-2. **监控**——右侧任务表实时状态（六态徽章：排队中/运行中/待审批/已完成/已失败/已取消），点进详情页每 2 秒自动刷新
-4. **查询结果**——**样本**页浏览已完成样本（列表、单株详情含检出基因、HTML 报告下载），**检索**页按关键词（物种/血清型/ST/基因名）或结构化字段查找样本。
-3. **审批**——任务到 `待审批` 时详情页出现琥珀色审批卡：填审批人、决定（approve/reject）、签名口令，提交后过挖掘门/发布门放行
+1. **助手**（`/assistant`）——用自然语言描述需求，页面显示回复与建议计划，点按钮确认并提交
+   （多轮会话保存在服务端）
+2. **提交任务**（任务页）——显式表单：任务类型 + 样本列表 / 范围 JSON
+3. **监控**——六态徽章（排队中/运行中/待审批/已完成/已失败/已取消），详情页每 2 秒自动刷新
+4. **查询结果**——**样本**页浏览已完成样本（列表、单株详情含检出基因、HTML 报告下载），
+   **检索**页按关键词或结构化字段查找
+5. **审批**——任务到 `待审批` 时详情页出现审批卡：填审批人、决定（approve/reject）、签名口令，提交后过挖掘门/发布门放行
 
 > 审批是六道门的一环：未签字的挖掘产物进不了报告、不达金标准的特征库发不了版——
 > 这是设计（智能体不能自己签字），不是故障。
@@ -42,7 +98,7 @@ ssh -L 8800:127.0.0.1:8800 user@10.0.0.5
 - 数据文件仍由操作员在工作机上按[配置指南 §5](configuration.zh-CN.md)注册；
   远程上传功能属于规划项（待智能体生信分析功能完成后再考虑）
 
-## 3. MCP 智能体接入
+## 5. MCP 智能体接入
 
 任意支持 MCP stdio 的客户端都能接（Hermes / Codex / OpenCode / OpenClaw / Claude…）。
 客户端配置样例：
@@ -91,7 +147,7 @@ bacmap mcp --transport http --host 127.0.0.1 --port 8765
 > "对 SAM-TYP-001 跑全套分析" → 智能体调 `bacmap_submit_task`(analyze) → 拿 task_id
 > → 轮询 `bacmap_task_status` → "已完成，报告在 results/SAM-TYP-001/report/"
 
-## 4. 四类任务与门
+## 6. 四类任务与门
 
 | 任务 | 内容 | 关键门 |
 |---|---|---|
@@ -102,7 +158,7 @@ bacmap mcp --transport http --host 127.0.0.1 --port 8765
 
 断点恢复：任务引擎基于 DBOS，运行中 kill 进程重启后从断点继续（V2 已验证）。
 
-## 5. 端到端示例（新样本上机 → 报告）
+## 7. 端到端示例（新样本上机 → 报告）
 
 ```bash
 # ① 布局数据并注册
@@ -116,7 +172,7 @@ echo -e "SAM-NEW-100\tSalmonella\tgs/SAM-NEW-100/SAM-NEW-100_R1.fastq.gz\tgs/SAM
 ls ~/.local/share/bacmap/results/SAM-NEW-100/report/
 ```
 
-## 6. 已知能力边界（外部工具依赖）
+## 8. 已知能力边界（外部工具依赖）
 
 | 字段/能力 | 状态 | 等待 |
 |---|---|---|

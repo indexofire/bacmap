@@ -1,5 +1,5 @@
-# Hermes-bacmap 端到端分析流程（4 病原通用，物种自动路由）
-# project.md §7.1 核心 pipeline
+# bacmap 端到端分析流程：物种由 gside 鉴定（species_identify），
+# 分型/血清型/SNP/cgMLST 等按病原注册表（core/pathogens.yaml）路由。
 
 import pandas as pd
 from pathlib import Path
@@ -28,50 +28,10 @@ include: "rules/dec_shigella.smk"
 include: "rules/vpara.smk"
 include: "rules/snp.smk"
 include: "rules/cgmlst.smk"
-include: "rules/taxonomy.smk"
 include: "rules/annotation.smk"
 include: "rules/report.smk"
 
-# species-id plan A/B/C/D gating: alternate identification methods add their
-# outputs only when the matching database is installed; missing databases
-# degrade to the marker-only baseline with a warning instead of failing.
-import os as _os
-
-_ALT_DB_BY_MODE = {
-    "panel": "refseq_panel",
-    "skani_gtdb": "skani_gtdb",
-    "mash_refseq": "mash_refseq",
-    "sourmash": "sourmash_gtdb",
-}
-_ALT_TARGET_BY_MODE = {
-    "panel": "species/species_ani.json",
-    "skani_gtdb": "species/species_ani.json",
-    "mash_refseq": "species/species_ani.json",
-    "sourmash": "species/species_sourmash.json",
-}
-_SPECIES_MODE = config.get("species_mode", "simple")
-_ALT_ACTIVE = (
-    _SPECIES_MODE in _ALT_DB_BY_MODE
-    and (PROJECT_ROOT / "data" / "db" / _ALT_DB_BY_MODE[_SPECIES_MODE]).is_dir()
-)
-if _SPECIES_MODE in _ALT_DB_BY_MODE and not _ALT_ACTIVE:
-    print(
-        f"WARNING: species_mode={_SPECIES_MODE} but its database is not installed "
-        f"(data/db/{_ALT_DB_BY_MODE[_SPECIES_MODE]}); degrading to marker-only. "
-        "Run scripts/setup_databases.py to install."
-    )
-
-_STANDARD_ACTIVE = (
-    _SPECIES_MODE == "standard"
-    and bool(_os.environ.get("GTDBTK_DATA_PATH") or _os.environ.get("GTDBDB"))
-)
-if _SPECIES_MODE == "standard" and not _STANDARD_ACTIVE:
-    print(
-        "WARNING: species_mode=standard but GTDBTK_DATA_PATH is not set; "
-        "GTDB-Tk validation will be skipped (marker-only). "
-        "Run scripts/download_db_gtdbtk.py to install."
-    )
-
+# reads 级 kraken2 预筛按需启用（与物种鉴定档位无关）。
 _KRAKEN2_ACTIVE = bool(config.get("kraken2_prefilter", False)) and (
     PROJECT_ROOT / "data" / "db" / "kraken2_custom"
 ).is_dir()
@@ -81,15 +41,9 @@ if bool(config.get("kraken2_prefilter", False)) and not _KRAKEN2_ACTIVE:
         "installed; raw reads go straight to fastp. Run scripts/setup_databases.py."
     )
 
+# 物种/分类学鉴定整体由 gside 承担（species_identify 规则，含多法仲裁），
+# 不再需要按鉴定档位追加 species_ani/species_sourmash/taxonomy 等占位目标。
 _EXTRA_TARGETS = []
-if _ALT_ACTIVE:
-    _EXTRA_TARGETS += expand(
-        str(WORKDIR) + "/{sample}/" + _ALT_TARGET_BY_MODE[_SPECIES_MODE], sample=SAMPLES
-    )
-if _STANDARD_ACTIVE:
-    _EXTRA_TARGETS += expand(
-        str(WORKDIR) + "/{sample}/taxonomy/validation.json", sample=SAMPLES
-    )
 if _KRAKEN2_ACTIVE:
     _EXTRA_TARGETS += expand(
         str(WORKDIR) + "/{sample}/kraken2/kraken2_prefilter.json", sample=SAMPLES

@@ -220,3 +220,49 @@ class TestWebAuth:
     def test_no_token_means_no_auth(self, engine):
         c = TestClient(create_app(engine))
         assert c.get("/").status_code == 200
+
+
+class TestAssistantPage:
+    """Web 助手：LLM 规划 → 确认 → 提交（会话经 build_session/execute_plan，测试注入）。"""
+
+    def test_plan_then_confirm_executes(self, client, monkeypatch):
+        import re
+
+        from bacmap.agent.session import AgentReply, AnalysisPlan, PlannedTask
+        from bacmap.interfaces import assistant as A
+
+        class _FakeSession:
+            def respond(self, text):
+                return AgentReply(
+                    message="规划完成",
+                    plan=AnalysisPlan(
+                        reply="规划完成",
+                        tasks=[PlannedTask(task_type="analyze", params={"samples": ["SAM-001"]})],
+                    ),
+                )
+
+        monkeypatch.setattr(
+            A, "build_session", lambda engine, submitted_by="assistant": _FakeSession()
+        )
+        executed: list = []
+        monkeypatch.setattr(
+            A,
+            "execute_plan",
+            lambda engine, plan, submitted_by="assistant": (
+                executed.append(plan),
+                [{"task_type": "analyze", "task_id": "t1", "ok": True}],
+            )[1],
+        )
+
+        c, _ = client
+        assert c.get("/assistant").status_code == 200
+        r = c.post("/assistant", data={"sid": "", "text": "跑 SAM-001"})
+        assert r.status_code == 200 and "规划完成" in r.text
+        sid = re.search(r'name="sid" value="([0-9a-f]+)"', r.text).group(1)
+        r2 = c.post("/assistant/execute", data={"sid": sid})
+        assert "t1" in r2.text
+        assert executed
+
+    def test_execute_without_plan_400(self, client):
+        c, _ = client
+        assert c.post("/assistant/execute", data={"sid": "nope"}).status_code == 400

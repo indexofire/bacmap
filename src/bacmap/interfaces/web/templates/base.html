@@ -19,6 +19,7 @@
     </a>
     <nav class="topnav" aria-label="主导航">
       <a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>任务</a>
+      <a href="/assistant" {% if request.url.path.startswith('/assistant') %}aria-current="page"{% endif %}>助手</a>
       <a href="/overview" {% if request.url.path == '/overview' %}aria-current="page"{% endif %}>系统</a>
       <a href="/samples" {% if request.url.path.startswith('/samples') %}aria-current="page"{% endif %}>样本</a>
     </nav>

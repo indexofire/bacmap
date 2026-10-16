@@ -1,7 +1,9 @@
-# v1.4.7：物种鉴定外移 gside；species_identify 经薄适配器接入 `gside species`
-#（脚本 workflow/scripts/gside_species.py 完成 JSON→species_id 形状转换）。
-# species_sourmash/species_ani 保留占位——gside `all` 模式内部已涵盖多法仲裁，
-# 待 GTDB-Tk 档落地后随 Snakefile 门控一并清理。
+# 物种鉴定：整体由 gside 承担（ADR-20）。
+# `species_identify` 经薄适配器（workflow/scripts/gside_species.py）调用
+# `gside species`，由 config `species_mode` 选择鉴定档位
+# （simple→marker / panel / skani_gtdb→panel / mash_refseq / sourmash / all / standard→all）。
+# gside `all` 模式内部已完成多法仲裁并自动纳入 GTDB-Tk 档（就绪后），
+# 故此处不再保留 species_ani / species_sourmash 等分档占位规则。
 
 import sys
 
@@ -18,29 +20,3 @@ rule species_identify:
         "mkdir -p $(dirname {output.result}) && "
         "{params.python} {params.py_script} "
         "--contigs {input.contigs} --out {output.result} --mode {params.mode}"
-
-
-rule species_sourmash:
-    input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
-    output:
-        result = str(WORKDIR) + "/{sample}/species/species_sourmash.json"
-    shell:
-        "mkdir -p $(dirname {output.result}) && "
-        "printf %s "
-        "'{{\"method\":\"sourmash\",\"status\":\"pending_gside\","
-        "\"interpretation\":\"externalized to gside (v1.4.7)\"}}' "
-        "> {output.result}"
-
-
-rule species_ani:
-    input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
-    output:
-        result = str(WORKDIR) + "/{sample}/species/species_ani.json"
-    shell:
-        "mkdir -p $(dirname {output.result}) && "
-        "printf %s "
-        "'{{\"method\":\"ani\",\"status\":\"pending_gside\","
-        "\"interpretation\":\"externalized to gside (v1.4.7)\"}}' "
-        "> {output.result}"

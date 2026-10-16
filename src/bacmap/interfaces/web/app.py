@@ -10,12 +10,7 @@ create_app(engine) 与 build_server(engine) 同构——引擎注入，测试可
 from __future__ import annotations
 
 import json
-import os
-import shutil
-from collections import Counter
 from datetime import UTC, datetime
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as pkg_version
 from pathlib import Path
 from typing import Any, Literal
 
@@ -24,112 +19,20 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from bacmap.agent.llm.endpoints import load_llm_config
 from bacmap.interfaces._auth import BearerTokenMiddleware
+from bacmap.interfaces.views import (
+    load_summaries,
+    overview_data,
+    report_path,
+    sample_digest,
+    search_rows,
+)
 from bacmap.interfaces.web.static import STATIC_DIR
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 from bacmap.tasks.spec import Approval, TaskId, TaskType
 from bacmap.tools._common import _validate_sample_id
 
 _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
-
-
-def _overview_data(engine: DbosTaskEngine) -> dict[str, Any]:
-    """系统概览只读数据——端点/路由/数据策略/版本/路径/沙箱/任务分布，零密钥。
-
-    路径随实例 ``engine.home`` 解析（与 ``--home`` 一致），不读模块级常量。
-    """
-    home = Path(engine.home)
-    cfg = load_llm_config(home / "config.toml")
-    endpoints = [
-        {
-            "name": e.name,
-            "location": e.location,
-            "base_url": e.base_url,
-            "model": e.model,
-            "enabled": e.enabled,
-        }
-        for e in cfg.endpoints.values()
-    ]
-    versions: dict[str, str] = {}
-    for pkg in ("bacmap", "gside", "gapit", "gmlst"):
-        try:
-            versions[pkg] = pkg_version(pkg)
-        except PackageNotFoundError:
-            versions[pkg] = "未安装"
-    if shutil.which("apptainer"):
-        sandbox = "Apptainer"
-    elif shutil.which("podman"):
-        sandbox = "Podman"
-    else:
-        sandbox = "无可用后端（mine 任务将失败）"
-    if os.environ.get("BACMAP_ALLOW_UNSANDBOXED") == "1":
-        sandbox += " · 直通通道已开启"
-    counts = Counter(str(t["state"]) for t in engine.list_tasks())
-    return {
-        "endpoints": endpoints,
-        "routing": cfg.routing,
-        "cloud_max_data_class": cfg.policy.cloud_max_data_class.name,
-        "versions": versions,
-        "paths": {
-            "BACMAP_HOME": str(home),
-            "data/": str(home / "data"),
-            "results/": str(home / "results"),
-            "workflows/": str(home / "workflows"),
-        },
-        "sandbox": sandbox,
-        "task_counts": dict(counts),
-    }
-
-
-def _digest(summary: dict[str, Any]) -> dict[str, Any]:
-    """summary JSON → 展示行（物种/MLST/血清型/基因计数，口径对齐 bio_get_result）。"""
-    from bacmap.core.utils import parse_mlst
-
-    steps = summary.get("steps", {}) or {}
-    sp = steps.get("species", {}) or {}
-    verdict = sp.get("verdict", "N/A") if isinstance(sp, dict) else str(sp)
-    mlst_raw = steps.get("mlst", "") or ""
-    st = parse_mlst(mlst_raw)["st"] if mlst_raw else "N/A"
-    sero = steps.get("serotype", {}) or {}
-    serovar = sero.get("sistr", "N/A") if isinstance(sero, dict) else "N/A"
-    amr = steps.get("amr", {}) or {}
-    card = amr.get("abricate_card", []) if isinstance(amr, dict) else []
-    vfdb = amr.get("abricate_vfdb", []) if isinstance(amr, dict) else []
-    plasmid = (steps.get("plasmid", {}) or {}).get("plasmidfinder", [])
-    dec = steps.get("dec", {}) if isinstance(steps.get("dec", {}), dict) else {}
-    return {
-        "sample_id": summary.get("_sample_id", summary.get("sample", "")),
-        "verdict": verdict,
-        "st": st,
-        "serovar": serovar,
-        "n_card": len(card),
-        "n_vfdb": len(vfdb),
-        "n_plasmid": len(plasmid),
-        "ipaH": dec.get("ipaH", "N/A"),
-        "pathotype": dec.get("pathotype", "N/A"),
-        "card_genes": sorted({str(g.get("GENE", "")) for g in card if g.get("GENE")}),
-        "vfdb_genes": sorted({str(g.get("GENE", "")) for g in vfdb if g.get("GENE")}),
-    }
-
-
-def _load_summaries(engine: DbosTaskEngine) -> list[dict[str, Any]]:
-    """已完成样本的 summary 扫描（基于 engine.home，随 --home 正确）。"""
-    results = Path(engine.home) / "results"
-    out: list[dict[str, Any]] = []
-    for sj in sorted(results.glob("*/report/*_summary.json")):
-        try:
-            data = json.loads(sj.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        if isinstance(data, dict):
-            data["_sample_id"] = sj.parent.parent.name
-            out.append(data)
-    return out
-
-
-def _report_path(engine: DbosTaskEngine, sample_id: str) -> Path:
-    return Path(engine.home) / "results" / sample_id / "report" / f"{sample_id}_report.html"
 
 
 def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI:
@@ -148,11 +51,11 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
 
     @app.get("/overview", response_class=HTMLResponse)
     def overview(request: Request) -> HTMLResponse:
-        return _TEMPLATES.TemplateResponse(request, "overview.html", _overview_data(engine))
+        return _TEMPLATES.TemplateResponse(request, "overview.html", overview_data(engine))
 
     @app.get("/samples", response_class=HTMLResponse)
     def samples_page(request: Request) -> HTMLResponse:
-        rows = [_digest(s) for s in _load_summaries(engine)]
+        rows = [sample_digest(s) for s in load_summaries(engine)]
         return _TEMPLATES.TemplateResponse(request, "samples.html", {"rows": rows})
 
     @app.get("/samples/{sample_id}", response_class=HTMLResponse)
@@ -160,19 +63,19 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
         if not _validate_sample_id(sample_id):
             raise HTTPException(400, "非法样本 ID")
         summary = next(
-            (s for s in _load_summaries(engine) if s["_sample_id"] == sample_id), None
+            (s for s in load_summaries(engine) if s["_sample_id"] == sample_id), None
         )
         if summary is None:
             raise HTTPException(404, "样本不存在")
-        d = _digest(summary)
-        d["has_report"] = _report_path(engine, sample_id).is_file()
+        d = sample_digest(summary)
+        d["has_report"] = report_path(engine, sample_id).is_file()
         return _TEMPLATES.TemplateResponse(request, "sample_detail.html", {"d": d})
 
     @app.get("/samples/{sample_id}/report")
     def sample_report(sample_id: str) -> FileResponse:
         if not _validate_sample_id(sample_id):
             raise HTTPException(400, "非法样本 ID")
-        path = _report_path(engine, sample_id)
+        path = report_path(engine, sample_id)
         if not path.is_file():
             raise HTTPException(404, "该样本尚未生成 HTML 报告")
         return FileResponse(path, media_type="text/html")
@@ -185,25 +88,10 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
         mlst_st: str = "",
         amr_gene: str = "",
     ) -> HTMLResponse:
-        rows = [_digest(s) for s in _load_summaries(engine)]
-        terms = [q.lower() for q in query.split() if q.strip()]
-        ser_l, st_u, gene_l = (
-            serotype.strip().lower(), mlst_st.strip().upper(), amr_gene.strip().lower()
+        rows = [sample_digest(s) for s in load_summaries(engine)]
+        hits = search_rows(
+            rows, query=query, serotype=serotype, mlst_st=mlst_st, amr_gene=amr_gene
         )
-        hits = []
-        for r in rows:
-            hay = " ".join(
-                [r["verdict"], r["serovar"], r["st"], *r["card_genes"], *r["vfdb_genes"]]
-            ).lower()
-            if terms and not all(t in hay for t in terms):
-                continue
-            if ser_l and ser_l not in r["serovar"].lower():
-                continue
-            if st_u and r["st"].upper() != st_u:
-                continue
-            if gene_l and gene_l not in [g.lower() for g in r["card_genes"] + r["vfdb_genes"]]:
-                continue
-            hits.append(r)
         return _TEMPLATES.TemplateResponse(
             request,
             "search.html",
@@ -293,5 +181,52 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
         except KeyError as exc:
             raise HTTPException(404, "任务不存在") from exc
         return RedirectResponse(f"/tasks/{task_id}", status_code=303)
+
+    # -- 会话式助手（LLM 规划 → 确认 → 提交） --------------------------------
+
+    _agent_sessions: dict[str, dict[str, Any]] = {}
+
+    @app.get("/assistant", response_class=HTMLResponse)
+    def assistant_page(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(
+            request, "assistant.html", {"sid": "", "reply": None, "text": "", "results": None}
+        )
+
+    @app.post("/assistant", response_class=HTMLResponse)
+    def assistant_ask(
+        request: Request, text: str = Form(...), sid: str = Form("")
+    ) -> HTMLResponse:
+        from uuid import uuid4
+
+        from bacmap.interfaces.assistant import build_session
+
+        if not sid or sid not in _agent_sessions:
+            sid = uuid4().hex
+            _agent_sessions[sid] = {"session": build_session(engine), "plan": None}
+        entry = _agent_sessions[sid]
+        reply = entry["session"].respond(text)
+        entry["plan"] = reply.plan
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "assistant.html",
+            {"sid": sid, "reply": reply, "text": "", "results": None},
+        )
+
+    @app.post("/assistant/execute", response_class=HTMLResponse)
+    def assistant_execute(request: Request, sid: str = Form(...)) -> HTMLResponse:
+        from bacmap.interfaces.assistant import execute_plan
+
+        entry = _agent_sessions.get(sid)
+        plan = entry["plan"] if entry else None
+        if plan is None or not plan.tasks:
+            raise HTTPException(400, "没有待执行的计划")
+        results = execute_plan(engine, plan, submitted_by="web")
+        if entry is not None:
+            entry["plan"] = None
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "assistant.html",
+            {"sid": sid, "reply": None, "text": "", "results": results},
+        )
 
     return app

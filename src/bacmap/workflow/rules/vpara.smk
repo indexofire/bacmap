@@ -1,23 +1,10 @@
 import sys
 
 # V. parahaemolyticus 相关规则
-# v1.4.7：vpara_targets（物种靶点判定）与 vpara_serotype（O/K 血清型）分别外移
-# gside / gapit（用户裁定），集成前输出占位。
-# v1.4.9：vpara_virulence 完成 gapit 换装（ADR-20）——改用 gapit 自定义库
-# `vpara_virulence`（tdh/trh/tlh），DB 由部署期 build_gapit_db.py 构建于
-# `$BACMAP_HOME/refs/gapit/`。
-
-rule vpara_targets:
-    input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
-    output:
-        result = str(WORKDIR) + "/{sample}/vpara/targets_blastn.tsv",
-        verdict = str(WORKDIR) + "/{sample}/vpara/species_verdict.txt"
-    shell:
-        "mkdir -p $(dirname {output.result}) && "
-        "touch {output.result} && "
-        "echo pending_gside > {output.verdict}"
-
+# 物种靶点判定由 gside species 统一承担（ADR-20，见 rules/species.smk），此处不再保留
+# `vpara_targets` 占位规则。
+# v1.4.7：vpara_serotype（O/K 血清型）外移 gapit，集成前输出占位。
+# v1.4.9：vpara_virulence 完成 gapit 换装（gapit 自定义库 vpara_virulence）。
 
 rule vpara_virulence:
     input:

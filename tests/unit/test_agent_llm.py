@@ -399,3 +399,12 @@ class TestTierAndCache:
         c = gw._agent_for(ep, IntentResult, None, "instr-A")
         assert a is c and a is not b
         assert calls == ["instr-A", "instr-B"]
+
+
+def test_model_settings_applies_request_timeout():
+    from bacmap.agent.llm.gateway import _model_settings
+
+    ms = _model_settings(
+        LlmEndpoint(name="e", base_url="http://x/v1", model="m", request_timeout_s=123)
+    )
+    assert ms.get("timeout") == 123.0

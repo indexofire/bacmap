@@ -8,17 +8,83 @@ bacmap has three entry points: the **CLI** (operations), the **web task console*
 
 ```bash
 bacmap --version
-bacmap web [--host 127.0.0.1] [--port 8800]   # Web 任务台（默认仅绑本机）
-bacmap mcp [--read-only] [--home H]           # stdio MCP 服务器（智能体接入用）
+bacmap ask "跑 SAM-001 的分析并和去年暴发株比较"   # LLM 规划 → 确认 → 提交
+bacmap chat                                        # 多轮对话式分析助手
+bacmap tui [--home H]                              # 全屏 TUI（Textual）
+bacmap console [--home H]                          # 交互式菜单
+bacmap overview [--json]                           # 系统概览
+bacmap task ls|show|submit|approve|cancel          # 任务查询与写操作（显式、无 LLM）
+bacmap sample ls|show                              # 样本浏览
+bacmap search --query <kw>                          # 样本检索
+bacmap web [--host 127.0.0.1] [--port 8800]        # Web 控制台（含助手）
+bacmap mcp [--read-only] [--home H]                # MCP 服务器（stdio/HTTP）
 ```
 
-## 2. Web task console (the main interface for humans)
+Query subcommands accept `--json`. Writes always go through the same gates as Web/MCP.
+
+## 2. LLM-driven assistant (CLI ask/chat, TUI Chat, Web /assistant)
+
+The built-in assistant turns a natural-language analysis need into an executable plan.
+It is the shared **agent session** (`agent/session.py`) used by all three interfaces
+(ADR-10 planner + ADR-11 open path):
+
+1. **Understand + look around**: the LLM may call read tools (`bio_list_samples`,
+   `bio_get_result`, `bio_search_samples`, `bio_query_metadata`, `bio_review_flags`,
+   `bio_compare_runs`) to ground itself.
+2. **Plan**: it returns a structured plan of closed task types — `analyze` (standard
+   Snakemake pipeline) or `curate` for most requests; `mine` for deep mining where it
+   writes a Python script (charts / tables) to run in the sandbox, and multiple sequential
+   `mine` tasks for multi-step work; `write` for documents.
+3. **Clarify**: when the request is ambiguous it asks instead of guessing.
+4. **Confirm (risk-tiered)**: reads/analysis-of-existing-results run inside planning;
+   **writes are only submitted after confirmation** (`bacmap ask` prompts, add `--yes` to
+   skip; TUI: `Ctrl+Y` or the button; Web: the confirm button).
+5. **Degrade (C3)**: if the LLM endpoint is unavailable, the assistant says so and you fall
+   back to the explicit subcommands / task form — the deterministic path always works.
+
+Example:
+
+```bash
+$ bacmap ask "把本地沙门菌按 ST 统计并画图"
+bacmap › 建议先统计再绘图。
+建议执行的分析计划：
+  1. mine —— 按 ST 聚合本地沙门菌并输出统计 CSV
+  2. mine —— 由统计 CSV 绘制 ST 分布图
+确认提交该计划？ [y/N]
+```
+
+## 3. TUI and interactive console
+
+`bacmap tui` starts a chat-first Textual workspace (inspired by opencode's TUI and the hermes
+agent REPL): a **status header** (LLM endpoint), a collapsible **sidebar** (Tasks / Samples),
+the **conversation**, a **plan hint**, and the **prompt**, with a **footer** of key hints.
+
+- **Direct keys**: `Enter` send · `Shift/Alt+Enter` newline · `Esc` interrupt / ignore the
+  pending plan · `Ctrl+C` quit · `Ctrl+B` toggle sidebar · `Ctrl+R` refresh · `Ctrl+L` clear
+  conversation · `Ctrl+F` toggle follow (stop auto-scroll while reading back) · `Ctrl+P`
+  command palette · `Ctrl+Y` confirm the pending plan.
+- **Leader `Ctrl+X`** chords: `n` new session · `l` tasks · `s` samples · `m` model/endpoint ·
+  `t` theme · `h` help · `q` quit.
+- **Slash commands** in the prompt: `/help /new /clear /tasks /samples /search <kw> /model`
+  `/analyze <样本> /curate [scope] /quit` (the `/analyze` and `/curate` commands are the
+  explicit no-LLM path).
+
+The prompt is the assistant: plan → confirm (`Ctrl+Y`) → submit. The sidebar auto-collapses on
+narrow terminals and restores your preference when width returns. `bacmap console` remains a
+numbered menu for users who prefer prompts over subcommands.
+
+## 4. Web console (tasks / assistant / samples / search)
 
 Run `bacmap web`, then open `http://127.0.0.1:8800` in a browser:
 
-1. **Submit a task**: pick the task type in the form on the left and fill in the sample list (analyze) or a scope JSON (curate)
-2. **Monitor**: the task table on the right shows live status with six state badges (queued / running / pending approval / completed / failed / canceled); open a detail page and it refreshes itself every 2 seconds
-4. **Query results**: the Samples pages browse completed samples (list, per-sample detail with detected genes, HTML report download); the Search page finds samples by keyword (species / serotype / ST / gene) or structured filters.
+1. **Assistant** (`/assistant`): describe the need in natural language; the page shows the
+   assistant's reply and the proposed plan, with a button to confirm and submit (multi-turn
+   session kept server-side).
+2. **Submit a task** (Tasks page): the explicit form (task type + sample list / scope JSON).
+3. **Monitor**: six state badges (queued / running / pending approval / completed / failed
+   / canceled); the detail page refreshes every 2 seconds.
+4. **Query results**: the Samples pages browse completed samples (list, per-sample detail
+   with detected genes, HTML report download); Search finds samples by keyword or filters.
 3. **Approve**: when a task reaches `pending approval`, an amber approval card appears on the detail page. Fill in the approver, the decision (approve/reject), and the signature passphrase. After submission the task passes the mining gate / release gate and proceeds
 
 > Approval is one of the six gates: unsigned mining output cannot enter a report, and a
@@ -43,7 +109,7 @@ ssh -L 8800:127.0.0.1:8800 user@10.0.0.5
 - No root needed, no firewall port to open on the workstation, no authentication layer added to bacmap
 - Data files are still registered on the workstation by the operator, per [configuration guide §5](configuration.md); remote upload is a planned feature (to be considered once the agent-side bioinformatics analysis features are done)
 
-## 3. MCP agent access
+## 5. MCP agent access
 
 Any client that supports MCP stdio can connect (Hermes / Codex / OpenCode / OpenClaw / Claude, and more). Sample client configurations:
 
@@ -91,7 +157,7 @@ A typical exchange with an agent:
 > "Run the full analysis for SAM-TYP-001" → the agent calls `bacmap_submit_task`(analyze) → gets a task_id
 > → polls `bacmap_task_status` → "Completed, the report is in results/SAM-TYP-001/report/"
 
-## 4. Four task types and their gates
+## 6. Four task types and their gates
 
 | Task | What it does | Key gate |
 |---|---|---|
@@ -102,7 +168,7 @@ A typical exchange with an agent:
 
 Checkpoint resume: the task engine is built on DBOS. Kill a running process and restart it, and the task continues from its checkpoint (verified in V2).
 
-## 5. End-to-end example (new sample on the sequencer → report)
+## 7. End-to-end example (new sample on the sequencer → report)
 
 ```bash
 # ① 布局数据并注册
@@ -116,7 +182,7 @@ echo -e "SAM-NEW-100\tSalmonella\tgs/SAM-NEW-100/SAM-NEW-100_R1.fastq.gz\tgs/SAM
 ls ~/.local/share/bacmap/results/SAM-NEW-100/report/
 ```
 
-## 6. Known capability boundaries (external tool dependencies)
+## 8. Known capability boundaries (external tool dependencies)
 
 | Field / capability | Status | Waiting on |
 |---|---|---|

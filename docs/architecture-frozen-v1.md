@@ -1,6 +1,6 @@
 [English](architecture-frozen-v1.en.md) | **简体中文（权威）**
 
-# BacMAP Standalone 框架设计（冻结版 v1.4.9）
+# BacMAP Standalone 框架设计（冻结版 v1.4.10）
 
 - **日期**：2026-10-09（v1.1–v1.4.7 同日修订，见第 10 节）
 - **状态**：冻结（Frozen）。第 8 节的验证项全部通过后，转为"已确认"
@@ -706,3 +706,4 @@ bacmap/
 | v1.4.7 | 2026-10-09 | **两条用户裁定即时生效**：①血清型三模块彻底放弃（推翻 v1.4.6 迁移脚手架式的临时恢复），gapit 承接，规则改 `pending_gapit` 占位；②**物种鉴定分析能力全部外移 gside**——species_identifier/taxonomic_validator/sourmash_identifier/ani_identifier/species_consensus 五模块与 4 个物种类工具（validate_taxonomy/species_compare/db_setup/db_status）立即删除（注册表 24 工具），species/taxonomy/vpara_targets 规则改 `pending_gside` 占位；测试基线 1004 passed / 1 skipped，ruff 与契约全绿；V1 比对范围相应修订（物种/血清型字段 SKIP）；deploy() 修复（重部署保留 .snakemake 续跑状态） | 用户两条裁定 + 实施验证 |
 | v1.4.8 | 2026-10-10 | **用户裁定：取消插件通道，仅保留 MCP**——`bacmap.adapters` 包、`hermes_agent.plugins` entry-point、importlinter forbidden 层中的 adapters 条目删除；Hermes 侧 `~/.hermes/plugins/hermes_bacmap` 目录与 plugins.enabled 条目移除（该插件自 09-18 起已因语法错误加载失败）；ADR-15 接入方式修订为 MCP 唯一通道，插件钩子防线条款废止。前置事实：V4 已实测 MCP 通路（✓ Connected 2038ms / 22 工具全量发现，含写操作唯一入口 bacmap_submit_task） | 用户裁定 + 实施验证 |
 | v1.4.9 | 2026-10-15 | **ADR-20 实现落地：vpara_virulence 完成 gapit 换装**——删除内联 blastn 筛查，改用 gapit 自定义库 `vpara_virulence`（tdh/trh/tlh）；库由部署期 `workflow/scripts/build_gapit_db.py` 构建于 `$BACMAP_HOME/refs/gapit/` 并登记 `refs/manifest.json`（ADR-18 `ref_databases` 可追溯）；规则输出归一化为既有 `virulence.json` 契约并新增 tool/database/hits 溯源字段。至此 ADR-20 替换表中的 direct blastn 编排类规则仅余 amrfinderplus（NCBI 专用工具）与 kraken2_prefilter（reads 级预筛），二者不在 gapit 三库职责范围内，维持现状。测试基线 1101 passed / 1 skipped | 实施验证（含真实 gapit 建库 + Snakemake 规则端到端冒烟） |
+| v1.4.10 | 2026-10-15 | **清理 gside 已覆盖的专项占位规则**：删除 `species_ani`/`species_sourmash`（alternate 物种鉴定档——gside `all` 模式内部已完成多法仲裁并自动纳入 GTDB-Tk 档）、`taxonomy.smk`（`taxonomy_validation`，属 gside GTDB-Tk 能力）、`vpara_targets`（vpara 物种靶点判定，属 gside species）；Snakefile 移除 `_ALT_*`/`_STANDARD_ACTIVE` 档位门控（`.smk` 11→10）。物种与分类学鉴定收敛为单一入口 `species_identify`（`gside species`，档位由 `species_mode` 选择）。测试基线 1101 passed / 1 skipped | 用户裁定 + 实施验证 |

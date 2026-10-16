@@ -3,7 +3,7 @@
 # bacmap
 
 本地病原菌基因组分析系统（含内置智能体层）——standalone 架构，冻结设计见
-[docs/architecture-frozen-v1.md](docs/architecture-frozen-v1.md)（v1.4.9）。
+[docs/architecture-frozen-v1.md](docs/architecture-frozen-v1.md)（v1.4.10）。
 
 ## 定位
 
@@ -28,16 +28,24 @@ bacmap --help         # 统一命令行入口
 
 | 命令 | 说明 |
 |---|---|
+| `bacmap ask "<需求>" [--yes]` | **LLM 驱动**：理解需求、调用只读工具、给出计划、确认后提交 |
+| `bacmap chat` | 多轮对话式分析助手（同一会话） |
+| `bacmap tui [--home H]` | 会话优先 TUI（Textual）：助手对话、侧栏（任务/样本）、leader 和弦（`Ctrl+X`）、斜杠命令 |
+| `bacmap console [--home H]` | 交互式菜单（rich），面向偏好引导式操作的用户 |
+| `bacmap overview [--json]` | 系统概览（端点 / 数据策略 / 版本 / 路径 / 沙箱） |
+| `bacmap task ls\|show\|submit\|approve\|cancel` | 任务查询与写操作（显式、无 LLM 路径） |
+| `bacmap sample ls\|show` / `bacmap search` | 样本浏览与检索 |
 | `bacmap mcp [--read-only] [--home H]` | 启动 MCP 服务器：stdio（默认）或带 Bearer 鉴权的 Streamable HTTP（ADR-12；23 个工具） |
-| `bacmap web [--host 127.0.0.1] [--port 8800]` | 启动 Web 任务台：任务管理 + 结果浏览 / 检索 / 报告（默认仅绑本机） |
+| `bacmap web [--host 127.0.0.1] [--port 8800]` | 启动 Web 控制台（任务 / 助手 / 样本 / 检索 / 报告） |
 | `bacmap --version` | 版本号 |
 
-等价模块方式：`python -m bacmap.interfaces.mcp` / `python -m bacmap.interfaces.web`。
+查询类子命令均支持 `--json` 便于脚本消费。等价模块方式：
+`python -m bacmap.interfaces.mcp` / `python -m bacmap.interfaces.web`。
 
 ## 开发
 
 ```bash
-pixi run -e dev test        # pytest（基线：1101 passed / 1 skipped）
+pixi run -e dev test        # pytest（基线：1136 passed / 1 skipped）
 pixi run -e dev lint        # ruff
 pixi run -e dev contracts   # import-linter 依赖方向契约
 ```

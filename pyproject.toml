@@ -17,6 +17,7 @@ dependencies = [
     "pyrodigal>=3.0",
     "mappy>=2.24",
     "pyyaml>=6.0",
+    "textual>=0.80",
 ]
 
 [project.optional-dependencies]

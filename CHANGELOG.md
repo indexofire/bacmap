@@ -6,6 +6,23 @@
 ## [未发布]
 
 ### 新增
+- **LLM 驱动的会话助手（三端统一）**：`agent/session.py`（多轮、只读工具、结构化 `AnalysisPlan`，
+  ADR-10 规划型 + ADR-11 开放路径）。简单需求规划为 `analyze`/`curate`（Snakemake 路径）；
+  深度挖掘规划为 `mine`（LLM 写脚本、沙箱执行，可多步）或 `write`。写操作**分级确认**后经同一任务引擎提交；
+  无 LLM 时降级到显式子命令/表单（C3）。新增 `assistant` 角色三文件。
+  - CLI：`bacmap ask "<需求>"`（一次性）、`bacmap chat`（多轮）。
+  - TUI：对话页即助手（规划 → `Ctrl+Y`/按钮确认 → 提交）。
+  - Web：`/assistant` 页（多轮会话保存在服务端 + 确认提交按钮）。
+- 网关新增 `run_agent`（带工具智能体，ADR-08 Tool Output 模式），与 `structured` 共用端点/数据分级/角色校验。
+- **CLI 扩展**：`bacmap tui|console|overview|task {ls,show,submit,approve,cancel}|sample {ls,show}|search`，
+  查询类子命令支持 `--json`。写操作与 Web/MCP 走同一套门与审批。
+- **全屏 TUI（Textual，会话优先重构）** `bacmap tui`：状态头（LLM 端点）+ 可折叠侧栏
+  （任务/样本）+ 会话区 + 计划提示 + 输入框 + 按键提示栏。参考 opencode TUI 的 leader 和弦
+  （`Ctrl+X` 后 `n/l/s/m/t/h/q`）与命令面板（`Ctrl+P`）、hermes agent 的 REPL 语义（`Esc` 中断、
+  斜杠命令）。直接键：`Ctrl+B` 侧栏、`Ctrl+R` 刷新、`Ctrl+L` 清屏、`Ctrl+Y` 确认计划；
+  斜杠命令 `/help /new /clear /tasks /samples /search /model /analyze /curate /quit`。
+- **交互式菜单** `bacmap console`（rich）：面向偏好引导式操作的用户。
+- **共享视图层** `interfaces/views.py`：Web / CLI / TUI 三端复用同一只读视图逻辑。
 - **MCP Streamable HTTP 传输（ADR-12）**：`bacmap mcp --transport http`（仅绑 127.0.0.1 或 unix socket，强制 Bearer token，DNS-rebinding 防护）；stdio 仍为默认。
 - **Web 可选鉴权（ADR-14）**：`BACMAP_WEB_TOKEN` 配置后全站 Bearer 校验，用于局域网访问。
 - **`bio_compare_runs` 运行比较工具（ADR-18）**：比较同一样本两次运行的来源与结果，归因差异，来源相同而结果不同判为 `NOT_REPRODUCIBLE`（注册表 23→24；MCP 暴露 22→23）。
@@ -29,6 +46,10 @@
   工具调用参数 45/46、挖掘样例 3/3、许可证确认、IQ3_XXS 单档+仲裁裁决。
 
 ### 变更
+- **清理 gside 已覆盖的专项占位规则（冻结文档 v1.4.10）**：删除
+  `species_ani`/`species_sourmash`（alternate 物种鉴定档，gside `all` 已含多法仲裁）、
+  `taxonomy.smk`、`vpara_targets`；Snakefile 移除 `_ALT_*`/`_STANDARD_ACTIVE` 档位门控
+  （`.smk` 11→10）。物种/分类学鉴定收敛为单一 `species_identify`（gside）。
 - **vpara_virulence 换装 gapit（ADR-20，冻结文档 v1.4.9）**：删除内联 blastn 筛查，
   改用 gapit 自定义库 `vpara_virulence`（tdh/trh/tlh）；部署期
   `workflow/scripts/build_gapit_db.py` 自动建库于 `$BACMAP_HOME/refs/gapit/` 并登记

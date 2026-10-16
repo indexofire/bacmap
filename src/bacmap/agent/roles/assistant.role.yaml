@@ -1,0 +1,18 @@
+name: assistant
+task_types: [analyze, curate, mine, write]
+min_model_tier: T2
+allowed_locations: [local, lan]
+max_data_class: D4
+trust_layer: L2
+tools:
+  - bio_list_samples
+  - bio_get_result
+  - bio_search_samples
+  - bio_query_metadata
+  - bio_review_flags
+  - bio_diagnose
+  - bio_compare_runs
+fs_scope:
+  read: ["${GOM_EXPORT}", "${RESULTS_DIR}"]
+  write: ["${TASK_WORKSPACE}"]
+network: false

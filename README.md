@@ -4,7 +4,7 @@
 
 A local pathogen genome analysis system (with a built-in agent layer), built on a
 standalone architecture. The frozen design is documented in
-[docs/architecture-frozen-v1.md](docs/architecture-frozen-v1.md) (v1.4.9).
+[docs/architecture-frozen-v1.md](docs/architecture-frozen-v1.md) (v1.4.10).
 
 ## Overview
 
@@ -30,16 +30,23 @@ bacmap --help         # 统一命令行入口
 
 | Command | Description |
 |---|---|
+| `bacmap ask "<需求>" [--yes]` | **LLM-driven**: understands the request, consults read tools, proposes a plan, confirms, submits |
+| `bacmap chat` | Multi-turn conversational analysis assistant (same agent session) |
+| `bacmap tui [--home H]` | Chat-first TUI (Textual): assistant conversation, sidebar (tasks/samples), leader chords (`Ctrl+X`), slash commands |
+| `bacmap console [--home H]` | Interactive menu (rich) for users who prefer prompts over subcommands |
+| `bacmap overview [--json]` | System overview (endpoints / data policy / versions / paths / sandbox) |
+| `bacmap task ls\|show\|submit\|approve\|cancel` | Task query and write operations (explicit, no-LLM path) |
+| `bacmap sample ls\|show` / `bacmap search` | Sample browsing and search |
 | `bacmap mcp [--read-only] [--home H]` | Start the MCP server: stdio (default) or Streamable HTTP with bearer auth (ADR-12; 23 tools) |
-| `bacmap web [--host 127.0.0.1] [--port 8800]` | Start the web console: task management plus results browsing / search / reports (localhost only by default) |
-| `bacmap --version` | Print the version |
+| `bacmap web [--host 127.0.0.1] [--port 8800]` | Start the web console (tasks / assistant / samples / search / reports) |
 
-Equivalent module form: `python -m bacmap.interfaces.mcp` / `python -m bacmap.interfaces.web`.
+All query subcommands accept `--json` for scripting. Equivalent module form:
+`python -m bacmap.interfaces.mcp` / `python -m bacmap.interfaces.web`.
 
 ## Development
 
 ```bash
-pixi run -e dev test        # pytest（基线：1101 passed / 1 skipped）
+pixi run -e dev test        # pytest（基线：1136 passed / 1 skipped）
 pixi run -e dev lint        # ruff
 pixi run -e dev contracts   # import-linter 依赖方向契约
 ```

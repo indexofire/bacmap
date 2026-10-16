@@ -5,7 +5,7 @@ bacmap：本地病原菌基因组分析系统（单工作站、数据不出网�
 
 ## 黄金规则（违反任何一条即返工）
 
-1. **冻结文档是宪法**：`docs/architecture-frozen-v1.md`（v1.4.9）中标"冻结"的决策，
+1. **冻结文档是宪法**：`docs/architecture-frozen-v1.md`（v1.4.10）中标"冻结"的决策，
    修改必须在该文档第 10 节新增一条 `v1.4.x` 修订记录（原因、证据、迁移成本），
    并同步 `dev/research-framework-evidence.md` 的对应 §10.x 证据小节。
 2. **依赖方向契约（ADR-02）**：`core/store/tools` 不得导入
@@ -20,7 +20,7 @@ bacmap：本地病原菌基因组分析系统（单工作站、数据不出网�
 6. **生信分析外部化（ADR-20）**：只依赖基因组的分析一律外部工具
    （gside=物种鉴定、gapit=基因筛查/血清型、gmlst=MLST/cgMLST/MST），
    bacmap 只做编排、适配与"需结合本地数据的判定"。不要在 bacmap 里写生信算法。
-7. **测试基线不得回退**：当前 1101 passed / 1 skipped。删测试来"通过"是最严重违规。
+7. **测试基线不得回退**：当前 1136 passed / 1 skipped。删测试来"通过"是最严重违规。
 8. **dev/ 目录不入库**：开发调研资料（证据/辩论）仅本地阅读（已 gitignore），
    架构等项目说明文档放 docs/ 并随仓库提交。
 9. **文档双语制与及时同步**：英文为默认语言（README.md、docs/<name>.md），
@@ -54,10 +54,10 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟）
 | `core/` | 领域模型、表定义 | 最底层，不依赖任何上层 |
 | `store/` | GOM/知识库持久化 | 只依赖 core |
 | `tools/` | 工具注册表 + 24 个 bio_* 工具 | 只依赖 core/store |
-| `workflow/` | Snakemake 规则（11 个 .smk）与脚本 | pending_gapit/pending_gside/pending_external_tool 占位等外部工具 |
+| `workflow/` | Snakemake 规则（10 个 .smk）与脚本 | pending_gapit/pending_external_tool 占位等外部工具；物种鉴定整体交 gside |
 | `tasks/` | DBOS 任务引擎、门、特征库 | 唯一导入 dbos 的模块（ADR-02） |
-| `agent/` | 意图分类、LLM 网关、沙箱、仲裁 | 唯一导入 pydantic-ai 的位置 |
-| `interfaces/` | mcp/（MCPServer）、web/（FastAPI）、cli/（bacmap 命令） | 最上层 |
+| `agent/` | 意图分类、LLM 网关、会话助手、沙箱、仲裁 | 唯一导入 pydantic-ai 的位置 |
+| `interfaces/` | mcp/（MCPServer）、web/（FastAPI）、cli/（bacmap 命令）、tui/（Textual）、views.py（三端共享只读视图） | 最上层 |
 
 ## 外部工具依赖（pixi [pypi-dependencies]）
 
@@ -71,7 +71,9 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟）
 |---|---|---|
 | `workflow/rules/dec_shigella.smk`、`vpara.smk` 血清型 | `pending_gapit` | gapit 血清型子命令 |
 | `workflow/rules/annotation.smk` | `pending_external_tool` | gapit 注释子命令 |
-| `workflow/rules/species.smk` ani 档、`taxonomy.smk` | `pending_gside` | gside GTDB-Tk 档 |
+
+> 物种与分类学鉴定已整体由 gside 承担（`species_identify` 规则 + `species_mode` 档位），
+> 原 `species_ani`/`species_sourmash`/`taxonomy`/`vpara_targets` 占位规则已删除（v1.4.10）。
 
 ## 工作流（改动前必读）
 
