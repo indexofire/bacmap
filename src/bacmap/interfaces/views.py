@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-from collections import Counter
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as pkg_version
 from pathlib import Path
@@ -47,7 +46,10 @@ def overview_data(engine: DbosTaskEngine) -> dict[str, Any]:
         sandbox = "无可用后端（mine 任务将失败）"
     if os.environ.get("BACMAP_ALLOW_UNSANDBOXED") == "1":
         sandbox += " · 直通通道已开启"
-    counts = Counter(str(t["state"]) for t in engine.list_tasks())
+    try:
+        counts = engine.count_states()
+    except Exception:  # noqa: BLE001 —— 概览为只读展示，统计失败降级为空
+        counts = {}
     return {
         "endpoints": endpoints,
         "routing": cfg.routing,

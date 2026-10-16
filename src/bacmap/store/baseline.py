@@ -227,14 +227,18 @@ def load_candidate(db_path: Path, task_id: str) -> dict | None:
 
 
 def publish(db_path: Path, manifest: dict, created_by: str, signature: str) -> int:
-    """写入新发布版本（INSERT-ONLY）。返回版本号。"""
+    """写入新发布版本（INSERT-ONLY）。返回版本号。父版本记入 parent_version（ADR-19）。"""
     stats = compute_stats(manifest)
     with _conn(db_path) as conn:
         conn.execute(RELEASES_DDL)
+        prev = conn.execute(
+            "SELECT MAX(version) AS v FROM baseline_releases"
+        ).fetchone()
+        parent = int(prev["v"]) if prev is not None and prev["v"] is not None else None
         cur = conn.execute(
             "INSERT INTO baseline_releases (created_at, created_by, signature, n_strains,"
-            " scope_json, manifest_json, stats_json)"
-            " VALUES (?,?,?,?,?,?,?)",
+            " scope_json, manifest_json, stats_json, parent_version)"
+            " VALUES (?,?,?,?,?,?,?,?)",
             (
                 datetime.now(UTC).isoformat(),
                 created_by,
@@ -243,6 +247,7 @@ def publish(db_path: Path, manifest: dict, created_by: str, signature: str) -> i
                 json.dumps(manifest.get("scope", {}), ensure_ascii=False),
                 json.dumps(manifest, ensure_ascii=False),
                 json.dumps(stats, ensure_ascii=False),
+                parent,
             ),
         )
         return int(cur.lastrowid or 0)

@@ -505,3 +505,49 @@ class TestVerifyResultLayer3:
         )
         assert r["layer3"]["needs_human_review"] is True
         assert r["layer3"]["contradicted_count"] == 1
+
+
+class TestNonStringAndGomLifecycle:
+    """非字符串 mlst 不崩；GOM 读写用 with 关闭连接。"""
+
+    def test_extract_facts_tolerates_dict_mlst(self):
+        from bacmap.core.verify.nli_reflector import extract_facts
+
+        facts = extract_facts(
+            {"steps": {"species": {"verdict": "Salmonella"}, "mlst": {"st": "19"}}}, "X"
+        )
+        assert facts.mlst_st == ""
+
+    def test_record_and_readback_roundtrip(self, tmp_path):
+        from bacmap.core.verify.nli_reflector import (
+            latest_review_flag,
+            record_reflection_event,
+            reflect,
+        )
+        from bacmap.store.genome_object_service import (
+            GenomeObject,
+            GenomeObjectService,
+            ObjectType,
+        )
+
+        db = tmp_path / "gom.sqlite"
+        with GenomeObjectService(db) as gos:
+            gos.create(
+                GenomeObject(
+                    object_id="a1",
+                    object_type=ObjectType.ANALYSIS,
+                    version=1,
+                    schema_version="0.1.0",
+                    created_at=__import__("datetime").datetime.now(__import__("datetime").UTC),
+                    created_by="t",
+                    payload={},
+                    pipeline_version="v",
+                    database_versions={"card": "3"},
+                    strain_id="SAM-9",
+                )
+            )
+        facts = StrainFacts("SAM-9", "Salmonella", "19", "", (), (), ())
+        r = reflect("该株 ST34。", facts)  # 与事实 ST19 矛盾
+        assert record_reflection_event(db, "SAM-9", r) is True
+        flag = latest_review_flag(db, "SAM-9")
+        assert flag is not None and flag["sample_id"] == "SAM-9"

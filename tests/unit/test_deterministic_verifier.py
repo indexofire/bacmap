@@ -219,3 +219,25 @@ class TestVerifyAll:
         }
         result = v.verify_all(summary)
         assert result.checks[0].passed is True
+
+
+class TestSpeciesCommonPathogens:
+    """Layer 2 物种校验：识别常见病原（不再只认 Salmonella）。"""
+
+    def test_ecoli_and_common_pathogens_confirmed(self):
+        v = DeterministicVerifier()
+        for verdict in ("E. coli", "Shigella", "V. parahaemolyticus", "Klebsiella_pneumoniae"):
+            assert v.verify_species(verdict).passed is True, verdict
+
+    def test_negative_and_unknown_still_fail(self):
+        v = DeterministicVerifier()
+        for verdict in ("not_Salmonella", "", "ambiguous", "Unknown"):
+            assert v.verify_species(verdict).passed is False, verdict
+
+    def test_verify_all_tolerates_non_str_mlst(self):
+        v = DeterministicVerifier()
+        result = v.verify_all(
+            {"steps": {"species": {"verdict": "Klebsiella_pneumoniae"}, "mlst": {"st": "1"}}}
+        )
+        assert result.checks[0].passed is True  # 物种识别
+        assert result.passed is False  # mlst/serotype 缺失 → 未通过，但不崩

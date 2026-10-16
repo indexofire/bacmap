@@ -675,6 +675,12 @@ class DbosTaskEngine:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def count_states(self) -> dict[str, int]:
+        """按状态统计全部任务（概览页用；不受 list_tasks 的 limit 截断）。"""
+        with self._conn() as conn:
+            rows = conn.execute("SELECT state, COUNT(*) AS n FROM tasks GROUP BY state").fetchall()
+        return {str(r["state"]): int(r["n"]) for r in rows}
+
     def _update_state(self, task_id: TaskId, state: TaskState, message: str | None = None) -> None:
         now = datetime.now(UTC).isoformat()
         with self._conn() as conn:

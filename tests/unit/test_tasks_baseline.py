@@ -276,3 +276,17 @@ class TestBuildCandidateArbitraryIds:
         )
         c = baseline.build_candidate(tmp_path)
         assert [s["strain_id"] for s in c["strains"]] == ["CTX008"]
+
+
+class TestPublishParentVersion:
+    """ADR-19：发布版本记录 parent_version（版本链）。"""
+
+    def test_parent_version_chain(self, tmp_path):
+        from bacmap.store import baseline as b
+
+        db = tmp_path / "baseline.sqlite"
+        v1 = b.publish(db, _valid_candidate(), "mark", "sig1")
+        v2 = b.publish(db, _valid_candidate(), "mark", "sig2")
+        assert v2 == v1 + 1
+        assert b.get_release(db, v1)["parent_version"] is None
+        assert b.get_release(db, v2)["parent_version"] == v1

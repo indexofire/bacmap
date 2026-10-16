@@ -331,3 +331,31 @@ class TestSubmitHardening:
         with engine._conn() as conn:
             n = conn.execute("SELECT COUNT(*) AS c FROM tasks WHERE state='failed'").fetchone()["c"]
         assert n >= 1
+
+
+class TestCountStates:
+    """count_states 统计全部任务，不受 list_tasks 的 limit 截断（概览页口径）。"""
+
+    def test_counts_exceed_list_limit(self, engine):
+        for i in range(55):
+            _insert_task_helper(engine, f"t-done-{i}", "succeeded")
+        for i in range(5):
+            _insert_task_helper(engine, f"t-run-{i}", "running")
+        counts = engine.count_states()
+        assert counts.get("succeeded") == 55
+        assert counts.get("running") == 5
+        assert sum(counts.values()) == 60
+        assert len(engine.list_tasks()) == 50  # 列表默认截断，计数不截断
+
+
+def _insert_task_helper(e, tid: str, state: str) -> None:
+    import sqlite3
+
+    now = datetime.now(UTC).isoformat()
+    with sqlite3.connect(e.db) as conn:
+        conn.execute(
+            "INSERT INTO tasks (task_id, task_type, state, params_json, submitted_by,"
+            " created_at, updated_at, workflow_id, current_step)"
+            " VALUES (?,?,?,?,?,?,?,?,?)",
+            (tid, "curate", state, "{}", "t", now, now, "", "curate"),
+        )

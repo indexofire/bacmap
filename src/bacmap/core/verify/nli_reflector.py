@@ -156,9 +156,11 @@ def extract_facts(summary: dict[str, Any], sample_id: str) -> StrainFacts:
     ipah = str(dec.get("ipaH", "")) if isinstance(dec, dict) else ""
 
     mlst_raw = steps.get("mlst", "")
-    st = str(parse_mlst(mlst_raw).get("st", "")) if mlst_raw else ""
-    if st in ("N/A", "-"):
-        st = ""
+    st = ""
+    if isinstance(mlst_raw, str) and mlst_raw:
+        st = str(parse_mlst(mlst_raw).get("st", ""))
+        if st in ("N/A", "-"):
+            st = ""
 
     sero = steps.get("serotype", {})
     serotype = str(sero.get("sistr", "")) if isinstance(sero, dict) else ""
@@ -339,42 +341,42 @@ def record_reflection_event(db_path: Path, sample_id: str, reflection: Reflectio
     )
 
     try:
-        gos = GenomeObjectService(db_path)
-        # P3-2：挂到该 strain 最新版本的 ANALYSIS 对象（list_by_type 返回各
-        # object_id 的 MAX(version)，取 created_at 最新一条保证确定性——
-        # 原 first-match 在多 ANALYSIS 对象时挂载目标不确定）
-        target = None
-        for obj in gos.list_by_type(ObjectType.ANALYSIS):
-            if obj.strain_id == sample_id and (
-                target is None or obj.created_at > target.created_at
-            ):
-                target = obj
-        if target is None:
-            return False
-        gos.log_event(
-            target.object_id,
-            "nli_reflected",
-            {
-                "sample_id": sample_id,
-                "contradiction_rate": reflection.contradiction_rate,
-                "contradicted_count": reflection.contradicted_count,
-                "needs_human_review": reflection.needs_human_review,
-                "verifiable_count": reflection.verifiable_count,
-                "corroborated_count": reflection.corroborated_count,
-                "threshold": reflection.threshold,
-                "contradicted_claims": [
-                    {
-                        "claim_type": str(cv.claim.claim_type),
-                        "value": cv.claim.value,
-                        "negated": cv.claim.negated,
-                        "evidence": cv.evidence,
-                    }
-                    for cv in reflection.verdicts
-                    if cv.verdict is Verdict.CONTRADICTED
-                ],
-            },
-        )
-        return True
+        with GenomeObjectService(db_path) as gos:
+            # P3-2：挂到该 strain 最新版本的 ANALYSIS 对象（list_by_type 返回各
+            # object_id 的 MAX(version)，取 created_at 最新一条保证确定性——
+            # 原 first-match 在多 ANALYSIS 对象时挂载目标不确定）
+            target = None
+            for obj in gos.list_by_type(ObjectType.ANALYSIS):
+                if obj.strain_id == sample_id and (
+                    target is None or obj.created_at > target.created_at
+                ):
+                    target = obj
+            if target is None:
+                return False
+            gos.log_event(
+                target.object_id,
+                "nli_reflected",
+                {
+                    "sample_id": sample_id,
+                    "contradiction_rate": reflection.contradiction_rate,
+                    "contradicted_count": reflection.contradicted_count,
+                    "needs_human_review": reflection.needs_human_review,
+                    "verifiable_count": reflection.verifiable_count,
+                    "corroborated_count": reflection.corroborated_count,
+                    "threshold": reflection.threshold,
+                    "contradicted_claims": [
+                        {
+                            "claim_type": str(cv.claim.claim_type),
+                            "value": cv.claim.value,
+                            "negated": cv.claim.negated,
+                            "evidence": cv.evidence,
+                        }
+                        for cv in reflection.verdicts
+                        if cv.verdict is Verdict.CONTRADICTED
+                    ],
+                },
+            )
+            return True
     except (GOMValidationError, sqlite3.Error, OSError):
         logger.exception("record_reflection_event failed for %s", sample_id)
         return False
@@ -394,19 +396,19 @@ def latest_review_flag(db_path: Path, sample_id: str) -> dict[str, Any] | None:
     )
 
     try:
-        gos = GenomeObjectService(db_path)
-        latest = None
-        for obj in gos.list_by_type(ObjectType.ANALYSIS):
-            if obj.strain_id != sample_id:
-                continue
-            for ev in gos.list_events(obj.object_id):
-                if ev.event_type == "nli_reflected" and (
-                    latest is None or ev.timestamp > latest.timestamp
-                ):
-                    latest = ev
-        if latest is None:
-            return None
-        return {"timestamp": latest.timestamp.isoformat(), **latest.event_payload}
+        with GenomeObjectService(db_path) as gos:
+            latest = None
+            for obj in gos.list_by_type(ObjectType.ANALYSIS):
+                if obj.strain_id != sample_id:
+                    continue
+                for ev in gos.list_events(obj.object_id):
+                    if ev.event_type == "nli_reflected" and (
+                        latest is None or ev.timestamp > latest.timestamp
+                    ):
+                        latest = ev
+            if latest is None:
+                return None
+            return {"timestamp": latest.timestamp.isoformat(), **latest.event_payload}
     except (GOMValidationError, sqlite3.Error, OSError):
         logger.exception("latest_review_flag failed for %s", sample_id)
         return None

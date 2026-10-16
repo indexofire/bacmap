@@ -12,7 +12,7 @@ from typing import Any
 
 from bacmap.core.utils import parse_mlst
 
-from ..analysis.species_canon import collapse_binomial
+from ..analysis.species_canon import UNKNOWN, canonical_from_verdict, collapse_binomial
 
 _KNOWN_SEROGROUPS = frozenset(
     {
@@ -87,8 +87,14 @@ class DeterministicVerifier:
     """project.md §8.2 Layer 2 确定性规则校验。"""
 
     def verify_species(self, verdict: str) -> CheckResult:
-        if verdict == "Salmonella":
-            return CheckResult("species", True, f"Species confirmed: {verdict}")
+        """物种是否已确认：识别任一登记的常见病原（gside Genus_species），
+        仅 ``not_*`` 否定、空值或不可识别串判为未确认。"""
+        v = verdict.strip()
+        if not v or v.startswith("not_"):
+            return CheckResult("species", False, f"Species NOT confirmed: {verdict!r}")
+        canon = canonical_from_verdict(v)
+        if canon != UNKNOWN:
+            return CheckResult("species", True, f"Species confirmed: {canon}")
         return CheckResult("species", False, f"Species NOT confirmed: {verdict!r}")
 
     def verify_mlst(self, st: str, alleles: dict[str, str]) -> CheckResult:
@@ -208,6 +214,8 @@ class DeterministicVerifier:
 
     @staticmethod
     def _parse_mlst(mlst_text: str) -> tuple[str, dict[str, str]]:
+        if not isinstance(mlst_text, str) or not mlst_text:
+            return "", {}
         parsed = parse_mlst(mlst_text)
         raw_alleles = parsed.get("alleles", {})
 
