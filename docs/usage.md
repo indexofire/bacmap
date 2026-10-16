@@ -31,10 +31,12 @@ It is the shared **agent session** (`agent/session.py`) used by all three interf
 1. **Understand + look around**: the LLM may call read tools (`bio_list_samples`,
    `bio_get_result`, `bio_search_samples`, `bio_query_metadata`, `bio_review_flags`,
    `bio_compare_runs`) to ground itself.
-2. **Plan**: it returns a structured plan of closed task types — `analyze` (standard
-   Snakemake pipeline) or `curate` for most requests; `mine` for deep mining where it
-   writes a Python script (charts / tables) to run in the sandbox, and multiple sequential
-   `mine` tasks for multi-step work; `write` for documents.
+2. **Plan & execute**: it returns a structured plan of closed task types — `analyze` (standard
+   Snakemake pipeline) or `curate` for most requests; `mine` for deep mining where it writes a
+   Python script to run in the sandbox (multiple sequential `mine` tasks for multi-step work);
+   `write` for documents. During planning it can also call **`sandbox_run`** to execute a script
+   (no network) and read back stdout/artifacts — so it can iterate on statistics and **render
+   charts (PNG/CSV)** before proposing a `mine` task that goes through the mining gate.
 3. **Clarify**: when the request is ambiguous it asks instead of guessing.
 4. **Confirm (risk-tiered)**: reads/analysis-of-existing-results run inside planning;
    **writes are only submitted after confirmation** (`bacmap ask` prompts, add `--yes` to

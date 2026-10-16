@@ -82,7 +82,8 @@ cloud_max_data_class = "D1"            # 见 §3，不可通过配置放宽超�
 
 | 配置 | 默认 | 说明 |
 |---|---|---|
-| `BACMAP_ALLOW_UNSANDBOXED=1` | 关 | mine 任务直通执行（仅受控开发环境） |
+| `BACMAP_ALLOW_UNSANDBOXED=1` | 关 | mine / `sandbox_run` 的直通执行（仅受控开发环境） |
+| `BACMAP_SANDBOX_IMAGE` | `docker://python:3.12-slim` | `sandbox_run` 的沙箱镜像；绘图需镜像自带分析栈（matplotlib/pandas/numpy） |
 | 沙箱回退链 | Apptainer → Podman | 都不存在且未开启直通时 mine 任务失败 |
 | `llm.resources.co_located` | true | 模型与管线同机时启用内存仲裁 |
 | 仲裁阈值 | 24 GB 可用内存 | 低于阈值自动卸载 Strata → 跑重型步骤 → 自动恢复 |

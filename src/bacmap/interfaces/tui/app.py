@@ -11,12 +11,15 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from rich.markup import escape as _esc
 from textual import work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.css.query import NoMatches
+from textual.theme import Theme
 from textual.widgets import (
     DataTable,
     Footer,
@@ -29,19 +32,68 @@ from textual.widgets import (
 # 侧栏自动折叠阈值（tui-design：窄终端折叠次要面板，恢复时保留选择）
 _SIDEBAR_MIN_WIDTH = 96
 
+# 语义调色板（对齐 opencode 的克制暗色 + hermes skin 的语义槽 + tui-design 技能）。
+# 主题值集中在 Theme.variables，CSS 只用语义槽，不写死颜色。
+_BACMAP_DARK = Theme(
+    name="bacmap-dark",
+    primary="#7170ff",
+    secondary="#8b8bf5",
+    accent="#7170ff",
+    success="#3fb950",
+    warning="#d29922",
+    error="#f85149",
+    foreground="#e6edf3",
+    background="#0d1117",
+    surface="#161b22",
+    panel="#21262d",
+    dark=True,
+    variables={
+        "text-muted": "#8b949e",
+        "border": "#30363d",
+        "tool": "#d2a8ff",
+        "thinking": "#8b949e",
+        "user": "#79c0ff",
+        "assistant": "#3fb950",
+    },
+)
+_BACMAP_LIGHT = Theme(
+    name="bacmap-light",
+    primary="#4f46e5",
+    secondary="#6366f1",
+    accent="#4f46e5",
+    success="#1a7f37",
+    warning="#9a6700",
+    error="#cf222e",
+    foreground="#1f2328",
+    background="#ffffff",
+    surface="#f6f8fa",
+    panel="#eaeef2",
+    dark=False,
+    variables={
+        "text-muted": "#59636e",
+        "border": "#d0d7de",
+        "tool": "#8250df",
+        "thinking": "#59636e",
+        "user": "#0969da",
+        "assistant": "#1a7f37",
+    },
+)
+
 _CSS = """
-#sidebar { width: 38; border-right: solid $panel; }
+Screen { background: $background; }
+#sidebar { width: 38; border-right: solid $border; background: $surface; }
 #sidebar.hidden { display: none; }
-#sidebar-title { padding: 0 1; color: $text-muted; }
+.side-title { padding: 0 1; color: $text-muted; text-style: bold; }
 #tasks-table, #samples-table { height: 1fr; }
 #main { width: 1fr; }
-#conversation { height: 1fr; padding: 0 1; }
-#plan-hint { padding: 0 1; color: $warning; height: auto; }
-#prompt { dock: bottom; }
+#conversation { height: 1fr; padding: 0 2; }
+#plan-hint { padding: 0 2; color: $warning; height: auto; }
+#prompt { dock: bottom; border: round $border; }
+#prompt:focus { border: round $accent; }
 """
 
 _HELP = (
-    "[b]bacmap 会话助手[/b]\n"
+    "[b #3fb950]bacmap 会话助手[/]\n"
     "  输入自然语言分析需求；助手会查询样本、规划任务，写操作需确认后提交。\n"
     "  斜杠命令：/help /new /clear /tasks /samples /search <kw> /model "
     "/analyze <样本> /curate [scope] /quit\n"
@@ -84,6 +136,7 @@ class BacmapTUI(App[None]):
         self.engine = engine
         self._session: Any = None
         self._pending_plan: Any = None
+        self._chat_task: Any = None  # 在途会话 asyncio.Task（Esc 可取消）
         self._leader = False
         self._reply_seq = 0  # 递增令牌：Esc 后丢弃迟到的回复
         self._sidebar_wanted = True  # 用户的侧栏意图（宽终端时生效）
@@ -95,9 +148,9 @@ class BacmapTUI(App[None]):
         yield Header(show_clock=True)
         with Horizontal():
             with Vertical(id="sidebar"):
-                yield Static("任务", id="sidebar-title")
+                yield Static("任务", classes="side-title")
                 yield DataTable(id="tasks-table")
-                yield Static("样本", id="sidebar-title-s")
+                yield Static("样本", classes="side-title")
                 yield DataTable(id="samples-table")
             with Vertical(id="main"):
                 yield RichLog(id="conversation", markup=True, wrap=True)
@@ -109,6 +162,9 @@ class BacmapTUI(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
+        self.register_theme(_BACMAP_DARK)
+        self.register_theme(_BACMAP_LIGHT)
+        self.theme = "bacmap-dark"
         tasks = self.query_one("#tasks-table", DataTable)
         tasks.cursor_type = "row"
         tasks.add_columns("task", "state", "step")
@@ -140,7 +196,8 @@ class BacmapTUI(App[None]):
             status = endpoint_status(self.engine)
         except Exception as exc:  # noqa: BLE001
             status = f"检查失败（{type(exc).__name__}）"
-        self.call_from_thread(self._chat_append, f"[dim]LLM 端点：{status}[/dim]")
+        self.call_from_thread(self._chat_append, f"[#8b949e]LLM 端点：{status}[/]")
+        self.call_from_thread(setattr, self, "sub_title", f"LLM · {status}")
 
     @work(thread=True, exclusive=True)
     def refresh_data(self) -> None:
@@ -192,10 +249,16 @@ class BacmapTUI(App[None]):
             pass
 
     def _chat_append(self, markup: str) -> None:
-        self.query_one("#conversation", RichLog).write(markup)
+        try:
+            self.query_one("#conversation", RichLog).write(markup)
+        except NoMatches:  # 关闭/卸载中，忽略
+            return
 
     def _set_hint(self, text: str) -> None:
-        self.query_one("#plan-hint", Static).update(text)
+        try:
+            self.query_one("#plan-hint", Static).update(text)
+        except NoMatches:
+            return
 
     # -- 动作 ---------------------------------------------------------------
 
@@ -219,6 +282,8 @@ class BacmapTUI(App[None]):
         inp = self.query_one("#prompt", Input)
         inp.value = ""
         self._reply_seq += 1  # 丢弃迟到的回复
+        if self._cancel_chat():
+            self._chat_append("[#d29922]已取消在途请求[/]")
         if self._leader:
             self._leader = False
             self._set_hint("")
@@ -226,12 +291,13 @@ class BacmapTUI(App[None]):
         if self._pending_plan is not None:
             self._pending_plan = None
             self._set_hint("")
-            self._chat_append("[dim]已忽略待确认计划[/dim]")
+            self._chat_append("[#8b949e]已忽略待确认计划[/]")
 
     def action_leader(self) -> None:
         self._leader = True
         self._set_hint(
-            "[b]Leader[/b] 已激活：n 新会话 · l 任务 · s 样本 · m 模型 · t 主题 · h 帮助 · q 退出"
+            "[b #d29922]Leader[/] 已激活：n 新会话 · l 任务 · s 样本 · "
+            "m 模型 · t 主题 · h 帮助 · q 退出"
         )
 
     def action_focus_tasks(self) -> None:
@@ -244,7 +310,7 @@ class BacmapTUI(App[None]):
         self._show_endpoint()
 
     def action_toggle_theme(self) -> None:
-        self.theme = "textual-light" if self.theme == "textual-dark" else "textual-dark"
+        self.theme = "bacmap-light" if self.theme == "bacmap-dark" else "bacmap-dark"
 
     def action_help(self) -> None:
         self._chat_append(_HELP)
@@ -253,11 +319,11 @@ class BacmapTUI(App[None]):
         self._session = None
         self._pending_plan = None
         self.action_clear_conversation()
-        self._chat_append("[dim]已开始新会话[/dim]")
+        self._chat_append("[#8b949e]已开始新会话[/]")
 
     def action_confirm_plan(self) -> None:
         if self._pending_plan is None:
-            self._chat_append("[dim]当前没有待确认的计划[/dim]")
+            self._chat_append("[#8b949e]当前没有待确认的计划[/]")
             return
         self._do_confirm_plan(self._pending_plan)
 
@@ -287,7 +353,7 @@ class BacmapTUI(App[None]):
         if text.startswith("/"):
             self._run_slash(text)
             return
-        self._run_chat(text)
+        self._start_chat(text)
 
     def _run_slash(self, text: str) -> None:
         parts = text[1:].split(maxsplit=1)
@@ -312,7 +378,7 @@ class BacmapTUI(App[None]):
         elif cmd in ("analyze", "curate"):
             self._slash_submit(cmd, arg)
         else:
-            self._chat_append(f"[red]未知命令：/{cmd}（输入 /help）[/red]")
+            self._chat_append(f"[#f85149]未知命令：/{cmd}（输入 /help）[/]")
 
     @work(thread=True, exclusive=False)
     def _slash_search(self, query: str) -> None:
@@ -320,7 +386,7 @@ class BacmapTUI(App[None]):
 
         hits = search_rows(sample_rows(self.engine), query=query)
         text = "、".join(r["sample_id"] for r in hits) or "无命中"
-        self.call_from_thread(self._chat_append, f"[dim]检索 {_esc(query)!r}：{_esc(text)}[/dim]")
+        self.call_from_thread(self._chat_append, f"[#8b949e]检索 {_esc(query)!r}：{_esc(text)}[/]")
 
     @work(thread=True, exclusive=False)
     def _slash_submit(self, task_type: str, arg: str) -> None:
@@ -332,51 +398,66 @@ class BacmapTUI(App[None]):
         if task_type == "analyze":
             samples = [s.strip() for s in arg.replace(",", " ").split() if s.strip()]
             if not samples:
-                self.call_from_thread(self._chat_append, "[red]用法：/analyze <样本ID>[/red]")
+                self.call_from_thread(self._chat_append, "[#f85149]用法：/analyze <样本ID>[/]")
                 return
             params["samples"] = samples
         elif arg:
             try:
                 params["scope"] = json.loads(arg)
             except ValueError:
-                self.call_from_thread(self._chat_append, "[red]scope 不是合法 JSON[/red]")
+                self.call_from_thread(self._chat_append, "[#f85149]scope 不是合法 JSON[/]")
                 return
         try:
             tid = self.engine.submit(TaskType(task_type), params, "tui")
             msg = f"[green]已提交 {_esc(task_type)}：{_esc(tid)}[/green]"
         except (ValueError, NotImplementedError) as exc:
-            msg = f"[red]提交失败：{_esc(str(exc))}[/red]"
+            msg = f"[#f85149]提交失败：{_esc(str(exc))}[/]"
         self.call_from_thread(self._chat_append, msg)
         self.refresh_tasks()
 
     # -- 会话（LLM 规划） ---------------------------------------------------
 
     @work(thread=True, exclusive=False)
-    def _run_chat(self, text: str) -> None:
+    def _start_chat(self, text: str) -> None:
+        """启动一轮会话（Textual worker）；新请求取消上一轮在途请求。"""
+        self._chat_task = self.run_worker(
+            self._chat_async(text), group="chat", exclusive=True, exit_on_error=False
+        )
+
+    def _cancel_chat(self) -> bool:
+        worker = self._chat_task
+        if worker is not None and not worker.is_finished:
+            worker.cancel()
+            return True
+        return False
+
+    async def _chat_async(self, text: str) -> None:
         self._reply_seq += 1
         token = self._reply_seq
-        self.call_from_thread(self._chat_append, f"[cyan]你[/cyan] › {_esc(text)}")
-        self.call_from_thread(self._set_hint, "…思考中（首次调用较慢，Esc 可放弃显示）")
+        self._chat_append(f"[#79c0ff]你[/] › {_esc(text)}")
+        self._set_hint("…思考中（首次调用较慢，Esc 可取消）")
         try:
             if self._session is None:
                 from bacmap.interfaces.assistant import build_session
 
                 self._session = build_session(self.engine)
-            reply = self._session.respond(text)
+            reply = await self._session.respond_async(text)
+        except asyncio.CancelledError:
+            self._set_hint("[#d29922]已在途请求已取消[/]")
+            raise
         except Exception as exc:  # noqa: BLE001
-            self.call_from_thread(
-                self._chat_append,
-                f"[red]助手调用失败：{_esc(type(exc).__name__)}: {_esc(str(exc))}[/red]",
+            self._chat_append(
+                f"[#f85149]助手调用失败：{_esc(type(exc).__name__)}: {_esc(str(exc))}[/]"
             )
-            self.call_from_thread(self._set_hint, "")
+            self._set_hint("")
             return
         if token != self._reply_seq:  # 已被 Esc 放弃
             return
-        self.call_from_thread(self._chat_reply, reply)
+        self._chat_reply(reply)
 
     def _chat_reply(self, reply: Any) -> None:
         # 助手文本被视为不可信显示数据：转义 Rich 标记，避免注入改版式/控制序列。
-        self._chat_append(f"[green]bacmap[/green] › {_esc(reply.message)}")
+        self._chat_append(f"[#3fb950]bacmap[/] › {_esc(reply.message)}")
         plan = reply.plan
         if plan is not None and plan.tasks:
             from bacmap.interfaces.assistant import format_plan
@@ -397,7 +478,7 @@ class BacmapTUI(App[None]):
         except Exception as exc:  # noqa: BLE001
             self.call_from_thread(
                 self._chat_append,
-                f"[red]提交失败：{_esc(type(exc).__name__)}: {_esc(str(exc))}[/red]",
+                f"[#f85149]提交失败：{_esc(type(exc).__name__)}: {_esc(str(exc))}[/]",
             )
             return
         self._pending_plan = None

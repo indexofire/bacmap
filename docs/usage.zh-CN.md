@@ -29,9 +29,10 @@ ADR-10 规划型 + ADR-11 开放路径）：
 
 1. **理解 + 查现状**：LLM 可调用只读工具（`bio_list_samples` / `bio_get_result` /
    `bio_search_samples` / `bio_query_metadata` / `bio_review_flags` / `bio_compare_runs`）。
-2. **规划**：返回封闭任务类型组成的结构化计划——多数请求是 `analyze`（标准 Snakemake 流程）
-   或 `curate`；**深度挖掘**用 `mine`（自行编写 Python 脚本绘图/统计，沙箱执行），
-   复杂挖掘可拆成多个顺序 `mine` 任务；文本产物用 `write`。
+2. **规划与执行**：返回封闭任务类型组成的结构化计划——多数请求是 `analyze`（标准 Snakemake 流程）
+   或 `curate`；**深度挖掘**用 `mine`（自行编写 Python 脚本，沙箱执行），复杂挖掘可拆成多个
+   顺序 `mine` 任务；文本产物用 `write`。规划阶段还可调用 **`sandbox_run`** 执行脚本（无网络）
+   并读回 stdout/产物——可反复迭代统计与**绘图（PNG/CSV）**，成熟后再作为 `mine` 任务过挖掘门。
 3. **澄清**：需求含糊时提问，不猜测。
 4. **分级确认**：读类/已有结果的查询在规划阶段直接完成；**写操作仅在确认后提交**
    （CLI 交互确认，`--yes` 跳过；TUI 按 `Ctrl+Y` 或点按钮；Web 点确认按钮）。

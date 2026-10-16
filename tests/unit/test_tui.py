@@ -59,6 +59,18 @@ class _NoopArbiter:
         return None
 
 
+async def _respond_async_ok(self, text):
+    from bacmap.agent.session import AgentReply, AnalysisPlan, PlannedTask
+
+    return AgentReply(
+        message="ok",
+        plan=AnalysisPlan(
+            reply="ok",
+            tasks=[PlannedTask(task_type="mine", params={"script": "print(1)"})],
+        ),
+    )
+
+
 class TestViews:
     def test_overview_and_samples(self, engine):
         ov = overview_data(engine)
@@ -169,7 +181,7 @@ class TestTuiChat:
         from bacmap.interfaces import assistant as A
 
         class _FakeSession:
-            def respond(self, text):
+            async def respond_async(self, text):
                 return AgentReply(
                     message="规划完成",
                     plan=AnalysisPlan(
@@ -211,7 +223,6 @@ class TestTuiChat:
         asyncio.run(_run())
 
     def test_escape_discards_pending_plan(self, engine, monkeypatch):
-        from bacmap.agent.session import AgentReply, AnalysisPlan, PlannedTask
         from bacmap.interfaces import assistant as A
 
         monkeypatch.setattr(
@@ -220,15 +231,7 @@ class TestTuiChat:
             lambda engine, submitted_by="assistant": type(
                 "_S",
                 (),
-                {
-                    "respond": lambda self, t: AgentReply(
-                        message="ok",
-                        plan=AnalysisPlan(
-                            reply="ok",
-                            tasks=[PlannedTask(task_type="mine", params={"script": "print(1)"})],
-                        ),
-                    )
-                },
+                {"respond_async": _respond_async_ok},
             )(),
         )
 
@@ -298,5 +301,54 @@ class TestSkillGuidelines:
                 await pilot.resize_terminal(140, 40)
                 await pilot.pause()
                 assert not sidebar.has_class("hidden")  # 恢复宽度回归
+
+        asyncio.run(_run())
+
+
+class TestTuiAsyncCancel:
+    """异步会话：Esc 取消在途 LLM 请求（异步 worker 真正 cancel）。"""
+
+    def test_escape_cancels_inflight_worker(self, engine, monkeypatch):
+        from bacmap.interfaces import assistant as A
+
+        class _SlowSession:
+            async def respond_async(self, text):
+                await asyncio.sleep(30)
+                raise AssertionError("should have been cancelled")
+
+        monkeypatch.setattr(
+            A, "build_session", lambda engine, submitted_by="assistant": _SlowSession()
+        )
+
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                inp = app.query_one("#prompt", Input)
+                inp.value = "慢请求"
+                inp.focus()
+                await pilot.press("enter")
+                await asyncio.sleep(0.2)
+                worker = app._chat_task
+                assert worker is not None and not worker.is_finished
+                await pilot.press("escape")
+                await asyncio.sleep(0.3)
+                assert worker.is_cancelled
+
+        asyncio.run(_run())
+
+
+class TestTuiTheme:
+    def test_registers_and_toggles_bacmap_themes(self, engine):
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                assert app.theme == "bacmap-dark"
+                app.query_one("#tasks-table", DataTable).focus()
+                await pilot.press("ctrl+x")
+                await pilot.press("t")
+                await pilot.pause()
+                assert app.theme == "bacmap-light"
 
         asyncio.run(_run())

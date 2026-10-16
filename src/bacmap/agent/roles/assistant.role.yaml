@@ -12,6 +12,7 @@ tools:
   - bio_review_flags
   - bio_diagnose
   - bio_compare_runs
+  - sandbox_run
 fs_scope:
   read: ["${GOM_EXPORT}", "${RESULTS_DIR}"]
   write: ["${TASK_WORKSPACE}"]

@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import json as _json
+
 from bacmap.agent.llm.endpoints import LlmConfig, LlmEndpoint
 from bacmap.agent.llm.gateway import LlmGateway
 from bacmap.agent.session import (
@@ -207,3 +209,52 @@ class TestEndpointStatus:
             home = tmp_path
 
         assert "已连接" in endpoint_status(_Engine())  # type: ignore[arg-type]
+
+
+class TestSandboxTool:
+    """让 LLM 执行脚本/绘图：sandbox_run（ADR-11 L2）。"""
+
+    def test_build_tool_named_sandbox_run(self, tmp_path):
+        from bacmap.agent.sandbox.tool import build_sandbox_tool
+
+        tool = build_sandbox_tool(tmp_path)
+        assert tool.name == "sandbox_run"
+
+    def test_session_includes_sandbox_tool(self, tmp_path):
+        from bacmap.agent.sandbox.tool import build_sandbox_tool
+
+        gw = LlmGateway(_cfg(), tool_agent_factory=_factory(AnalysisPlan(reply="x")))
+        session = AgentSession(gw, extra_tools=[build_sandbox_tool(tmp_path)])
+        names = {t.name for t in session._tools}
+        assert "sandbox_run" in names and "bio_list_samples" in names
+
+    def test_run_script_plotting_via_passthrough(self, tmp_path, monkeypatch):
+        # 无 apptainer/podman：显式开启受控直通，脚本在本机 python 中绘图。
+        monkeypatch.setenv("BACMAP_ALLOW_UNSANDBOXED", "1")
+        from bacmap.agent.sandbox.tool import run_script
+
+        script = (
+            "import matplotlib; matplotlib.use('Agg')\n"
+            "import matplotlib.pyplot as plt\n"
+            "plt.plot([1,2,3],[1,4,9]); plt.savefig('plot.png')\n"
+            "print('done')\n"
+        )
+        out = _json.loads(run_script(tmp_path, script, "plot"))
+        assert out["returncode"] == 0, out
+        assert any(a["name"] == "plot.png" and a["size"] > 0 for a in out["artifacts"])
+        assert "done" in out["stdout"]
+
+    def test_run_script_no_sandbox_is_explicit_error(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("BACMAP_ALLOW_UNSANDBOXED", raising=False)
+
+        import bacmap.agent.sandbox as sb
+        from bacmap.agent.sandbox import SandboxUnavailableError
+        from bacmap.agent.sandbox import tool as st
+
+        class _Boom:
+            def run(self, spec):
+                raise SandboxUnavailableError("no apptainer/podman on PATH")
+
+        monkeypatch.setattr(sb, "SandboxExecutor", lambda *a, **k: _Boom())
+        out = _json.loads(st.run_script(tmp_path, "print(1)"))
+        assert "error" in out and "沙箱不可用" in out["error"]

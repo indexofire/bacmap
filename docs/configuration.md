@@ -83,7 +83,8 @@ Requests over the limit are intercepted by the LlmGateway **before they are sent
 
 | Setting | Default | Notes |
 |---|---|---|
-| `BACMAP_ALLOW_UNSANDBOXED=1` | off | Passthrough execution for mine tasks (controlled development environments only) |
+| `BACMAP_ALLOW_UNSANDBOXED=1` | off | Passthrough execution for mine/`sandbox_run` (controlled development environments only) |
+| `BACMAP_SANDBOX_IMAGE` | `docker://python:3.12-slim` | Sandbox image for `sandbox_run`; use an image that bundles the analysis stack (matplotlib/pandas/numpy) so the assistant can render charts |
 | Sandbox fallback chain | Apptainer → Podman | If neither exists and passthrough is off, mine tasks fail |
 | `llm.resources.co_located` | true | Enables memory arbitration when the model and the pipeline share one machine |
 | Arbitration threshold | 24 GB free memory | Below the threshold, Strata is unloaded automatically → heavy steps run → it is restored automatically |

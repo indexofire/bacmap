@@ -134,6 +134,7 @@ class LlmGateway:
             for name, ep in config.endpoints.items()
         }
         self._agents: dict[tuple[str, ...], Any] = {}
+        self._asems: dict[str, Any] = {}  # asyncio.Semaphore 按端点，首次异步调用时创建
         self._lock = threading.Lock()
 
     def _agent_for(
@@ -295,4 +296,75 @@ class LlmGateway:
                 )
         raise LlmUnavailableError(
             f"agent run failed after {MAX_RETRIES + 1} attempts on {endpoint.name}"
+        ) from last_exc
+
+    def _asem_for(self, endpoint: LlmEndpoint) -> Any:
+        """按端点的 max_concurrency 创建 asyncio 信号量（首次异步调用时绑定事件循环）。"""
+        import asyncio
+
+        if endpoint.name not in self._asems:
+            self._asems[endpoint.name] = asyncio.Semaphore(max(endpoint.max_concurrency, 1))
+        return self._asems[endpoint.name]
+
+    async def run_agent_async(
+        self,
+        purpose: str,
+        prompt: str,
+        output_type: type[BaseModel],
+        tools: list[Any],
+        data_class: DataClass = DataClass.D0,
+        role: str | None = None,
+        message_history: list[Any] | None = None,
+    ) -> Any:
+        """``run_agent`` 的异步版：可被 asyncio 取消（中断在途请求）。"""
+        endpoint, instructions = self._resolve_checked(purpose, data_class, role)
+        agent = self._tool_agent_for(endpoint, output_type, role, instructions, tools)
+        sem = self._asem_for(endpoint)
+        last_exc: Exception | None = None
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                async with sem:
+                    return await agent.run(prompt, message_history=message_history)
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                logger.warning(
+                    "agent(async) attempt %d/%d failed on %s: %s",
+                    attempt + 1,
+                    MAX_RETRIES + 1,
+                    endpoint.name,
+                    exc,
+                )
+        raise LlmUnavailableError(
+            f"agent run failed after {MAX_RETRIES + 1} attempts on {endpoint.name}"
+        ) from last_exc
+
+    async def structured_async(
+        self,
+        purpose: str,
+        prompt: str,
+        output_type: type[BaseModel],
+        data_class: DataClass = DataClass.D0,
+        role: str | None = None,
+    ) -> BaseModel:
+        """``structured`` 的异步版。"""
+        endpoint, instructions = self._resolve_checked(purpose, data_class, role)
+        agent = self._agent_for(endpoint, output_type, role, instructions)
+        sem = self._asem_for(endpoint)
+        last_exc: Exception | None = None
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                async with sem:
+                    result = await agent.run(prompt)
+                return result.output
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                logger.warning(
+                    "structured(async) attempt %d/%d failed on %s: %s",
+                    attempt + 1,
+                    MAX_RETRIES + 1,
+                    endpoint.name,
+                    exc,
+                )
+        raise LlmUnavailableError(
+            f"structured output failed after {MAX_RETRIES + 1} attempts on {endpoint.name}"
         ) from last_exc

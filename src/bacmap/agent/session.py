@@ -79,8 +79,11 @@ def build_read_tools(names: tuple[str, ...] = READ_TOOL_NAMES) -> list[Any]:
             "properties": {},
         }
 
-        def _call(_handler: Any = handler, **kwargs: Any) -> str:
-            return str(_handler(kwargs))
+        async def _call(_handler: Any = handler, **kwargs: Any) -> str:
+            # 工具是同步 handler（文件/DB IO）：在线程中执行，避免阻塞事件循环（异步会话）。
+            import anyio
+
+            return str(await anyio.to_thread.run_sync(lambda: _handler(kwargs)))
 
         tools.append(
             Tool.from_schema(
@@ -105,13 +108,15 @@ class AgentSession:
         home: Path | None = None,
         role: str = "assistant",
         tools: list[Any] | None = None,
+        extra_tools: list[Any] | None = None,
         purpose: str = "intent_classifier",
     ) -> None:
         self._gateway = gateway
         self._home = home
         self._role = role
         self._purpose = purpose
-        self._tools = build_read_tools() if tools is None else tools
+        base = build_read_tools() if tools is None else tools
+        self._tools = list(base) + list(extra_tools or [])
         self._history: list[Any] = []
 
     @property
@@ -131,15 +136,38 @@ class AgentSession:
                 message_history=self._history or None,
             )
         except LlmUnavailableError as exc:
-            return AgentReply(
-                message=(
-                    f"内置助手暂不可用（{exc}）。可改用确定性路径："
-                    "`bacmap task submit --type analyze --samples <ID>`。"
-                ),
-                degraded=True,
+            return self._degraded(exc)
+        return self._to_reply(result)
+
+    async def respond_async(self, text: str) -> AgentReply:
+        """``respond`` 的异步版：可被取消（TUI 用），工具在线程中执行不阻塞事件循环。"""
+        try:
+            result = await self._gateway.run_agent_async(
+                purpose=self._purpose,
+                prompt=_build_prompt(text, self._home),
+                output_type=AnalysisPlan,
+                tools=self._tools,
+                data_class=_ASSISTANT_DATA_CLASS,
+                role=self._role,
+                message_history=self._history or None,
             )
+        except LlmUnavailableError as exc:
+            return self._degraded(exc)
+        return self._to_reply(result)
+
+    def _to_reply(self, result: Any) -> AgentReply:
         self._history = list(result.all_messages())
         plan = result.output
         if not isinstance(plan, AnalysisPlan):
             plan = AnalysisPlan.model_validate(plan)
         return AgentReply(message=plan.reply, plan=plan)
+
+    @staticmethod
+    def _degraded(exc: Exception) -> AgentReply:
+        return AgentReply(
+            message=(
+                f"内置助手暂不可用（{exc}）。可改用确定性路径："
+                "`bacmap task submit --type analyze --samples <ID>`。"
+            ),
+            degraded=True,
+        )

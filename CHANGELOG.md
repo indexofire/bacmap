@@ -6,6 +6,13 @@
 ## [未发布]
 
 ### 新增
+- **深度挖掘执行**：内置助手可调用 `sandbox_run`（ADR-11 L2）执行 Python 脚本并产出图表
+  （PNG/CSV）；可反复调用迭代，成熟脚本再作为 `mine` 任务经挖掘门/人工签字进入报告。
+  沙箱后端 Apptainer/Podman；无后端且 `BACMAP_ALLOW_UNSANDBOXED=1` 时受控直通，否则显式报错。
+- **TUI 视觉语言**：注册 `bacmap-dark`/`bacmap-light` 语义主题，CSS 全用语义槽；Header 显示
+  LLM 端点；会话日志配色与主题一致。
+- **异步会话**：网关 `run_agent_async`/`structured_async`；只读工具异步 + 线程卸载；
+  TUI `Esc` 真正取消在途 LLM 请求。
 - **LLM 驱动的会话助手（三端统一）**：`agent/session.py`（多轮、只读工具、结构化 `AnalysisPlan`，
   ADR-10 规划型 + ADR-11 开放路径）。简单需求规划为 `analyze`/`curate`（Snakemake 路径）；
   深度挖掘规划为 `mine`（LLM 写脚本、沙箱执行，可多步）或 `write`。写操作**分级确认**后经同一任务引擎提交；
