@@ -1,9 +1,9 @@
 """ToolSpec 注册表（ADR-04：唯一事实来源）。
 
-由 hermes-bacmap 的 29 项 legacy 表迁移而来，现存 24 项。
+由 hermes-bacmap 的 29 项 legacy 表迁移而来，现存 25 项。
 v1.4.5 去 bio_vpa_serotype（typing→gapit）；v1.4.7 去
 bio_validate_taxonomy / bio_species_compare / bio_db_setup / bio_db_status（物种鉴定→gside）；
-新增 bio_compare_runs（ADR-18 运行比较工具）。
+新增 bio_compare_runs（ADR-18 运行比较工具）、bio_inspect_dataset（沙箱数据集登记查看）。
 
 trust_layer / effect / output_data_class 为首版判定（ADR-04 冻结字段，
 取值可经评审修订；字段本身不可删改）。D 级依据 ADR-16。
@@ -39,6 +39,7 @@ _TOOL_REGISTRY: list[HandlerEntry] = [
     ("bio_cgmlst", schemas.CGLST_TRACEBACK, services.cgmlst_traceback),
     ("bio_search_samples", schemas.SEARCH_SAMPLES, services.search_samples),
     ("bio_review_flags", schemas.REVIEW_FLAGS, services.review_flags),
+    ("bio_inspect_dataset", schemas.INSPECT_DATASET, services.inspect_dataset),
     ("bio_diagnose", schemas.DIAGNOSE, pipeline.diagnose_failure),
     ("bio_query_metadata", schemas.QUERY_METADATA, services.query_metadata),
     ("bio_add_metadata", schemas.ADD_METADATA, services.add_metadata),
@@ -66,6 +67,7 @@ _META: dict[str, tuple[TrustLayer, Effect, DataClass, bool]] = {
     "bio_cgmlst": (TrustLayer.L1, Effect.COMPUTE, DataClass.D2, False),
     "bio_search_samples": (TrustLayer.L3, Effect.READ, DataClass.D2, False),
     "bio_review_flags": (TrustLayer.L1, Effect.READ, DataClass.D2, False),
+    "bio_inspect_dataset": (TrustLayer.L1, Effect.READ, DataClass.D3, False),
     "bio_diagnose": (TrustLayer.L1, Effect.READ, DataClass.D0, False),
     "bio_query_metadata": (TrustLayer.L3, Effect.READ, DataClass.D4, False),
     "bio_add_metadata": (TrustLayer.L3, Effect.WRITE, DataClass.D4, False),

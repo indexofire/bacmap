@@ -11,7 +11,7 @@ standalone architecture. The frozen design is documented in
 A pathogen genomic epidemiology analysis system for a **single workstation**
 (64 GB RAM, data never leaves the local network):
 
-- **Tool registry** (24 `bio_*` tools): read-only and compute tools are exposed directly; every write operation goes through task submission;
+- **Tool registry** (25 `bio_*` tools): read-only and compute tools are exposed directly; every write operation goes through task submission;
 - **Task engine**: DBOS workflows (four task types, analyze / curate / mine / write, all checkpoint-resumable);
 - **Snakemake 9 pipelines**: QC → assembly → typing → AMR/virulence → report;
 - **Agent layer**: a local LLM (Strata / OpenAI-compatible endpoint) handles intent classification and interpretation drafting, with data-classification gating across the entire chain;
@@ -46,7 +46,7 @@ All query subcommands accept `--json` for scripting. Equivalent module form:
 ## Development
 
 ```bash
-pixi run -e dev test        # pytest（基线：1199 passed / 1 skipped）
+pixi run -e dev test        # pytest（基线：1235 passed / 1 skipped）
 pixi run -e dev lint        # ruff
 pixi run -e dev contracts   # import-linter 依赖方向契约
 ```

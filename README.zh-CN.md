@@ -9,7 +9,7 @@
 
 面向**单工作站**（64 GB 内存、本地数据不出网）的病原菌基因组流行病学分析系统：
 
-- **工具注册表**（24 个 `bio_*` 工具）：只读/计算类工具直接暴露，写操作一律经任务提交；
+- **工具注册表**（25 个 `bio_*` 工具）：只读/计算类工具直接暴露，写操作一律经任务提交；
 - **任务引擎**：DBOS 工作流（analyze / curate / mine / write 四类任务，断点可恢复）；
 - **Snakemake 9 管线**：QC → 组装 → 分型 → AMR/毒力 → 报告；
 - **智能体层**：本地 LLM（Strata / OpenAI 兼容端点）意图分类 + 解读撰写，全链路数据分级门控；
@@ -45,7 +45,7 @@ bacmap --help         # 统一命令行入口
 ## 开发
 
 ```bash
-pixi run -e dev test        # pytest（基线：1199 passed / 1 skipped）
+pixi run -e dev test        # pytest（基线：1235 passed / 1 skipped）
 pixi run -e dev lint        # ruff
 pixi run -e dev contracts   # import-linter 依赖方向契约
 ```

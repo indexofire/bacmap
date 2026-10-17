@@ -23,6 +23,7 @@ def _spec(tmp_path: Path) -> SandboxSpec:
         command=["python", "script.py"],
         workspace=ws,
         readonly_mounts={"/data/gom-export": "/gom"},
+        allowed_readonly_roots=(Path("/data/gom-export"),),
     )
 
 

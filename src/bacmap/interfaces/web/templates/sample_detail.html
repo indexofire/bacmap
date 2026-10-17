@@ -22,7 +22,7 @@
     </tbody>
   </table>
 </section>
-{% if d.card_genes or d.vfdb_genes %}
+{% if d.card_genes or d.vfdb_genes or d.plasmids %}
 <section class="card" aria-labelledby="genes-title">
   <div class="card__head"><h2 class="card__title" id="genes-title">检出基因</h2></div>
   {% if d.card_genes %}
@@ -32,6 +32,10 @@
   {% if d.vfdb_genes %}
   <p class="field__hint">毒力（VFDB）：</p>
   <p>{% for g in d.vfdb_genes %}<code>{{ g }}</code> {% endfor %}</p>
+  {% endif %}
+  {% if d.plasmids %}
+  <p class="field__hint">质粒（PlasmidFinder）：</p>
+  <p>{% for g in d.plasmids %}<code>{{ g }}</code> {% endfor %}</p>
   {% endif %}
 </section>
 {% endif %}

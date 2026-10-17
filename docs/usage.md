@@ -55,6 +55,29 @@ bacmap › 建议先统计再绘图。
 确认提交该计划？ [y/N]
 ```
 
+### Giving the assistant a data path
+
+The assistant cannot read arbitrary host paths. To use data you provide:
+
+1. Have it plan a `mine` task with the path in `input_paths` — the task registers it
+   **zero-copy** (per-file SHA256) and bind-mounts it read-only into the sandbox at
+   `/input/<dataset_id>`.
+2. Inspect what was registered with `bio_inspect_dataset`; pass the `dataset_id` to
+   `sandbox_run` (its `datasets` argument), or have the script read the mount from
+   `context.json`.
+3. `bio_inspect_dataset` with a `dataset_id` and `verify=true` recomputes SHA256 to detect
+   content changes.
+
+The registry lives in the GOM DB. Hashes are SHA256 and are **evidence** (a fingerprint for
+integrity/dedup), not a way to recover a deleted original — ask for materialization (a copy)
+if you need durability or portability.
+
+Besides `sandbox_run` (a Python script), a restricted **`sandbox_shell`** runs a single shell
+command inside the same sandbox — only read/analysis commands (`ls`, `cat`, `grep`, `zcat`,
+`samtools`, `seqkit`, `python`, …) are allowed; anything else is refused and should become a
+signed `mine` task. It only runs with a real container backend (passthrough is refused by
+default) and every invocation is written to `$BACMAP_HOME/audits/sandbox_shell.jsonl`.
+
 ## 3. TUI and interactive console
 
 `bacmap tui` starts a chat-first Textual workspace (inspired by opencode's TUI and the hermes
@@ -99,6 +122,10 @@ Run `bacmap web`, then open `http://127.0.0.1:8800` in a browser:
 another computer, do **not** expose it bare with `--host 0.0.0.0` (the UI has no
 authentication, so anyone on the LAN could submit or approve tasks). Use an SSH tunnel
 instead: SSH carries all of the encryption and authentication, and bacmap needs zero changes:
+
+> `BACMAP_WEB_TOKEN` (`--token-env`) adds a Bearer check for **programmatic/API** clients.
+> Browsers cannot send an `Authorization` header, so once a token is configured the HTML
+> console returns 401 — keep the tunnel-first workflow below for the UI.
 
 ```bash
 # 在你自己的电脑上执行（user 为工作站账号，10.0.0.5 换成工作站实际 IP）：

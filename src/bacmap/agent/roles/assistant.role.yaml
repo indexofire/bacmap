@@ -10,9 +10,11 @@ tools:
   - bio_search_samples
   - bio_query_metadata
   - bio_review_flags
+  - bio_inspect_dataset
   - bio_diagnose
   - bio_compare_runs
   - sandbox_run
+  - sandbox_shell
 fs_scope:
   read: ["${GOM_EXPORT}", "${RESULTS_DIR}"]
   write: ["${TASK_WORKSPACE}"]

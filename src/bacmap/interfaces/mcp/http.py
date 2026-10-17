@@ -17,6 +17,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
 from bacmap.interfaces._auth import BearerTokenMiddleware
+from bacmap.interfaces._security import SecurityHeadersMiddleware
 
 
 def build_http_app(
@@ -41,7 +42,7 @@ def build_http_app(
         allowed_hosts=list(dict.fromkeys(allowed_hosts)),
     )
     app = server.streamable_http_app(host=host, transport_security=security)
-    return BearerTokenMiddleware(app, token)
+    return SecurityHeadersMiddleware(BearerTokenMiddleware(app, token))
 
 
 def run_http(

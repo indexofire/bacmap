@@ -31,6 +31,8 @@ from textual.widgets import (
 
 # 侧栏自动折叠阈值（tui-design：窄终端折叠次要面板，恢复时保留选择）
 _SIDEBAR_MIN_WIDTH = 96
+# 单轮需求文本上限（与 Web 一致，防超大提示词）
+_MAX_PROMPT_LEN = 8000
 
 # 语义调色板（对齐 opencode 的克制暗色 + hermes skin 的语义槽 + tui-design 技能）。
 # 主题值集中在 Theme.variables，CSS 只用语义槽，不写死颜色。
@@ -120,7 +122,7 @@ class BacmapTUI(App[None]):
         ("escape", "interrupt", "中断/清空"),
     ]
 
-    # leader 和弦（Ctrl+X 之后）：键 → 本类同步动作方法
+    # leader 和弦（Ctrl+G 之后）：键 → 本类同步动作方法
     _LEADER_CHORDS = {
         "n": "action_new_session",
         "l": "action_focus_tasks",
@@ -157,7 +159,7 @@ class BacmapTUI(App[None]):
                 yield RichLog(id="conversation", markup=True, wrap=True)
                 yield Static("", id="plan-hint")
                 yield Input(
-                    placeholder="输入分析需求；/ 查看斜杠命令；Enter 发送 · Ctrl+X 引导键",
+                    placeholder="输入分析需求；/ 查看斜杠命令；Enter 发送 · Ctrl+G 引导键",
                     id="prompt",
                 )
         yield Footer()
@@ -328,14 +330,20 @@ class BacmapTUI(App[None]):
     def action_new_session(self) -> None:
         self._session = None
         self._pending_plan = None
+        self._reply_seq += 1  # 丢弃旧会话迟到的回复
+        self._cancel_chat()
         self.action_clear_conversation()
         self._chat_append("[#8b949e]已开始新会话[/]")
 
     def action_confirm_plan(self) -> None:
-        if self._pending_plan is None:
+        plan = self._pending_plan
+        if plan is None:
             self._chat_append("[#8b949e]当前没有待确认的计划[/]")
             return
-        self._do_confirm_plan(self._pending_plan)
+        # 立即清除待确认计划：防连按 Ctrl+Y 重复提交同一个计划。
+        self._pending_plan = None
+        self._set_hint("")
+        self._do_confirm_plan(plan)
 
     # -- leader 和弦拦截 ----------------------------------------------------
 
@@ -344,9 +352,10 @@ class BacmapTUI(App[None]):
             return
         handler = getattr(self, self._LEADER_CHORDS.get(event.key, ""), None)
         self._end_leader()
+        # 消费该键：leader 模式下任何键都不落回输入框（否则残键会写入 prompt）。
+        event.prevent_default()
+        event.stop()
         if handler is not None:
-            event.prevent_default()
-            event.stop()
             handler()
 
     def _leader_quit(self) -> None:
@@ -358,6 +367,11 @@ class BacmapTUI(App[None]):
         text = event.value.strip()
         event.input.value = ""
         if not text:
+            return
+        if len(text) > _MAX_PROMPT_LEN:
+            self._chat_append(
+                f"[#f85149]需求过长（上限 {_MAX_PROMPT_LEN} 字符）[/]"
+            )
             return
         if text.startswith("/"):
             self._run_slash(text)
@@ -422,13 +436,12 @@ class BacmapTUI(App[None]):
         except (ValueError, NotImplementedError) as exc:
             msg = f"[#f85149]提交失败：{_esc(str(exc))}[/]"
         self.call_from_thread(self._chat_append, msg)
-        self.refresh_tasks()
+        self.call_from_thread(self.refresh_tasks)
 
     # -- 会话（LLM 规划） ---------------------------------------------------
 
-    @work(thread=True, exclusive=False)
     def _start_chat(self, text: str) -> None:
-        """启动一轮会话（Textual worker）；新请求取消上一轮在途请求。"""
+        """启动一轮会话（async worker）；新一轮以 exclusive 取消上一轮在途请求。"""
         self._chat_task = self.run_worker(
             self._chat_async(text), group="chat", exclusive=True, exit_on_error=False
         )
@@ -499,4 +512,4 @@ class BacmapTUI(App[None]):
                 f"{mark} {_esc(str(r['task_type']))}: "
                 f"{_esc(str(r.get('task_id') or r.get('error')))}",
             )
-        self.refresh_tasks()
+        self.call_from_thread(self.refresh_tasks)

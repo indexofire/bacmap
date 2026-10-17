@@ -266,3 +266,69 @@ class TestAssistantPage:
     def test_execute_without_plan_400(self, client):
         c, _ = client
         assert c.post("/assistant/execute", data={"sid": "nope"}).status_code == 400
+
+
+class TestWebHardening:
+    """巡检加固：安全头 / 报告下载 / 助手输入边界 / 会话上限。"""
+
+    def test_security_headers_present(self, client):
+        c, _ = client
+        r = c.get("/")
+        csp = r.headers.get("content-security-policy", "")
+        assert csp.startswith("default-src 'self'")
+        assert "frame-ancestors 'none'" in csp
+        assert r.headers.get("x-content-type-options") == "nosniff"
+        assert r.headers.get("x-frame-options") == "DENY"
+
+    def test_security_headers_on_401(self, engine):
+        c = TestClient(create_app(engine, auth_token="tok"))
+        r = c.get("/")
+        assert r.status_code == 401
+        assert "content-security-policy" in r.headers
+
+    def test_report_served_as_attachment(self, client):
+        c, home = client
+        rep = home / "results" / "SAM-001" / "report" / "SAM-001_report.html"
+        rep.write_text("<html><body>ok</body></html>", encoding="utf-8")
+        r = c.get("/samples/SAM-001/report")
+        assert r.status_code == 200
+        assert "attachment" in r.headers.get("content-disposition", "")
+
+    def test_assistant_empty_prompt_400(self, client):
+        c, _ = client
+        assert c.post("/assistant", data={"sid": "", "text": "   "}).status_code == 400
+
+    def test_assistant_prompt_too_long_413(self, client):
+        c, _ = client
+        r = c.post("/assistant", data={"sid": "", "text": "x" * 9000})
+        assert r.status_code == 413
+
+    def test_assistant_session_lru_cap(self, client, monkeypatch):
+        import re
+
+        from bacmap.agent.session import AgentReply, AnalysisPlan
+        from bacmap.interfaces import assistant as interface_assistant
+        from bacmap.interfaces.web import app as web_app
+
+        class _Fake:
+            def respond(self, text):
+                return AgentReply(message="ok", plan=AnalysisPlan(reply="ok", tasks=[]))
+
+        monkeypatch.setattr(
+            interface_assistant,
+            "build_session",
+            lambda engine, submitted_by="assistant": _Fake(),
+        )
+        c, _ = client
+
+        def _ask(sid: str, text: str) -> str:
+            r = c.post("/assistant", data={"sid": sid, "text": text})
+            assert r.status_code == 200
+            return re.search(r'name="sid" value="([0-9a-f]+)"', r.text).group(1)
+
+        first = _ask("", "init")
+        for i in range(web_app._MAX_ASSISTANT_SESSIONS):
+            _ask("", f"t{i}")
+        # 首个会话已被 LRU 淘汰 → 再次用它开会话会返回新 sid。
+        again = _ask(first, "reuse")
+        assert again != first

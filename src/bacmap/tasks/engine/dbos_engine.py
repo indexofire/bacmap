@@ -498,40 +498,98 @@ def _run_sandbox(spec: Any) -> Any:
     return SandboxExecutor().run(spec)
 
 
+def _sandbox_backend_name() -> str:
+    """实际执行时会用的后端名（可注入；用于沙箱访问面/context 决策）。"""
+    from bacmap.agent.sandbox import SandboxExecutor
+
+    return SandboxExecutor().backend_name()
+
+
 # ---------------------------------------------------------------------------
 # mine / write 工作流（迁移第 10 步：开放路径 + V11⑤⑥）
 # ---------------------------------------------------------------------------
 
 
+_MINE_INTERNAL_FILES = {"analysis.py", "context.json"}
+
+
 @DBOS.step()
 def _step_mine_run(params: dict[str, Any]) -> dict[str, Any]:
-    """沙箱执行脚本，产物落 workspace（L2，ADR-11）。"""
+    """登记外部数据（零拷贝）→ 只读挂载 → 沙箱执行脚本（L2，ADR-11）。"""
+    from bacmap.agent.sandbox.access import allowed_roots, build_access
+    from bacmap.store.datasets import DatasetRegistry
+
     home = Path(params["home"])
     workspace = home / "workspaces" / params["task_id"]
     workspace.mkdir(parents=True, exist_ok=True)
     script = workspace / "analysis.py"
     script.write_text(params.get("script", "# no-op\n"), encoding="utf-8")
-    spec = _build_sandbox_spec(params.get("sandbox_image"), script.name, workspace)
+
+    # A：登记用户给定的数据路径（SHA256 证据链，零拷贝），随后只读挂载进沙箱。
+    datasets: list[Any] = []
+    input_paths = params.get("input_paths") or []
+    if input_paths:
+        registry = DatasetRegistry(home / "gom.sqlite")
+        try:
+            for path in input_paths:
+                datasets.append(
+                    registry.register(
+                        path,
+                        registered_by=params.get("submitted_by", "task"),
+                        data_class=params.get("input_data_class", "D3"),
+                    )
+                )
+        finally:
+            registry.close()
+
+    backend = _sandbox_backend_name()
+    mounts, context = build_access(
+        backend,
+        results_dir=home / "results",
+        gom_db=home / "gom.sqlite",
+        datasets=datasets,
+    )
+    (workspace / "context.json").write_text(
+        json.dumps(context, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    spec = _build_sandbox_spec(
+        params.get("sandbox_image"),
+        script.name,
+        workspace,
+        readonly_mounts=mounts,
+        allowed_readonly_roots=allowed_roots(
+            results_dir=home / "results", gom_db=home / "gom.sqlite", datasets=datasets
+        ),
+    )
     result = _run_sandbox(spec)
     artifacts = [
         {"name": f.name, "reproducible": True}
         for f in sorted(workspace.iterdir())
-        if f.is_file() and f != script
+        if f.is_file() and f.name not in _MINE_INTERNAL_FILES
     ]
     return {
         "returncode": result.returncode,
         "artifacts": artifacts,
         "workspace": str(workspace),
+        "datasets": [d.dataset_id for d in datasets],
     }
 
 
-def _build_sandbox_spec(image: str | None, script_name: str, workspace: Path) -> Any:
+def _build_sandbox_spec(
+    image: str | None,
+    script_name: str,
+    workspace: Path,
+    readonly_mounts: dict[str, str] | None = None,
+    allowed_readonly_roots: tuple[Path, ...] = (),
+) -> Any:
     from bacmap.agent.sandbox import SandboxSpec
 
     return SandboxSpec(
         image=image or "docker://python:3.12-slim",
         command=["python", script_name],
         workspace=workspace,
+        readonly_mounts=dict(readonly_mounts or {}),
+        allowed_readonly_roots=tuple(allowed_readonly_roots),
     )
 
 
@@ -681,6 +739,7 @@ class DbosTaskEngine:
         p = params.model_dump() if isinstance(params, BaseModel) else dict(params)
         p.setdefault("home", str(self.home))
         p.setdefault("cores", 8)
+        p.setdefault("submitted_by", submitted_by)
 
         # 防御纵深：样本 ID 白名单（MCP/Web 已校验；引擎是最终写入口）。
         samples = p.get("samples")
@@ -817,7 +876,7 @@ class DbosTaskEngine:
                 artifacts = [
                     {"name": f.name, "reproducible": True}
                     for f in sorted(workspace.iterdir())
-                    if f.is_file() and f.name != "analysis.py"
+                    if f.is_file() and f.name not in _MINE_INTERNAL_FILES
                 ]
             gate = _gates.evaluate_mining(
                 {"artifacts": artifacts, "signed_by": approval.approver}

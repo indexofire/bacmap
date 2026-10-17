@@ -252,6 +252,9 @@ class TestSandboxTool:
         from bacmap.agent.sandbox import tool as st
 
         class _Boom:
+            def backend_name(self):
+                return "unavailable"
+
             def run(self, spec):
                 raise SandboxUnavailableError("no apptainer/podman on PATH")
 
@@ -265,12 +268,14 @@ class TestAssistantRoleToolAlignment:
 
     def test_role_tools_match_session_tools(self, tmp_path):
         from bacmap.agent import roledef
-        from bacmap.agent.sandbox.tool import build_sandbox_tool
+        from bacmap.agent.sandbox.tool import build_sandbox_tool, build_shell_tool
         from bacmap.agent.session import READ_TOOL_NAMES
 
         gw = LlmGateway(_cfg(), tool_agent_factory=_factory(AnalysisPlan(reply="x")))
-        session = AgentSession(gw, extra_tools=[build_sandbox_tool(tmp_path)])
+        session = AgentSession(
+            gw, extra_tools=[build_sandbox_tool(tmp_path), build_shell_tool(tmp_path)]
+        )
         session_names = {t.name for t in session._tools}
         role_tools = set(roledef.load_role_def("assistant").tools)
         assert role_tools == session_names
-        assert set(READ_TOOL_NAMES) | {"sandbox_run"} == role_tools
+        assert set(READ_TOOL_NAMES) | {"sandbox_run", "sandbox_shell"} == role_tools

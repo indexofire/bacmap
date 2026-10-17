@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import uvicorn
@@ -20,10 +21,12 @@ def main() -> None:
     parser.add_argument("--home", default=str(BACMAP_HOME))
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8800)
+    parser.add_argument("--token-env", default="BACMAP_WEB_TOKEN", help="Bearer token 环境变量名")
     args = parser.parse_args()
 
     engine = DbosTaskEngine(Path(args.home))
-    app = create_app(engine)
+    token = os.environ.get(args.token_env, "")
+    app = create_app(engine, auth_token=token or None)
     uvicorn.run(app, host=args.host, port=args.port)
 
 

@@ -49,6 +49,24 @@ bacmap › 建议先统计再绘图。
 确认提交该计划？ [y/N]
 ```
 
+### 给助手一份数据路径
+
+助手读不了任意宿主路径。要用你提供的本地数据：
+
+1. 让它规划一个 `mine` 任务，把路径放进 `input_paths`——任务会**零拷贝**登记（逐文件 SHA256）
+   并把数据只读挂载进沙箱的 `/input/<dataset_id>`。
+2. 用 `bio_inspect_dataset` 查看已登记内容；把 `dataset_id` 传给 `sandbox_run`（`datasets` 参数），
+   或让脚本从工作区 `context.json` 读取挂载点。
+3. `bio_inspect_dataset` 指定 `dataset_id` 且 `verify=true` 时重算 SHA256，检测内容是否变化。
+
+登记表存于 GOM 库。哈希用 SHA256，是**证据**（完整性/去重指纹），**不是**回收已删除原始数据的手段——
+需要可移植/防删除时再要求"物化"（复制副本）。
+
+除 `sandbox_run`（跑一段 Python）外，另有受限的 **`sandbox_shell`**：在同一沙箱内跑**一条** shell 命令，
+仅放行只读/分析白名单（`ls`、`cat`、`grep`、`zcat`、`samtools`、`seqkit`、`python` 等），
+其余命令会被拒绝并要求改用需签字的 `mine` 任务；仅在真实容器后端下运行（直通默认拒绝），
+每次调用写入 `$BACMAP_HOME/audits/sandbox_shell.jsonl`。
+
 ## 3. TUI 与交互菜单
 
 `bacmap tui` 启动**会话优先**的 Textual 工作台（参考 opencode TUI 与 hermes agent REPL）：
@@ -86,6 +104,10 @@ bacmap › 建议先统计再绘图。
 bacmap web 默认只绑 `127.0.0.1`（ADR-16）。需要从其他电脑访问时，**不要**直接
 `--host 0.0.0.0` 裸暴露（界面无认证，局域网内任何人可提交/审批任务）——用 SSH 隧道，
 加密与认证全部由 SSH 承担，bacmap 侧零改动：
+
+> `BACMAP_WEB_TOKEN`（`--token-env`）为**程序化/API** 客户端增加 Bearer 校验。
+> 浏览器无法发送 `Authorization` 头，因此一旦配置 token，HTML 控制台会返回 401——
+> 界面仍走下面的隧道方式。
 
 ```bash
 # 在你自己的电脑上执行（user 为工作站账号，10.0.0.5 换成工作站实际 IP）：

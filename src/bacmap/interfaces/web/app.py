@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from bacmap.interfaces._auth import BearerTokenMiddleware
+from bacmap.interfaces._security import SecurityHeadersMiddleware
 from bacmap.interfaces.views import (
     load_summaries,
     overview_data,
@@ -34,13 +35,18 @@ from bacmap.tools._common import _validate_sample_id
 
 _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
+_MAX_ASSISTANT_SESSIONS = 32  # 会话上限（LRU 淘汰；防无界增长/内存泄漏）
+_MAX_PROMPT_LEN = 8000  # 单轮需求文本上限（防超大表单/提示词）
+
 
 def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI:
     app = FastAPI(title="bacmap", docs_url=None, redoc_url=None)
     if auth_token:
         # ADR-14：跨机访问需鉴权；配置 token 时全站 Bearer 校验。
         app.add_middleware(BearerTokenMiddleware, token=auth_token)
-    # 静态资源仅本地（CSS/图标；零外联，ADR-16）
+    # 安全响应头（含 CSP）：最后加入 → 位于最外层，鉴权 401 也带安全头。
+    app.add_middleware(SecurityHeadersMiddleware)
+    # 静态资源仅本地（CSS/图标/脚本；零外联，ADR-16）
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/", response_class=HTMLResponse)
@@ -78,7 +84,12 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
         path = report_path(engine, sample_id)
         if not path.is_file():
             raise HTTPException(404, "该样本尚未生成 HTML 报告")
-        return FileResponse(path, media_type="text/html")
+        # 以附件下载：报告为独立 HTML，避免在同源内联渲染引入 XSS 面。
+        return FileResponse(
+            path,
+            media_type="text/html",
+            filename=f"{sample_id}_report.html",
+        )
 
     @app.get("/search", response_class=HTMLResponse)
     def search_page(
@@ -192,19 +203,37 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
             request, "assistant.html", {"sid": "", "reply": None, "text": "", "results": None}
         )
 
+    def _new_session(sid: str) -> None:
+        from bacmap.interfaces.assistant import build_session
+
+        # LRU 上限：超限淘汰最旧会话（其 LLM 历史随之释放）。
+        if len(_agent_sessions) >= _MAX_ASSISTANT_SESSIONS:
+            oldest = min(_agent_sessions, key=lambda k: _agent_sessions[k]["at"])
+            _agent_sessions.pop(oldest, None)
+        _agent_sessions[sid] = {
+            "session": build_session(engine),
+            "plan": None,
+            "at": datetime.now(UTC),
+        }
+
     @app.post("/assistant", response_class=HTMLResponse)
     def assistant_ask(
         request: Request, text: str = Form(...), sid: str = Form("")
     ) -> HTMLResponse:
         from uuid import uuid4
 
-        from bacmap.interfaces.assistant import build_session
+        prompt = text.strip()
+        if not prompt:
+            raise HTTPException(400, "需求不能为空")
+        if len(prompt) > _MAX_PROMPT_LEN:
+            raise HTTPException(413, f"需求过长（上限 {_MAX_PROMPT_LEN} 字符）")
 
         if not sid or sid not in _agent_sessions:
             sid = uuid4().hex
-            _agent_sessions[sid] = {"session": build_session(engine), "plan": None}
+            _new_session(sid)
         entry = _agent_sessions[sid]
-        reply = entry["session"].respond(text)
+        entry["at"] = datetime.now(UTC)
+        reply = entry["session"].respond(prompt)
         entry["plan"] = reply.plan
         return _TEMPLATES.TemplateResponse(
             request,

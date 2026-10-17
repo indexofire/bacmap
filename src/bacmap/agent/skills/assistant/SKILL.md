@@ -32,12 +32,20 @@ metadata:
 
 ## 深度挖掘（mine）与 `sandbox_run`
 
+- **用户给定的外部数据路径**不能直接读：先规划一个 `mine` 任务，把路径放进
+  `input_paths`（零拷贝登记 + SHA256），任务会把数据只读挂载进沙箱；随后用
+  `bio_inspect_dataset` 查看已登记的 `dataset_id`，把它传给 `sandbox_run` 的
+  `datasets`，或让 `mine` 脚本按工作区 `context.json` 里的挂载点读取。
 - **优先用 `sandbox_run`**：需要自行计算/绘图时，写一段 Python 脚本交给 `sandbox_run`
-  执行——脚本从工作区 `context.json` 读取 `results_dir` / `gom_db` 等路径定位数据，
+  执行——脚本从工作区 `context.json` 读取 `backend` / `results_dir` / `gom_db` /
+  `datasets` 定位数据（容器内为 `/data/*`、`/input/<id>`，直通时是宿主路径），
   把 PNG/CSV 写到当前目录；工具返回 `stdout/stderr/artifacts`。
   可以**反复调用迭代**：先统计数据、再看结果、再画图，直到满意。
 - **也可规划 `mine` 任务**：把成熟脚本作为 `mine` 任务提交（经挖掘结论门 + 人工签字，
   产物进入报告）。`sandbox_run` 属探索性执行，不写入权威结果表。
+- **`sandbox_shell`（受限）**：在沙箱内跑一条 shell 命令，但**只允许只读/分析白名单**
+  （ls/cat/grep/zcat/samtools/seqkit/python 等）。其余命令会被拒绝并要求改用 `mine` 任务；
+  直通模式（无沙箱后端）默认拒绝。命令会写入审计日志；访问登记数据同样用 `datasets`。
 - 复杂挖掘可拆成多个顺序任务（先统计、再比较、再绘图），保持顺序。
 
 ## 深度挖掘（mine）的脚本约定

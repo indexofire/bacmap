@@ -583,6 +583,67 @@ def review_flags(args: dict[str, Any], **kwargs: Any) -> str:
     return json.dumps({"events": events[:limit], "total": len(events)}, ensure_ascii=False)
 
 
+# ---------------------------------------------------------------------------
+# bio_inspect_dataset —— 沙箱数据集登记查看（A/B，ADR-11）
+# ---------------------------------------------------------------------------
+
+
+@tool_handler
+def inspect_dataset(args: dict[str, Any], **kwargs: Any) -> str:
+    """列出/查看已登记的可沙箱访问数据集（零拷贝，SHA256 证据链）。"""
+    dataset_id = str(args.get("dataset_id", "")).strip()
+    verify = bool(args.get("verify", False))
+    db_path = _GOM_DB
+    if not db_path.is_file():
+        return json.dumps(
+            {"count": 0, "datasets": [], "note": "尚无登记数据集"}, ensure_ascii=False
+        )
+
+    from bacmap.store.datasets import DatasetRegistry
+
+    with DatasetRegistry(db_path) as reg:
+        if dataset_id:
+            ds = reg.get(dataset_id)
+            if ds is None:
+                return json.dumps(
+                    {"error": f"unknown dataset: {dataset_id}"}, ensure_ascii=False
+                )
+            if verify:
+                reg.verify(dataset_id)
+                ds = reg.get(dataset_id)
+                assert ds is not None
+            return json.dumps(
+                {
+                    "dataset_id": ds.dataset_id,
+                    "kind": ds.kind,
+                    "source_path": ds.source_path,
+                    "resolved_path": ds.resolved_path,
+                    "total_size": ds.total_size,
+                    "manifest_sha256": ds.manifest_sha256,
+                    "status": ds.status,
+                    "mount": ds.mount_guest,
+                    "data_class": ds.data_class,
+                    "registered_by": ds.registered_by,
+                    "registered_at": ds.registered_at,
+                    "n_entries": len(ds.entries),
+                    "entries": ds.entries[:200],
+                },
+                ensure_ascii=False,
+            )
+
+        items = [
+            {
+                "dataset_id": d.dataset_id,
+                "kind": d.kind,
+                "total_size": d.total_size,
+                "status": d.status,
+                "source_path": d.source_path,
+                "mount": d.mount_guest,
+            }
+            for d in reg.list_all()
+        ]
+    return json.dumps({"count": len(items), "datasets": items}, ensure_ascii=False)
+
 
 # ---------------------------------------------------------------------------
 # bio_compare_runs —— 运行比较（ADR-18）

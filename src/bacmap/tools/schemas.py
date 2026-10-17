@@ -845,3 +845,28 @@ COMPARE_RUNS = {
         "required": ["sample_id", "run_a", "run_b"],
     },
 }
+
+INSPECT_DATASET = {
+    "name": "bio_inspect_dataset",
+    "description": (
+        "List or inspect datasets registered for sandbox access (local paths given "
+        "by the user, registered by a mine task's input_paths). Without dataset_id, "
+        "lists all registered datasets (id, kind, size, status, source path). With "
+        "dataset_id, returns the file manifest, SHA256 manifest hash and sandbox "
+        "mount; set verify=true to recompute SHA256 and detect changes. Pass a "
+        "dataset_id to sandbox_run to read that data inside the sandbox."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "dataset_id": {
+                "type": "string",
+                "description": "Registered dataset id (optional; omit to list all).",
+            },
+            "verify": {
+                "type": "boolean",
+                "description": "Recompute SHA256 to detect changes (default false).",
+            },
+        },
+    },
+}

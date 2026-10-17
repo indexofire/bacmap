@@ -405,3 +405,102 @@ class TestNonStringMlst:
         from bacmap.store.baseline import _summary_mlst_st
 
         assert _summary_mlst_st({"steps": {"mlst": {"st": "19"}}}) == ""
+
+
+class TestViewsHardening:
+    """共享视图层：真实 summary 的 species 键 + 非 dict 命中条目的健壮性。"""
+
+    def test_digest_reads_species_species_key(self):
+        from bacmap.interfaces.views import sample_digest
+
+        d = sample_digest(
+            {"sample": "X", "steps": {"species": {"species": "Klebsiella_pneumoniae"}}}
+        )
+        assert d["verdict"] == "Klebsiella_pneumoniae"
+
+    def test_digest_tolerates_non_dict_hits(self):
+        from bacmap.interfaces.views import sample_digest
+
+        d = sample_digest(
+            {
+                "sample": "X",
+                "steps": {
+                    "species": {"species": "Salmonella"},
+                    "amr": {
+                        "abricate_card": ["oops", {"GENE": "blaCTX-M-15"}],
+                        "abricate_vfdb": None,
+                    },
+                    "plasmid": "N/A",
+                },
+            }
+        )
+        assert d["card_genes"] == ["blaCTX-M-15"]
+        assert d["vfdb_genes"] == []
+        assert d["n_plasmid"] == 0
+
+
+class TestTuiHardening:
+    """巡检加固：连按确认只提交一次、超长提示词拦截。"""
+
+    def test_double_confirm_submits_once(self, engine, monkeypatch):
+        import time as _time
+
+        from bacmap.agent.session import AgentReply, AnalysisPlan, PlannedTask
+        from bacmap.interfaces import assistant as A
+
+        class _FakeSession:
+            async def respond_async(self, text):
+                return AgentReply(
+                    message="规划完成",
+                    plan=AnalysisPlan(
+                        reply="规划完成",
+                        tasks=[PlannedTask(task_type="analyze", params={"samples": ["SAM-001"]})],
+                    ),
+                )
+
+        monkeypatch.setattr(
+            A, "build_session", lambda engine, submitted_by="assistant": _FakeSession()
+        )
+        calls: list = []
+
+        def _exec(engine, plan, submitted_by="assistant"):
+            calls.append(plan)
+            _time.sleep(0.3)  # 制造并发窗口：第二次 Ctrl+Y 应被忽略
+            return [{"task_type": "analyze", "task_id": "t1", "ok": True}]
+
+        monkeypatch.setattr(A, "execute_plan", _exec)
+
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                inp = app.query_one("#prompt", Input)
+                inp.value = "跑 SAM-001 的分析"
+                inp.focus()
+                await pilot.press("enter")
+                await asyncio.sleep(0.5)
+                await pilot.pause()
+                assert app._pending_plan is not None
+                app.query_one("#tasks-table", DataTable).focus()
+                await pilot.press("ctrl+y")
+                await pilot.press("ctrl+y")  # 立即无效：待确认计划已清空
+                await asyncio.sleep(0.8)
+                await pilot.pause()
+                assert len(calls) == 1
+
+        asyncio.run(_run())
+
+    def test_overlong_prompt_rejected_without_session(self, engine):
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                inp = app.query_one("#prompt", Input)
+                inp.value = "x" * 9000
+                inp.focus()
+                await pilot.press("enter")
+                await pilot.pause()
+                assert app._session is None  # 未触发 LLM 会话
+                assert app._pending_plan is None
+
+        asyncio.run(_run())

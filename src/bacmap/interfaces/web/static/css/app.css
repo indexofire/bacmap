@@ -452,6 +452,12 @@ svg {
   background: rgba(255, 255, 255, 0.03);
 }
 
+/* 键盘聚焦保留可见外框（:focus 的 outline:none 仅针对鼠标点击；键盘走 :focus-visible） */
+.field__control:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
 .field__control::placeholder {
   color: var(--text-3);
   opacity: 1;
@@ -861,3 +867,7 @@ code {
     gap: var(--sp-4);
   }
 }
+
+/* 间距工具类（替代内联 style，配合严格 CSP） */
+.mt-1 { margin-top: 1rem; }
+.mt-075 { margin-top: .75rem; }

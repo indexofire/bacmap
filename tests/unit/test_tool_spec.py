@@ -47,7 +47,7 @@ class TestRegistryAccessors:
         from bacmap.tools import registry
 
         specs = registry.list_specs()
-        assert len(specs) == 24  # 元数据缺项会被静默丢弃——此处锁死数量
+        assert len(specs) == 25  # 元数据缺项会被静默丢弃——此处锁死数量
 
     def test_get_returns_spec(self):
         from bacmap.tools import registry

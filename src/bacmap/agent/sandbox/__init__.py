@@ -38,6 +38,7 @@ class SandboxSpec:
     command: list[str]
     workspace: Path                    # 任务工作区（可读写）
     readonly_mounts: dict[str, str] = field(default_factory=dict)  # 宿主路径 → 容器内挂载点
+    allowed_readonly_roots: tuple[Path, ...] = ()  # fs_scope 白名单（D）
 
     def __post_init__(self) -> None:
         self.validate()
@@ -47,6 +48,15 @@ class SandboxSpec:
             raise ValueError("SandboxSpec 需要 image 与 command")
         if not self.workspace.is_dir():
             raise ValueError(f"workspace 不存在: {self.workspace}")
+        if self.readonly_mounts:
+            # D：只读挂载必须显式声明允许根，且宿主路径落在允许根内——否则越权。
+            if not self.allowed_readonly_roots:
+                raise ValueError("readonly_mounts 需要 allowed_readonly_roots（fs_scope 白名单）")
+            roots = [Path(r).resolve() for r in self.allowed_readonly_roots]
+            for host in self.readonly_mounts:
+                host_p = Path(host).resolve()
+                if not any(host_p == r or r in host_p.parents for r in roots):
+                    raise ValueError(f"只读挂载越权（越出 fs_scope 允许根）: {host}")
 
 
 def _which(binary: str) -> str | None:
@@ -126,6 +136,16 @@ class SandboxExecutor:
                 return runner, None
             logger.info("sandbox backend %s not found on PATH", binary)
         return None, "no apptainer/podman on PATH"
+
+    def backend_name(self) -> str:
+        """会在实际执行时使用的后端名（不执行）：apptainer/podman/direct/unavailable。
+
+        用于在写 ``context.json`` 前决定用 guest 路径还是宿主路径。
+        """
+        runner, _ = self._pick_runner()
+        if runner is not None:
+            return runner.backend_name
+        return "direct" if self._allow_unsandboxed else "unavailable"
 
     def run(self, spec: SandboxSpec) -> SandboxResult:
         """在工作区内以 container 内路径执行 command（cwd=/workspace）。"""

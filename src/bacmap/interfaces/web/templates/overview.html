@@ -29,7 +29,7 @@
     {% endfor %}
     </tbody>
   </table>
-  <div class="card__head" style="margin-top:1rem">
+  <div class="card__head mt-1">
     <h2 class="card__title">用途路由</h2>
   </div>
   {% if routing %}
@@ -43,7 +43,7 @@
   {% else %}
   <p class="empty__hint">未配置路由——所有用途走第一个启用端点。</p>
   {% endif %}
-  <p class="field__hint" style="margin-top:.75rem">数据策略：cloud 端点上限 <strong>{{ cloud_max_data_class }}</strong>；D3/D4 永不外发（代码强制，配置不可放宽）。</p>
+  <p class="field__hint mt-075">数据策略：cloud 端点上限 <strong>{{ cloud_max_data_class }}</strong>；D3/D4 永不外发（代码强制，配置不可放宽）。</p>
 </section>
 
 <section class="card" aria-labelledby="ov-env">

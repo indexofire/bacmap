@@ -31,6 +31,7 @@ READ_TOOL_NAMES: tuple[str, ...] = (
     "bio_search_samples",
     "bio_query_metadata",
     "bio_review_flags",
+    "bio_inspect_dataset",
     "bio_diagnose",
     "bio_compare_runs",
 )

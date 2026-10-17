@@ -72,7 +72,11 @@ def sample_digest(summary: dict[str, Any]) -> dict[str, Any]:
 
     steps = summary.get("steps", {}) or {}
     sp = steps.get("species", {}) or {}
-    verdict = sp.get("verdict", "N/A") if isinstance(sp, dict) else str(sp)
+    # 真实 summary 存 steps.species.species（gside）；旧 fixtures 用 verdict。
+    if isinstance(sp, dict):
+        verdict = str(sp.get("verdict") or sp.get("species") or "N/A")
+    else:
+        verdict = str(sp) if sp else "N/A"
     mlst_raw = steps.get("mlst", "")
     st = parse_mlst(mlst_raw)["st"] if isinstance(mlst_raw, str) and mlst_raw else "N/A"
     sero = steps.get("serotype", {}) or {}
@@ -80,25 +84,36 @@ def sample_digest(summary: dict[str, Any]) -> dict[str, Any]:
     amr = steps.get("amr", {}) or {}
     card = amr.get("abricate_card", []) if isinstance(amr, dict) else []
     vfdb = amr.get("abricate_vfdb", []) if isinstance(amr, dict) else []
-    plasmid = (steps.get("plasmid", {}) or {}).get("plasmidfinder", [])
+    plasmid_steps = steps.get("plasmid", {}) or {}
+    plasmid = plasmid_steps.get("plasmidfinder", []) if isinstance(plasmid_steps, dict) else []
     dec = steps.get("dec", {}) if isinstance(steps.get("dec", {}), dict) else {}
+
+    def _genes(hits: Any) -> list[str]:
+        if not isinstance(hits, list):
+            return []
+        return sorted(
+            {str(g.get("GENE", "")) for g in hits if isinstance(g, dict) and g.get("GENE")}
+        )
+
+    card_genes = _genes(card)
+    vfdb_genes = _genes(vfdb)
     return {
         "sample_id": summary.get("_sample_id", summary.get("sample", "")),
         "verdict": verdict,
         "st": st,
         "serovar": serovar,
-        "n_card": len(card),
-        "n_vfdb": len(vfdb),
-        "n_plasmid": len(plasmid),
+        "n_card": len(card) if isinstance(card, list) else 0,
+        "n_vfdb": len(vfdb) if isinstance(vfdb, list) else 0,
+        "n_plasmid": len(plasmid) if isinstance(plasmid, list) else 0,
         "ipaH": dec.get("ipaH", "N/A"),
         "pathotype": dec.get("pathotype", "N/A"),
-        "card_genes": sorted({str(g.get("GENE", "")) for g in card if g.get("GENE")}),
-        "vfdb_genes": sorted({str(g.get("GENE", "")) for g in vfdb if g.get("GENE")}),
-        "amr_genes": sorted({str(g.get("GENE", "")) for g in card if g.get("GENE")}),
-        "virulence_genes": sorted({str(g.get("GENE", "")) for g in vfdb if g.get("GENE")}),
+        "card_genes": card_genes,
+        "vfdb_genes": vfdb_genes,
         "plasmids": sorted(
             {str(p.get("GENE", "")) for p in plasmid if isinstance(p, dict) and p.get("GENE")}
-        ),
+        )
+        if isinstance(plasmid, list)
+        else [],
     }
 
 

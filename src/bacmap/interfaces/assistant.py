@@ -33,11 +33,15 @@ def build_session(engine: DbosTaskEngine, *, submitted_by: str = "assistant") ->
             home,
         )
     gateway = LlmGateway(load_llm_config(home / "config.toml"))
-    from bacmap.agent.sandbox.tool import build_sandbox_tool
+    from bacmap.agent.sandbox.tool import build_sandbox_tool, build_shell_tool
 
     workspace = home / "workspaces" / "assistant"
     workspace.mkdir(parents=True, exist_ok=True)
-    return AgentSession(gateway, home=home, extra_tools=[build_sandbox_tool(workspace)])
+    return AgentSession(
+        gateway,
+        home=home,
+        extra_tools=[build_sandbox_tool(workspace), build_shell_tool(workspace)],
+    )
 
 
 def endpoint_status(engine: DbosTaskEngine) -> str:
