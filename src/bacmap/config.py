@@ -43,14 +43,23 @@ def _load_config_toml(home: Path) -> dict[str, Any]:
     return {}
 
 
+def _resolve_data_dir(home: Path, paths_cfg: dict[str, Any], env_value: str | None) -> Path:
+    """DATA_DIR 解析：环境变量优先（多实例/测试），其次 config.toml 的 paths.data_dir，
+    最后 ``$BACMAP_HOME/data``。后两者展开 ``~`` 并 resolve（env 由 _env_path 处理）。"""
+    if env_value:
+        return Path(env_value).expanduser().resolve()
+    configured = paths_cfg.get("data_dir")
+    if isinstance(configured, str) and configured.strip():
+        return Path(configured).expanduser().resolve()
+    return home / "data"
+
+
 BACMAP_HOME: Path = _env_path("BACMAP_HOME", Path.home() / ".local" / "share" / "bacmap")
 
 _toml = _load_config_toml(BACMAP_HOME)
 _paths_cfg: dict[str, Any] = _toml.get("paths", {})
 
-DATA_DIR: Path = _env_path("BACMAP_DATA_DIR", BACMAP_HOME / "data")
-if isinstance(_paths_cfg.get("data_dir"), str):
-    DATA_DIR = Path(_paths_cfg["data_dir"])
+DATA_DIR: Path = _resolve_data_dir(BACMAP_HOME, _paths_cfg, os.environ.get("BACMAP_DATA_DIR"))
 
 REF_DIR: Path = DATA_DIR / "reference"
 
@@ -81,7 +90,8 @@ WORKFLOW_STATE_DIR: Path = _env_path("BACMAP_WORKFLOW_STATE_DIR", BACMAP_HOME / 
 WORKFLOW_LOG_DIR: Path = WORKFLOW_STATE_DIR / "log"
 
 # 大型鉴定数据库（GTDB-Tk / CheckM2 等）由部署者通过环境变量指向。
-CHECKM2_DB: Path | None = _env_path("CHECKM2DB", None) if os.environ.get("CHECKM2DB") else None
+# 注：CheckM2 官方变量为 CHECKM2_DB（与文档一致）；CHECKM2DB 作为旧别名兼容。
+CHECKM2_DB: Path | None = _env_path("CHECKM2_DB", None) or _env_path("CHECKM2DB", None)
 GTDB_DB: Path | None = _env_path("GTDBTK_DATA_PATH", None) or _env_path("GTDBDB", None)
 
 

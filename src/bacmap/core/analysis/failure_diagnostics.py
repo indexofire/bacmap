@@ -52,15 +52,18 @@ _PATTERNS: list[tuple[str, re.Pattern[str], str, str, list[str]]] = [
         "lock",
         re.compile(r"Directory cannot be locked|Error locking directory|lock.*exist", re.I),
         "Snakemake 工作目录被锁定，可能由前一次中断的运行留下",
-        "解锁工作目录后重试",
-        ["cd workflows/bacmap && snakemake --unlock"],
+        "解锁工作目录后重试（路径按 BACMAP_HOME 解析，ADR-03）",
+        ['snakemake --unlock -d "$BACMAP_HOME/workflows/bacmap"'],
     ),
     (
         "missing_input",
         re.compile(r"MissingInputException|Missing input files", re.I),
         "缺少输入文件，可能 FASTQ 路径错误或文件未下载",
         "检查 samples.tsv 中的路径，确保 FASTQ 文件存在",
-        ["cat workflows/bacmap/config/samples.tsv", "python scripts/download_gold_standard.py"],
+        [
+            'cat "$BACMAP_HOME/workflows/bacmap/config/samples.tsv"',
+            'ls "$BACMAP_HOME/gs"',
+        ],
     ),
     (
         "oom",
@@ -70,8 +73,8 @@ _PATTERNS: list[tuple[str, re.Pattern[str], str, str, list[str]]] = [
             re.I,
         ),
         "内存不足（OOM），组装或比对步骤消耗过多 RAM",
-        "减少线程数或限制内存使用",
-        ["python scripts/run_analysis.py --sample <ID> --cores 2"],
+        "降低 config.yaml 的 cores/threads 后重试（避免与本地模型争内存）",
+        ["bacmap task submit --type analyze --samples <ID>"],
     ),
     (
         "missing_tool",
@@ -102,7 +105,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str], str, str, list[str]]] = [
         "检查是否有僵尸进程，或增加超时时间",
         [
             "ps aux | grep -E 'bwa|samtools|blast' | grep -v grep",
-            "cd workflows/bacmap && snakemake --unlock",
+            'snakemake --unlock -d "$BACMAP_HOME/workflows/bacmap"',
         ],
     ),
     (
@@ -110,21 +113,21 @@ _PATTERNS: list[tuple[str, re.Pattern[str], str, str, list[str]]] = [
         re.compile(r"No space left on device|disk full|ENOSPC", re.I),
         "磁盘空间不足",
         "清理临时文件或更换更大磁盘",
-        ["df -h", "rm -rf workflows/bacmap/.snakemake/tmp/*"],
+        ["df -h", 'rm -rf "$BACMAP_HOME/workflows/bacmap/.snakemake/tmp"/*'],
     ),
     (
         "permission",
         re.compile(r"Permission denied|Operation not permitted", re.I),
         "文件权限不足",
         "检查文件/目录权限",
-        ["ls -la <path>", "chmod -R u+rwX results/"],
+        ["ls -la <path>", 'chmod -R u+rwX "$BACMAP_HOME/results"'],
     ),
     (
         "snakemake_v8",
         re.compile(r"TypeError.*snakefile|AttributeError.*dag|version.*8.*incompatible", re.I),
-        "Snakemake 版本不兼容（需要 7.32.x）",
-        "锁定 Snakemake 版本",
-        ["pixi install snakemake=7.32"],
+        "Snakemake 版本不兼容（本仓库锁定 9.27.*，见 ADR-05）",
+        "运行 pixi install 按 pixi.lock 恢复锁定版本",
+        ["pixi install"],
     ),
 ]
 

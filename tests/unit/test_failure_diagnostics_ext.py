@@ -311,3 +311,29 @@ class TestSummaryIntegration:
         s = out.summary
         assert s.startswith("[oom]")
         assert "rule=shovill" in s
+
+
+class TestRecoveryCommandAccuracy:
+    """恢复建议必须真实可执行（回归：曾引用不存在的 scripts/ 与过时 7.32）。"""
+
+    def test_no_phantom_scripts_or_relative_cd(self):
+        from bacmap.core.analysis.failure_diagnostics import _PATTERNS
+
+        cmds = [c for _, _, _, _, cs in _PATTERNS for c in cs]
+        assert not any("scripts/" in c for c in cmds)
+        assert not any(c.startswith("cd ") for c in cmds)
+
+    def test_data_paths_use_bacmap_home(self):
+        from bacmap.core.analysis.failure_diagnostics import _PATTERNS
+
+        cmds = [c for _, _, _, _, cs in _PATTERNS for c in cs]
+        assert any("$BACMAP_HOME" in c for c in cmds)
+
+    def test_snakemake_advice_matches_pinned_lock(self):
+        from bacmap.core.analysis.failure_diagnostics import diagnose
+
+        out = diagnose("Snakemake version 8 incompatible")
+        assert out.error_type == "snakemake_v8"
+        joined = out.suggested_fix + " " + " ".join(out.recovery_commands)
+        assert "7.32" not in joined
+        assert "9.27" in out.details

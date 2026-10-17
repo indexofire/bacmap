@@ -75,3 +75,46 @@ class TestRunsUsesEnvLock:
             workflow="bacmap", workflow_dir=wf, strain_ids=[], db_path=tmp_path / "r.sqlite"
         )
         assert run.env_lock_sha256 == runs.file_sha256(lock)
+
+
+class TestDataDirResolution:
+    """DATA_DIR 优先级：env > config.toml(paths.data_dir) > $BACMAP_HOME/data（含展开/resolve）。"""
+
+    def test_env_wins_over_toml(self, tmp_path: Path):
+        env = tmp_path / "envdir"
+        toml_dir = tmp_path / "tomldir"
+        got = config._resolve_data_dir(tmp_path, {"data_dir": str(toml_dir)}, str(env))
+        assert got == env.resolve()
+
+    def test_toml_fallback_resolved(self, tmp_path: Path):
+        toml_dir = tmp_path / "tomldir"
+        assert config._resolve_data_dir(tmp_path, {"data_dir": str(toml_dir)}, None) == (
+            toml_dir.resolve()
+        )
+
+    def test_blank_toml_falls_back_to_home_data(self, tmp_path: Path):
+        assert config._resolve_data_dir(tmp_path, {"data_dir": "   "}, None) == tmp_path / "data"
+
+    def test_default_home_data(self, tmp_path: Path):
+        assert config._resolve_data_dir(tmp_path, {}, None) == tmp_path / "data"
+
+
+class TestCheckm2EnvName:
+    """文档写 CHECKM2_DB；代码须读同名（回归：曾误读 CHECKM2DB，文档变量失效）。"""
+
+    def test_checkm2_db_env_name_aligned(self, tmp_path: Path):
+        import os
+        import subprocess
+        import sys
+
+        env = {**os.environ, "CHECKM2_DB": str(tmp_path / "c2")}
+        env.pop("CHECKM2DB", None)
+        out = subprocess.run(
+            [sys.executable, "-c", "from bacmap import config; print(config.CHECKM2_DB)"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert out.returncode == 0, out.stderr
+        assert out.stdout.strip() == str((tmp_path / "c2").resolve())

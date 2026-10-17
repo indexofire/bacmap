@@ -109,6 +109,12 @@ class TestReadJsonFile:
         p.write_text('{"key": "value"}')
         assert read_json_file(p) == {"key": "value"}
 
+    def test_top_level_array_returned_as_is(self, tmp_path):
+        # 诚实标注：JSON 顶层为数组时原样返回（调用方自行校验形态）。
+        p = tmp_path / "list.json"
+        p.write_text('["a", "b"]')
+        assert read_json_file(p) == ["a", "b"]
+
     def test_missing(self, tmp_path):
         assert read_json_file(tmp_path / "nonexistent.json") is None
 

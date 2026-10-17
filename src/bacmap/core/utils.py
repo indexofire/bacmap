@@ -37,17 +37,8 @@ def parse_mlst(mlst_tsv: str) -> dict[str, Any]:
         else:
             result["alleles"][col_lower] = data[i]
 
-    if "st" not in result:
-        st_header_idx = None
-        for i, col in enumerate(header):
-            if col.lower() == "st":
-                st_header_idx = i
-                break
-        if st_header_idx is not None and st_header_idx < len(data):
-            result["st"] = data[st_header_idx]
-        else:
-            result["st"] = "N/A"
-
+    # 无 ST 列时给出 "N/A" 默认（原实现有一段重复的 fallback 查找，已删除）。
+    result.setdefault("st", "N/A")
     return result
 
 
@@ -84,14 +75,17 @@ def parse_abricate_tsv(tsv_text: str) -> list[dict[str, str]]:
     return rows
 
 
-def read_json_file(path: str | Path) -> dict[str, Any] | None:
-    """Read and parse a JSON file, return None if missing or invalid."""
+def read_json_file(path: str | Path) -> Any | None:
+    """Read and parse a JSON file; None if missing, empty, or invalid.
+
+    返回类型标注为 ``Any``（诚实）：JSON 顶层可以是对象、数组或标量，调用方
+    自行按预期形态校验——不要假定一定是 dict。
+    """
     p = Path(path)
     if not p.exists() or p.stat().st_size == 0:
         return None
     try:
-        data: dict[str, Any] = json.loads(p.read_text())
-        return data
+        return json.loads(p.read_text())
     except (json.JSONDecodeError, UnicodeDecodeError, OSError):
         return None
 
