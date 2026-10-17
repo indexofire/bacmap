@@ -59,14 +59,22 @@ def _run_align_and_sort(
 
     with tempfile.TemporaryFile(mode="w+t") as err:
         with subprocess.Popen(aligner_cmd, stdout=subprocess.PIPE, stderr=err) as ap:
-            proc = subprocess.run(
-                [samtools, "sort", "-@", str(threads), "-o", out_bam, "-"],
-                stdin=ap.stdout,
-                capture_output=True,
-                text=True,
-                timeout=600,
-            )
-            rc = ap.wait(timeout=600)
+            try:
+                proc = subprocess.run(
+                    [samtools, "sort", "-@", str(threads), "-o", out_bam, "-"],
+                    stdin=ap.stdout,
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                )
+            except subprocess.TimeoutExpired:
+                ap.kill()  # 不留遗留对齐进程
+                raise RuntimeError("samtools sort timed out (600s)") from None
+            try:
+                rc = ap.wait(timeout=600)
+            except subprocess.TimeoutExpired:
+                ap.kill()
+                raise RuntimeError(f"{aligner_name} timed out (600s)") from None
         if rc != 0:
             err.seek(0)
             raise RuntimeError(f"{aligner_name} failed (exit {rc}): {err.read()[:500]}")

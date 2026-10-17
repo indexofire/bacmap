@@ -451,17 +451,34 @@ def _var_mpileup_call(inp: str, args: dict[str, Any]) -> str:
         mpileup_cmd += extra.split()
     call_cmd = ["bcftools", "call", "-mv", "-Ov"]
 
-    # Pipe: mpileup | call > output
-    p1 = subprocess.Popen(mpileup_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    assert p1.stdout is not None and p1.stderr is not None
-    with open(out_path, "wb") as f:
-        p2 = subprocess.run(
-            call_cmd, stdin=p1.stdout, stdout=f, stderr=subprocess.PIPE, timeout=600
-        )
-    p1.stdout.close()
-    err = p1.stderr.read().decode() + p2.stderr.decode()
+    # 管道：mpileup | call > output
+    # 注意：p1 的 stderr 必须落到临时文件（不是 PIPE）——否则 stderr 写满会阻塞 mpileup、
+    # 进而 p2 读不到 stdout 而死锁；且 p2 超时必须 kill p1，避免遗留进程。
+    import tempfile
 
-    if p1.wait() != 0 or p2.returncode != 0:
+    with tempfile.TemporaryFile() as mpileup_err:
+        p1 = subprocess.Popen(mpileup_cmd, stdout=subprocess.PIPE, stderr=mpileup_err)
+        assert p1.stdout is not None
+        try:
+            with open(out_path, "wb") as f:
+                p2 = subprocess.run(
+                    call_cmd,
+                    stdin=p1.stdout,
+                    stdout=f,
+                    stderr=subprocess.PIPE,
+                    timeout=600,
+                )
+        except subprocess.TimeoutExpired:
+            p1.kill()
+            p1.wait()
+            return json.dumps({"error": "bcftools call timed out (600s)"})
+        finally:
+            p1.stdout.close()
+        rc1 = p1.wait()
+        mpileup_err.seek(0)
+        err = mpileup_err.read().decode(errors="replace") + p2.stderr.decode(errors="replace")
+
+    if rc1 != 0 or p2.returncode != 0:
         return json.dumps({"error": "bcftools mpileup/call failed", "stderr": err[-2000:]})
 
     return json.dumps(

@@ -79,7 +79,13 @@ dec_serotype = read_json(snakemake.input.ectyper, {})
 if not isinstance(dec_serotype, dict):
     dec_serotype = {}
 dec_pathotype = read_file(snakemake.input.pathotype, "N/A")
-ipah = "ipaH_positive" if any(m.get("gene") == "ipaH" for m in species_id.get("detected_markers", [])) else "ipaH_negative"
+# gside 标记名小写（"ipah"）；大小写不敏感匹配，且容忍 marker 非 dict/非 list 形态。
+_markers = species_id.get("detected_markers", [])
+_marker_genes = {
+    (str(m.get("gene", "")) if isinstance(m, dict) else str(m)).lower()
+    for m in (_markers if isinstance(_markers, list) else [])
+}
+ipah = "ipaH_positive" if "ipah" in _marker_genes else "ipaH_negative"
 summary["steps"]["dec"] = {
     "ecoh_serotype": dec_serotype.get("serotype", "N/A"),
     "o_type": dec_serotype.get("o_type", "-"),
@@ -133,12 +139,19 @@ annotation = read_json(snakemake.input.annotation, {})
 if isinstance(annotation, dict) and annotation.get("summary"):
     ann_summary = annotation.get("summary", {})
     top_genes = []
-    for feat in annotation.get("features", [])[:20]:
-        if feat.get("gene") and feat.get("identity", 0) >= 80:
+    _features = annotation.get("features", [])
+    for feat in (_features if isinstance(_features, list) else [])[:20]:
+        ident = feat.get("identity", 0) if isinstance(feat, dict) else 0
+        if (
+            isinstance(feat, dict)
+            and feat.get("gene")
+            and isinstance(ident, (int, float))
+            and ident >= 80
+        ):
             top_genes.append({
                 "gene": feat["gene"],
                 "product": feat.get("product", ""),
-                "identity": feat.get("identity", 0),
+                "identity": ident,
                 "source": feat.get("source", ""),
             })
     summary["steps"]["annotation"] = {

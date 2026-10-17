@@ -960,3 +960,57 @@ class TestVariant:
         p.write_text("##header\n#CHROM\nchr1\t1\nchr1\t2\n\n")
         assert tools_cli._count_vcf_records(str(p)) == 2
         assert tools_cli._count_vcf_records(str(tmp_path / "nope.vcf")) == 0
+
+
+class TestMpileupPipelineSafety:
+    """mpileup 管道：p2 超时必须 kill p1（避免遗留进程/死锁）。"""
+
+    def test_call_timeout_kills_upstream(self, tmp_path, monkeypatch):
+        import io
+        import json
+
+        import bacmap.tools.cli as cli
+
+        bam = tmp_path / "a.bam"
+        bam.write_bytes(b"x")
+        (tmp_path / "a.bam.bai").write_bytes(b"")  # 跳过 index
+        ref = tmp_path / "r.fa"
+        ref.write_text(">r\nACGT\n")
+        (tmp_path / "r.fa.fai").write_text("")  # 跳过 faidx
+        out = tmp_path / "o.vcf"
+
+        monkeypatch.setattr(cli, "_which_or_error", lambda c: "/usr/bin/" + c)
+
+        class _P1:
+            def __init__(self):
+                self.killed = False
+                self.stdout = io.BytesIO(b"")
+
+            def kill(self):
+                self.killed = True
+
+            def wait(self):
+                return -9
+
+        p1 = _P1()
+        monkeypatch.setattr(cli.subprocess, "Popen", lambda *a, **k: p1)
+
+        def _run(cmd, **k):
+            if cmd[:2] == ["bcftools", "call"]:
+                raise cli.subprocess.TimeoutExpired(cmd=cmd, timeout=600)
+            raise AssertionError(f"unexpected run: {cmd}")
+
+        monkeypatch.setattr(cli.subprocess, "run", _run)
+
+        res = json.loads(
+            cli.variant(
+                {
+                    "operation": "mpileup_call",
+                    "input": str(bam),
+                    "reference": str(ref),
+                    "output": str(out),
+                }
+            )
+        )
+        assert "timed out" in res["error"]
+        assert p1.killed is True

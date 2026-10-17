@@ -444,3 +444,45 @@ class TestReadMapperFacadeRouting:
             ["r1.fq"], "ref.fasta", "out.bam", threads=16, extra_args="-Y"
         )
         assert result == {"aligner": "bwa-mem"}
+
+
+class TestAlignTimeoutKillsChild:
+    """samtools sort 超时必须 kill 对齐子进程（否则遗留进程/僵尸）。"""
+
+    def test_sort_timeout_kills_aligner(self, tmp_path, monkeypatch):
+        import subprocess
+
+        import bacmap.core.engine.read_mapper as rm
+
+        monkeypatch.setattr(rm, "which", lambda c: "/usr/bin/" + c)
+
+        class _AP:
+            def __init__(self):
+                self.killed = False
+                self.stdout = None
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def kill(self):
+                self.killed = True
+
+            def wait(self, timeout=None):
+                return -9
+
+        ap = _AP()
+        monkeypatch.setattr(rm.subprocess, "Popen", lambda *a, **k: ap)
+
+        def _run(cmd, **k):
+            raise subprocess.TimeoutExpired(cmd=cmd, timeout=600)
+
+        monkeypatch.setattr(rm.subprocess, "run", _run)
+
+        import pytest
+
+        with pytest.raises(RuntimeError, match="samtools sort timed out"):
+            rm._run_align_and_sort(["bwa", "mem"], str(tmp_path / "o.bam"), 2, "bwa")
+        assert ap.killed is True
