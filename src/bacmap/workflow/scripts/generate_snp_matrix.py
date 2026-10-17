@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 
-def read_vcf(vcf_path: str) -> tuple[list[str], list[list[str]]]:
+def read_vcf(vcf_path: str, min_qual: float = 30.0) -> tuple[list[str], list[list[str]]]:
     opener = gzip.open if vcf_path.endswith(".gz") else open
 
     samples: list[str] = []
@@ -47,7 +47,7 @@ def read_vcf(vcf_path: str) -> tuple[list[str], list[list[str]]]:
                 qual = float(qual_str) if qual_str != "." else 0
             except ValueError:
                 qual = 0
-            if qual < 30:
+            if qual < min_qual:
                 continue
 
             variants.append(fields)
@@ -135,7 +135,7 @@ def main() -> int:
         return 1
 
     print(f"Reading VCF: {args.input_vcf}", file=sys.stderr)
-    samples, variants = read_vcf(args.input_vcf)
+    samples, variants = read_vcf(args.input_vcf, args.min_qual)
     print(f"  Samples: {len(samples)}", file=sys.stderr)
     print(f"  Variants (QUAL>={args.min_qual}, biallelic SNP): {len(variants)}", file=sys.stderr)
 

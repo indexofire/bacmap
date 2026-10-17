@@ -1,7 +1,5 @@
 import sys
 
-import sys
-
 # SNP calling + joint variant calling + phylogenetic tree
 # Per-species-group: Salmonella / E.coli+Shigella / V.parahaemolyticus
 # Each group uses its own reference genome and produces independent tree
@@ -50,6 +48,7 @@ rule snp_calling:
     threads: 8
     shell:
         "mkdir -p {params.outdir} && "
+        "set -o pipefail && "
         "export PATH={params.pixi}:$PATH && "
         "bwa mem -t {threads} -Y -M {params.ref} {input.r1} {input.r2} | "
         "samtools sort -@ 4 -o {output.bam} && "
@@ -84,6 +83,7 @@ rule joint_variant_calling:
                 fh.write(_WD + "/" + s + "/snp/snps.bam\t" + s + "\n")
         vcfgz = _WD + "/snp/" + grp + "/joint.vcf.gz"
         cmd = (
+            "set -o pipefail && "
             "export PATH=" + _PIXI + ":$PATH && "
             "bcftools mpileup -f " + params.ref + " -q 20 -Q 20 --max-depth 200 "
             + bam_list + " | "

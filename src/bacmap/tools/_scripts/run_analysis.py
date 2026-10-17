@@ -173,7 +173,7 @@ def _cgmlst_cohort_targets(samples_tsv: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="病原菌自动分析编排器（4种病原通用）")
-    group = parser.add_mutually_exclusive_group(required=True)
+    group = parser.add_mutually_exclusive_group()
     group.add_argument("--sample", type=str, help="Sample ID to analyze")
     group.add_argument("--all", action="store_true", help="Analyze all samples")
     group.add_argument("--snp", action="store_true", help="Run SNP cohort analysis")
@@ -188,7 +188,8 @@ def main() -> int:
         dest="cgmlst_cohort",
         help="Run cgMLST cohort analysis (distance matrix + MST + summary) per group",
     )
-    group.add_argument("--status", action="store_true", help="Check analysis status")
+    # --status 可与 --sample 组合（查单样本状态），故不在互斥组内。
+    parser.add_argument("--status", action="store_true", help="Check analysis status")
     parser.add_argument("--cores", type=int, default=8)
     parser.add_argument(
         "--species-mode",
@@ -198,8 +199,17 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    has_action = bool(
+        args.sample or args.all or args.snp or args.cgmlst or args.cgmlst_cohort
+    )
+    if not args.status and not has_action:
+        parser.error(
+            "one of --sample/--all/--snp/--cgmlst/--cgmlst-cohort is required "
+            "(or --status)"
+        )
+
     if args.status:
-        status = check_status(None)
+        status = check_status(args.sample)
 
         print(f"\n{'=' * 60}")
         print("  分析状态")

@@ -154,11 +154,13 @@ class KnowledgeStore:
             rows = conn.execute(
                 "SELECT identifier FROM knowledge_entries"
                 " WHERE approved_by IS NOT NULL AND identifier IS NOT NULL"
-                " AND identifier != ''"
+                " AND trim(identifier) != ''"
             ).fetchall()
         out: set[str] = set()
         for r in rows:
             ident = r["identifier"].strip()
+            if not ident:  # 纯空白标识符不入可引用集合
+                continue
             m = _PMID_NORM_RE.match(ident)
             if m:
                 out.add(m.group(1))

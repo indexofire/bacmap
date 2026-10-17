@@ -70,7 +70,19 @@ def _load_thresholds(config_file: str | None, group: str | None) -> dict[str, ob
         cfg = yaml.safe_load(cfg_path.read_text()) or {}
     except Exception:  # pragma: no cover - defensive: config read must never break summary
         return {}
-    return cfg.get("cgmlst", {}).get("thresholds", {}).get(group, {})
+    thresholds = cfg.get("cgmlst", {}).get("thresholds", {})
+    # config.yaml 的 cgmlst.thresholds 按物种名建键（salmonella/ecoli/shigella/
+    # vparahaemolyticus，与 cgmlst_projection._load_species_thresholds 一致），
+    # 而 cohort 的 group 名是 pathogens.yaml 的 snp_groups 键（salmonella/ecoli/
+    # vpara）。故需把 group 映射到物种键，否则 vpara 组的 thresholds_applied 恒为空。
+    group_to_species_key = {
+        "salmonella": "salmonella",
+        "ecoli": "ecoli",
+        "shigella": "shigella",
+        "vpara": "vparahaemolyticus",
+    }
+    key = group_to_species_key.get(group, group)
+    return thresholds.get(key, {}) or {}
 
 
 def main() -> int:
@@ -102,6 +114,15 @@ def main() -> int:
 
     newick = tree_path.read_text().strip()
     matrix_payload = json.loads(matrix_path.read_text())
+    # gmlst 0.5.5 `visual matrix --format json` 把 labels/matrix 放在顶层 data 键下；
+    # 顶层缺关键字段时解封装，否则 samples/n_loci/allele_distances 全空。
+    if isinstance(matrix_payload, dict) and not any(
+        k in matrix_payload
+        for k in ("labels", "matrix", "samples", "distances", "allele_distances")
+    ):
+        inner = matrix_payload.get("data")
+        if isinstance(inner, dict):
+            matrix_payload = inner
     missing_rate = _missing_rate(profiles_path.read_text())
 
     samples = matrix_payload.get("samples") or matrix_payload.get("labels") or []

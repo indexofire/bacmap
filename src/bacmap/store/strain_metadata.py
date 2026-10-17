@@ -183,8 +183,6 @@ class StrainMetadataService:
 
         now = datetime.now(UTC).isoformat()
         core["strain_id"] = strain_id
-        if not core.get("sample_id"):
-            core["sample_id"] = strain_id
         core["extra"] = json.dumps(merged_extra, ensure_ascii=False) if merged_extra else None
         core["updated_at"] = now
 
@@ -199,6 +197,9 @@ class StrainMetadataService:
                 values = list(core.values()) + [strain_id]
                 self._conn.execute(f"UPDATE strain_metadata SET {sets} WHERE strain_id = ?", values)
             else:
+                # 仅在插入时补默认 sample_id；部分更新不得覆盖已存的 sample_id。
+                if not core.get("sample_id"):
+                    core["sample_id"] = strain_id
                 core["created_at"] = now
                 cols = ", ".join(core.keys())
                 placeholders = ", ".join("?" for _ in core)

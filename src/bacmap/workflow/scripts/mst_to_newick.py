@@ -20,7 +20,21 @@ def _sanitize(label: str) -> str:
     return s or "node"
 
 
+def _unwrap(payload: dict) -> dict:
+    """解封装 `gmlst visual * --format json` 的 {schema_version, data} 外壳。
+
+    gmlst 0.5.5 把真正的 node/edge 载荷放在顶层 ``data`` 键下；直接读顶层
+    ``nodes`` 会 KeyError，导致 cgMLST cohort 建树整条规则失败。
+    """
+    if not isinstance(payload, dict):
+        return payload
+    if "nodes" not in payload and isinstance(payload.get("data"), dict):
+        return payload["data"]
+    return payload
+
+
 def to_newick(payload: dict) -> str:
+    payload = _unwrap(payload)
     nodes = payload["nodes"]
     edges = payload.get("edges", [])
     adj: dict[int, list[tuple[int, float]]] = {n["id"]: [] for n in nodes}

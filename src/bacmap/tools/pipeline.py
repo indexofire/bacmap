@@ -26,6 +26,20 @@ from ._common import (
 )
 
 
+def _script_error(stdout: str) -> str | None:
+    """从 `_run_project_script` 输出提取错误信封（避免诊断信息被吞）。"""
+    try:
+        obj = json.loads(stdout)
+    except (TypeError, ValueError):
+        return None
+    if isinstance(obj, dict) and obj.get("error"):
+        detail = str(obj["error"])
+        if obj.get("stderr"):
+            detail += " | " + str(obj["stderr"])[:300]
+        return detail
+    return None
+
+
 @tool_handler
 def analyze_pathogen(args: dict[str, Any], **kwargs: Any) -> str:
     """Trigger full analysis pipeline via Snakemake.
@@ -37,12 +51,17 @@ def analyze_pathogen(args: dict[str, Any], **kwargs: Any) -> str:
     if not _validate_sample_id(sample_id):
         return json.dumps({"error": f"invalid sample_id: {sample_id!r}"})
 
-    _run_project_script("run_analysis.py", ["--sample", sample_id, "--cores", str(cores)])
+    script_out = _run_project_script(
+        "run_analysis.py", ["--sample", sample_id, "--cores", str(cores)]
+    )
 
     summary_path = _RESULTS_DIR / sample_id / "report" / f"{sample_id}_summary.json"
     if summary_path.exists():
         with summary_path.open() as f:
             return str(f.read())
+    detail = _script_error(script_out)
+    if detail:
+        return json.dumps({"error": "Pipeline failed", "detail": detail}, ensure_ascii=False)
     return json.dumps({"error": "Pipeline completed but summary not found"})
 
 
@@ -65,10 +84,14 @@ def get_result(args: dict[str, Any], **kwargs: Any) -> str:
     steps = summary.get("steps", {})
 
     sp = steps.get("species", {})
-    verdict = sp.get("verdict", "N/A") if isinstance(sp, dict) else str(sp)
+    # 真实 summary 存 steps.species.species（species.smk/gside 输出）；旧 fixtures 用 verdict。
+    if isinstance(sp, dict):
+        verdict = str(sp.get("verdict") or sp.get("species") or "N/A")
+    else:
+        verdict = str(sp) if sp else "N/A"
 
     mlst_raw = steps.get("mlst", "")
-    st = parse_mlst(mlst_raw)["st"] if mlst_raw else "N/A"
+    st = parse_mlst(mlst_raw)["st"] if isinstance(mlst_raw, str) and mlst_raw else "N/A"
 
     sero = steps.get("serotype", {})
     serovar = sero.get("sistr", "N/A") if isinstance(sero, dict) else "N/A"
@@ -76,19 +99,28 @@ def get_result(args: dict[str, Any], **kwargs: Any) -> str:
     amr = steps.get("amr", {})
     card = amr.get("abricate_card", []) if isinstance(amr, dict) else []
     vfdb = amr.get("abricate_vfdb", []) if isinstance(amr, dict) else []
-    pl = steps.get("plasmid", {}).get("plasmidfinder", [])
+    plas = steps.get("plasmid", {})
+    pl = plas.get("plasmidfinder", []) if isinstance(plas, dict) else []
 
     dec = steps.get("dec", {}) if isinstance(steps.get("dec", {}), dict) else {}
     ipah = dec.get("ipaH", "N/A")
     pathotype = dec.get("pathotype", "N/A")
 
-    species_type = "unknown"
-    if verdict == "Salmonella":
+    # 物种归类：四病原沿用既有短标签；gside 常见病原（Genus_species）用规范名。
+    from bacmap.core.analysis.species_canon import UNKNOWN as _SPECIES_UNKNOWN
+    from bacmap.core.analysis.species_canon import canonical_from_verdict as _canon
+
+    canon = _canon(verdict, str(ipah))
+    if canon == "Salmonella":
         species_type = "Salmonella"
-    elif "positive" in str(ipah):
+    elif canon == "Shigella" or "positive" in str(ipah):
         species_type = "Shigella/EIEC"
-    elif "not_Salmonella" in verdict:
+    elif canon == "E. coli":
         species_type = "E. coli/DEC"
+    elif canon != _SPECIES_UNKNOWN:
+        species_type = canon
+    else:
+        species_type = "unknown"
 
     pt_line = "N/A"
     if pathotype and pathotype != "N/A":
@@ -183,10 +215,17 @@ def verify_result(args: dict[str, Any], **kwargs: Any) -> str:
 def generate_report(args: dict[str, Any], **kwargs: Any) -> str:
     """Generate HTML report for a sample."""
     sample_id = args.get("sample_id", "")
-    _run_project_script("generate_report.py", ["--sample", sample_id], timeout=60)
+    if not _validate_sample_id(sample_id):
+        return json.dumps({"error": f"invalid sample_id: {sample_id!r}"})
+    script_out = _run_project_script("generate_report.py", ["--sample", sample_id], timeout=60)
     report_path = _RESULTS_DIR / sample_id / "report" / f"{sample_id}_report.html"
     if report_path.exists():
         return json.dumps({"sample_id": sample_id, "report_path": str(report_path)})
+    detail = _script_error(script_out)
+    if detail:
+        return json.dumps(
+            {"error": "Report generation failed", "detail": detail}, ensure_ascii=False
+        )
     return json.dumps({"error": "Report generation failed"})
 
 

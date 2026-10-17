@@ -49,7 +49,8 @@ rule typing_sistr:
         "-f json -o {params.prefix}.json -MM --more-results "
         "--run-mash -p {output.cgmlst} -t {threads} -T $(dirname {output.json}) && "
         "mv {params.prefix}.json {output.json} || "
-        "echo '{{\"serovar\":\"N/A\",\"serogroup\":\"N/A\",\"o_antigen\":\"N/A\",\"h1\":\"N/A\",\"h2\":\"N/A\"}}' > {output.json}"
+        "( echo '{{\"serovar\":\"N/A\",\"serogroup\":\"N/A\",\"o_antigen\":\"N/A\",\"h1\":\"N/A\",\"h2\":\"N/A\"}}' > {output.json} && "
+        "touch {output.cgmlst} )"
 
 rule amr_abricate_vfdb:
     input:

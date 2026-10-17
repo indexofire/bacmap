@@ -133,9 +133,10 @@ class LabResultService:
     ) -> list[LabResult]:
         added = []
         for r in results:
-            test_name = r.pop("test_name", "")
-            result_val = r.pop("result", "")
-            lr = self.add(strain_id, category, test_name, result_val, **r)
+            entry = dict(r)  # 不原地 pop 调用方的 dict
+            test_name = entry.pop("test_name", "")
+            result_val = entry.pop("result", "")
+            lr = self.add(strain_id, category, test_name, result_val, **entry)
             added.append(lr)
         return added
 
@@ -181,10 +182,13 @@ class LabResultService:
         if interpretation:
             conditions.append("interpretation = ?")
             params.append(interpretation)
-        if strain_ids:
-            placeholders = ", ".join("?" for _ in strain_ids)
-            conditions.append(f"strain_id IN ({placeholders})")
-            params.extend(strain_ids)
+        if strain_ids is not None:
+            if not strain_ids:
+                conditions.append("1 = 0")  # 显式空集 → 不返回任何行
+            else:
+                placeholders = ", ".join("?" for _ in strain_ids)
+                conditions.append(f"strain_id IN ({placeholders})")
+                params.extend(strain_ids)
 
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
         sql = f"SELECT * FROM lab_results{where} ORDER BY created_at DESC LIMIT ?"

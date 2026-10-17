@@ -8,12 +8,9 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from bacmap.config import RESULTS_DIR as ROOT  # 过渡：沿用脚本侧 ROOT 语义位
+from bacmap.config import DEPLOYED_WORKFLOWS_DIR as _DEPLOYED_WORKFLOWS_DIR
 
-sys.path.insert(0, str(ROOT / "src"))
-
-
-WORKFLOW_DIR = ROOT / "workflows" / "bacmap"
+WORKFLOW_DIR = _DEPLOYED_WORKFLOWS_DIR
 SAMPLES_TSV = WORKFLOW_DIR / "config" / "samples.tsv"
 
 _SAMPLE_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")

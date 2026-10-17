@@ -8,6 +8,6 @@ rule genome_annotation:
     shell:
         "mkdir -p $(dirname {output.annotation}) && "
         "printf %s "
-        "'{{\"status\":\"pending_external_tool\",\"tool\":\"gapit\",\"sample\":\"{{wildcards.sample}}\","
+        "'{{\"status\":\"pending_external_tool\",\"tool\":\"gapit\",\"sample\":\"{wildcards.sample}\","
         "\"total_CDS\":0,\"annotated_CDS\":0,\"annotation_rate\":0.0,\"top_genes\":[]}}' "
         "> {output.annotation}"

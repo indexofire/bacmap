@@ -415,7 +415,10 @@ def search_samples(args: dict[str, Any], **kwargs: Any) -> str:
     mlst_st = args.get("mlst_st", "").strip()
     amr_gene = args.get("amr_gene", "").strip()
     organism = args.get("organism", "").strip()
-    limit = args.get("limit", 50)
+    try:
+        limit = max(0, int(args.get("limit", 50)))
+    except (TypeError, ValueError):
+        limit = 50
 
     db_path = _DEFAULT_DB_PATH
     if not db_path.exists():
@@ -559,19 +562,23 @@ def review_flags(args: dict[str, Any], **kwargs: Any) -> str:
 
     from bacmap.store.genome_object_service import GenomeObjectService, ObjectType
 
-    gos = GenomeObjectService(db_path)
-    limit = int(args.get("limit", 50))
+    try:
+        limit = max(0, int(args.get("limit", 50)))
+    except (TypeError, ValueError):
+        limit = 50
     events = []
-    for obj in gos.list_by_type(ObjectType.ANALYSIS):
-        for ev in gos.list_events(obj.object_id):
-            if ev.event_type == "nli_reflected":
-                events.append(
-                    {
-                        "timestamp": ev.timestamp.isoformat(),
-                        "object_id": obj.object_id,
-                        **ev.event_payload,
-                    }
-                )
+    with GenomeObjectService(db_path) as gos:
+        for obj in gos.list_by_type(ObjectType.ANALYSIS):
+            for ev in gos.list_events(obj.object_id):
+                if ev.event_type == "nli_reflected":
+                    events.append(
+                        {
+                            # payload 先展开，timestamp/object_id 保持权威不被覆盖
+                            **ev.event_payload,
+                            "timestamp": ev.timestamp.isoformat(),
+                            "object_id": obj.object_id,
+                        }
+                    )
     events.sort(key=lambda e: e["timestamp"], reverse=True)
     return json.dumps({"events": events[:limit], "total": len(events)}, ensure_ascii=False)
 
