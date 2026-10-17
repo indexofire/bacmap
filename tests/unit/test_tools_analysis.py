@@ -6,7 +6,7 @@ validate_taxonomy, annotate_genome, diagnose_failure.
 
 We patch lazily-imported functions on their source module attributes and
 monkeypatch tools.pipeline._RESULTS_DIR / _DEPLOYED_WORKFLOWS_DIR / _run_project_script
-and tools.services._DEFAULT_DB_PATH / _RESULTS_DIR to point to tmp paths or
+and tools.services._GOM_DB / _RESULTS_DIR to point to tmp paths or
 canned outputs.
 """
 
@@ -379,13 +379,13 @@ class TestGeneScan:
 
 class TestSnpTree:
     def test_no_db_no_disk_summary(self, tmp_results, monkeypatch):
-        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", tmp_results / "no.sqlite")
+        monkeypatch.setattr(tools_services, "_GOM_DB", tmp_results / "no.sqlite")
         r = _parse(tools.snp_tree({}))
         assert "error" in r
         assert "SNP tree not available" in r["error"]
 
     def test_disk_summary_happy(self, tmp_results, monkeypatch):
-        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", tmp_results / "no.sqlite")
+        monkeypatch.setattr(tools_services, "_GOM_DB", tmp_results / "no.sqlite")
         snp_dir = tmp_results / "snp"
         snp_dir.mkdir()
         summary_path = snp_dir / "snp_summary.json"
@@ -405,7 +405,7 @@ class TestSnpTree:
         assert r["tree_newick"] == "(A,B);"
 
     def test_disk_summary_corrupt(self, tmp_results, monkeypatch):
-        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", tmp_results / "no.sqlite")
+        monkeypatch.setattr(tools_services, "_GOM_DB", tmp_results / "no.sqlite")
         snp_dir = tmp_results / "snp"
         snp_dir.mkdir()
         (snp_dir / "snp_summary.json").write_text("{not json")
@@ -442,7 +442,7 @@ class TestSnpTree:
             )
             gos.create(obj)
 
-        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(tools_services, "_GOM_DB", db_path)
         r = _parse(tools.snp_tree({}))
         assert r["source"] == "gom"
         assert r["n_samples"] == 2
@@ -458,14 +458,14 @@ class TestSnpTree:
 
 class TestSearchSamples:
     def test_db_missing(self, tmp_results, monkeypatch):
-        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", tmp_results / "no.sqlite")
+        monkeypatch.setattr(tools_services, "_GOM_DB", tmp_results / "no.sqlite")
         r = _parse(tools.search_samples({}))
         assert "GOM database not found" in r["error"]
 
     def test_no_query_no_filters(self, tmp_path, monkeypatch):
         db_path = tmp_path / "gom.sqlite"
         GenomeObjectService(db_path).close()  # create empty DB
-        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(tools_services, "_GOM_DB", db_path)
         r = _parse(tools.search_samples({}))
         assert "error" in r
         assert "Provide at least one" in r["error"]
@@ -496,7 +496,7 @@ class TestSearchSamples:
             object_id="obj-002",
         )
         idx.close()
-        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(tools_services, "_GOM_DB", db_path)
 
         r = _parse(tools.search_samples({"serotype": "Typhimurium"}))
         assert r["count"] == 1
@@ -524,7 +524,7 @@ class TestSearchSamples:
             object_id="obj-002",
         )
         idx.close()
-        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(tools_services, "_GOM_DB", db_path)
 
         r = _parse(tools.search_samples({"amr_gene": "blaCTX-M-15"}))
         assert r["count"] == 1
@@ -559,7 +559,7 @@ class TestSearchSamples:
                 tool_versions={"abricate": "1.0.0"},
             )
             gos.create(obj)
-        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(tools_services, "_GOM_DB", db_path)
 
         # "ST 19" form — handler parses ST-number query and matches mlst ST=19.
         r = _parse(tools.search_samples({"query": "ST 19"}))
@@ -593,7 +593,7 @@ class TestSearchSamples:
                 tool_versions={"abricate": "1.0.0"},
             )
             gos.create(obj)
-        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(tools_services, "_GOM_DB", db_path)
 
         r = _parse(tools.search_samples({"query": "tet(A)"}))
         assert r["count"] >= 1
@@ -622,7 +622,7 @@ class TestSearchSamples:
                 tool_versions={"sistr": "1.1.0"},
             )
             gos.create(obj)
-        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(tools_services, "_GOM_DB", db_path)
 
         r = _parse(tools.search_samples({"query": "typhimurium"}))
         assert r["count"] >= 1

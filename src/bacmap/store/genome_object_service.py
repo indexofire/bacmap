@@ -185,9 +185,12 @@ class GenomeObject:
                     "ANALYSIS GenomeObject requires pipeline_version"
                     " (project.md §4.5 evidence chain)"
                 )
-            if not self.database_versions:
+            # C4 证据链要求"参考数据库与工具的实测版本"：二者至少有其一即可
+            # （运行记录里 tool_versions 由 probe 保证非空，参考库清单可能为空）。
+            if not self.database_versions and not self.tool_versions:
                 raise GOMValidationError(
-                    "ANALYSIS GenomeObject requires non-empty database_versions (project.md §4.5)"
+                    "ANALYSIS GenomeObject requires database_versions or tool_versions"
+                    " (project.md §4.5)"
                 )
             _validate_cgmlst_payload(self.payload)
             _validate_species_payload(self.payload)

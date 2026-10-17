@@ -13,8 +13,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from bacmap.config import DB_PATH as _REFLECTION_DB_PATH
 from bacmap.config import DEPLOYED_WORKFLOWS_DIR as _DEPLOYED_WORKFLOWS_DIR
+from bacmap.config import GOM_DB as _REFLECTION_DB_PATH
 from bacmap.core.utils import parse_mlst
 
 from ._common import (

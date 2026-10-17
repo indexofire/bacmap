@@ -166,32 +166,205 @@ def _step_finish_run(run_id: str, params: dict[str, Any]) -> None:
     runs.finalize_run(run_id, home / "runs.sqlite", home / "runs")
 
 
-@DBOS.step()
-def _step_ingest_gom(home_s: str, sample: str, run_id: str, summary: dict[str, Any]) -> str:
+def _analysis_provenance(home: Path, run_id: str) -> dict[str, Any]:
+    """ANALYSIS 对象的证据链字段（C4/ADR-18）：流程版本 + 数据库/工具实测版本。
+
+    pipeline_version 优先取运行记录的工作流 Git commit，缺省回退部署期工作流内容哈希
+    （`.bacmap_workflow_sha`）；tool_versions 由运行记录 probe 保证非空。
+    """
+    from bacmap.store import runs
+
+    stamp = home / "workflows" / "bacmap" / ".bacmap_workflow_sha"
+    fallback = stamp.read_text(encoding="utf-8").strip() if stamp.is_file() else "unknown"
+    fallback = fallback or "unknown"
+    run = runs.read_run(run_id, home / "runs.sqlite")
+    if run is None:
+        return {
+            "pipeline_version": fallback,
+            "database_versions": {},
+            "tool_versions": {"workflow": fallback},
+        }
+    pipeline_version = run.workflow_commit or fallback
+    return {
+        "pipeline_version": pipeline_version,
+        "database_versions": {r.name: r.version for r in run.ref_databases},
+        "tool_versions": dict(run.tool_versions) or {"workflow": pipeline_version},
+    }
+
+
+def _ingest_analysis_object(
+    home: Path,
+    object_id: str,
+    strain_id: str,
+    payload: dict[str, Any],
+    provenance: dict[str, Any],
+    organism: str | None,
+) -> str:
+    """幂等写入一个 ANALYSIS 对象；同 object_id 已存在（崩溃恢复重跑）则返回既有 id。"""
     from bacmap.store.genome_object_service import (
         GenomeObject,
         GenomeObjectService,
+        GOMImmutableError,
         ObjectType,
     )
 
-    gos = GenomeObjectService(Path(home_s) / "gom.sqlite")
-    species = ""
-    sp = ((summary.get("steps", {}) or {}).get("species", {})) or {}
-    if isinstance(sp, dict):
-        species = str(sp.get("verdict") or sp.get("species") or "")
-    obj = GenomeObject(
-        object_id=uuid.uuid4().hex,
-        object_type=ObjectType.SAMPLE,
-        version=1,
-        schema_version="1.0.0",
-        created_at=datetime.now(UTC),
-        created_by="bacmap.tasks",
-        payload={"summary": summary, "run_id": run_id},
-        organism=species or None,
-        strain_id=sample,
+    try:
+        with GenomeObjectService(home / "gom.sqlite") as gos:
+            created = gos.create(
+                GenomeObject(
+                    object_id=object_id,
+                    object_type=ObjectType.ANALYSIS,
+                    version=1,
+                    schema_version="1.0.0",
+                    created_at=datetime.now(UTC),
+                    created_by="bacmap.tasks",
+                    payload=payload,
+                    pipeline_version=provenance["pipeline_version"],
+                    database_versions=provenance["database_versions"],
+                    tool_versions=provenance["tool_versions"],
+                    organism=organism or None,
+                    strain_id=strain_id,
+                )
+            )
+        return created.object_id
+    except GOMImmutableError:
+        return object_id
+
+
+@DBOS.step()
+def _step_ingest_gom(home_s: str, sample: str, run_id: str, summary: dict[str, Any]) -> str:
+    """把单样本分析结果入库 GOM（ANALYSIS，指向 run_id）并同步特征索引。
+
+    payload 采用"扁平分型视图 + 完整 summary"：扁平键（species_verdict/serotype/
+    mlst/amr/dec/plasmid）供 `bio_search_samples` 与特征索引读取，`summary` 保留
+    原始结果供比较运行（compare_runs）与报告。
+    """
+    from bacmap.store.strain_index import StrainGenotypeIndex, _extract_genotype
+
+    home = Path(home_s)
+    steps = summary.get("steps", {}) or {}
+    sp = steps.get("species", {}) or {}
+    species = (
+        str(sp.get("verdict") or sp.get("species") or "") if isinstance(sp, dict) else str(sp)
     )
-    created = gos.create(obj)
-    return created.object_id
+    payload: dict[str, Any] = {
+        "analysis_type": "sample_analysis",
+        "sample_id": sample,
+        "run_id": run_id,
+        "species_verdict": species,
+        "serotype": steps.get("serotype") if isinstance(steps.get("serotype"), dict) else {},
+        "mlst": steps.get("mlst") if isinstance(steps.get("mlst"), str) else "",
+        "amr": steps.get("amr") if isinstance(steps.get("amr"), dict) else {},
+        "dec": steps.get("dec") if isinstance(steps.get("dec"), dict) else {},
+        "plasmid": steps.get("plasmid") if isinstance(steps.get("plasmid"), dict) else {},
+        "summary": summary,
+    }
+    provenance = _analysis_provenance(home, run_id)
+    object_id = _ingest_analysis_object(
+        home, f"analysis:{sample}:{run_id}", sample, payload, provenance, species or None
+    )
+
+    # 同步本地菌株特征索引（ADR-19 读回/去重）：与 GOM 同库，供 bio_search_samples。
+    genotype = _extract_genotype(payload)
+    idx = StrainGenotypeIndex(home / "gom.sqlite")
+    try:
+        idx.upsert(
+            strain_id=sample,
+            organism=species,
+            species=genotype["species"],
+            serotype=genotype["serotype"],
+            serotype_method=genotype["serotype_method"],
+            mlst_scheme=genotype["mlst_scheme"],
+            mlst_st=genotype["mlst_st"],
+            plasmid_types=genotype["plasmid_types"],
+            amr_genes=genotype["amr_genes"],
+            object_id=object_id,
+            analysis_date=datetime.now(UTC).isoformat(),
+            pipeline_version=provenance["pipeline_version"],
+        )
+    finally:
+        idx.close()
+    return object_id
+
+
+@DBOS.step()
+def _step_ingest_cgmlst_profiles(home_s: str, samples: list[str], run_id: str) -> int:
+    """入库逐样本 cgMLST 谱（ANALYSIS cgmlst_profile，指向 run_id）。"""
+    from bacmap.core.utils import parse_cgmlst_profile
+
+    home = Path(home_s)
+    provenance = _analysis_provenance(home, run_id)
+    count = 0
+    for sample in samples:
+        tsv = home / "results" / sample / "typing" / "cgmlst.tsv"
+        if not tsv.is_file():
+            continue
+        try:
+            profile = parse_cgmlst_profile(tsv.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            logger.exception("cgmlst profile parse failed for %s", sample)
+            continue
+        if not profile.scheme or profile.n_total == 0:
+            continue
+        payload: dict[str, Any] = {
+            "analysis_type": "cgmlst_profile",
+            "sample_id": profile.sample_id or sample,
+            "scheme": profile.scheme,
+            "n_loci": profile.n_total,
+            "st_raw": profile.st_raw,
+            "alleles": dict(profile.alleles),
+            "n_called": profile.n_called,
+            "n_total": profile.n_total,
+            "missing_loci": list(profile.missing_loci),
+            "novel_loci": list(profile.novel_loci),
+            "ambiguous_loci": list(profile.ambiguous_loci),
+        }
+        _ingest_analysis_object(
+            home, f"cgmlst_profile:{sample}:{run_id}", sample, payload, provenance, None
+        )
+        count += 1
+    return count
+
+
+@DBOS.step()
+def _step_ingest_cohorts(home_s: str, run_id: str) -> int:
+    """入库队列级 SNP / cgMLST 汇总（ANALYSIS，strain_id = cohort:<group>-<kind>）。"""
+    home = Path(home_s)
+    provenance = _analysis_provenance(home, run_id)
+    specs = (
+        ("snp", "snp_summary.json", "-snp", "snp_cohort"),
+        ("cgmlst", "cgmlst_summary.json", "-cgmlst", "cgmlst_cohort"),
+    )
+    count = 0
+    for sub, filename, suffix, analysis_type in specs:
+        base = home / "results" / sub
+        if not base.is_dir():
+            continue
+        for summary_path in sorted(base.glob(f"*/{filename}")):
+            try:
+                summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                logger.exception("cohort summary read failed: %s", summary_path)
+                continue
+            if not isinstance(summary, dict):
+                continue
+            group = summary_path.parent.name
+            payload = dict(summary)
+            payload["analysis_type"] = analysis_type
+            payload["run_id"] = run_id
+            payload.setdefault("group", group)
+            strain_id = f"cohort:{group}{suffix}"
+            organism = summary.get("organism")
+            _ingest_analysis_object(
+                home,
+                f"{strain_id}:{run_id}",
+                strain_id,
+                payload,
+                provenance,
+                organism if isinstance(organism, str) else None,
+            )
+            count += 1
+    return count
 
 
 @DBOS.step()
@@ -289,6 +462,10 @@ def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
             _step_record_gate(str(home), object_id, gate_out)
         out["gates"][s] = gate_out
         out.setdefault("reports", {})[s] = _step_report(s)
+    out["cgmlst_profiles_ingested"] = _step_ingest_cgmlst_profiles(
+        str(home), params["samples"], run["run_id"]
+    )
+    out["cohorts_ingested"] = _step_ingest_cohorts(str(home), run["run_id"])
     if any(g["verdict"] != "pass" for g in out["gates"].values()):
         out["status"] = "AWAITING_APPROVAL"
     return out

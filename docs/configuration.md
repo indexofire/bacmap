@@ -10,12 +10,14 @@ The data root is `BACMAP_HOME` (default `~/.local/share/bacmap`), laid out as fo
 
 ```
 $BACMAP_HOME/
-├── data/            # 数据库（bacmap.sqlite）与参考库
+├── data/            # 本地库（strain metadata / 化验 / 特征索引）与参考库
 ├── results/         # 分析结果（按样本分目录）
 ├── workflows/       # 部署的 Snakemake 工作流（含 config/samples.tsv）
 ├── workflow_state/  # .snakemake 运行状态（断点续跑）
 ├── gs/              # 测序数据约定布局：<样本>/<样本>_R1.fastq.gz
 ├── workspaces/      # mine 任务沙箱工作区
+├── gom.sqlite       # GOM：分析对象（ANALYSIS）+ 门/审计事件
+├── runs.sqlite      # 分析运行记录（ADR-18）
 ├── tasks.sqlite     # 任务表
 ├── dbos.sqlite      # DBOS 工作流引擎库
 └── config.toml      # 本配置文件（可选）
@@ -27,11 +29,12 @@ Environment variables (for tests and multi-instance deployments):
 |---|---|---|
 | `BACMAP_HOME` | `~/.local/share/bacmap` | Data root directory |
 | `BACMAP_DATA_DIR` | `$BACMAP_HOME/data` | Database / reference library directory |
-| `BACMAP_DB_PATH` | `$DATA_DIR/bacmap.sqlite` | Location of the main GOM database |
+| `BACMAP_GOM_DB` | `$BACMAP_HOME/gom.sqlite` | GOM database: analysis objects + gate/audit events (read by the GOM query tools) |
+| `BACMAP_DB_PATH` | `$DATA_DIR/bacmap.sqlite` | Local database: strain metadata, lab results, genotype index |
 | `BACMAP_RESULTS_DIR` | `$BACMAP_HOME/results` | Results directory |
 | `BACMAP_WORKFLOWS_DIR` | `$BACMAP_HOME/workflows` | Workflow deployment directory |
 | `BACMAP_WORKFLOW_STATE_DIR` | `$BACMAP_HOME/workflow_state` | Run-state directory |
-| `BACMAP_RUNS_DB` / `BACMAP_GOM_DB` | `$BACMAP_HOME/runs.sqlite` / `gom.sqlite` | Run records / GOM database |
+| `BACMAP_RUNS_DB` | `$BACMAP_HOME/runs.sqlite` | Run records (ADR-18) |
 | `BACMAP_REFS_DIR` | `$BACMAP_HOME/refs` | External tool databases (ADR-20); `refs/manifest.json` registers them into run records |
 | `BACMAP_ENV_LOCK` | `$BACMAP_HOME/pixi.lock` | Environment lock hashed into run records (ADR-18) |
 | `BACMAP_MCP_TOKEN` / `BACMAP_WEB_TOKEN` | none | Bearer token for MCP HTTP transport / Web LAN access (ADR-12/14) |

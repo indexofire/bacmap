@@ -45,7 +45,7 @@ bacmap --help         # 统一命令行入口
 ## 开发
 
 ```bash
-pixi run -e dev test        # pytest（基线：1190 passed / 1 skipped）
+pixi run -e dev test        # pytest（基线：1199 passed / 1 skipped）
 pixi run -e dev lint        # ruff
 pixi run -e dev contracts   # import-linter 依赖方向契约
 ```
@@ -60,10 +60,12 @@ pixi run -e dev contracts   # import-linter 依赖方向契约
 
 ```
 $BACMAP_HOME/
-├── data/            # 数据库（bacmap.sqlite 等）与参考库（reference/、db/）
+├── data/            # 本地库（bacmap.sqlite：元数据/化验/特征索引）与参考库（reference/、db/）
 ├── results/         # 分析结果
 ├── workflows/       # 工作流文件
 ├── workflow_state/  # .snakemake 运行状态与日志
+├── gom.sqlite       # GOM：分析对象 + 门/审计事件
+├── runs.sqlite      # 分析运行记录（ADR-18）
 ├── tasks.sqlite     # 任务表
 ├── dbos.sqlite      # DBOS 系统库
 └── config.toml      # 可选配置（LLM 端点、路由、数据策略）

@@ -57,7 +57,7 @@ def _seed_gom(db: Path) -> None:
 class TestReviewFlagsTool:
     def test_reads_back_flagged_event(self, tmp_path, monkeypatch):
         _seed_gom(tmp_path / "gom.sqlite")
-        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", tmp_path / "gom.sqlite")
+        monkeypatch.setattr(tools_services, "_GOM_DB", tmp_path / "gom.sqlite")
         r = json.loads(tools_services.review_flags({}))
         assert r["total"] == 1
         (event,) = r["events"]
@@ -67,13 +67,13 @@ class TestReviewFlagsTool:
         assert any(c["value"] == "blaNDM-1" for c in event["contradicted_claims"])
 
     def test_limit_and_empty_db(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", tmp_path / "no.sqlite")
+        monkeypatch.setattr(tools_services, "_GOM_DB", tmp_path / "no.sqlite")
         r = json.loads(tools_services.review_flags({}))
         assert r["events"] == [] and "note" in r
 
     def test_limit_param(self, tmp_path, monkeypatch):
         _seed_gom(tmp_path / "gom.sqlite")
-        monkeypatch.setattr(tools_services, "_DEFAULT_DB_PATH", tmp_path / "gom.sqlite")
+        monkeypatch.setattr(tools_services, "_GOM_DB", tmp_path / "gom.sqlite")
         r = json.loads(tools_services.review_flags({"limit": 0}))
         assert r["events"] == [] and r["total"] == 1
 

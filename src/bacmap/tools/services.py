@@ -207,7 +207,7 @@ def add_lab_result(args: dict[str, Any], **kwargs: Any) -> str:
 @tool_handler
 def snp_tree(args: dict[str, Any], **kwargs: Any) -> str:
     """Retrieve cohort-level SNP phylogenetic tree and distance matrix."""
-    db_path = _DEFAULT_DB_PATH
+    db_path = _GOM_DB
     if db_path.exists():
         try:
             from bacmap.store.genome_object_service import GenomeObjectService, ObjectType
@@ -300,7 +300,7 @@ def cgmlst_traceback(args: dict[str, Any], **kwargs: Any) -> str:
 
 
 def _load_cgmlst_profile_payload(sample_id: str) -> dict[str, Any] | None:
-    db_path = _DEFAULT_DB_PATH
+    db_path = _GOM_DB
     if db_path.exists():
         try:
             from bacmap.store.genome_object_service import (
@@ -420,10 +420,10 @@ def search_samples(args: dict[str, Any], **kwargs: Any) -> str:
     except (TypeError, ValueError):
         limit = 50
 
-    db_path = _DEFAULT_DB_PATH
+    db_path = _GOM_DB
     if not db_path.exists():
         return json.dumps(
-            {"error": "GOM database not found. Run 'python scripts/ingest_results.py --all' first."}
+            {"error": "GOM database not found. Run an analysis first to populate it."}
         )
 
     try:
@@ -554,7 +554,7 @@ def review_flags(args: dict[str, Any], **kwargs: Any) -> str:
 
     Human-review loop read-back: which samples were flagged by the AI
     interpretation self-check (contradiction rate, contradicted claims)."""
-    db_path = _DEFAULT_DB_PATH
+    db_path = _GOM_DB
     if not db_path.exists():
         return json.dumps(
             {"events": [], "note": f"GOM DB not found at {db_path}"}, ensure_ascii=False
@@ -605,13 +605,13 @@ def _diff_mapping(a: Any, b: Any, prefix: str = "") -> list[dict[str, Any]]:
 
 
 def _gom_summary_for_run(sample_id: str, run_id: str) -> dict[str, Any] | None:
-    """从 GOM 取某样本某次运行的 summary（对象 payload:{summary,run_id}）。"""
+    """从 GOM 取某样本某次运行的 summary（ANALYSIS 对象 payload:{summary,run_id}）。"""
     from bacmap.store.genome_object_service import GenomeObjectService, ObjectType
 
     if not _GOM_DB.is_file():
         return None
     with GenomeObjectService(_GOM_DB) as gos:
-        for obj in gos.list_by_type(ObjectType.SAMPLE):
+        for obj in gos.list_by_type(ObjectType.ANALYSIS, limit=1000):
             if obj.strain_id != sample_id:
                 continue
             payload = obj.payload or {}

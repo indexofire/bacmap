@@ -10,12 +10,14 @@ bacmap 的全部配置来自**环境变量 + 一个 TOML 文件**。任何路径
 
 ```
 $BACMAP_HOME/
-├── data/            # 数据库（bacmap.sqlite）与参考库
+├── data/            # 本地库（菌株元数据 / 化验 / 特征索引）与参考库
 ├── results/         # 分析结果（按样本分目录）
 ├── workflows/       # 部署的 Snakemake 工作流（含 config/samples.tsv）
 ├── workflow_state/  # .snakemake 运行状态（断点续跑）
 ├── gs/              # 测序数据约定布局：<样本>/<样本>_R1.fastq.gz
 ├── workspaces/      # mine 任务沙箱工作区
+├── gom.sqlite       # GOM：分析对象（ANALYSIS）+ 门/审计事件
+├── runs.sqlite      # 分析运行记录（ADR-18）
 ├── tasks.sqlite     # 任务表
 ├── dbos.sqlite      # DBOS 工作流引擎库
 └── config.toml      # 本配置文件（可选）
@@ -27,11 +29,12 @@ $BACMAP_HOME/
 |---|---|---|
 | `BACMAP_HOME` | `~/.local/share/bacmap` | 数据根目录 |
 | `BACMAP_DATA_DIR` | `$BACMAP_HOME/data` | 数据库/参考库目录 |
-| `BACMAP_DB_PATH` | `$DATA_DIR/bacmap.sqlite` | GOM 主库位置 |
+| `BACMAP_GOM_DB` | `$BACMAP_HOME/gom.sqlite` | GOM 数据库：分析对象 + 门/审计事件（GOM 查询工具读取） |
+| `BACMAP_DB_PATH` | `$DATA_DIR/bacmap.sqlite` | 本地数据库：菌株元数据、化验结果、特征索引 |
 | `BACMAP_RESULTS_DIR` | `$BACMAP_HOME/results` | 结果目录 |
 | `BACMAP_WORKFLOWS_DIR` | `$BACMAP_HOME/workflows` | 工作流部署目录 |
 | `BACMAP_WORKFLOW_STATE_DIR` | `$BACMAP_HOME/workflow_state` | 运行状态目录 |
-| `BACMAP_RUNS_DB` / `BACMAP_GOM_DB` | `$BACMAP_HOME/runs.sqlite` / `gom.sqlite` | 运行记录 / GOM 数据库 |
+| `BACMAP_RUNS_DB` | `$BACMAP_HOME/runs.sqlite` | 运行记录（ADR-18） |
 | `BACMAP_REFS_DIR` | `$BACMAP_HOME/refs` | 外部工具数据库（ADR-20）；`refs/manifest.json` 将登记写入运行记录 |
 | `BACMAP_ENV_LOCK` | `$BACMAP_HOME/pixi.lock` | 计入运行记录的环境锁（ADR-18） |
 | `BACMAP_MCP_TOKEN` / `BACMAP_WEB_TOKEN` | 无 | MCP HTTP 传输 / Web 局域网访问的 Bearer token（ADR-12/14） |

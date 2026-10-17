@@ -19,7 +19,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from bacmap.config import DB_PATH as _NLI_DB_PATH  # noqa: E402
+from bacmap.config import GOM_DB as _NLI_DB_PATH  # noqa: E402
 from bacmap.config import REF_DIR, RESULTS_DIR, WORKFLOWS_DIR
 from bacmap.core.analysis.cgmlst_projection import (  # noqa: E402
     ProjectionResult,

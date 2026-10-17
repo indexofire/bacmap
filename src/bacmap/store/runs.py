@@ -103,6 +103,28 @@ def probe_tool_versions(tools: list[str], timeout: int = 20) -> dict[str, str]:
     return versions
 
 
+def _workflow_git(workflow_dir: Path) -> tuple[str, bool]:
+    """工作流目录的 Git commit 与 dirty 标记（ADR-18）；非 git 仓库 → ("", False)。"""
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(workflow_dir), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if head.returncode != 0:
+            return "", False
+        status = subprocess.run(
+            ["git", "-C", str(workflow_dir), "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return head.stdout.strip(), bool(status.stdout.strip())
+    except (OSError, subprocess.TimeoutExpired):
+        return "", False
+
+
 def resolve_config(workflow_dir: Path, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
     """合并 config.yaml 与覆盖项后的完整参数（深合并一层，与 Snakemake --config 语义一致）。"""
     cfg_path = workflow_dir / "config" / "config.yaml"
@@ -181,10 +203,13 @@ def create_run(
         for s in (resolved.get("nondeterministic_steps") or [])
         if s is not None and str(s).strip()
     ]
+    commit, dirty = _workflow_git(workflow_dir)
     run = AnalysisRun(
         task_id=task_id,
         strain_ids=strain_ids,
         workflow=workflow,
+        workflow_commit=commit,
+        workflow_dirty=dirty,
         resolved_config=resolved,
         config_sha256=hashlib.sha256(
             json.dumps(resolved, sort_keys=True, ensure_ascii=False).encode()

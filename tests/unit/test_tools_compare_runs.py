@@ -38,12 +38,19 @@ def _add_summary(gom_db: Path, sample: str, run_id: str, steps: dict) -> None:
         gos.create(
             GenomeObject(
                 object_id=f"{sample}-{run_id}",
-                object_type=ObjectType.SAMPLE,
+                object_type=ObjectType.ANALYSIS,
                 version=1,
                 schema_version="1.0.0",
                 created_at=datetime.now(UTC),
                 created_by="test",
-                payload={"summary": {"sample_id": sample, "steps": steps}, "run_id": run_id},
+                payload={
+                    "analysis_type": "sample_analysis",
+                    "sample_id": sample,
+                    "run_id": run_id,
+                    "summary": {"sample_id": sample, "steps": steps},
+                },
+                pipeline_version="test",
+                tool_versions={"workflow": "test"},
                 strain_id=sample,
             )
         )

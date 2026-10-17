@@ -296,8 +296,9 @@ class TestGateEventsPersisted:
         _wait(engine, tid)
 
         with GenomeObjectService(tmp_path / "gom.sqlite") as gos:
-            objs = gos.list_by_type(ObjectType.SAMPLE)
-            assert objs, "analyze 应写入样本 GOM 对象"
+            objs = gos.list_by_type(ObjectType.ANALYSIS)
+            assert objs, "analyze 应写入样本 GOM 分析对象"
+            assert objs[0].payload.get("analysis_type") == "sample_analysis"
             events = gos.list_events(objs[0].object_id)
         gate_types = {e.event_type for e in events}
         assert "gate.analysis_claims" in gate_types

@@ -342,15 +342,22 @@ def record_reflection_event(db_path: Path, sample_id: str, reflection: Reflectio
 
     try:
         with GenomeObjectService(db_path) as gos:
-            # P3-2：挂到该 strain 最新版本的 ANALYSIS 对象（list_by_type 返回各
-            # object_id 的 MAX(version)，取 created_at 最新一条保证确定性——
-            # 原 first-match 在多 ANALYSIS 对象时挂载目标不确定）
+            # P3-2+：优先挂到该样本的 sample_analysis ANALYSIS 对象（单样本结果版本），
+            # 取其 created_at 最新一条保证确定性；无标记时回退任一 ANALYSIS 对象。
             target = None
             for obj in gos.list_by_type(ObjectType.ANALYSIS):
-                if obj.strain_id == sample_id and (
-                    target is None or obj.created_at > target.created_at
-                ):
+                if obj.strain_id != sample_id:
+                    continue
+                if obj.payload.get("analysis_type") != "sample_analysis":
+                    continue
+                if target is None or obj.created_at > target.created_at:
                     target = obj
+            if target is None:
+                for obj in gos.list_by_type(ObjectType.ANALYSIS):
+                    if obj.strain_id == sample_id and (
+                        target is None or obj.created_at > target.created_at
+                    ):
+                        target = obj
             if target is None:
                 return False
             gos.log_event(

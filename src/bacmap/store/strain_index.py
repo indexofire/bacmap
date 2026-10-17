@@ -352,6 +352,10 @@ class StrainGenotypeIndex:
         count = 0
         for row in rows:
             payload = json.loads(row["payload_json"])
+            # 仅纳入单样本分析对象；逐样本 cgmlst_profile / 队列对象（可能同 strain_id）
+            # 不得污染特征索引。
+            if payload.get("analysis_type") not in (None, "sample_analysis"):
+                continue
             extracted = _extract_genotype(payload)
             self.upsert(
                 strain_id=row["strain_id"],
