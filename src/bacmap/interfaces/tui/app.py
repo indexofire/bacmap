@@ -146,6 +146,8 @@ class BacmapTUI(App[None]):
         self._reply_seq = 0  # 递增令牌：Esc 后丢弃迟到的回复
         self._sidebar_wanted = True  # 用户的侧栏意图（宽终端时生效）
         self._follow = True  # 会话是否跟随最新（tui-design：follow 显式）
+        self._task_states: dict[str, str] = {}  # 上次渲染看到的任务状态（失败回显去重）
+        self._tasks_seeded = False  # 首次渲染只登记、不回显历史失败
 
     # -- 布局 ---------------------------------------------------------------
 
@@ -228,6 +230,28 @@ class BacmapTUI(App[None]):
                 t["task_id"][:10], t["state"], t.get("current_step") or "", key=t["task_id"]
             )
         self._restore_selection(table, prev)
+        self._announce_task_failures(tasks)
+
+    def _announce_task_failures(self, tasks: list[dict[str, Any]]) -> None:
+        """任务进入 failed/cancelled 时回显到会话区（每个任务只报一次）。
+
+        按 Ctrl+Y 提交后助手回合即结束；任务在后台失败若只变更侧栏表格，用户不会知道。
+        首次渲染只登记既有状态，避免启动时把历史失败刷进会话。
+        """
+        if not self._tasks_seeded:
+            self._task_states.update({str(t["task_id"]): str(t["state"]) for t in tasks})
+            self._tasks_seeded = True
+            return
+        for t in tasks:
+            tid = str(t["task_id"])
+            state = str(t["state"])
+            prev = self._task_states.get(tid)
+            if state in ("failed", "cancelled") and prev != state:
+                msg = (t.get("message") or "").strip()
+                detail = f"：{msg[:300]}" if msg else ""
+                step = t.get("current_step") or "-"
+                self._chat_append(f"[#f85149]任务 {tid[:10]} {state}（{step}）{detail}[/]")
+            self._task_states[tid] = state
 
     def _render_samples(self, rows: list[dict[str, Any]]) -> None:
         table = self.query_one("#samples-table", DataTable)

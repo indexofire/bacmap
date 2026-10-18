@@ -84,6 +84,8 @@ bacmap › 建议先统计再绘图。
   可直接输入。
 - **Leader `Ctrl+G` 和弦**：`n` 新会话 · `i` 输入框 · `l` 任务 · `s` 样本 · `m` 模型/端点 · `t` 主题 ·
   `h` 帮助 · `q` 退出。
+- **失败回显**：提交的任务进入 `failed`/`cancelled` 时，会话区会追加一行
+  `任务 <id> failed（<step>）：<原因>`（每个任务只报一次），不必盯着侧栏。
 - **斜杠命令**：`/help /new /clear /tasks /samples /search <kw> /model /analyze <样本>
   /curate [scope] /quit`（`/analyze`、`/curate` 为显式无 LLM 路径）。
 

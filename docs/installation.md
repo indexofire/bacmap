@@ -43,7 +43,7 @@ a pathogen sets `plan.recombination: true`. Run it via `pixi run -e recomb …`.
 ## 3. Development environment (optional, needed to contribute code)
 
 ```bash
-pixi run -e dev test          # pytest（当前基线 1339 passed）
+pixi run -e dev test          # pytest（当前基线 1341 passed）
 pixi run -e dev lint          # ruff
 pixi run -e dev contracts     # import-linter 依赖方向契约
 ```

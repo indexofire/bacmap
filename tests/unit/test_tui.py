@@ -424,6 +424,59 @@ class TestInputFocusedOnMount:
         asyncio.run(_run())
 
 
+class TestTaskFailureEcho:
+    """后台任务失败要回显到会话区（提交后助手回合已结束，否则用户看不到）。"""
+
+    def test_failed_task_echoed_once(self, engine):
+        async def _run():
+            app = BacmapTUI(engine)
+            captured: list[str] = []
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                app._chat_append = lambda m: captured.append(m)
+                running = [{"task_id": "t1", "state": "running", "current_step": "analyze"}]
+                app._render_tasks(running)
+                assert captured == []  # 运行中不提示
+                failed = [
+                    {
+                        "task_id": "t1",
+                        "state": "failed",
+                        "current_step": "analyze",
+                        "message": "snakemake 退出码 1：boom",
+                    }
+                ]
+                app._render_tasks(failed)
+                assert any("failed" in c and "snakemake 退出码 1" in c for c in captured)
+                n = len(captured)
+                app._render_tasks(failed)  # 同一状态不重复刷屏
+                assert len(captured) == n
+
+        asyncio.run(_run())
+
+    def test_history_not_echoed_on_startup(self, engine):
+        async def _run():
+            app = BacmapTUI(engine)
+            captured: list[str] = []
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                app._chat_append = lambda m: captured.append(m)
+                app._tasks_seeded = False  # 模拟首次渲染
+                app._task_states.clear()
+                app._render_tasks(
+                    [
+                        {
+                            "task_id": "old",
+                            "state": "failed",
+                            "current_step": "analyze",
+                            "message": "历史失败",
+                        }
+                    ]
+                )
+                assert captured == []  # 启动时只登记，不刷历史
+
+        asyncio.run(_run())
+
+
 class TestNonStringMlst:
     """summary 的 mlst 字段非字符串时不得让展示层崩溃。"""
 

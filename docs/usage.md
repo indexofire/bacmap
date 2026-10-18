@@ -97,6 +97,8 @@ the **conversation**, a **plan hint**, and the **prompt**, with a **footer** of 
   so you can type immediately.
 - **Leader `Ctrl+G`** chords: `n` new session · `i` focus input · `l` tasks · `s` samples ·
   `m` model/endpoint · `t` theme · `h` help · `q` quit.
+- **Failure echo**: when a submitted task ends `failed`/`cancelled`, the conversation gets one
+  line — `任务 <id> failed（<step>）：<reason>` — so you need not watch the sidebar.
 - **Slash commands** in the prompt: `/help /new /clear /tasks /samples /search <kw> /model`
   `/analyze <样本> /curate [scope] /quit` (the `/analyze` and `/curate` commands are the
   explicit no-LLM path).
