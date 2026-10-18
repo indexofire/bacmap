@@ -69,20 +69,17 @@ tools:
 # src/hermes_bacmap/skills/interpret-results/SKILL.md "cgMLST Trace-back
 # Interpretation" for the full per-species rubric and citations.
 cgmlst:
-  schemes:
-    Salmonella: senterica_2
-    "E.coli": ecoli_2
-    Shigella: ecoli_2
-    "V.parahaemolyticus": vparahaemolyticus_3
   run_cgmlst_cohort: false
+  # 阈值键 = 三字母物种码（core/species_codes.py）；查表由 species_code 归一，
+  # 故 Salmonella/E.coli/Escherichia coli 等写法都命中同一键。
   thresholds:
     # source: Zhou 2020 Genome Res (HierCC HC5/HC10); Ferrato 2023 Frontiers Microbiol
-    salmonella:
+    SAL:
       outbreak_allele_dist: 10  # HC5/HC10 outbreak boundary (Zhou 2020)
       clonal_allele_dist: 3     # ST11/ST34 clonal sub-threshold (Ferrato 2023)
       related_allele_dist: 50   # HierCC HC50 (Zhou 2020)
     # source: Emerjean 2025 CDC EID (HC5 screen); Zhou 2020 Genome Res (HC50)
-    ecoli:
+    ECO:
       outbreak_allele_dist: 5   # HC5 general screen (Emerjean 2025)
       related_allele_dist: 50   # HierCC HC50 (Zhou 2020)
       serotype_specific:        # Emerjean 2025 CDC EID
@@ -91,11 +88,11 @@ cgmlst:
         "O103:H2": 5
         "O80:H2": 9
     # source: Hawkey 2021 Nat Commun; Weill 2022 (S. sonnei UNRELIABLE -> SNV)
-    shigella:
+    SHI:
       outbreak_allele_dist: 5   # HC5; S. sonnei UNRELIABLE -> SNV confirm
       related_allele_dist: 50   # HierCC HC50 (Zhou 2020)
     # source: Achtman 2022 bioRxiv -- only HC1090 species boundary published
-    vparahaemolyticus:
+    VPA:
       outbreak_allele_dist: null    # NO published threshold; verdict=UNDETERMINED
       related_allele_dist: null     # local calibration required
   projection:

@@ -191,3 +191,12 @@ E. coli pathotype is determined by **gapit's `ecoli_dec` database**
 — `gb4789_6` preferred — `pathotype_confidence`, `pathotype_genes`, `pathotype_runner_up`,
 `pathotype_schemes`). If `gapit` is missing the step records `status="skipped"` and the
 pathotype degrades to `N/A` (it never guesses).
+
+**cgMLST keys: thresholds and the reference library.** `cgmlst.thresholds` is keyed by the
+**3-letter species code** (`SAL`/`ECO`/`SHI`/`VPA`); lookups pass an arbitrary species spelling
+(`Salmonella`, `E. coli`, `Vibrio parahaemolyticus`, …) and it is normalized to the code, so
+there is one vocabulary everywhere. The cgMLST reference library is keyed by **scheme**, e.g.
+`data/reference/cgmlst/<scheme>/reference_profiles.tsv` (`senterica_2`, `ecoli_2`,
+`vparahaemolyticus_3`) — scheme names are gmlst's stable identifiers, decoupled from species
+spelling. The former `cgmlst.schemes` config block was removed; per-species schemes come from
+`core/pathogens.yaml` (the single source of truth, keyed by code).

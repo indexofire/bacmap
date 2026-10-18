@@ -71,18 +71,14 @@ def _load_thresholds(config_file: str | None, group: str | None) -> dict[str, ob
     except Exception:  # pragma: no cover - defensive: config read must never break summary
         return {}
     thresholds = cfg.get("cgmlst", {}).get("thresholds", {})
-    # config.yaml 的 cgmlst.thresholds 按物种名建键（salmonella/ecoli/shigella/
-    # vparahaemolyticus，与 cgmlst_projection._load_species_thresholds 一致），
-    # 而 cohort 的 group 名是 pathogens.yaml 的 snp_groups 键（salmonella/ecoli/
-    # vpara）。故需把 group 映射到物种键，否则 vpara 组的 thresholds_applied 恒为空。
-    group_to_species_key = {
-        "salmonella": "salmonella",
-        "ecoli": "ecoli",
-        "shigella": "shigella",
-        "vpara": "vparahaemolyticus",
+    # cohort 的 group 名（pathogens.yaml 的 snp_groups 键）→ 阈值键（三字母码）。
+    group_to_code = {
+        "salmonella": "SAL",
+        "ecoli": "ECO",
+        "shigella": "SHI",
+        "vpara": "VPA",
     }
-    key = group_to_species_key.get(group, group)
-    return thresholds.get(key, {}) or {}
+    return thresholds.get(group_to_code.get(group, group), {}) or {}
 
 
 def main() -> int:

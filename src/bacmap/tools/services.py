@@ -24,7 +24,7 @@ from bacmap.core.analysis.cgmlst_projection import (
     project_sample,
 )
 from bacmap.core.analysis.cgmlst_types import CgmlstProfile
-from bacmap.core.utils import parse_cgmlst_profile, parse_cgmlst_profiles, parse_mlst
+from bacmap.core.utils import parse_cgmlst_profile, parse_mlst
 
 from ._common import (
     _DEFAULT_DB_PATH,
@@ -35,13 +35,13 @@ from ._common import (
 )
 
 # Shigella shares the ecoli_2 scheme with E. coli and cannot be distinguished
-# by scheme alone; we resolve to "E.coli" so ecoli thresholds apply. The
+# by scheme alone; we resolve to ECO so ecoli thresholds apply. The
 # project_sample S. sonnei caveat therefore only fires for samples whose
 # species is set to "Shigella" elsewhere (out of scheme-driven scope here).
-_CGMLST_SCHEME_SPECIES: dict[str, str] = {
-    "senterica_2": "Salmonella",
-    "ecoli_2": "E.coli",
-    "vparahaemolyticus_3": "V.parahaemolyticus",
+_CGMLST_SCHEME_CODE: dict[str, str] = {
+    "senterica_2": "SAL",
+    "ecoli_2": "ECO",
+    "vparahaemolyticus_3": "VPA",
 }
 
 
@@ -274,25 +274,25 @@ def cgmlst_traceback(args: dict[str, Any], **kwargs: Any) -> str:
         )
 
     scheme = profile_payload.get("scheme", "")
-    species = _CGMLST_SCHEME_SPECIES.get(scheme, "")
-    if not species:
+    code = _CGMLST_SCHEME_CODE.get(scheme, "")
+    if not code:
         return json.dumps({"error": f"unknown cgmlst scheme {scheme!r} for {sample_id}"})
 
     query_profile = _payload_to_cgmlst_profile(profile_payload, sample_id)
 
-    reference = _load_reference_profiles(species)
+    reference = _load_reference_profiles(scheme)
     if isinstance(reference, str):
         return json.dumps({"error": reference})
     if not reference:
-        return json.dumps({"error": f"cgmlst reference library is empty for species {species!r}"})
+        return json.dumps({"error": f"cgmlst reference library is empty for scheme {scheme!r}"})
 
-    thresholds_or_err = _load_species_thresholds(species)
+    thresholds_or_err = _load_species_thresholds(code)
     if isinstance(thresholds_or_err, str):
         return json.dumps({"error": thresholds_or_err})
     thresholds = thresholds_or_err
 
     try:
-        result = project_sample(query_profile, reference, thresholds, species=species)
+        result = project_sample(query_profile, reference, thresholds, species=code)
     except ValueError as e:
         return json.dumps({"error": f"projection failed: {e}"})
 
@@ -385,28 +385,28 @@ def _payload_to_cgmlst_profile(payload: dict[str, Any], fallback_sample_id: str)
     )
 
 
-def _load_reference_profiles(species: str) -> list[CgmlstProfile] | str:
-    species_key = species.lower().replace(".", "")
-    ref_path = (
-        _DATA_DIR / "reference" / "cgmlst" / species_key / "reference_profiles.tsv"
+def _load_reference_profiles(scheme: str) -> list[CgmlstProfile] | str:
+    """按 **scheme** 读参考库（``<ref_dir>/cgmlst/<scheme>/``，单一实现）。"""
+    from bacmap.core.analysis.cgmlst_reference import (
+        load_reference_profiles as _load_ref,
     )
-    if not ref_path.exists():
-        return f"cgmlst reference library not found for species {species!r} (looked at {ref_path})"
+    from bacmap.core.analysis.cgmlst_reference import reference_profiles_path
 
-    try:
-        return parse_cgmlst_profiles(ref_path.read_text())
-    except (ValueError, OSError):
-        logger.exception("cgmlst reference parse failed for %s", species_key)
-        return f"failed to parse cgmlst reference library for species {species!r}"
+    ref_dir = _DATA_DIR / "reference"
+    profiles = _load_ref(scheme, ref_dir=ref_dir)
+    if profiles is None:
+        path = reference_profiles_path(scheme, ref_dir=ref_dir)
+        return f"cgmlst reference library not found for scheme {scheme!r} (looked at {path})"
+    return profiles
 
 
-def _load_species_thresholds(species: str) -> CgmlstThresholds | str:
+def _load_species_thresholds(species_key: str) -> CgmlstThresholds | str:
     config_path = _DEPLOYED_WORKFLOWS_DIR / "config" / "config.yaml"
     try:
-        return load_thresholds_from_config(config_path, species)
+        return load_thresholds_from_config(config_path, species_key)
     except (ValueError, RuntimeError, OSError):
-        logger.exception("cgmlst threshold load failed for %s", species)
-        return f"failed to load cgmlst thresholds for species {species!r}"
+        logger.exception("cgmlst threshold load failed for %s", species_key)
+        return f"failed to load cgmlst thresholds for species {species_key!r}"
 
 
 @tool_handler

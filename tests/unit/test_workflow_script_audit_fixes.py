@@ -82,10 +82,10 @@ class TestGenerateCgmlstSummary:
         assert summary["n_samples"] == 2
         assert summary["allele_distances"]["A|B"] == 4
 
-    def test_vpara_group_uses_species_threshold_key(self, tmp_path, monkeypatch):
+    def test_vpara_group_uses_code_threshold_key(self, tmp_path, monkeypatch):
         cfg = tmp_path / "config.yaml"
         cfg.write_text(
-            "cgmlst:\n  thresholds:\n    vparahaemolyticus:\n"
+            "cgmlst:\n  thresholds:\n    VPA:\n"
             "      outbreak_allele_dist: null\n      related_allele_dist: null\n"
         )
         summary = self._run(tmp_path, monkeypatch, group="vpara", config_file=cfg)

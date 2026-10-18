@@ -178,3 +178,10 @@ python workflows/bacmap/scripts/fetch_reference_genomes.py \
 `dec/pathotype.json`，归一进 `steps.dec`（`pathotype`、`pathotype_scheme`——首选 `gb4789_6`——
 `pathotype_confidence`、`pathotype_genes`、`pathotype_runner_up`、`pathotype_schemes`）。
 `gapit` 缺失时该步骤记 `status="skipped"`，`pathotype` 退化为 `N/A`（绝不猜测）。
+
+**cgMLST 键：阈值与参考库**：`cgmlst.thresholds` 以**三字母物种码**建键（`SAL`/`ECO`/`SHI`/`VPA`）；
+调用方传任意物种写法（`Salmonella`/`E. coli`/`Vibrio parahaemolyticus`…）都会被归一为码，
+全系统一套词表。cgMLST 参考库按 **scheme** 命名，如
+`data/reference/cgmlst/<scheme>/reference_profiles.tsv`（`senterica_2`/`ecoli_2`/
+`vparahaemolyticus_3`）——scheme 是 gmlst 的稳定标识符，与物种写法解耦。原 `cgmlst.schemes`
+配置块已删除；各物种的方案来自 `core/pathogens.yaml`（单一事实来源，码键）。

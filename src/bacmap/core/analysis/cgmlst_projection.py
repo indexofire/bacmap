@@ -37,6 +37,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from bacmap.core.species_codes import species_code
+
 from .cgmlst_types import CgmlstProfile
 
 # Caveat strings (single source of truth -- the report card and skill quote
@@ -45,18 +47,8 @@ _S_SONNEI_CAVEAT = "HC5/HC10 unreliable for S. sonnei, confirm with SNV"
 _NO_THRESHOLD_CAVEAT = "no published cgMLST outbreak threshold, local calibration required"
 _ZERO_CALLED_CAVEAT = "query profile has 0 called loci; distance is uninformative"
 
-# Species-name aliases -> config.yaml ``cgmlst.thresholds.<key>`` normalisation.
-# The config keys are lowercase short forms (``ecoli`` / ``vparahaemolyticus``);
-# callers may pass full Latin names or the dotted short forms used elsewhere in
-# the repo (``E.coli`` / ``V.parahaemolyticus``). All are folded to the key.
-_SPECIES_KEY_ALIASES: dict[str, str] = {
-    "salmonella": "salmonella",
-    "ecoli": "ecoli",
-    "escherichiacoli": "ecoli",
-    "shigella": "shigella",
-    "vparahaemolyticus": "vparahaemolyticus",
-    "vibrioparahaemolyticus": "vparahaemolyticus",
-}
+# 物种键归一：统一折叠到三字母码（全系统同一词表；见 core/species_codes.py）。
+# 历史上这里维护过一张别名表（escherichiacoli→ecoli 等），迁码后删除——别名税就此消失。
 
 
 class Verdict(StrEnum):
@@ -178,16 +170,13 @@ def _is_ssonnei(species: str) -> bool:
 
 
 def _normalize_species_key(species: str) -> str:
-    """Fold a caller-supplied species name to a ``cgmlst.thresholds.<key>``.
+    """fold 任意物种写法 → ``cgmlst.thresholds.<码>`` 的键。
 
-    Lowercases, strips dots/spaces, and applies the alias map so both the
-    repo's short forms (``E.coli`` / ``V.parahaemolyticus``) and full Latin
-    names (``Escherichia coli`` / ``Vibrio parahaemolyticus``) resolve to the
-    config key. Unknown names are returned folded-but-unchanged so the caller
-    gets a clear "no thresholds for <key>" error from the lookup.
+    统一走 `species_code`（`Salmonella`/`Salmonella enterica` → ``SAL``；
+    `E.coli`/`Escherichia coli` → ``ECO``；`V.parahaemolyticus` → ``VPA``）。
+    未识别 → 计算出的码（或 ``UNK``），由查表给出清晰的 "no thresholds" 报错。
     """
-    folded = species.lower().replace(".", "").replace(" ", "")
-    return _SPECIES_KEY_ALIASES.get(folded, folded)
+    return species_code(species)
 
 
 def project_sample(

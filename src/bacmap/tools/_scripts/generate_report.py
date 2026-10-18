@@ -31,26 +31,13 @@ from bacmap.core.analysis.cgmlst_types import CgmlstProfile  # noqa: E402
 from bacmap.core.utils import (  # noqa: E402
     parse_abricate_tsv,
     parse_cgmlst_profile,
-    parse_cgmlst_profiles,
     parse_mlst,
 )
 from bacmap.core.verify.deterministic_verifier import DeterministicVerifier  # noqa: E402
 
 RESULTS_DIR = RESULTS_DIR
 # Module-level so tests can monkey-patch without touching disk.
-CGMLST_REFERENCE_DIR = REF_DIR / "cgmlst"
 CONFIG_PATH = WORKFLOWS_DIR / "bacmap" / "config" / "config.yaml"
-
-# Fold species strings to reference-library dir names (must match
-# config.yaml cgmlst.thresholds keys + build_cgmlst_reference.py output dir).
-_CGMLST_SPECIES_DIRS: dict[str, str] = {
-    "salmonella": "salmonella",
-    "ecoli": "ecoli",
-    "escherichiacoli": "ecoli",
-    "shigella": "shigella",
-    "vparahaemolyticus": "vparahaemolyticus",
-    "vibrioparahaemolyticus": "vparahaemolyticus",
-}
 
 
 def _row(label: str, value: str, ok: bool = True) -> str:
@@ -95,32 +82,14 @@ def _extract_species(summary: dict) -> str:
     return ""
 
 
-def _species_dir_name(species: str) -> str:
-    folded = species.lower().replace(".", "").replace(" ", "")
-    if folded in _CGMLST_SPECIES_DIRS:
-        return _CGMLST_SPECIES_DIRS[folded]
-    # Fall back to the first word so "Shigella sonnei" -> "shigella" and
-    # "Salmonella enterica" -> "salmonella" (covers subspecies strings the
-    # species identifier emits for Shigella serovars).
-    first_word = species.lower().split()[0].replace(".", "") if species else ""
-    if first_word in _CGMLST_SPECIES_DIRS:
-        return _CGMLST_SPECIES_DIRS[first_word]
-    return species.lower().replace(" ", "")
-
-
-def _load_reference_profiles(species: str) -> list[CgmlstProfile]:
+def _load_reference_profiles(scheme: str) -> list[CgmlstProfile]:
     # Returns [] when the library is absent or unreadable so the caller can
     # render profile-only stats without crashing the report (graceful
-    # degradation per plan todo 9).
-    if not species:
-        return []
-    ref_path = CGMLST_REFERENCE_DIR / _species_dir_name(species) / "reference_profiles.tsv"
-    if not ref_path.exists():
-        return []
-    try:
-        return parse_cgmlst_profiles(ref_path.read_text())
-    except (ValueError, OSError):
-        return []
+    # degradation per plan todo 9). 按 **scheme** 命名目录（单一实现）。
+    from bacmap.core.analysis.cgmlst_reference import load_reference_profiles as _load_ref
+
+    profiles = _load_ref(scheme, ref_dir=REF_DIR)
+    return profiles or []
 
 
 def _load_top_n_from_config(config_path: Path) -> int:
@@ -147,17 +116,15 @@ def _compute_projection(profile: CgmlstProfile, species: str) -> ProjectionResul
     # Best-effort: returns None on any failure (no reference library, unknown
     # species, missing thresholds, parse error) so the caller falls back to
     # profile-only rendering instead of crashing the report.
-    if not species or profile.n_total == 0:
+    if not species or profile.n_total == 0 or not profile.scheme:
         return None
-    reference = _load_reference_profiles(species)
+    reference = _load_reference_profiles(profile.scheme)
     if not reference:
         return None
-    # Canonical species key (e.g. "shigella") for config/dir lookup, but pass
-    # the original species string to project_sample so the S. sonnei caveat
-    # check (_is_ssonnei substring match) still fires.
-    canonical = _species_dir_name(species)
+    # thresholds key = 三字母码（load_thresholds_from_config 经 species_code 归一）；
+    # project_sample 仍收原始 species 串（S. sonnei caveat 的子串匹配）。
     try:
-        thresholds = load_thresholds_from_config(CONFIG_PATH, canonical)
+        thresholds = load_thresholds_from_config(CONFIG_PATH, species)
         top_n = _load_top_n_from_config(CONFIG_PATH)
     except (ValueError, RuntimeError, OSError):
         return None
@@ -236,10 +203,10 @@ def _render_cgmlst_section(sample_id: str, summary: dict) -> str:
             projection_rows = _row("Nearest reference", "—")
     else:
         badge_html = _verdict_badge_html(Verdict.UNDETERMINED)
-        if species and not _load_reference_profiles(species):
+        if species and not _load_reference_profiles(profile.scheme):
             caveats.append(
-                f"no reference library at data/reference/cgmlst/"
-                f"{_species_dir_name(species)}/; projection skipped"
+                f"no reference library at data/reference/cgmlst/{profile.scheme}/; "
+                "projection skipped"
             )
         elif species:
             caveats.append(

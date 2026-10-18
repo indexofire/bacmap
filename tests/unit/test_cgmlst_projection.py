@@ -359,7 +359,7 @@ class TestLoadThresholdsFromConfig:
     def test_malformed_threshold_value_raises(self, tmp_path):
         bad = tmp_path / "bad.yaml"
         bad.write_text(
-            "cgmlst:\n  thresholds:\n    salmonella:\n"
+            "cgmlst:\n  thresholds:\n    SAL:\n"
             "      outbreak_allele_dist: ten\n"
             "      related_allele_dist: 50\n"
         )
