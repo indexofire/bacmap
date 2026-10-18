@@ -99,7 +99,8 @@ _HELP = (
     "  输入自然语言分析需求；助手会查询样本、规划任务，写操作需确认后提交。\n"
     "  斜杠命令：/help /new /clear /tasks /samples /search <kw> /model "
     "/analyze <样本> /curate [scope] /quit\n"
-    "  Leader（Ctrl+G）：n 新会话 · l 任务 · s 样本 · m 模型 · t 主题 · h 帮助 · q 退出\n"
+    "  Leader（Ctrl+G）：n 新会话 · i 输入框 · l 任务 · s 样本 · "
+    "m 模型 · t 主题 · h 帮助 · q 退出\n"
     "  其它：Enter 发送 · Shift/Alt+Enter 换行 · Esc 中断 · Ctrl+Y 确认计划 · "
     "Ctrl+F 跟随开关 · Ctrl+B 侧栏 · Ctrl+R 刷新 · Ctrl+L 清屏 · Ctrl+P 命令面板"
 )
@@ -125,6 +126,7 @@ class BacmapTUI(App[None]):
     # leader 和弦（Ctrl+G 之后）：键 → 本类同步动作方法
     _LEADER_CHORDS = {
         "n": "action_new_session",
+        "i": "action_focus_input",
         "l": "action_focus_tasks",
         "s": "action_focus_samples",
         "m": "action_model_info",
@@ -304,7 +306,7 @@ class BacmapTUI(App[None]):
         self._leader = True
         self._set_hint(
             "[b #d29922]Leader[/] 已激活：n 新会话 · l 任务 · s 样本 · "
-            "m 模型 · t 主题 · h 帮助 · q 退出"
+            "i 输入 · m 模型 · t 主题 · h 帮助 · q 退出"
         )
 
     def _end_leader(self) -> None:
@@ -316,6 +318,10 @@ class BacmapTUI(App[None]):
 
     def action_focus_tasks(self) -> None:
         self.query_one("#tasks-table", DataTable).focus()
+
+    def action_focus_input(self) -> None:
+        """回到输入框（表格聚焦后无法直接输入；Leader i 或 Tab 回来）。"""
+        self.query_one("#prompt", Input).focus()
 
     def action_focus_samples(self) -> None:
         self.query_one("#samples-table", DataTable).focus()

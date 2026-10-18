@@ -63,11 +63,19 @@ def shutdown_dbos() -> None:
 
 
 def _run_snakemake(params: dict[str, Any]) -> Any:
-    from bacmap.workflow.runner import WorkflowRunner
+    from bacmap.workflow.runner import WorkflowRunner, deploy
 
     home = Path(params["home"])
+    # 必须走 deploy()：全新 BACMAP_HOME 下 <home>/workflows/bacmap 尚不存在，
+    # 直接把它当 cwd 会 FileNotFoundError；而显式传 deployed_dir 又会跳过内容哈希
+    # 检查（升级后仍跑旧模板）。deploy() 幂等且内容变化时自动重部署。
+    deployed = deploy()
+    if deployed != home / "workflows" / "bacmap":
+        logger.warning(
+            "engine home %s 与规范部署目录 %s 不一致（BACMAP_HOME 未对齐？）", home, deployed
+        )
     runner = WorkflowRunner(
-        deployed_dir=home / "workflows" / "bacmap", timeout=params.get("timeout", 12 * 3600)
+        deployed_dir=deployed, timeout=params.get("timeout", 12 * 3600)
     )
     targets = [
         str(home / "results" / s / "report" / f"{s}_summary.json") for s in params["samples"]
@@ -137,9 +145,17 @@ def _memory_arbiter() -> Any:
 
 @DBOS.step()
 def _step_run(params: dict[str, Any]) -> dict[str, Any]:
-    with _memory_arbiter().heavy_step():
-        proc = _run_snakemake(params)
-    return {"returncode": proc.returncode}
+    try:
+        with _memory_arbiter().heavy_step():
+            proc = _run_snakemake(params)
+    except Exception as exc:  # 记录而非静默：失败以 FAILED + message 呈现，不留裸 DBOS 堆栈
+        logger.exception("analyze step failed")
+        return {"returncode": 1, "error": f"{type(exc).__name__}: {exc}"}
+    return {
+        "returncode": proc.returncode,
+        "error": None,
+        "stderr_tail": (getattr(proc, "stderr", "") or "").strip()[-500:],
+    }
 
 
 @DBOS.step()
@@ -445,7 +461,13 @@ def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
 
     rc = _step_run(params)
     if rc["returncode"] != 0:
-        return {"status": "FAILED", "snakemake_returncode": rc["returncode"], "gates": {}}
+        detail = rc.get("error") or rc.get("stderr_tail") or "无 stderr 输出"
+        return {
+            "status": "FAILED",
+            "snakemake_returncode": rc["returncode"],
+            "message": f"snakemake 退出码 {rc['returncode']}：{detail}",
+            "gates": {},
+        }
 
     run = _step_create_run(params)
     _step_finish_run(run["run_id"], params)
@@ -572,6 +594,8 @@ def _step_mine_run(params: dict[str, Any]) -> dict[str, Any]:
         "artifacts": artifacts,
         "workspace": str(workspace),
         "datasets": [d.dataset_id for d in datasets],
+        # 失败时把脚本 stderr 带回任务 message（便于在 TUI/Web 直接看到原因）。
+        "stderr": (getattr(result, "stderr", "") or "").strip()[-500:],
     }
 
 
@@ -609,9 +633,11 @@ def mine_workflow(params: dict[str, Any]) -> dict[str, Any]:
     """
     result = _step_mine_run(params)
     if result["returncode"] != 0:
+        detail = (result.get("stderr") or "").strip() or "无 stderr 输出"
         return {
             "status": "FAILED",
             "sandbox_returncode": result["returncode"],
+            "message": f"沙箱脚本退出码 {result['returncode']}：{detail[-500:]}",
             "gates": {},
         }
     gate = _step_mining_gate(result["artifacts"], None)
@@ -815,11 +841,18 @@ class DbosTaskEngine:
                         "AWAITING_APPROVAL": TaskState.AWAITING_APPROVAL,
                         "FAILED": TaskState.FAILED,
                     }.get(status_val, TaskState.SUCCEEDED)
-                    message = json.dumps(result.get("gates", {}), ensure_ascii=False)
+                    # 工作流可给出具体失败原因（如 snakemake stderr / 沙箱脚本报错）；
+                    # 没有时退回门结果 JSON。
+                    message = str(result.get("message") or "") or json.dumps(
+                        result.get("gates", {}), ensure_ascii=False
+                    )
                 elif ws == "CANCELLED":
                     state = TaskState.CANCELLED
                 else:
                     state = TaskState.FAILED
+                    # 工作流以 ERROR 结束（无 result 可读）时也给出可读提示，
+                    # 否则列表里 message 为空、用户不知道发生了什么。
+                    message = message or f"workflow {ws}"
                 self._transition_from_running(task_id, state.value, message)
 
         return TaskStatus(
@@ -916,8 +949,28 @@ class DbosTaskEngine:
                 message = f"published baseline v{version} (signed by {approval.approver})"
         self._update_state(task_id, new_state, message)
 
+    def _reconcile_running(self) -> None:
+        """把仍在 running 的任务按工作流实际终态落库（列表/概览读取时惰性对账）。
+
+        原来只有显式 ``status(task_id)`` 才迁移状态，于是 TUI/Web 的**列表视图**
+        （走 ``list_tasks``/``count_states``）会永远显示 running——即便工作流早已
+        以 FAILED/AWAITING_APPROVAL/SUCCEEDED 结束。
+        """
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT task_id FROM tasks WHERE state = ?"
+                " AND workflow_id IS NOT NULL AND workflow_id != ''",
+                (TaskState.RUNNING.value,),
+            ).fetchall()
+        for row in rows:
+            try:
+                self.status(TaskId(str(row["task_id"])))
+            except Exception:  # 对账失败不得影响列表读取
+                logger.warning("reconcile failed for %s", row["task_id"], exc_info=True)
+
     def list_tasks(self, limit: int = 50) -> list[dict[str, Any]]:
-        """最近任务列表（Web 列表页消费）。"""
+        """最近任务列表（Web 列表页消费）。读取前先对账 running 的终态。"""
+        self._reconcile_running()
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT task_id, task_type, state, submitted_by, created_at, updated_at,"
@@ -928,6 +981,7 @@ class DbosTaskEngine:
 
     def count_states(self) -> dict[str, int]:
         """按状态统计全部任务（概览页用；不受 list_tasks 的 limit 截断）。"""
+        self._reconcile_running()
         with self._conn() as conn:
             rows = conn.execute("SELECT state, COUNT(*) AS n FROM tasks GROUP BY state").fetchall()
         return {str(r["state"]): int(r["n"]) for r in rows}

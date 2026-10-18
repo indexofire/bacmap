@@ -37,9 +37,22 @@ metadata:
   `bio_inspect_dataset` 查看已登记的 `dataset_id`，把它传给 `sandbox_run` 的
   `datasets`，或让 `mine` 脚本按工作区 `context.json` 里的挂载点读取。
 - **优先用 `sandbox_run`**：需要自行计算/绘图时，写一段 Python 脚本交给 `sandbox_run`
-  执行——脚本从工作区 `context.json` 读取 `backend` / `results_dir` / `gom_db` /
-  `datasets` 定位数据（容器内为 `/data/*`、`/input/<id>`，直通时是宿主路径），
-  把 PNG/CSV 写到当前目录；工具返回 `stdout/stderr/artifacts`。
+  执行——脚本从工作区 `context.json` 读取数据位置，**字段结构照抄，别猜**：
+
+  ```json
+  {
+    "backend": "direct",
+    "datasets": {"ds-<hex>": "/宿主/路径"},
+    "results_dir": "/…/results",
+    "gom_db": "/…/gom.sqlite"
+  }
+  ```
+
+  ⚠️ `datasets` 是 **id→路径的映射（对象）**，不是数组：
+  `for ds_id, path in ctx["datasets"].items(): …`。
+  写 `for d in ctx["datasets"]` 会迭代出**字符串键**，随后 `d.get(...)` 必然
+  `AttributeError`（这正是常见失败原因）。容器内挂载点为 `/data/*`、`/input/<id>`，
+  直通（direct）时是宿主路径；把 PNG/CSV 写到当前目录；工具返回 `stdout/stderr/artifacts`。
   可以**反复调用迭代**：先统计数据、再看结果、再画图，直到满意。
 - **也可规划 `mine` 任务**：把成熟脚本作为 `mine` 任务提交（经挖掘结论门 + 人工签字，
   产物进入报告）。`sandbox_run` 属探索性执行，不写入权威结果表。

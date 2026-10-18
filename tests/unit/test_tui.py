@@ -391,6 +391,38 @@ class TestLeaderWhilePromptFocused:
 
         asyncio.run(_run())
 
+    def test_leader_i_refocuses_input_after_table(self, engine):
+        """焦点落到表格后，Leader `i` 是回到输入框的直路（真实会话暴露的 UX 缺口）。"""
+
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                inp = app.query_one("#prompt", Input)
+                await pilot.press("ctrl+g")
+                await pilot.press("s")  # 聚焦样本表
+                await pilot.pause()
+                assert app.screen.focused is app.query_one("#samples-table", DataTable)
+                await pilot.press("ctrl+g")
+                await pilot.press("i")
+                await pilot.pause()
+                assert app.screen.focused is inp
+
+        asyncio.run(_run())
+
+
+class TestInputFocusedOnMount:
+    """开屏即聚焦输入框：旧行为焦点落在任务表，用户打字被吞（pty 冒烟抓到）。"""
+
+    def test_input_focused_after_mount(self, engine):
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                assert app.screen.focused is app.query_one("#prompt", Input)
+
+        asyncio.run(_run())
+
 
 class TestNonStringMlst:
     """summary 的 mlst 字段非字符串时不得让展示层崩溃。"""

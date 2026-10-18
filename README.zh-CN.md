@@ -45,7 +45,7 @@ bacmap --help         # 统一命令行入口
 ## 开发
 
 ```bash
-pixi run -e dev test        # pytest（基线：1333 passed）
+pixi run -e dev test        # pytest（基线：1339 passed）
 pixi run -e dev lint        # ruff
 pixi run -e dev contracts   # import-linter 依赖方向契约
 ```

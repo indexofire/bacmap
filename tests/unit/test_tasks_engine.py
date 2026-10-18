@@ -84,6 +84,56 @@ class TestDbosTaskEngine:
         st = _wait(engine, tid)
         assert st.state == TaskState.FAILED
 
+    def test_list_tasks_reconciles_terminal_state(self, engine, monkeypatch):
+        """列表读取（TUI/Web/CLI 口径）就应看到终态，而不是卡在 running。"""
+        monkeypatch.setattr(eng, "_run_snakemake", lambda p: _Proc(1))
+        tid = engine.submit(TaskType.ANALYZE, {"samples": ["SAM-001"]}, "tester")
+        # 刻意不调用 status()：仅靠 list_tasks 对账
+        state = None
+        deadline = time.time() + 30.0
+        while time.time() < deadline:
+            state = next(r for r in engine.list_tasks() if r["task_id"] == tid)["state"]
+            if state != TaskState.RUNNING.value:
+                break
+            time.sleep(0.05)
+        assert state == TaskState.FAILED.value
+
+    def test_step_exception_recorded_as_message(self, engine, monkeypatch):
+        """步骤内异常应落成 FAILED + 可读 message（不再只留 DBOS 堆栈）。"""
+
+        def boom(params):
+            raise FileNotFoundError("snakemake: 部署目录缺失")
+
+        monkeypatch.setattr(eng, "_run_snakemake", boom)
+        tid = engine.submit(TaskType.ANALYZE, {"samples": ["SAM-001"]}, "tester")
+        st = _wait(engine, tid)
+        assert st.state == TaskState.FAILED
+        assert "FileNotFoundError" in (st.message or "")
+
+    def test_mine_failure_message_carries_stderr(self, engine, monkeypatch):
+        """mine 脚本非零退出 → FAILED 且 message 带 stderr（原为永远 running）。"""
+        from bacmap.agent.sandbox import SandboxResult
+
+        monkeypatch.setattr(
+            eng,
+            "_run_sandbox",
+            lambda spec: SandboxResult(
+                returncode=1, stdout="", stderr="AttributeError: boom", backend="direct"
+            ),
+        )
+        tid = engine.submit(TaskType.MINE, {"script": "print(1)"}, "tester")
+        state = None
+        message = ""
+        deadline = time.time() + 30.0
+        while time.time() < deadline:
+            row = next(r for r in engine.list_tasks() if r["task_id"] == tid)
+            state, message = row["state"], row["message"] or ""
+            if state != TaskState.RUNNING.value:
+                break
+            time.sleep(0.05)
+        assert state == TaskState.FAILED.value
+        assert "boom" in message
+
     def test_gate_review_awaits_approval_then_approves(self, engine):
         tid = engine.submit(
             TaskType.ANALYZE,
@@ -355,6 +405,34 @@ class TestCountStates:
         assert counts.get("running") == 5
         assert sum(counts.values()) == 60
         assert len(engine.list_tasks()) == 50  # 列表默认截断，计数不截断
+
+
+class TestRunSnakemakeDeploys:
+    """`_run_snakemake` 必须先 deploy()。
+
+    真实 TUI 会话暴露：全新 BACMAP_HOME 下 `<home>/workflows/bacmap` 不存在，而旧代码
+    直接把它当 cwd（还跳过了内容哈希检查）→ `FileNotFoundError`。
+    """
+
+    def test_uses_deploy_result_as_cwd(self, tmp_path, monkeypatch):
+        import bacmap.workflow.runner as wf_runner
+
+        deployed = tmp_path / "deployed"
+        deployed.mkdir()
+        seen: dict[str, object] = {}
+
+        class _Stub:
+            def __init__(self, deployed_dir=None, timeout=0):
+                seen["deployed_dir"] = deployed_dir
+
+            def run(self, targets, cores=8):
+                seen["targets"] = targets
+                return _Proc(0)
+
+        monkeypatch.setattr(wf_runner, "deploy", lambda force=False: deployed)
+        monkeypatch.setattr(wf_runner, "WorkflowRunner", _Stub)
+        eng._run_snakemake({"home": str(tmp_path), "samples": ["S1"]})
+        assert seen["deployed_dir"] == deployed  # 部署目录，而非 home/workflows/bacmap
 
 
 def _insert_task_helper(e, tid: str, state: str) -> None:

@@ -40,7 +40,7 @@ bacmap --version      # 验证：应输出版本号
 ## 3. 开发环境（可选，贡献代码时需要）
 
 ```bash
-pixi run -e dev test          # pytest（当前基线 1333 passed）
+pixi run -e dev test          # pytest（当前基线 1339 passed）
 pixi run -e dev lint          # ruff
 pixi run -e dev contracts     # import-linter 依赖方向契约
 ```
