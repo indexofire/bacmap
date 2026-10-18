@@ -124,9 +124,9 @@ def get_result(args: dict[str, Any], **kwargs: Any) -> str:
 
     pt_line = "N/A"
     if pathotype and pathotype != "N/A":
-        pt_lines = pathotype.strip().split("\n")
-        if len(pt_lines) >= 2:
-            pt_line = pt_lines[-1].split("\t")[0]
+        # 新契约（gapit typing 归一）：pathotype 已是干净字符串（如 EHEC）；
+        # 兼容旧 summary 的多行 TSV：取最后一行第一列。
+        pt_line = pathotype.strip().splitlines()[-1].split("\t")[0]
 
     compact = {
         "sample_id": sample_id,

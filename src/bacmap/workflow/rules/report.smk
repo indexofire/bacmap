@@ -12,7 +12,7 @@ rule report_summary:
         amrfinderplus = str(WORKDIR) + "/{sample}/amr/amrfinderplus.tsv",
         plasmidfinder = str(WORKDIR) + "/{sample}/plasmid/abricate_plasmidfinder.tsv",
         ectyper = str(WORKDIR) + "/{sample}/dec/ecoh_serotype.json",
-        pathotype = str(WORKDIR) + "/{sample}/dec/pathotype.tsv",
+        pathotype = str(WORKDIR) + "/{sample}/dec/pathotype.json",
         shigella_serotype = str(WORKDIR) + "/{sample}/dec/shigella_serotype.json",
         vpa_serotype = str(WORKDIR) + "/{sample}/vpa/vpa_serotype.json",
         vpa_virulence = str(WORKDIR) + "/{sample}/vpara/virulence.json",

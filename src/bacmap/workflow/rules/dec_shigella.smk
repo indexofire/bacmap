@@ -2,7 +2,7 @@ import sys
 
 # DEC + Shigella 分析（project.md §7.3.2-3）
 # v1.4.7：ecoh/shigella 血清型判定外移 gapit（用户裁定），集成前输出占位；
-# dec_pathotype 保留（abricate 外部工具编排 + 规则脚本，第 5 步随 gapit 复评）。
+# v1.4.18：DEC 致病型判定外移 gapit（`ecoli_dec` 库）——bacmap 不再自判路径型。
 
 rule dec_ecoh_serotype:
     input:
@@ -21,15 +21,19 @@ rule dec_ecoh_serotype:
 
 rule dec_pathotype:
     input:
-        vfdb = str(WORKDIR) + "/{sample}/amr/abricate_vfdb.tsv"
+        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
     output:
-        result = str(WORKDIR) + "/{sample}/dec/pathotype.tsv"
+        result = str(WORKDIR) + "/{sample}/dec/pathotype.json"
     params:
-        py_script = str(PROJECT_ROOT / "workflows/bacmap/scripts/call_pathotype.py"),
-        python = sys.executable
+        py_script = str(PROJECT_ROOT / "workflows/bacmap/scripts/run_dec_typing.py"),
+        python = sys.executable,
+        workdir = str(WORKDIR) + "/{sample}/dec",
+        db = "ecoli_dec"
+    threads: 4
     shell:
         "mkdir -p $(dirname {output.result}) && "
-        "{params.python} {params.py_script} --vfdb {input.vfdb} --output {output.result}"
+        "{params.python} {params.py_script} --contigs {input.contigs} "
+        "--out {output.result} --workdir {params.workdir} --db {params.db}"
 
 
 rule shigella_serotype:

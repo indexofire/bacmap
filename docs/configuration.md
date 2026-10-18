@@ -183,3 +183,11 @@ final custom code is recorded per sample.
 separate `recomb` pixi environment (`pixi run -e recomb gubbins`, installed by `pixi install`).
 If `run_gubbins.py` is not on PATH the step writes `status="skipped"` into
 `snp/<group>/recombination.json` — it never changes a verdict silently.
+
+**Below-species typing (DEC pathotype).** gside stops at species (`ECO`); the diarrheagenic
+E. coli pathotype is determined by **gapit's `ecoli_dec` database**
+(`gapit screen --db ecoli_dec` → `gapit typing`), not by bacmap. The result lands in
+`dec/pathotype.json` and is summarized into `steps.dec` (`pathotype`, `pathotype_scheme`
+— `gb4789_6` preferred — `pathotype_confidence`, `pathotype_genes`, `pathotype_runner_up`,
+`pathotype_schemes`). If `gapit` is missing the step records `status="skipped"` and the
+pathotype degrades to `N/A` (it never guesses).

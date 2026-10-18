@@ -95,35 +95,6 @@ class TestGenerateCgmlstSummary:
         }
 
 
-class TestCallPathotype:
-    def test_eae_only_is_aEPEC_not_tEPEC(self):
-        mod = _load("call_pathotype")
-        calls = dict(mod.call_pathotype({"EAE"}))
-        assert "aEPEC" in calls and "tEPEC" not in calls
-        assert calls["aEPEC"] == ["EAE"]
-
-    def test_eae_and_bfpa_is_tEPEC_only(self):
-        mod = _load("call_pathotype")
-        calls = dict(mod.call_pathotype({"EAE", "BFPA"}))
-        assert "tEPEC" in calls and "aEPEC" not in calls
-
-    def test_stx_is_stec(self):
-        mod = _load("call_pathotype")
-        calls = dict(mod.call_pathotype({"STX1"}))
-        assert calls["STEC"] == ["STX1"]
-
-    def test_none_is_non_pathogenic(self):
-        mod = _load("call_pathotype")
-        calls = dict(mod.call_pathotype({"SOMEGENE"}))
-        assert calls == {"Non-pathogenic": []}
-
-    def test_detected_markers_are_rule_specific(self):
-        mod = _load("call_pathotype")
-        calls = dict(mod.call_pathotype({"EAE", "BFPA", "OTHER"}))
-        # 只报本规则命中的标记，不把库里所有基因抄一遍
-        assert calls["tEPEC"] == ["BFPA", "EAE"]
-
-
 class TestGenerateSnpMatrix:
     def _vcf(self, tmp_path: Path, quals: list[str]) -> Path:
         lines = [

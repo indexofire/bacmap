@@ -172,3 +172,9 @@ python workflows/bacmap/scripts/fetch_reference_genomes.py \
 即启用。Gubbins 装在独立的 `recomb` pixi 环境（`pixi run -e recomb gubbins`，随 `pixi install`
 安装）。`run_gubbins.py` 不在 PATH 时该步骤写 `status="skipped"` 到
 `snp/<group>/recombination.json`——绝不静默改判定。
+
+**种以下判定（DEC 致病型）**：gside 止于种（`ECO`）；致泻性大肠埃希菌的致病型由 **gapit 的
+`ecoli_dec` 库**判定（`gapit screen --db ecoli_dec` → `gapit typing`），bacmap 不自判。结果落在
+`dec/pathotype.json`，归一进 `steps.dec`（`pathotype`、`pathotype_scheme`——首选 `gb4789_6`——
+`pathotype_confidence`、`pathotype_genes`、`pathotype_runner_up`、`pathotype_schemes`）。
+`gapit` 缺失时该步骤记 `status="skipped"`，`pathotype` 退化为 `N/A`（绝不猜测）。

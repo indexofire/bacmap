@@ -78,7 +78,10 @@ summary["steps"]["plasmid"] = {
 dec_serotype = read_json(snakemake.input.ectyper, {})
 if not isinstance(dec_serotype, dict):
     dec_serotype = {}
-dec_pathotype = read_file(snakemake.input.pathotype, "N/A")
+# DEC 致病型：gapit `ecoli_dec` 的 typing 结果（v1.4.18，判定外部化）
+from bacmap.core.analysis.dec_pathotype import summarize as summarize_dec_pathotype  # noqa: E402
+
+dec_pt = summarize_dec_pathotype(read_json(snakemake.input.pathotype, {}))
 # gside 标记名小写（"ipah"）；大小写不敏感匹配，且容忍 marker 非 dict/非 list 形态。
 _markers = species_id.get("detected_markers", [])
 _marker_genes = {
@@ -91,7 +94,12 @@ summary["steps"]["dec"] = {
     "o_type": dec_serotype.get("o_type", "-"),
     "h_type": dec_serotype.get("h_type", "-"),
     "interpretation": dec_serotype.get("interpretation", ""),
-    "pathotype": dec_pathotype,
+    "pathotype": dec_pt["pathotype"],
+    "pathotype_scheme": dec_pt["pathotype_scheme"],
+    "pathotype_confidence": dec_pt["pathotype_confidence"],
+    "pathotype_genes": dec_pt["pathotype_genes"],
+    "pathotype_runner_up": dec_pt["pathotype_runner_up"],
+    "pathotype_schemes": dec_pt["pathotype_schemes"],
     "ipaH": ipah,
 }
 
