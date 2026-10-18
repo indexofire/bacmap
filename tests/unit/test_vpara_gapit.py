@@ -132,9 +132,8 @@ class TestDeployEnsuresDb:
     def test_noop_without_packaged_fasta(self, tmp_path, monkeypatch):
         calls = []
         monkeypatch.setattr(wf_runner.subprocess, "run", lambda *a, **k: calls.append(a))
-        monkeypatch.setattr(wf_runner, "DEPLOYED_DIR", tmp_path / "deployed")
         monkeypatch.setattr(wf_runner, "BACMAP_HOME", tmp_path / "home")
-        wf_runner._ensure_gapit_vpara_db()
+        wf_runner._ensure_gapit_vpara_db(tmp_path / "deployed")
         assert calls == []
 
     def test_builds_when_fasta_present(self, tmp_path, monkeypatch):
@@ -147,9 +146,8 @@ class TestDeployEnsuresDb:
         monkeypatch.setattr(
             wf_runner.subprocess, "run", lambda *a, **k: calls.append(a[0]) or _P(0, stdout="ok")
         )
-        monkeypatch.setattr(wf_runner, "DEPLOYED_DIR", deployed)
         monkeypatch.setattr(wf_runner, "BACMAP_HOME", tmp_path / "home")
-        wf_runner._ensure_gapit_vpara_db()
+        wf_runner._ensure_gapit_vpara_db(deployed)
         assert len(calls) == 1
         assert "build_gapit_db.py" in " ".join(calls[0])
 

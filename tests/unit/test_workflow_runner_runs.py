@@ -98,6 +98,9 @@ class TestDeploy:
         monkeypatch.setattr(wf_runner, "BACMAP_HOME", home)
 
         d1 = wf_runner.deploy()
+        # 回归：部署必须落在 monkeypatch 的 WORKFLOWS_DIR——绝不写穿真实 BACMAP_HOME
+        # （旧实现用导入期常量 DEPLOYED_DIR，测试会把 user samples.tsv 覆盖成 "user\tdata"）。
+        assert d1 == home / "workflows" / "bacmap"
         assert 'project_root: "' in (d1 / "config" / "config.yaml").read_text()
         assert "../.." not in (d1 / "config" / "config.yaml").read_text()
 

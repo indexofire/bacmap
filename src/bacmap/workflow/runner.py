@@ -21,24 +21,32 @@ from bacmap.core._pkg import pkg_dir
 logger = logging.getLogger(__name__)
 
 WORKFLOW_PKG_DIR = pkg_dir().parent / "workflow"
-DEPLOYED_DIR = WORKFLOWS_DIR / "bacmap"
+def _deployed_dir() -> Path:
+    """部署落点——每次调用解析 ``WORKFLOWS_DIR``（测试/多实例 monkeypatch 生效）。
+
+    导入期常量会让 ``deploy()`` 写穿真实 BACMAP_HOME（测试只改 WORKFLOWS_DIR 时）。
+    """
+    return WORKFLOWS_DIR / "bacmap"
+
+
+DEPLOYED_DIR = _deployed_dir()  # 兼容导出；实际写入一律经 _deployed_dir()
 GAPIT_DB_NAME = "vpara_virulence"
 GAPIT_REF_FASTA = "refs/vpara_virulence.fasta"
 
 
-def _ensure_gapit_vpara_db() -> None:
+def _ensure_gapit_vpara_db(deployed: Path) -> None:
     """部署期构建 vpara 毒力基因 gapit 自定义库（ADR-20）。
 
     幂等：DB 已存在（manifest 在）即跳过；gapit 缺失/失败仅告警，不阻断部署
     （该规则在缺少 DB 时会显式失败，见 vpara.smk / vpara_virulence.py）。
     """
-    fasta = DEPLOYED_DIR / GAPIT_REF_FASTA
+    fasta = deployed / GAPIT_REF_FASTA
     if not fasta.is_file():
         return
     datadir = BACMAP_HOME / "refs" / "gapit"
     if (datadir / GAPIT_DB_NAME / "gapit-manifest.json").is_file():
         return
-    script = DEPLOYED_DIR / "scripts" / "build_gapit_db.py"
+    script = deployed / "scripts" / "build_gapit_db.py"
     if not script.is_file():
         return
     cmd = [
@@ -73,36 +81,37 @@ def _tree_hash(root: Path) -> str:
 
 
 def deployed_stamp() -> Path:
-    return DEPLOYED_DIR / ".bacmap_workflow_sha"
+    return _deployed_dir() / ".bacmap_workflow_sha"
 
 
 def deploy(force: bool = False) -> Path:
     """包内工作流 → BACMAP_HOME；内容变化时自动更新（保留 samples.tsv 与 .snakemake 续跑状态）。"""
+    deployed = _deployed_dir()
     pkg_hash = _tree_hash(WORKFLOW_PKG_DIR)
     stamp = deployed_stamp()
     if not force and stamp.is_file() and stamp.read_text().strip() == pkg_hash:
-        return DEPLOYED_DIR
+        return deployed
 
     keeps: list[tuple[Path, Path]] = []
     for rel in ("config/samples.tsv", ".snakemake"):
-        src = DEPLOYED_DIR / rel
+        src = deployed / rel
         if src.exists():
-            bak = DEPLOYED_DIR.parent / (src.name + ".keep")
+            bak = deployed.parent / (src.name + ".keep")
             if bak.exists():
                 shutil.rmtree(bak, ignore_errors=True)
             shutil.copytree(src, bak) if src.is_dir() else shutil.copy2(src, bak)
-            keeps.append((bak, DEPLOYED_DIR / rel))
+            keeps.append((bak, deployed / rel))
 
-    if DEPLOYED_DIR.exists():
-        shutil.rmtree(DEPLOYED_DIR)
-    shutil.copytree(WORKFLOW_PKG_DIR, DEPLOYED_DIR, ignore=shutil.ignore_patterns("__pycache__"))
+    if deployed.exists():
+        shutil.rmtree(deployed)
+    shutil.copytree(WORKFLOW_PKG_DIR, deployed, ignore=shutil.ignore_patterns("__pycache__"))
 
     for bak, dst in keeps:
         if dst.exists():
             shutil.rmtree(dst, ignore_errors=True)
         shutil.move(str(bak), str(dst))
 
-    cfg = DEPLOYED_DIR / "config" / "config.yaml"
+    cfg = deployed / "config" / "config.yaml"
     text = cfg.read_text()
     marker = 'project_root: "../.."'
     already = f'project_root: "{BACMAP_HOME}"'
@@ -117,10 +126,10 @@ def deploy(force: bool = False) -> Path:
         )
     cfg.write_text(rewritten)
 
-    _ensure_gapit_vpara_db()
+    _ensure_gapit_vpara_db(deployed)
 
     stamp.write_text(pkg_hash)
-    return DEPLOYED_DIR
+    return deployed
 
 
 def _env_with_src() -> dict[str, str]:
