@@ -388,13 +388,17 @@ class TestWebHardening:
         assert r.status_code == 401
         assert "content-security-policy" in r.headers
 
-    def test_report_served_as_attachment(self, client):
+    def test_report_inline_by_default_and_sandboxed(self, client):
+        """v1.4.25：默认内联查看（sandbox CSP 隔离），下载走 ?download=1。"""
         c, home = client
         rep = home / "results" / "SAM-001" / "report" / "SAM-001_report.html"
         rep.write_text("<html><body>ok</body></html>", encoding="utf-8")
         r = c.get("/samples/SAM-001/report")
         assert r.status_code == 200
-        assert "attachment" in r.headers.get("content-disposition", "")
+        assert "inline" in r.headers.get("content-disposition", "").lower()
+        assert "sandbox" in r.headers.get("content-security-policy", "")
+        r2 = c.get("/samples/SAM-001/report?download=1")
+        assert "attachment" in r2.headers.get("content-disposition", "")
 
     def test_assistant_empty_prompt_400(self, client):
         c, _ = client
@@ -434,3 +438,74 @@ class TestWebHardening:
         # 首个会话已被 LRU 淘汰 → 再次用它开会话会返回新 sid。
         again = _ask(first, "reuse")
         assert again != first
+
+
+class TestWebBearerLogin:
+    """v1.4.25：bearer 模式下 /login 不再重定向（旧实现与中间件形成死循环）。"""
+
+    def test_login_page_explains_bearer_mode(self, engine, monkeypatch):
+        monkeypatch.delenv("BACMAP_WEB_AUTH", raising=False)
+        c = TestClient(create_app(engine, auth_token="tok"))
+        r = c.get("/login", headers={"accept": "text/html"}, follow_redirects=False)
+        assert r.status_code == 200  # 不是 303
+        assert "bearer" in r.text
+        assert "BACMAP_WEB_AUTH=cookie" in r.text
+
+    def test_html_navigation_gets_401_with_hint_not_redirect(self, engine, monkeypatch):
+        monkeypatch.delenv("BACMAP_WEB_AUTH", raising=False)
+        c = TestClient(create_app(engine, auth_token="tok"))
+        r = c.get("/", headers={"accept": "text/html"}, follow_redirects=False)
+        assert r.status_code == 401
+        assert "/login" in r.text  # 给出可操作提示
+
+    def test_api_clients_still_get_plain_401(self, engine, monkeypatch):
+        monkeypatch.delenv("BACMAP_WEB_AUTH", raising=False)
+        c = TestClient(create_app(engine, auth_token="tok"))
+        r = c.get("/tasks/nope/fragment")
+        assert r.status_code == 401
+        assert r.headers["www-authenticate"] == "Bearer"
+
+
+class TestWebNoAuthLoginPage:
+    """/login 始终可达：未启用鉴权时给出说明，而非静默重定向。"""
+
+    def test_login_page_when_auth_disabled(self, engine):
+        c = TestClient(create_app(engine, auth_token=None))
+        r = c.get("/login", follow_redirects=False)
+        assert r.status_code == 200
+        assert "无需登录" in r.text
+
+
+class TestSampleReportDelivery:
+    """报告默认内联查看（sandbox CSP），?download=1 才附件下载。"""
+
+    def _client_with_report(self, engine) -> TestClient:
+        rep = Path(engine.home) / "results" / "SAM-001" / "report"
+        rep.mkdir(parents=True, exist_ok=True)
+        (rep / "SAM-001_report.html").write_text(
+            "<!doctype html><html><body><h1>报告</h1></body></html>", encoding="utf-8"
+        )
+        return TestClient(create_app(engine, auth_token=None))
+
+    def test_inline_by_default_with_sandbox_csp(self, engine):
+        c = self._client_with_report(engine)
+        r = c.get("/samples/SAM-001/report")
+        assert r.status_code == 200
+        assert "attachment" not in r.headers.get("content-disposition", "").lower()
+        assert "inline" in r.headers["content-disposition"].lower()
+        csp = r.headers["content-security-policy"]
+        assert "sandbox" in csp and "default-src 'none'" in csp
+        assert "报告" in r.text
+
+    def test_download_flag_forces_attachment(self, engine):
+        c = self._client_with_report(engine)
+        r = c.get("/samples/SAM-001/report?download=1")
+        assert r.status_code == 200
+        assert "attachment" in r.headers["content-disposition"].lower()
+
+    def test_detail_page_offers_both_links(self, engine):
+        c = self._client_with_report(engine)
+        r = c.get("/samples/SAM-001")
+        assert r.status_code == 200
+        assert "/samples/SAM-001/report" in r.text
+        assert "/samples/SAM-001/report?download=1" in r.text

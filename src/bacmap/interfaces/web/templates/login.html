@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}登录 · bacmap{% endblock %}
 {% block content %}
+{% if mode == 'cookie' %}
 <div class="pagehead">
   <h1 class="pagehead__title">登录 bacmap</h1>
   <p class="pagehead__sub">输入部署令牌（环境变量 <span class="mono-dim">BACMAP_WEB_TOKEN</span>）以进入控制台。</p>
@@ -21,4 +22,23 @@
     </div>
   </form>
 </section>
+{% else %}
+<div class="pagehead">
+  <h1 class="pagehead__title">{% if mode == 'disabled' %}无需登录{% else %}浏览器登录未启用{% endif %}</h1>
+  <p class="pagehead__sub">
+    {% if mode == 'disabled' %}
+      鉴权未启用（未设置 <span class="mono-dim">BACMAP_WEB_TOKEN</span>），直接访问控制台即可。
+    {% else %}
+      当前为 <span class="mono-dim">bearer</span> 模式（仅供 API 客户端使用
+      <span class="mono-dim">Authorization: Bearer</span>）。浏览器登录需设置
+      <span class="mono-dim">BACMAP_WEB_AUTH=cookie</span> 后重启服务；
+      或继续用 API 方式访问。
+    {% endif %}
+  </p>
+</div>
+<section class="card" aria-labelledby="login-next-title">
+  <div class="card__head"><h2 class="card__title" id="login-next-title">继续</h2></div>
+  <p><a class="btn btn--primary" href="/">返回控制台</a></p>
+</section>
+{% endif %}
 {% endblock %}

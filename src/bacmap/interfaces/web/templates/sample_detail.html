@@ -5,7 +5,8 @@
   <h1 class="pagehead__title mono-dim">{{ d.sample_id }}</h1>
   <p class="pagehead__sub">
     分析结果详情
-    {% if d.has_report %}· <a href="/samples/{{ d.sample_id }}/report">查看 HTML 报告</a>{% endif %}
+    {% if d.has_report %}· <a href="/samples/{{ d.sample_id }}/report">查看 HTML 报告</a>
+    · <a href="/samples/{{ d.sample_id }}/report?download=1">下载</a>{% endif %}
   </p>
 </div>
 <section class="card" aria-labelledby="det-title">

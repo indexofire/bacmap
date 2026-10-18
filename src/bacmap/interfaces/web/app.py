@@ -98,10 +98,16 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
 
     @app.get("/login", response_class=HTMLResponse)
     def login_form(request: Request, next: str = "/"):
-        if not (cfg.enabled and cfg.mode == "cookie"):
-            return RedirectResponse("/", status_code=303)
+        # 始终渲染（不重定向）：cookie 模式给登录表单；bearer/未启用模式给说明页。
+        # 旧实现在非 cookie 模式 303 回首页，与中间件"HTML→/login"形成死循环（v1.4.25 修复）。
         return _TEMPLATES.TemplateResponse(
-            request, "login.html", {"next": safe_next(next), "error": None}
+            request,
+            "login.html",
+            {
+                "next": safe_next(next),
+                "error": None,
+                "mode": cfg.mode if cfg.enabled else "disabled",
+            },
         )
 
     @app.post("/login", response_class=HTMLResponse)
@@ -166,17 +172,22 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
         return _TEMPLATES.TemplateResponse(request, "sample_detail.html", {"d": d})
 
     @app.get("/samples/{sample_id}/report")
-    def sample_report(sample_id: str) -> FileResponse:
+    def sample_report(sample_id: str, download: int = 0) -> FileResponse:
         if not _validate_sample_id(sample_id):
             raise HTTPException(400, "非法样本 ID")
         path = report_path(engine, sample_id)
         if not path.is_file():
             raise HTTPException(404, "该样本尚未生成 HTML 报告")
-        # 以附件下载：报告为独立 HTML，避免在同源内联渲染引入 XSS 面。
+        # 默认**内联查看**（用户点"查看"的预期）；`?download=1` 才作为附件下载。
+        # 报告是自包含 HTML（内联 <style>），用 sandbox CSP 隔离：禁脚本、禁外联、
+        # 唯一不透明源（即使报告里混入不可信文本也无法读取同源 cookie/发起请求）。
+        csp = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:"
         return FileResponse(
             path,
             media_type="text/html",
             filename=f"{sample_id}_report.html",
+            content_disposition_type="attachment" if download else "inline",
+            headers={"Content-Security-Policy": csp},
         )
 
     @app.get("/search", response_class=HTMLResponse)

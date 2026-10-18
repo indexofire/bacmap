@@ -100,6 +100,17 @@ def _run_web(args: argparse.Namespace) -> None:
     token = os.environ.get(args.token_env, "")
     _warn_if_exposed(args.host)
     engine = _engine(args.home)
+    mode = (os.environ.get("BACMAP_WEB_AUTH") or "bearer").strip().lower()
+    if not token:
+        hint = f"鉴权关闭（未设置 {args.token_env}；仅本机安全）"
+    elif mode == "cookie":
+        hint = f"浏览器登录：http://{args.host}:{args.port}/login（令牌见 {args.token_env}）"
+    else:
+        hint = (
+            f"bearer 模式（API 客户端）；浏览器登录请设 BACMAP_WEB_AUTH=cookie 后重启，"
+            f"或用 Authorization: Bearer <{args.token_env}>"
+        )
+    print(f"bacmap web → http://{args.host}:{args.port}/  ·  {hint}")
     uvicorn.run(create_app(engine, auth_token=token or None), host=args.host, port=args.port)
 
 

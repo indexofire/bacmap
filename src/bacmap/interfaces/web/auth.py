@@ -129,6 +129,22 @@ def _cookies(scope: dict[str, Any]) -> dict[str, str]:
     return {k: v.value for k, v in jar.items()}
 
 
+_UNAUTHORIZED_HTML = """<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>401 · bacmap</title>
+<body style="font-family:system-ui,-apple-system,sans-serif;max-width:44em;
+margin:3em auto;padding:0 1em;line-height:1.6">
+<h1>401 · 需要认证</h1>
+<p>当前 Web 控制台为 <b>bearer 模式</b>（仅 <code>Authorization: Bearer</code>）。
+浏览器请任选：</p>
+<ul>
+  <li>设置 <code>BACMAP_WEB_AUTH=cookie</code> 后重启，再访问
+      <a href="/login">/login</a> 登录；</li>
+  <li>或用 API 方式：<code>curl -H "Authorization: Bearer &lt;token&gt;" …</code>。</li>
+</ul>
+<p><a href="/login">/login</a> · <a href="/">返回首页</a></p>
+</body></html>""".encode()
+
+
 class WebAuthMiddleware:
     """浏览器(cookie) + API(Bearer) 双通道鉴权；bearer 模式等价于纯 Bearer。"""
 
@@ -162,7 +178,14 @@ class WebAuthMiddleware:
             await self._app(scope, receive, send)
             return
         method = str(scope.get("method", "GET")).upper()
-        if method in SAFE_METHODS and self._accepts_html(scope):
+        # 只有 cookie 模式存在"浏览器登录"：HTML 导航 303 到 /login。
+        # bearer 模式若也跳转，会与 /login 的"非 cookie 模式回首页"形成重定向死循环
+        #（v1.4.15 引入的缺陷，v1.4.25 修复）。
+        if (
+            method in SAFE_METHODS
+            and self._accepts_html(scope)
+            and self._cfg.mode == "cookie"
+        ):
             location = "/login?next=" + quote(path, safe="/")
             await send(
                 {
@@ -175,6 +198,19 @@ class WebAuthMiddleware:
                 }
             )
             await send({"type": "http.response.body", "body": b"redirecting to /login"})
+            return
+        if self._accepts_html(scope):
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 401,
+                    "headers": [
+                        (b"content-type", b"text/html; charset=utf-8"),
+                        (b"www-authenticate", b"Bearer"),
+                    ],
+                }
+            )
+            await send({"type": "http.response.body", "body": _UNAUTHORIZED_HTML})
             return
         await send(
             {

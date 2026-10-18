@@ -118,7 +118,9 @@ Run `bacmap web`, then open `http://127.0.0.1:8800` in a browser:
 3. **Monitor**: six state badges (queued / running / pending approval / completed / failed
    / canceled); the detail page refreshes every 2 seconds.
 4. **Query results**: the Samples pages browse completed samples (list, per-sample detail
-   with detected genes, HTML report download); Search finds samples by keyword or filters.
+   with detected genes). Per-sample detail offers **查看 HTML 报告** — rendered *inline* in the
+   browser under a `sandbox` CSP (script-free, no external requests) — and **下载** for the
+   file (`?download=1`). Search finds samples by keyword or filters.
 3. **Approve**: when a task reaches `pending approval`, an amber approval card appears on the detail page. Fill in the approver, the decision (approve/reject), and the signature passphrase. After submission the task passes the mining gate / release gate and proceeds
 
 > Approval is one of the six gates: unsigned mining output cannot enter a report, and a
@@ -133,11 +135,12 @@ authentication, so anyone on the LAN could submit or approve tasks). Use an SSH 
 instead: SSH carries all of the encryption and authentication, and bacmap needs zero changes:
 
 > `BACMAP_WEB_TOKEN` (`--token-env`) adds authentication. In the default `bearer` mode it is
-> sent as an `Authorization` header, which **browsers cannot set** — so the HTML console
-> returns 401 and the tunnel-first workflow below is the way in. Set
-> `BACMAP_WEB_AUTH=cookie` to instead log in at `/login` (signed `HttpOnly` session cookie +
-> CSRF token on every state-changing POST); with `BACMAP_WEB_COOKIE_SECURE=1` add `Secure`
-> for TLS deployments.
+> sent as an `Authorization` header, which **browsers cannot set** — the HTML console answers
+> **401 with a short page telling you what to do**, and `/login` renders the same explanation
+> (it never redirects, so there is no redirect loop). Set `BACMAP_WEB_AUTH=cookie` to log in
+> at `/login` (signed `HttpOnly` session cookie + CSRF token on every state-changing POST);
+> add `BACMAP_WEB_COOKIE_SECURE=1` for TLS deployments. The startup line prints the URL and
+> the effective auth hint.
 
 ```bash
 # 在你自己的电脑上执行（user 为工作站账号，10.0.0.5 换成工作站实际 IP）：
