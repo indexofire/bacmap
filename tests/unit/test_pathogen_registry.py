@@ -146,6 +146,12 @@ class TestGoldenMigration:
         assert reg.pathogens["SAL"].wants("recombination") is True
         assert reg.pathogens["KPN"].wants("snp") is False  # 无参考基因组
 
+    def test_recombination_groups_from_plan(self):
+        from bacmap.core.pathogen_registry import get_workflow_tables, load_registry
+
+        assert load_registry().groups_with_plan("recombination") == ["salmonella"]
+        assert get_workflow_tables().recombination_groups == ["salmonella"]
+
 
 class TestResolveDualAccept:
     def test_code_label_and_display_name(self):

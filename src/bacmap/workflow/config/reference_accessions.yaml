@@ -1,0 +1,38 @@
+# 参考基因组 accession 清单（部署期由 fetch_reference_genomes.py 取回）
+#
+# 用途：为每个 SNP/cgMLST cohort 组提供参考基因组。运维/智能体据此取回 NCBI
+# RefSeq 基因组并落到 data/reference/genomes/；缺失的组不参与 SNP cohort
+# （`pathogens.yaml` 的 snp_groups 只列已备参考的组）。
+#
+# 字段：
+#   out         输出文件名（相对 data/reference/genomes/）
+#   organism    说明（人读）
+#   accessions  NCBI nuccore accession 列表；**多复制子按顺序拼接**为单条参考
+#   version     命中记录用途的版本标签（写入 refs/manifest.json）
+#
+# 用法（联网的工作站）：
+#   python workflows/bacmap/scripts/fetch_reference_genomes.py \
+#       --manifest workflows/bacmap/config/reference_accessions.yaml \
+#       --out-dir "$BACMAP_DATA_DIR/reference/genomes" \
+#       --refs-dir "$BACMAP_HOME/refs"
+# 离线失败不中断：逐条记 error；需要严格模式加 --strict。
+#
+# 换参考基因组：改 accessions 后带 --force 重取；脚本按 sha256 登记到
+# refs/manifest.json，运行记录（ADR-18）据此溯源所用参考。
+
+genomes:
+  salmonella:
+    out: salmonella_LT2.fasta
+    organism: Salmonella enterica subsp. enterica serovar Typhimurium str. LT2
+    accessions: [NC_003197.2]
+    version: NC_003197.2
+  ecoli:
+    out: ecoli_k12.fasta
+    organism: Escherichia coli str. K-12 substr. MG1655
+    accessions: [NC_000913.3]
+    version: NC_000913.3
+  vpara:
+    out: vpara_rimd.fasta
+    organism: Vibrio parahaemolyticus RIMD 2210633 (chromosome I + II)
+    accessions: [NC_004603.1, NC_004605.1]
+    version: NC_004603.1+NC_004605.1

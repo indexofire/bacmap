@@ -153,3 +153,33 @@ is built automatically at deploy time from the packaged
 `workflow/refs/vpara_virulence.fasta` and registered here; an updated database can replace
 it at any time and will be recorded on the next run. The `vpara_virulence` rule fails
 explicitly if the database is missing (no silent degradation).
+
+## 7. Reference genomes, species escalation, recombination (optional)
+
+**Reference genomes (SNP/cgMLST cohorts).** Each cohort group needs a reference genome.
+Accessions live in `workflow/config/reference_accessions.yaml` (`group → out + accessions`);
+fetch them on a networked workstation:
+
+```bash
+python workflows/bacmap/scripts/fetch_reference_genomes.py \
+    --manifest workflows/bacmap/config/reference_accessions.yaml \
+    --out-dir "$BACMAP_DATA_DIR/reference/genomes" \
+    --refs-dir "$BACMAP_HOME/refs"
+```
+
+Multi-replicon entries (e.g. V. parahaemolyticus chromosomes I+II) are concatenated into one
+reference. Offline failures are non-fatal (per-entry `error`); `--strict` exits non-zero.
+Each genome's sha256/version is registered into `refs/manifest.json`, so run records (ADR-18)
+trace exactly which reference was used. Groups without a reference simply skip the SNP cohort.
+
+**Species escalation.** `species_mode` picks the starting gside tier; set
+`species_escalation: true` (and optionally `species_mode_max`) so an unresolved verdict
+escalates `marker → panel → mash_refseq → sourmash → all`. Tiers whose databases are not
+provisioned simply fall through (no crash); `attempts` is recorded in `species_id.json`. The
+final custom code is recorded per sample.
+
+**Recombination (Gubbins).** Optional and off by default: set
+`plan.recombination: true` on a pathogen (in `core/pathogens.yaml`). Gubbins lives in the
+separate `recomb` pixi environment (`pixi run -e recomb gubbins`, installed by `pixi install`).
+If `run_gubbins.py` is not on PATH the step writes `status="skipped"` into
+`snp/<group>/recombination.json` — it never changes a verdict silently.

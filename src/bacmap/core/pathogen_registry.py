@@ -85,6 +85,7 @@ class WorkflowTables:
     gapit_screens: dict[str, list[str]]
     snp_groups: dict[str, dict[str, Any]]
     cgmlst_species_groups: dict[str, dict[str, Any]]
+    recombination_groups: list[str]
     signature: str
 
 
@@ -135,6 +136,14 @@ class PathogenRegistry:
             for c, p in self.pathogens.items()
             if p.enabled and p.gapit_screens
         }
+
+    def groups_with_plan(self, key: str) -> list[str]:
+        """声明了 ``plan[key]`` 的 SNP 组（如 recombination）。"""
+        return [
+            name
+            for name, g in self.snp_group_specs.items()
+            if any(self.pathogens[c].wants(key) for c in self._group_members(name))
+        ]
 
     def _group_members(self, group_name: str) -> list[str]:
         return [
@@ -325,6 +334,7 @@ def get_workflow_tables() -> WorkflowTables:
         gapit_screens=reg.gapit_screens(),
         snp_groups=reg.snp_groups(),
         cgmlst_species_groups=reg.cgmlst_species_groups(),
+        recombination_groups=reg.groups_with_plan("recombination"),
         signature=reg.signature(),
     )
 

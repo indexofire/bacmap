@@ -147,3 +147,28 @@ nondeterministic_steps: []    # 无法固定随机性的步骤名，如 [assembl
 `vpara_virulence` 的 gapit 库（副溶血性弧菌毒力标记 tdh/trh/tlh）在部署期由打包的
 `workflow/refs/vpara_virulence.fasta` 自动构建并登记于此；更新后的数据库可随时替换，
 下次运行即记录新版本。数据库缺失时 `vpara_virulence` 规则显式失败（不静默降级）。
+
+## 7. 参考基因组、鉴定升级、重组检测（可选）
+
+**参考基因组（SNP/cgMLST cohort）**：每个 cohort 组需要一个参考基因组，accession 写在
+`workflow/config/reference_accessions.yaml`（`group → out + accessions`）；联网工作站取回：
+
+```bash
+python workflows/bacmap/scripts/fetch_reference_genomes.py \
+    --manifest workflows/bacmap/config/reference_accessions.yaml \
+    --out-dir "$BACMAP_DATA_DIR/reference/genomes" \
+    --refs-dir "$BACMAP_HOME/refs"
+```
+
+多复制子（如副溶血性弧菌 I+II 号染色体）按顺序拼接为单条参考；离线失败不中断（逐条记
+`error`），`--strict` 时非零退出。每个基因组的 sha256/版本登记进 `refs/manifest.json`，
+运行记录（ADR-18）据此溯源；没有参考的组自动跳过 SNP cohort。
+
+**鉴定升级**：`species_mode` 为起始 gside 档位；设 `species_escalation: true`（可选
+`species_mode_max`）后，未定种会按 `marker→panel→mash_refseq→sourmash→all` 升档。库未就绪的档
+自动落空（不崩溃），`attempts` 记入 `species_id.json`。
+
+**重组检测（Gubbins）**：默认关闭；在 `core/pathogens.yaml` 给病原设 `plan.recombination: true`
+即启用。Gubbins 装在独立的 `recomb` pixi 环境（`pixi run -e recomb gubbins`，随 `pixi install`
+安装）。`run_gubbins.py` 不在 PATH 时该步骤写 `status="skipped"` 到
+`snp/<group>/recombination.json`——绝不静默改判定。

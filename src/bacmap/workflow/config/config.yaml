@@ -14,6 +14,10 @@ project_root: "../.."
 # panel/skani_gtdb/mash_refseq/sourmash/standard 由方案 A/B/C 交付后可用，
 # 数据库缺失时自动回退 simple 并记录原因。Kraken2 reads 级预筛独立开关（方案 D）。
 species_mode: "simple"
+# 升级阶梯（v1.4.17）：起始档未定种时按 marker→panel→mash_refseq→sourmash→all 升档。
+# 各档库未就绪时该档落空（不崩溃）；本地需 `gside db setup --tier <tier>`。
+species_escalation: false
+species_mode_max: "all"
 kraken2_prefilter: false
 
 samples_file: "config/samples.tsv"

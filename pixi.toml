@@ -76,5 +76,12 @@ mkdocs-material = ">=9.5"
 docs-build = { cmd = "mkdocs build" }
 typecheck = { cmd = "mypy src/bacmap", env = { PYTHONPATH = "$PIXI_PROJECT_ROOT/src" } }
 
+# 重组检测（ADR-20：外部工具；不进默认环境，按需 `pixi run -e recomb ...`）。
+# 缺失时重组步骤写 status=skipped（不静默、不改判定）。
+[feature.recomb.dependencies]
+gubbins = ">=3.3"
+
 [environments]
 dev = ["dev"]
+# 独立求解（不继承默认依赖）：gubbins 需 iqtree 2.0.3.*，与默认 iqtree 3.1.2.* 冲突。
+recomb = { features = ["recomb"], no-default-feature = true }

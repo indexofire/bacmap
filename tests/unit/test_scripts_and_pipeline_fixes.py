@@ -110,3 +110,51 @@ class TestRunAnalysisCli:
         monkeypatch.setattr(sys, "argv", ["run_analysis.py"])
         with pytest.raises(SystemExit):
             mod.main()
+
+
+class TestCohortTargets:
+    """分组目标由 registry 派生 + resolve 双接受（码/名称），并含重组目标。"""
+
+    def _mod(self):
+        path = _SRC / "bacmap" / "tools" / "_scripts" / "run_analysis.py"
+        spec = importlib.util.spec_from_file_location("run_analysis_targets", path)
+        mod = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        spec.loader.exec_module(mod)
+        return mod
+
+    def _samples(self, tmp_path, rows: list[tuple[str, str]]):
+        wf = tmp_path / "wf"
+        (wf / "config").mkdir(parents=True)
+        tsv = wf / "config" / "samples.tsv"
+        body = "sample\tspecies\n" + "".join(f"{s}\t{sp}\n" for s, sp in rows)
+        tsv.write_text(body)
+        return tsv
+
+    def test_codes_accepted(self, tmp_path, monkeypatch):
+        mod = self._mod()
+        monkeypatch.setattr(mod, "RESULTS_DIR", tmp_path / "results")
+        tsv = self._samples(tmp_path, [("S1", "SAL"), ("S2", "SAL"), ("S3", "ECO")])
+        snp = mod._cohort_targets(tsv, "snp")
+        assert any(p.endswith("/snp/salmonella/snp_summary.json") for p in snp)
+        # ecoli 组只有 1 株（<2）→ 不产目标
+        assert not any("/snp/ecoli/" in p for p in snp)
+        # salmonella plan.recombination=true → 附带重组目标
+        assert any(p.endswith("/snp/salmonella/recombination.json") for p in snp)
+
+    def test_names_dual_accepted(self, tmp_path, monkeypatch):
+        mod = self._mod()
+        monkeypatch.setattr(mod, "RESULTS_DIR", tmp_path / "results")
+        tsv = self._samples(
+            tmp_path, [("S1", "E.coli"), ("S2", "Shigella")]
+        )
+        cg = mod._cohort_targets(tsv, "cgmlst")
+        assert any(p.endswith("/cgmlst/ecoli/cgmlst_summary.json") for p in cg)
+
+    def test_snp_no_longer_points_at_stale_root(self, tmp_path, monkeypatch):
+        mod = self._mod()
+        monkeypatch.setattr(mod, "RESULTS_DIR", tmp_path / "results")
+        tsv = self._samples(tmp_path, [("S1", "SAL"), ("S2", "SAL")])
+        snp = mod._cohort_targets(tsv, "snp")
+        assert all("/snp/" in p and p.count("/snp/") == 1 for p in snp)
+        assert not any(p.endswith("/snp/snp_summary.json") for p in snp)

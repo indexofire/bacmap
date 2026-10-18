@@ -35,10 +35,15 @@ What the environment contains (all declared in `pixi.toml`, nothing to install b
   - `gapit`: gene screening / serotyping (PyPI release)
   - `gmlst`: MLST/cgMLST/MST (PyPI release)
 
+`pixi install` also provisions a separate **`recomb` environment** with **Gubbins** (optional
+recombination detection). It is isolated from the default env because Gubbins pins
+`iqtree 2.0.3.*`, which conflicts with the pipeline's `iqtree 3.1.2.*`; it is only used when
+a pathogen sets `plan.recombination: true`. Run it via `pixi run -e recomb …`.
+
 ## 3. Development environment (optional, needed to contribute code)
 
 ```bash
-pixi run -e dev test          # pytest（当前基线 1287 passed / 1 skipped）
+pixi run -e dev test          # pytest（当前基线 1313 passed / 1 skipped）
 pixi run -e dev lint          # ruff
 pixi run -e dev contracts     # import-linter 依赖方向契约
 ```

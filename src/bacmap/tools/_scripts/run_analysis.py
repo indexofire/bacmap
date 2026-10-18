@@ -140,34 +140,54 @@ def interpret_summary(sample: str) -> None:
     print(f"\n  Full report: {summary_path(RESULTS_DIR, sample)}")
 
 
-# Deliberately duplicated from workflows/bacmap/rules/cgmlst.smk — the plan
-# (cgmlst-support.md §Must NOT have) forbids coupling between the snakemake
-# DAG and the orchestration scripts. Same convention as snp.smk.
-_CGMLST_SPECIES_GROUPS: dict[str, list[str]] = {
-    "salmonella": ["Salmonella"],
-    "ecoli": ["E.coli", "Shigella"],
-    "vpara": ["V.parahaemolyticus"],
-}
+# 分组一律由 registry 派生（单一事实来源），不再手抄 species 列表；
+# samples.tsv 的 species 值经 resolve_species 双接受（码/标签/显示名）。
+def _registry_tables():
+    from bacmap.core.pathogen_registry import get_workflow_tables
+
+    return get_workflow_tables()
 
 
-def _cgmlst_cohort_targets(samples_tsv: Path) -> list[str]:
-    """Per-group ``cgmlst_summary.json`` targets for groups with ≥2 samples.
+def _resolve_species(value: str) -> str | None:
+    from bacmap.core.pathogen_registry import resolve_species
 
-    The ≥2 threshold mirrors the ``_CGMLST_GROUP_SAMPLES`` guard in
-    cgmlst.smk so targets match what the DAG can actually produce.
-    """
+    return resolve_species(value)
+
+
+def _read_species(samples_tsv: Path) -> list[str]:
     import csv
 
-    species_by_sample: dict[str, str] = {}
     with samples_tsv.open() as f:
-        for row in csv.DictReader(f, delimiter="\t"):
-            species_by_sample[row["sample"]] = row.get("species", "")
+        return [row.get("species", "") for row in csv.DictReader(f, delimiter="\t")]
+
+
+def _cohort_members(samples_tsv: Path, species_list: list[str]) -> int:
+    codes = [_resolve_species(sp) for sp in _read_species(samples_tsv)]
+    return sum(1 for c in codes if c in species_list)
+
+
+def _cohort_targets(samples_tsv: Path, kind: str) -> list[str]:
+    """≥2 样本的 cohort 目标（kind: snp|cgmlst），并附重组目标（plan-driven）。
+
+    与 snp.smk/cgmlst.smk 的 ≥2 样本门一致，确保目标在 DAG 内可产出。
+    """
+    tables = _registry_tables()
+    if kind == "snp":
+        groups = tables.snp_groups
+        summary_name = "snp_summary.json"
+        recombination = set(tables.recombination_groups)
+    else:
+        groups = tables.cgmlst_species_groups
+        summary_name = "cgmlst_summary.json"
+        recombination = set()
 
     targets: list[str] = []
-    for group, species_list in _CGMLST_SPECIES_GROUPS.items():
-        n_in_group = sum(1 for sp in species_by_sample.values() if sp in species_list)
-        if n_in_group >= 2:
-            targets.append(str(RESULTS_DIR / "cgmlst" / group / "cgmlst_summary.json"))
+    for group, info in groups.items():
+        if _cohort_members(samples_tsv, info["species"]) < 2:
+            continue
+        targets.append(str(RESULTS_DIR / kind / group / summary_name))
+        if group in recombination:
+            targets.append(str(RESULTS_DIR / "snp" / group / "recombination.json"))
     return targets
 
 
@@ -242,13 +262,12 @@ def main() -> int:
         return 0
 
     if args.snp:
-        target = str(RESULTS_DIR / "snp" / "snp_summary.json")
-        targets = [target]
+        targets = _cohort_targets(WORKFLOW_DIR / "config" / "samples.tsv", "snp")
     elif args.cgmlst:
         samples = validate_all_sample_names()
         targets = [str(RESULTS_DIR / s / "typing" / "cgmlst.tsv") for s in samples]
     elif args.cgmlst_cohort:
-        targets = _cgmlst_cohort_targets(WORKFLOW_DIR / "config" / "samples.tsv")
+        targets = _cohort_targets(WORKFLOW_DIR / "config" / "samples.tsv", "cgmlst")
     elif args.sample:
         validate_sample(args.sample)
         target = str(RESULTS_DIR / args.sample / "report" / f"{args.sample}_summary.json")
@@ -269,10 +288,9 @@ def main() -> int:
     if success:
         if args.snp:
             print("\n✅ SNP cohort analysis 完成。")
-            print(f"   Tree: {RESULTS_DIR / 'snp' / 'core.treefile'}")
-            print(f"   Summary: {RESULTS_DIR / 'snp' / 'snp_summary.json'}")
-            print("   Report: python scripts/generate_report.py --cohort")
-            print("   Ingest: python scripts/ingest_results.py --snp")
+            print(f"   Trees/Summaries: {RESULTS_DIR}/snp/{{group}}/")
+            print(f"   Recombination: {RESULTS_DIR}/snp/{{group}}/recombination.json（若启用）")
+            print("   Report: python workflows/bacmap/scripts/generate_report.py --cohort")
         elif args.cgmlst:
             print("\n✅ cgMLST per-sample typing 完成。")
             print(f"   Profiles: {RESULTS_DIR}/{{sample}}/typing/cgmlst.tsv")

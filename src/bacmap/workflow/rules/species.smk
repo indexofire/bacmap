@@ -15,8 +15,11 @@ rule species_identify:
     params:
         py_script = str(PROJECT_ROOT / "workflows/bacmap/scripts/gside_species.py"),
         python = sys.executable,
-        mode = config["species_mode"]
+        mode = config["species_mode"],
+        escalation = "--escalation" if config.get("species_escalation", False) else "",
+        mode_max = config.get("species_mode_max", "all")
     shell:
         "mkdir -p $(dirname {output.result}) && "
         "{params.python} {params.py_script} "
-        "--contigs {input.contigs} --out {output.result} --mode {params.mode}"
+        "--contigs {input.contigs} --out {output.result} --mode {params.mode} "
+        "--mode-max {params.mode_max} {params.escalation}"

@@ -33,10 +33,14 @@ bacmap --version      # 验证：应输出版本号
   - `gapit` —— 基因筛查/血清型（PyPI 发布版）
   - `gmlst` —— MLST/cgMLST/MST（PyPI 发布版）
 
+`pixi install` 还会创建独立的 **`recomb` 环境**（含 **Gubbins**，可选重组检测）。之所以独立，
+是因为 Gubbins 锁定 `iqtree 2.0.3.*`，与管线的 `iqtree 3.1.2.*` 冲突；仅当某病原设置
+`plan.recombination: true` 时才用，且以 `pixi run -e recomb …` 调用。
+
 ## 3. 开发环境（可选，贡献代码时需要）
 
 ```bash
-pixi run -e dev test          # pytest（当前基线 1287 passed / 1 skipped）
+pixi run -e dev test          # pytest（当前基线 1313 passed / 1 skipped）
 pixi run -e dev lint          # ruff
 pixi run -e dev contracts     # import-linter 依赖方向契约
 ```
