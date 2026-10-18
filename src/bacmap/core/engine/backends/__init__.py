@@ -37,10 +37,13 @@ def _ensure(name: str) -> None:
 
 
 def get_backend(name: str, **kwargs: Any) -> Any:
-    _ensure(name)
-    cls = _REG.get(name)
-    if name in ("blastp", "blastx", "tblastn") and "tool" not in kwargs:
-        kwargs["tool"] = name
+    key = (name or "").strip().lower()
+    _ensure(key)
+    cls = _REG.get(key)
+    # blast 家族统一用 BlastBackend，但 tool 必须随请求的子命令走；否则大写/别名
+    # 请求会落到默认 blastn（如 BLASTP 被当成 blastn）。
+    if key in ("blastp", "blastx", "tblastn") and "tool" not in kwargs:
+        kwargs["tool"] = key
     return cls(**kwargs)
 
 

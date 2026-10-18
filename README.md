@@ -46,7 +46,7 @@ All query subcommands accept `--json` for scripting. Equivalent module form:
 ## Development
 
 ```bash
-pixi run -e dev test        # pytest（基线：1244 passed / 1 skipped）
+pixi run -e dev test        # pytest（基线：1246 passed / 1 skipped）
 pixi run -e dev lint        # ruff
 pixi run -e dev contracts   # import-linter 依赖方向契约
 ```

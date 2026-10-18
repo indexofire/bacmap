@@ -174,6 +174,34 @@ class TestBackendsModule:
         finally:
             del _REG._store["custom_test_backend_xyz"]
 
+    def test_get_backend_uppercase_injects_tool(self):
+        """回归：大写 BLASTP 曾因未归一化而落到默认 blastn。"""
+        seen: dict = {}
+
+        class FakeBackend:
+            def __init__(self, **kwargs):
+                seen.update(kwargs)
+
+        for key in ("blastn", "blastp"):
+            _REG._store[key] = FakeBackend  # 覆盖懒加载，免依赖真实二进制
+        try:
+            get_backend("BLASTP")
+            assert seen.get("tool") == "blastp"
+        finally:
+            for key in ("blastn", "blastp"):
+                _REG._store.pop(key, None)
+
+    def test_get_backend_case_insensitive_registered(self):
+        class FakeBackend:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+        register("casetest", FakeBackend)
+        try:
+            assert isinstance(get_backend("CaseTest"), FakeBackend)
+        finally:
+            del _REG._store["casetest"]
+
     def test_ensure_idempotent(self):
         """Calling _ensure twice keeps the same registered class."""
         _ensure("blastn")

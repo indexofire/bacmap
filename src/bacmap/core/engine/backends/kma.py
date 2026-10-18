@@ -123,8 +123,6 @@ class KmaBackend:
             except (ValueError, TypeError):
                 depth = 0.0
 
-            gene, _, product = self._parse_template(template)
-
             hits.append(
                 Hit(
                     query_id="reads",
