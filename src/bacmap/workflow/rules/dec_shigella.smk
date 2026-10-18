@@ -13,9 +13,10 @@ rule dec_ecoh_serotype:
     shell:
         "mkdir -p $(dirname {output.result}) && "
         "printf %s "
-        "'{{\"serotype\":\"pending_gapit\",\"o_type\":\"-\",\"h_type\":\"-\","
+        "'{{\"serotype\":\"N/A\",\"status\":\"unavailable\",\"o_type\":\"-\",\"h_type\":\"-\","
         "\"o_antigen_hits\":[],\"h_antigen_hits\":[],"
-        "\"interpretation\":\"serotyping externalized to gapit (v1.4.7)\"}}' "
+        "\"reason\":\"gapit ecoh 库未 build --typing（TYPING_NO_SCHEME）；O/H 判定待上游补齐\","
+        "\"interpretation\":\"E. coli O/H serotyping needs a gapit DB built with --typing; none available yet\"}}' "
         "> {output.result}"
 
 
@@ -45,7 +46,9 @@ rule shigella_serotype:
     shell:
         "mkdir -p $(dirname {output.result}) && "
         "printf %s "
-        "'{{\"species\":\"N/A\",\"serotype\":\"pending_gapit\",\"confidence\":\"none\","
+        "'{{\"species\":\"N/A\",\"serotype\":\"N/A\",\"status\":\"see_sistr\","
+        "\"confidence\":\"none\","
         "\"detected_genes\":[],"
-        "\"interpretation\":\"serotyping externalized to gapit (v1.4.7)\"}}' "
+        "\"reason\":\"Shigella 血清型由已集成的 SISTR 给出（见 steps.serotype.sistr）\","
+        "\"interpretation\":\"Shigella serovar is reported by SISTR (steps.serotype.sistr)\"}}' "
         "> {output.result}"

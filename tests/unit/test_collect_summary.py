@@ -31,6 +31,7 @@ def _run(tmp_path: Path, species_id: dict) -> dict:
         plasmidfinder=missing,
         ectyper=missing,
         pathotype=missing,
+        gapit_typing=missing,
         shigella_serotype=missing,
         vpa_serotype=missing,
         vpa_virulence=missing,

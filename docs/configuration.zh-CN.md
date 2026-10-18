@@ -179,6 +179,14 @@ python workflows/bacmap/scripts/fetch_reference_genomes.py \
 `pathotype_confidence`、`pathotype_genes`、`pathotype_runner_up`、`pathotype_schemes`）。
 `gapit` 缺失时该步骤记 `status="skipped"`，`pathotype` 退化为 `N/A`（绝不猜测）。
 
+**gapit 通用分型（registry 驱动）**：除上面的 DEC 致病型外，还有一个通用步骤——对样本物种在
+`core/pathogens.yaml` 声明的每个 `gapit_screens` 库执行 `gapit screen` + `gapit typing`，写
+`gapit/typing.json`。状态**一律如实**：`ran`（有 scheme 并给出表型，如 `lm_doumith` → 单核细胞
+增生李斯特菌 Doumith 血清群，并入 `steps.serotype.serogroup` 与 `serogroup_scheme`）、
+`no_scheme`（库存在但未 `--typing` build，如 `ecoh`）、`skipped`（gapit 缺失）、`failed`。
+`ecoli_dec` 由 DEC 专用步骤处理。原血清型占位不再是 `pending_gapit` 而是事实性结果：大肠埃希菌
+O/H 待 gapit `--typing` 库；志贺菌血清型由 **SISTR** 给出；副溶血性弧菌血清型上游暂无数据库。
+
 **cgMLST 键：阈值与参考库**：`cgmlst.thresholds` 以**三字母物种码**建键（`SAL`/`ECO`/`SHI`/`VPA`）；
 调用方传任意物种写法（`Salmonella`/`E. coli`/`Vibrio parahaemolyticus`…）都会被归一为码，
 全系统一套词表。cgMLST 参考库按 **scheme** 命名，如

@@ -180,6 +180,14 @@ class TestResolveDualAccept:
 
         assert load_registry().resolve("Klebsiella_pneumoniae") == "KPN"
 
+    def test_gapit_screens_for(self):
+        from bacmap.core.pathogen_registry import gapit_screens_for
+
+        assert gapit_screens_for("E.coli") == ["ecoli_dec", "ecoh"]
+        assert gapit_screens_for("Listeria_monocytogenes") == ["lm_doumith"]
+        assert gapit_screens_for("Salmonella") == []
+        assert gapit_screens_for("Unknown") == []
+
 
 class TestValidation:
     def _load(self, tmp_path, data):

@@ -32,7 +32,8 @@ rule vpara_serotype:
     shell:
         "mkdir -p $(dirname {output.result}) && "
         "printf %s "
-        "'{{\"predicted_serotype\":\"pending_gapit\",\"o_locus\":\"None\",\"k_locus\":\"None\","
-        "\"o_confidence\":\"Unknown\",\"k_confidence\":\"Unknown\","
-        "\"interpretation\":\"serotyping externalized to gapit (v1.4.7)\"}}' "
+        "'{{\"predicted_serotype\":\"N/A\",\"status\":\"unavailable\",\"o_locus\":\"None\","
+        "\"k_locus\":\"None\",\"o_confidence\":\"Unknown\",\"k_confidence\":\"Unknown\","
+        "\"reason\":\"gapit 尚无副溶血性弧菌血清型数据库\","
+        "\"interpretation\":\"V. parahaemolyticus serotyping has no upstream (gapit) database yet\"}}' "
         "> {output.result}"

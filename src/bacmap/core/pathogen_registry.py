@@ -342,3 +342,12 @@ def get_workflow_tables() -> WorkflowTables:
 def resolve_species(value: str) -> str | None:
     """samples.tsv/展示值 → 三字母码（双接受：码/标签/显示名）。"""
     return load_registry().resolve(value)
+
+
+def gapit_screens_for(value: str) -> list[str]:
+    """样本的物种值 → 该物种声明的 gapit 分型库列表（未识别 → []）。"""
+    code = load_registry().resolve(value)
+    if code is None:
+        return []
+    spec = load_registry().pathogens.get(code)
+    return list(spec.gapit_screens) if spec else []

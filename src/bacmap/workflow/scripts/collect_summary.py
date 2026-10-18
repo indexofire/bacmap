@@ -65,6 +65,19 @@ summary["steps"]["serotype"] = {
     "h2": sistr.get("h2", "N/A"),
 }
 
+# gapit 分型（registry 驱动；lm_doumith 等带 typing scheme 的库给出表型）
+from bacmap.core.analysis.gapit_typing import summarize as summarize_gapit_typing  # noqa: E402
+
+gapit_tp = summarize_gapit_typing(read_json(snakemake.input.gapit_typing, {}))
+summary["steps"]["gapit_typing"] = {
+    "status": gapit_tp["status"],
+    "databases": gapit_tp["databases"],
+}
+# 血清群（如 L. monocytogenes Doumith serogroup）并入 serotype 段，注明来源 scheme
+if gapit_tp["serogroup"]:
+    summary["steps"]["serotype"]["serogroup"] = gapit_tp["serogroup"]
+    summary["steps"]["serotype"]["serogroup_scheme"] = gapit_tp["serogroup_scheme"]
+
 summary["steps"]["amr"] = {
     "abricate_vfdb": parse_tsv(snakemake.input.vfdb, []),
     "abricate_card": parse_tsv(snakemake.input.card, []),

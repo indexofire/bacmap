@@ -13,6 +13,7 @@ rule report_summary:
         plasmidfinder = str(WORKDIR) + "/{sample}/plasmid/abricate_plasmidfinder.tsv",
         ectyper = str(WORKDIR) + "/{sample}/dec/ecoh_serotype.json",
         pathotype = str(WORKDIR) + "/{sample}/dec/pathotype.json",
+        gapit_typing = str(WORKDIR) + "/{sample}/gapit/typing.json",
         shigella_serotype = str(WORKDIR) + "/{sample}/dec/shigella_serotype.json",
         vpa_serotype = str(WORKDIR) + "/{sample}/vpa/vpa_serotype.json",
         vpa_virulence = str(WORKDIR) + "/{sample}/vpara/virulence.json",

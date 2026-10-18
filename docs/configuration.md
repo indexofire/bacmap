@@ -192,8 +192,18 @@ E. coli pathotype is determined by **gapit's `ecoli_dec` database**
 `pathotype_schemes`). If `gapit` is missing the step records `status="skipped"` and the
 pathotype degrades to `N/A` (it never guesses).
 
-**cgMLST keys: thresholds and the reference library.** `cgmlst.thresholds` is keyed by the
-**3-letter species code** (`SAL`/`ECO`/`SHI`/`VPA`); lookups pass an arbitrary species spelling
+**Below-species typing via gapit (registry-driven).** Besides DEC pathotype (above), a generic
+step runs `gapit screen` + `gapit typing` for every database a sample's species declares in
+`core/pathogens.yaml` (`gapit_screens`) and writes `gapit/typing.json`. Status is always
+factual: `ran` (a scheme designated a phenotype — e.g. `lm_doumith` → L. monocytogenes
+Doumith serogroup, surfaced as `steps.serotype.serogroup` + `serogroup_scheme`),
+`no_scheme` (the DB exists but was not built with `--typing`, e.g. `ecoh`), `skipped` (gapit
+absent), `failed`. `ecoli_dec` is handled by the dedicated DEC step. Legacy serotype
+placeholders are now factual rather than `pending_gapit`: E. coli O/H awaits a `--typing`
+gapit DB, Shigella serovar comes from **SISTR**, and V. parahaemolyticus serotyping has no
+upstream database yet.
+
+**cgMLST keys: thresholds and the reference library.** `cgmlst.thresholds` is keyed by the**3-letter species code** (`SAL`/`ECO`/`SHI`/`VPA`); lookups pass an arbitrary species spelling
 (`Salmonella`, `E. coli`, `Vibrio parahaemolyticus`, …) and it is normalized to the code, so
 there is one vocabulary everywhere. The cgMLST reference library is keyed by **scheme**, e.g.
 `data/reference/cgmlst/<scheme>/reference_profiles.tsv` (`senterica_2`, `ecoli_2`,
