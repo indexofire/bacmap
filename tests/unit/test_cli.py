@@ -162,3 +162,43 @@ def test_ask_json_shows_plan(tmp_path, monkeypatch):
         import bacmap.tasks.engine.dbos_engine as eng
 
         eng.shutdown_dbos()
+
+
+def test_help_documents_interface_vs_command_taxonomy(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["bacmap", "--help"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "界面/模式" in out and "命令（" in out
+
+
+def test_safe_escapes_rich_markup():
+    from bacmap.interfaces.cli.main import _safe
+
+    assert _safe("[red]boom[/red]") == r"\[red]boom\[/red]"
+    assert _safe(12345) == "12345"
+
+
+def test_console_tables_escape_untrusted_values():
+    from bacmap.interfaces.cli.console import _sample_table, _task_table
+
+    sample = _sample_table(
+        [
+            {
+                "sample_id": "S1",
+                "verdict": "[red]Salmonella[/red]",
+                "st": "19",
+                "serovar": "[blue]X",
+                "n_card": 0,
+                "n_vfdb": 0,
+            }
+        ]
+    )
+    assert sample.columns[1]._cells[0] == r"\[red]Salmonella\[/red]"
+    assert sample.columns[3]._cells[0] == r"\[blue]X"
+
+    task = _task_table([{"task_id": "t1", "task_type": "analyze", "state": "running",
+                         "current_step": "[b]qc[/b]", "submitted_by": "[i]me"}])
+    assert task.columns[3]._cells[0] == r"\[b]qc\[/b]"
+    assert task.columns[4]._cells[0] == r"\[i]me"

@@ -22,6 +22,12 @@ bacmap mcp [--read-only] [--home H]                # MCP 服务器（stdio/HTTP�
 
 Query subcommands accept `--json`. Writes always go through the same gates as Web/MCP.
 
+Top-level commands fall into two kinds: **interfaces/modes** (`mcp`, `web`, `tui`, `console`)
+that take over a terminal or bind a port, and **commands** (`overview`, `task`, `sample`,
+`search`, `ask`, `chat`) that perform one query or write and exit. `bacmap` itself *is* the
+CLI, so commands stay at the top level (`bacmap task ls`) rather than nested under a `cli`
+subcommand; `web`/`tui`/`console` are sibling interaction modes.
+
 ## 2. LLM-driven assistant (CLI ask/chat, TUI Chat, Web /assistant)
 
 The built-in assistant turns a natural-language analysis need into an executable plan.

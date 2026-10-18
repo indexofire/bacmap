@@ -22,6 +22,11 @@ bacmap mcp [--read-only] [--home H]                # MCP 服务器（stdio/HTTP�
 
 查询类子命令支持 `--json`；写操作与 Web/MCP 走同一套门与审批。
 
+顶层命令分两类:**界面/模式**(`mcp`、`web`、`tui`、`console`——接管终端或绑定端口)与
+**命令**(`overview`、`task`、`sample`、`search`、`ask`、`chat`——执行一次查询/写操作后退出)。
+`bacmap` 本身**就是**命令行界面,故命令直接挂在顶层(`bacmap task ls`),不再套一层 `cli`
+子命令;`web`/`tui`/`console` 是并列的其他交互形态。
+
 ## 2. LLM 驱动的分析助手（CLI ask/chat、TUI 对话页、Web /assistant）
 
 内置助手把自然语言分析需求转成可执行计划，三端共用同一 **agent 会话**（`agent/session.py`，

@@ -55,6 +55,17 @@ def _console() -> Any:
     return Console()
 
 
+def _safe(value: Any) -> str:
+    """把不可信文本转义为 Rich 安全的字面量。
+
+    样本摘要（物种/血清型/基因名/门消息）来自文件，可能含 ``[..]`` 之类的
+    Rich 标记；直接进表格会改版式（CLI 层的注入面），故统一转义。
+    """
+    from rich.markup import escape
+
+    return escape(str(value))
+
+
 # ---------------------------------------------------------------------------
 # mcp / web / tui / console
 # ---------------------------------------------------------------------------
@@ -145,8 +156,8 @@ def _run_task_ls(args: argparse.Namespace) -> None:
             t["task_id"][:12],
             t["task_type"],
             t["state"],
-            t.get("current_step") or "",
-            t.get("submitted_by") or "",
+            _safe(t.get("current_step") or ""),
+            _safe(t.get("submitted_by") or ""),
             t.get("updated_at") or "",
         )
     c.print(table)
@@ -165,7 +176,7 @@ def _run_task_show(args: argparse.Namespace) -> None:
     c = _console()
     c.print(f"[bold]{st.task_id}[/bold]  state={st.state.value}  step={st.current_step or '-'}")
     if st.message:
-        c.print(f"  message: {st.message}")
+        c.print(f"  message: {_safe(st.message)}")
 
 
 def _run_task_submit(args: argparse.Namespace) -> None:
@@ -237,7 +248,7 @@ def _run_sample_ls(args: argparse.Namespace) -> None:
         table.add_column(col)
     for r in rows:
         table.add_row(
-            r["sample_id"], r["verdict"], str(r["st"]), r["serovar"],
+            r["sample_id"], _safe(r["verdict"]), str(r["st"]), _safe(r["serovar"]),
             str(r["n_card"]), str(r["n_vfdb"]), str(r["n_plasmid"]),
         )
     c.print(table)
@@ -255,11 +266,11 @@ def _run_sample_show(args: argparse.Namespace) -> None:
         return
     c = _console()
     c.print(
-        f"[bold]{row['sample_id']}[/bold]  物种={row['verdict']}  "
-        f"ST={row['st']}  血清型={row['serovar']}"
+        f"[bold]{row['sample_id']}[/bold]  物种={_safe(row['verdict'])}  "
+        f"ST={_safe(row['st'])}  血清型={_safe(row['serovar'])}"
     )
-    c.print(f"  毒力/耐药基因: {', '.join(row['card_genes'] + row['vfdb_genes']) or '无'}")
-    c.print(f"  质粒: {', '.join(row['plasmids']) or '无'}")
+    c.print(f"  毒力/耐药基因: {_safe(', '.join(row['card_genes'] + row['vfdb_genes']) or '无')}")
+    c.print(f"  质粒: {_safe(', '.join(row['plasmids']) or '无')}")
 
 
 def _run_search(args: argparse.Namespace) -> None:
@@ -282,7 +293,7 @@ def _run_search(args: argparse.Namespace) -> None:
     for col in ("sample_id", "species", "ST", "serovar"):
         table.add_column(col)
     for r in hits:
-        table.add_row(r["sample_id"], r["verdict"], str(r["st"]), r["serovar"])
+        table.add_row(r["sample_id"], _safe(r["verdict"]), str(r["st"]), _safe(r["serovar"]))
     c.print(table)
 
 
@@ -313,7 +324,7 @@ def _present_and_execute(args: argparse.Namespace, engine: Any, reply: Any) -> N
     results = execute_plan(engine, plan, submitted_by=args.by)
     for r in results:
         mark = "✓" if r["ok"] else "✗"
-        c.print(f"{mark} {r['task_type']}: {r.get('task_id') or r.get('error')}")
+        c.print(f"{mark} {_safe(r['task_type'])}: {_safe(r.get('task_id') or r.get('error'))}")
 
 
 def _run_ask(args: argparse.Namespace) -> None:
@@ -367,10 +378,23 @@ def _add_json(p: argparse.ArgumentParser) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="bacmap", description="bacmap 本地病原菌基因组分析系统（architecture-frozen-v1）"
+        prog="bacmap",
+        description="bacmap 本地病原菌基因组分析系统（architecture-frozen-v1）",
+        epilog=(
+            "界面/模式（启动后接管终端或端口）：mcp · web · tui · console\n"
+            "命令（一次性查询/写操作，均支持 --json）：overview · task · sample · "
+            "search · ask · chat\n"
+            "注：bacmap 本身即命令行界面；web/tui/console 是并列的其他交互形态，"
+            "故命令直接挂在顶层（bacmap task ls），不再套一层 cli 子命令。"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"bacmap {pkg_version('bacmap')}")
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(
+        dest="command",
+        required=True,
+        metavar="{mcp,web,tui,console,overview,task,sample,search,ask,chat}",
+    )
 
     p_mcp = sub.add_parser("mcp", help="启动 MCP 服务器（stdio 或 Streamable HTTP）")
     _add_home(p_mcp)

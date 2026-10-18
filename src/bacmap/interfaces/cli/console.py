@@ -12,6 +12,8 @@ from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
 
+from bacmap.interfaces.cli.main import _safe
+
 
 def _task_table(tasks: list[dict[str, Any]]) -> Table:
     table = Table(title=f"任务（最近 {len(tasks)}）")
@@ -20,7 +22,7 @@ def _task_table(tasks: list[dict[str, Any]]) -> Table:
     for t in tasks:
         table.add_row(
             t["task_id"][:12], t["task_type"], t["state"],
-            t.get("current_step") or "", t.get("submitted_by") or "",
+            _safe(t.get("current_step") or ""), _safe(t.get("submitted_by") or ""),
         )
     return table
 
@@ -31,7 +33,7 @@ def _sample_table(rows: list[dict[str, Any]]) -> Table:
         table.add_column(col)
     for r in rows:
         table.add_row(
-            r["sample_id"], r["verdict"], str(r["st"]), r["serovar"],
+            r["sample_id"], _safe(r["verdict"]), str(r["st"]), _safe(r["serovar"]),
             str(r["n_card"]), str(r["n_vfdb"]),
         )
     return table
@@ -105,6 +107,6 @@ def interactive_menu(engine: Any) -> None:
                 )
                 console.print(_sample_table(search_rows(sample_rows(engine), query=query)))
         except (KeyError, ValueError, NotImplementedError) as exc:
-            console.print(f"[red]操作失败：{exc}[/red]")
+            console.print(f"[red]操作失败：{_safe(exc)}[/red]")
 
     console.print("已退出 bacmap 控制台。")
