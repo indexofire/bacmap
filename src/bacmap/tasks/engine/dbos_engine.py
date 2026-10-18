@@ -741,6 +741,10 @@ class DbosTaskEngine:
         p.setdefault("cores", 8)
         p.setdefault("submitted_by", submitted_by)
 
+        # analyze 必须有样本：否则工作流会以 KeyError 落成静默 FAILED 任务。
+        if task_type == TaskType.ANALYZE and not p.get("samples"):
+            raise ValueError("analyze requires at least one sample id")
+
         # 防御纵深：样本 ID 白名单（MCP/Web 已校验；引擎是最终写入口）。
         samples = p.get("samples")
         if samples:

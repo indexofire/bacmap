@@ -94,6 +94,20 @@ def test_task_submit_rejects_unknown_type(monkeypatch):
     assert exc.value.code == 2  # argparse choices 拒绝
 
 
+def test_task_submit_analyze_without_samples_exits(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["bacmap", "task", "submit", "--type", "analyze", "--home", str(tmp_path)],
+    )
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert "提交失败" in str(exc.value)
+    import bacmap.tasks.engine.dbos_engine as eng
+
+    eng.shutdown_dbos()
+
+
 def test_task_show_unknown_task_exits(tmp_path, monkeypatch):
     monkeypatch.setattr(
         sys, "argv", ["bacmap", "task", "show", "nope", "--home", str(tmp_path)]

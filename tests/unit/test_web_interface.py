@@ -132,6 +132,11 @@ class TestWebInterface:
         r = c.post("/tasks/submit", data={"task_type": "deploy", "samples": "X"})
         assert r.status_code == 400
 
+    def test_analyze_without_samples_rejected(self, client):
+        c, _ = client
+        r = c.post("/tasks/submit", data={"task_type": "analyze", "samples": ""})
+        assert r.status_code == 400
+
     def test_open_path_task_type_rejected(self, client):
         c, _ = client
         r = c.post("/tasks/submit", data={"task_type": "mine", "samples": "SAM-001"})

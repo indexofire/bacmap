@@ -162,7 +162,7 @@ def _register_task_tools(server: MCPServer, engine: Any) -> None:
             params["scope"] = scope
         try:
             tid = engine.submit(tt, params, submitted_by)
-        except NotImplementedError as exc:
+        except (ValueError, NotImplementedError) as exc:
             return json.dumps({"error": str(exc)}, ensure_ascii=False)
         return json.dumps({"task_id": tid, "state": "running"}, ensure_ascii=False)
 

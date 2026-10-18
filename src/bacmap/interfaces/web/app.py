@@ -143,7 +143,7 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
                 raise HTTPException(400, "scope 不是合法 JSON") from exc
         try:
             tid = engine.submit(tt, params, submitted_by="web")
-        except NotImplementedError as exc:
+        except (ValueError, NotImplementedError) as exc:
             raise HTTPException(400, str(exc)) from exc
         return RedirectResponse(f"/tasks/{tid}", status_code=303)
 

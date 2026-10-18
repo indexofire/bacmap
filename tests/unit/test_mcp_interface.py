@@ -159,6 +159,10 @@ class TestTaskToolsRoundtrip:
         )
         assert "error" in out
 
+    def test_submit_analyze_without_samples_error(self, server):
+        out = _call(server, "bacmap_submit_task", {"task_type": "analyze"})
+        assert "error" in out and "sample" in out["error"]
+
     def test_unknown_task_status_error(self, server):
         out = _call(server, "bacmap_task_status", {"task_id": "no-such"})
         assert "error" in out
