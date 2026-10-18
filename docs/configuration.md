@@ -207,8 +207,10 @@ step runs `gapit screen` + `gapit typing` for every database a sample's species 
 `core/pathogens.yaml` (`gapit_screens`) and writes `gapit/typing.json`. Status is always
 factual: `ran` (a scheme designated a phenotype — e.g. `lm_doumith` → L. monocytogenes
 Doumith serogroup, surfaced as `steps.serotype.serogroup` + `serogroup_scheme`),
-`no_scheme` (the DB exists but was not built with `--typing`, e.g. `ecoh`), `skipped` (gapit
-absent), `failed`. `ecoli_dec` is handled by the dedicated DEC step. Legacy serotype
+`no_scheme` (the DB exists but was not built with `--typing`, e.g. `ecoh` — gapit returns
+`TYPING_NO_SCHEME` on stderr with a non-zero exit, still recorded as `no_scheme`),
+`unavailable` (the DB is not installed: `DATABASE_NOT_FOUND`), `skipped` (gapit absent),
+`failed` (a real execution error). `ecoli_dec` is handled by the dedicated DEC step. Legacy serotype
 placeholders are now factual rather than `pending_gapit`: E. coli O/H awaits a `--typing`
 gapit DB, Shigella serovar comes from **SISTR**, and V. parahaemolyticus serotyping has no
 upstream database yet.

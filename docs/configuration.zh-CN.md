@@ -192,7 +192,9 @@ python workflows/bacmap/scripts/verify_reference_accessions.py \
 `core/pathogens.yaml` 声明的每个 `gapit_screens` 库执行 `gapit screen` + `gapit typing`，写
 `gapit/typing.json`。状态**一律如实**：`ran`（有 scheme 并给出表型，如 `lm_doumith` → 单核细胞
 增生李斯特菌 Doumith 血清群，并入 `steps.serotype.serogroup` 与 `serogroup_scheme`）、
-`no_scheme`（库存在但未 `--typing` build，如 `ecoh`）、`skipped`（gapit 缺失）、`failed`。
+`no_scheme`（库存在但未 `--typing` build，如 `ecoh`；gapit 把 `TYPING_NO_SCHEME` 写在 stderr
+且退出码非 0，仍如实记为 `no_scheme`）、`unavailable`（库未安装：`DATABASE_NOT_FOUND`）、
+`skipped`（gapit 缺失）、`failed`（真正的执行失败）。
 `ecoli_dec` 由 DEC 专用步骤处理。原血清型占位不再是 `pending_gapit` 而是事实性结果：大肠埃希菌
 O/H 待 gapit `--typing` 库；志贺菌血清型由 **SISTR** 给出；副溶血性弧菌血清型上游暂无数据库。
 

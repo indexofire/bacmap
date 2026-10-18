@@ -88,6 +88,27 @@ class TestRunGapitTyping:
         )
         assert json.loads(out.read_text()) == {"status": "empty", "databases": {}}
 
+    def test_error_json_on_stderr_is_no_scheme(self, tmp_path, monkeypatch):
+        """gapit typing 把 error JSON 放 stderr 且退出码非 0（实测 0.5.4 + ecoh）。"""
+        mod = _load()
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        err = json.dumps(
+            {"schema": "gapit.error/1", "code": "TYPING_NO_SCHEME", "message": "no scheme"}
+        )
+
+        def _run(cmd, **kwargs):
+            if "screen" in cmd:
+                Path(cmd[cmd.index("-o") + 1]).write_text("#FILE\tGENE\n", encoding="utf-8")
+                return _Proc(0)
+            return _Proc(1, out="", err=err)
+
+        monkeypatch.setattr(mod.subprocess, "run", _run)
+        out = tmp_path / "typing.json"
+        mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", databases=["ecoh"], timeout=30)
+        data = json.loads(out.read_text())
+        # 无 scheme 是能力未就绪，不是执行失败
+        assert data["databases"]["ecoh"]["status"] == "no_scheme"
+
     def test_ran_and_no_scheme_mixed(self, tmp_path, monkeypatch):
         mod = _load()
         monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")

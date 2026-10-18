@@ -16,6 +16,7 @@ JSON：
 状态语义（**绝不猜测**）：
 - ``ran``        该库有 typing scheme 并给出表型；
 - ``no_scheme``  库存在但未 build --typing（gapit 报 TYPING_NO_SCHEME）——如实记录；
+- ``unavailable`` 库未安装（gapit 报 DATABASE_NOT_FOUND）——能力未就绪，不是失败；
 - ``skipped``    gapit 不在 PATH；
 - ``failed``     screen/typing 执行失败（带 stage/error）。
 
@@ -109,18 +110,39 @@ def _screen_and_type(gapit: str, contigs: Path, db: str, workdir: Path, timeout:
         text=True,
         timeout=timeout,
     )
-    try:
-        payload = json.loads(tp.stdout) if tp.stdout.strip() else {}
-    except ValueError:
-        return {"status": "failed", "stage": "typing", "error": "non-JSON output"}
-    if isinstance(payload, dict) and payload.get("schema") == "gapit.error/1":
-        code = str(payload.get("code", ""))
-        return {
-            "status": "no_scheme" if code in _NO_SCHEME_CODES else "failed",
-            "error": str(payload.get("message", code)),
-        }
+    payload: dict = {}
+    if tp.stdout.strip():
+        try:
+            raw = json.loads(tp.stdout)
+        except ValueError:
+            raw = None
+        if isinstance(raw, dict):
+            payload = raw
+    # gapit 0.5.4 的 `typing` 在无 scheme 时把 error JSON 放到 **stderr**（stdout 为空、
+    # 退出码非 0）——必须先识别错误码再判失败，否则 TYPING_NO_SCHEME 会被误记成 failed。
+    if payload.get("schema") == "gapit.error/1":
+        err: tuple[str, str] | None = (
+            str(payload.get("code", "")),
+            str(payload.get("message", "")),
+        )
+    else:
+        err = _gapit_error(tp.stderr)
+    if err is not None:
+        code, message = err
+        if code in _NO_SCHEME_CODES:
+            status = "no_scheme"
+        elif code == "DATABASE_NOT_FOUND":
+            status = "unavailable"
+        else:
+            status = "failed"
+        out: dict = {"status": status, "error": message or code}
+        if status == "failed":
+            out["stage"] = "typing"
+        return out
     if tp.returncode != 0:
         return {"status": "failed", "stage": "typing", "error": (tp.stderr or "")[-500:]}
+    if not payload:
+        return {"status": "failed", "stage": "typing", "error": "non-JSON output"}
     schemes = _phenotypes(payload)
     if not schemes:
         return {"status": "failed", "stage": "typing", "error": "no phenotypes in typing result"}
