@@ -263,6 +263,43 @@ class TestSandboxTool:
         assert "error" in out and "沙箱不可用" in out["error"]
 
 
+class TestHistoryBound:
+    """无界历史的安全上界：按用户轮次裁剪，不拆散 tool-call/return 配对。"""
+
+    class _Part:
+        def __init__(self, kind: str) -> None:
+            self.part_kind = kind
+
+    class _Msg:
+        def __init__(self, *kinds: str) -> None:
+            self.parts = [TestHistoryBound._Part(k) for k in kinds]
+
+    def test_trim_keeps_last_turns(self):
+        from bacmap.agent.session import _is_user_prompt, _trim_history
+
+        msgs = []
+        for _ in range(20):
+            msgs.append(self._Msg("user-prompt"))
+            msgs.append(self._Msg("tool-call"))
+            msgs.append(self._Msg("tool-return"))
+        trimmed = _trim_history(msgs, max_turns=3)
+        assert len(trimmed) == 9
+        assert _is_user_prompt(trimmed[0])
+        assert sum(1 for m in trimmed if _is_user_prompt(m)) == 3
+
+    def test_trim_noop_below_cap(self):
+        from bacmap.agent.session import _trim_history
+
+        msgs = [self._Msg("user-prompt"), self._Msg("text")]
+        assert _trim_history(msgs, max_turns=3) == msgs
+
+    def test_build_prompt_truncates(self):
+        from bacmap.agent.session import _MAX_PROMPT_CHARS, _build_prompt
+
+        prompt = _build_prompt("x" * (_MAX_PROMPT_CHARS + 500), None)
+        assert prompt == "用户请求：" + "x" * _MAX_PROMPT_CHARS
+
+
 class TestAssistantRoleToolAlignment:
     """assistant.role.yaml 的工具白名单必须与实际会话工具一致（防漂移）。"""
 

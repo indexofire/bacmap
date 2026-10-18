@@ -255,6 +255,20 @@ class TestIntent:
         with pytest.raises(ValidationError):
             IntentTask(task_type="deploy")
 
+    def test_classify_truncates_long_input(self):
+        from bacmap.agent.intent import _MAX_TEXT_LEN
+
+        captured: dict = {}
+
+        class _Rec:
+            def run_sync(self, prompt):
+                captured["prompt"] = prompt
+                return _FakeResult(IntentResult(tasks=[]))
+
+        gw = LlmGateway(_make_config(), agent_factory=lambda ep, ot, _i=None: _Rec())
+        classify_intent("x" * (_MAX_TEXT_LEN + 999), gw)
+        assert captured["prompt"].count("x") == _MAX_TEXT_LEN
+
 
 class TestInterpretation:
     def test_generate_returns_output(self):

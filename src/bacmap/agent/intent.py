@@ -13,6 +13,9 @@ from bacmap.tools.spec import DataClass
 
 TASK_TYPES = ("analyze", "curate", "mine", "write")
 
+# 路由输入上限（字符）：防止超大文本进提示词（Web/TUI 已在入口限长，此处兜底）。
+_MAX_TEXT_LEN = 8000
+
 _TASK_TYPE_ZH = {
     "analyze": "基因组分析——对测序数据/装配跑管线：QC、组装、物种鉴定、分型、耐药基因筛查等",
     "curate": "本地流行特征库的构建与比对——结果整理入库、与本地特征库/基线数据比对、更新参考集",
@@ -60,10 +63,11 @@ _PROMPT_TEMPLATE = (
 
 def classify_intent(text: str, gateway: LlmGateway) -> IntentResult | None:
     """意图 → 任务列表。无 LLM 可用时返回 None（降级信号）。"""
+    bounded = text if len(text) <= _MAX_TEXT_LEN else text[:_MAX_TEXT_LEN]
     try:
         result = gateway.structured(
             purpose="intent_classifier",
-            prompt=_PROMPT_TEMPLATE.format(text=text),
+            prompt=_PROMPT_TEMPLATE.format(text=bounded),
             output_type=IntentResult,
             data_class=DataClass.D0,
         )

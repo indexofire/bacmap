@@ -39,6 +39,10 @@ READ_TOOL_NAMES: tuple[str, ...] = (
 # 助手可能读到 D4（元数据）——本地端点无碍；cloud 端点会被 ADR-16 拦截（助手仅 local/lan）。
 _ASSISTANT_DATA_CLASS = DataClass.D4
 
+# 单轮提示词上限（字符）与保留的历史轮数上限（防无界上下文增长）。
+_MAX_PROMPT_CHARS = 8000
+_MAX_HISTORY_TURNS = 12
+
 
 class PlannedTask(BaseModel):
     """计划中的单个任务（封闭任务类型 + 参数）。"""
@@ -95,8 +99,30 @@ def build_read_tools(names: tuple[str, ...] = READ_TOOL_NAMES) -> list[Any]:
 
 
 def _build_prompt(text: str, home: Path | None) -> str:
+    # 上限防超大提示词（Web/TUI 在入口已限长；CLI ask/chat 依赖此处兜底）。
+    bounded = text if len(text) <= _MAX_PROMPT_CHARS else text[:_MAX_PROMPT_CHARS]
     ctx = f"\n（当前 BACMAP_HOME：{home}）" if home else ""
-    return f"用户请求：{text}{ctx}"
+    return f"用户请求：{bounded}{ctx}"
+
+
+def _is_user_prompt(message: Any) -> bool:
+    """该消息是否以用户请求开头（pydantic-ai ModelRequest 含 user-prompt part）。"""
+    parts = getattr(message, "parts", None)
+    if not parts:
+        return False
+    return any(getattr(p, "part_kind", "") == "user-prompt" for p in parts)
+
+
+def _trim_history(messages: list[Any], max_turns: int = _MAX_HISTORY_TURNS) -> list[Any]:
+    """只保留最近 ``max_turns`` 个用户轮次起的全部消息。
+
+    按"用户请求"边界裁剪，避免把 tool-call 与其 tool-return **拆散**（否则续接会
+    因消息配对缺失而报错）——这是无界历史的安全上界。
+    """
+    starts = [i for i, m in enumerate(messages) if _is_user_prompt(m)]
+    if len(starts) <= max_turns:
+        return messages
+    return messages[starts[-max_turns]:]
 
 
 class AgentSession:
@@ -157,7 +183,7 @@ class AgentSession:
         return self._to_reply(result)
 
     def _to_reply(self, result: Any) -> AgentReply:
-        self._history = list(result.all_messages())
+        self._history = _trim_history(list(result.all_messages()))
         plan = result.output
         if not isinstance(plan, AnalysisPlan):
             plan = AnalysisPlan.model_validate(plan)
