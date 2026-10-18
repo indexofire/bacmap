@@ -67,6 +67,23 @@ def _first_genes(payload: dict) -> list[str]:
     return [str(g) for g in genes] if isinstance(genes, list) else []
 
 
+def _gapit_error(text: str | None) -> tuple[str, str] | None:
+    """从 gapit 输出里取 ``gapit.error/1`` 的 (code, message)；非错误 → None。"""
+    if not text:
+        return None
+    for line in text.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            payload = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(payload, dict) and payload.get("schema") == "gapit.error/1":
+            return str(payload.get("code", "")), str(payload.get("message", ""))
+    return None
+
+
 def _screen_and_type(gapit: str, contigs: Path, db: str, workdir: Path, timeout: int) -> dict:
     screen = workdir / f"{db}_screen.tsv"
     sp = subprocess.run(
@@ -76,7 +93,16 @@ def _screen_and_type(gapit: str, contigs: Path, db: str, workdir: Path, timeout:
         timeout=timeout,
     )
     if sp.returncode != 0 or not screen.is_file():
-        return {"status": "failed", "stage": "screen", "error": (sp.stderr or "")[-500:]}
+        # gapit 缺库时以退出码 0 返回 gapit.error/1（DATABASE_NOT_FOUND）——如实记 unavailable，
+        # 与真正的执行失败（failed）区分开。
+        code, message = _gapit_error(sp.stdout) or _gapit_error(sp.stderr) or ("", "")
+        if code == "DATABASE_NOT_FOUND":
+            return {"status": "unavailable", "error": message or f"database {db} not installed"}
+        return {
+            "status": "failed",
+            "stage": "screen",
+            "error": (message or sp.stderr or "")[-500:],
+        }
     tp = subprocess.run(
         [gapit, "typing", str(screen), "-f", "json"],
         capture_output=True,

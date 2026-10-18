@@ -93,7 +93,8 @@ the **conversation**, a **plan hint**, and the **prompt**, with a **footer** of 
 - **Direct keys**: `Enter` send · `Shift/Alt+Enter` newline · `Esc` interrupt / ignore the
   pending plan · `Ctrl+C` quit · `Ctrl+B` toggle sidebar · `Ctrl+R` refresh · `Ctrl+L` clear
   conversation · `Ctrl+F` toggle follow (stop auto-scroll while reading back) · `Ctrl+P`
-  command palette · `Ctrl+Y` confirm the pending plan.
+  command palette · `Ctrl+Y` confirm the pending plan. The input box is **focused on start**,
+  so you can type immediately.
 - **Leader `Ctrl+G`** chords: `n` new session · `l` tasks · `s` samples · `m` model/endpoint ·
   `t` theme · `h` help · `q` quit.
 - **Slash commands** in the prompt: `/help /new /clear /tasks /samples /search <kw> /model`

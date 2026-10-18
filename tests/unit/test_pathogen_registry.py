@@ -133,10 +133,21 @@ class TestGoldenMigration:
         from bacmap.core.pathogen_registry import load_registry
 
         groups = load_registry().snp_groups()
-        assert set(groups) == set(GOLDEN_SNP_GROUPS)
+        # 三个历史组（名字保留，路径稳定）
         for name, (ref, members) in GOLDEN_SNP_GROUPS.items():
             assert Path(groups[name]["ref"]) == ref
             assert groups[name]["species"] == members
+        # 新增常见病原组（分组名 = 小写码），成员由 snp_group 派生
+        assert groups["vch"]["species"] == ["VCH"]
+        assert groups["lmo"]["species"] == ["LMO"]
+        assert len(groups) == 21
+
+    def test_new_snp_groups_have_accessions(self):
+        from bacmap.core.pathogen_registry import load_registry
+
+        # 每个新组的参考文件名应与 accession 清单一致（防止空组）
+        for name, info in load_registry().snp_groups().items():
+            assert info["ref"].endswith(".fasta")
 
     def test_plan_flags(self):
         from bacmap.core.pathogen_registry import load_registry
@@ -144,7 +155,9 @@ class TestGoldenMigration:
         reg = load_registry()
         assert reg.pathogens["SAL"].wants("snp") is True
         assert reg.pathogens["SAL"].wants("recombination") is True
-        assert reg.pathogens["KPN"].wants("snp") is False  # 无参考基因组
+        # 新增参考后 KPN 也有了 SNP 组；仍无参考的物种（如 YEN）为 False
+        assert reg.pathogens["KPN"].wants("snp") is True
+        assert reg.pathogens["YEN"].wants("snp") is False
 
     def test_recombination_groups_from_plan(self):
         from bacmap.core.pathogen_registry import get_workflow_tables, load_registry

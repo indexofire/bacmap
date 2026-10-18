@@ -89,5 +89,6 @@ class TestListReferenceGenomes:
         monkeypatch.setattr(tools_services, "_DATA_DIR", tmp_path / "data")
         monkeypatch.setattr(tools_services, "_REFS_DIR", tmp_path / "refs")
         out = json.loads(tools_services.list_reference_genomes({}))
-        assert out["n_total"] == 3  # salmonella / ecoli / vpara（包内模板）
-        assert {g["group"] for g in out["genomes"]} == {"salmonella", "ecoli", "vpara"}
+        assert out["n_total"] >= 21  # 3 历史组 + 常见病原组（包内模板）
+        groups = {g["group"] for g in out["genomes"]}
+        assert {"salmonella", "ecoli", "vpara", "vch", "lmo"} <= groups

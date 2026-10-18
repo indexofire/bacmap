@@ -80,7 +80,8 @@ bacmap › 建议先统计再绘图。
 
 - **直接按键**：`Enter` 发送 · `Shift/Alt+Enter` 换行 · `Esc` 中断/忽略待确认计划 ·
   `Ctrl+C` 退出 · `Ctrl+B` 侧栏 · `Ctrl+R` 刷新 · `Ctrl+L` 清屏 · `Ctrl+F` 跟随开关
-  （回看时停止自动滚动）· `Ctrl+P` 命令面板 · `Ctrl+Y` 确认计划。
+  （回看时停止自动滚动）· `Ctrl+P` 命令面板 · `Ctrl+Y` 确认计划。**开屏即聚焦输入框**，
+  可直接输入。
 - **Leader `Ctrl+G` 和弦**：`n` 新会话 · `l` 任务 · `s` 样本 · `m` 模型/端点 · `t` 主题 ·
   `h` 帮助 · `q` 退出。
 - **斜杠命令**：`/help /new /clear /tasks /samples /search <kw> /model /analyze <样本>

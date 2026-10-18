@@ -179,6 +179,8 @@ class BacmapTUI(App[None]):
         self._show_endpoint()
         self.refresh_data()
         self.set_interval(4.0, self.refresh_tasks)
+        # 开屏即聚焦输入框：用户可直接输入（否则焦点落在任务表，输入被吞）。
+        self.query_one("#prompt", Input).focus()
 
     async def _on_resize(self, event: Any) -> None:
         # App 在 _on_resize 中 stop 事件，公共 on_resize 不会触发；在此渲染钩子后重排侧栏。

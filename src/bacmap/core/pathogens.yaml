@@ -57,39 +57,59 @@ pathogens:
   VCH:
     display_name: 霍乱弧菌
     gside_labels: [Vibrio_cholerae, Vibrio_cholerae_O1, Vibrio_cholerae_O139]
+    snp_group: vch
+    plan: {snp: true}
   VVU:
     display_name: 创伤弧菌
     gside_labels: [Vibrio_vulnificus]
+    snp_group: vvu
+    plan: {snp: true}
   LMO:
     display_name: 单核细胞增生李斯特菌
     gside_labels: [Listeria_monocytogenes]
+    snp_group: lmo
+    plan: {snp: true}
     gapit_screens: [lm_doumith]
   SAU:
     display_name: 金黄色葡萄球菌
     gside_labels: [Staphylococcus_aureus]
+    snp_group: sau
+    plan: {snp: true}
   KPN:
     display_name: 肺炎克雷伯菌
     gside_labels: [Klebsiella_pneumoniae]
+    snp_group: kpn
+    plan: {snp: true}
     gapit_screens: [kpsc_k, kpsc_o]
   ABA:
     display_name: 鲍曼不动杆菌
     gside_labels: [Acinetobacter_baumannii]
+    snp_group: aba
+    plan: {snp: true}
     gapit_screens: [ab_k, ab_o]
   PAE:
     display_name: 铜绿假单胞菌
     gside_labels: [Pseudomonas_aeruginosa]
+    snp_group: pae
+    plan: {snp: true}
   EFA:
     display_name: 粪肠球菌
     gside_labels: [Enterococcus_faecalis]
+    snp_group: efa
+    plan: {snp: true}
   EFM:
     display_name: 屎肠球菌
     gside_labels: [Enterococcus_faecium]
   SPN:
     display_name: 肺炎链球菌
     gside_labels: [Streptococcus_pneumoniae]
+    snp_group: spn
+    plan: {snp: true}
   SPY:
     display_name: 化脓性链球菌
     gside_labels: [Streptococcus_pyogenes]
+    snp_group: spy
+    plan: {snp: true}
   SAG:
     display_name: 无乳链球菌
     gside_labels: [Streptococcus_agalactiae]
@@ -99,12 +119,18 @@ pathogens:
   NME:
     display_name: 脑膜炎奈瑟菌
     gside_labels: [Neisseria_meningitidis]
+    snp_group: nme
+    plan: {snp: true}
   NGO:
     display_name: 淋病奈瑟菌
     gside_labels: [Neisseria_gonorrhoeae]
+    snp_group: ngo
+    plan: {snp: true}
   CDI:
     display_name: 艰难拟梭菌
     gside_labels: [Clostridioides_difficile]
+    snp_group: cdi
+    plan: {snp: true}
   CDP:
     display_name: 白喉棒状杆菌
     gside_labels: [Corynebacterium_diphtheriae]
@@ -114,12 +140,16 @@ pathogens:
   LPN:
     display_name: 嗜肺军团菌
     gside_labels: [Legionella_pneumophila]
+    snp_group: lpn
+    plan: {snp: true}
   MPN:
     display_name: 肺炎支原体
     gside_labels: [Mycoplasma_pneumoniae]
   HPY:
     display_name: 幽门螺杆菌
     gside_labels: [Helicobacter_pylori]
+    snp_group: hpy
+    plan: {snp: true}
   BPE:
     display_name: 百日咳博德特菌
     gside_labels: [Bordetella_pertussis]
@@ -129,6 +159,8 @@ pathogens:
   BPS:
     display_name: 类鼻疽伯克霍尔德菌
     gside_labels: [Burkholderia_pseudomallei]
+    snp_group: bps
+    plan: {snp: true}
   LIN:
     display_name: 问号钩端螺旋体
     gside_labels: [Leptospira_interrogans]
@@ -141,6 +173,8 @@ pathogens:
   YPE:
     display_name: 鼠疫耶尔森菌
     gside_labels: [Yersinia_pestis]
+    snp_group: ype
+    plan: {snp: true}
   YEN:
     display_name: 肠结肠炎耶尔森菌
     gside_labels: [Yersinia_enterocolitica]
@@ -156,6 +190,8 @@ pathogens:
   CJE:
     display_name: 空肠弯曲菌
     gside_labels: [Campylobacter_jejuni]
+    snp_group: cje
+    plan: {snp: true}
   CCO:
     display_name: 结肠弯曲菌
     gside_labels: [Campylobacter_coli]
@@ -170,3 +206,57 @@ snp_groups:
   vpara:
     ref: data/reference/genomes/vpara_rimd.fasta
     organism: Vibrio parahaemolyticus
+  vch:
+    ref: data/reference/genomes/vch_n16961.fasta
+    organism: Vibrio cholerae
+  vvu:
+    ref: data/reference/genomes/vvu_cmcp6.fasta
+    organism: Vibrio vulnificus
+  lmo:
+    ref: data/reference/genomes/lmo_egde.fasta
+    organism: Listeria monocytogenes
+  sau:
+    ref: data/reference/genomes/sau_n315.fasta
+    organism: Staphylococcus aureus
+  kpn:
+    ref: data/reference/genomes/kpn_hs11286.fasta
+    organism: Klebsiella pneumoniae
+  aba:
+    ref: data/reference/genomes/aba_acicu.fasta
+    organism: Acinetobacter baumannii
+  pae:
+    ref: data/reference/genomes/pae_pao1.fasta
+    organism: Pseudomonas aeruginosa
+  efa:
+    ref: data/reference/genomes/efa_v583.fasta
+    organism: Enterococcus faecalis
+  spn:
+    ref: data/reference/genomes/spn_r6.fasta
+    organism: Streptococcus pneumoniae
+  spy:
+    ref: data/reference/genomes/spy_sf370.fasta
+    organism: Streptococcus pyogenes
+  nme:
+    ref: data/reference/genomes/nme_mc58.fasta
+    organism: Neisseria meningitidis
+  ngo:
+    ref: data/reference/genomes/ngo_fa1090.fasta
+    organism: Neisseria gonorrhoeae
+  cdi:
+    ref: data/reference/genomes/cdi_630.fasta
+    organism: Clostridioides difficile
+  lpn:
+    ref: data/reference/genomes/lpn_philadelphia1.fasta
+    organism: Legionella pneumophila
+  hpy:
+    ref: data/reference/genomes/hpy_26695.fasta
+    organism: Helicobacter pylori
+  cje:
+    ref: data/reference/genomes/cje_nctc11168.fasta
+    organism: Campylobacter jejuni
+  bps:
+    ref: data/reference/genomes/bps_k96243.fasta
+    organism: Burkholderia pseudomallei
+  ype:
+    ref: data/reference/genomes/ype_co92.fasta
+    organism: Yersinia pestis

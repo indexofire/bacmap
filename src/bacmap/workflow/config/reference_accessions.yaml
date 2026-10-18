@@ -36,3 +36,95 @@ genomes:
     organism: Vibrio parahaemolyticus RIMD 2210633 (chromosome I + II)
     accessions: [NC_004603.1, NC_004605.1]
     version: NC_004603.1+NC_004605.1
+  # 以下为常见病原的型株参考（经 scripts/verify_reference_accessions.py 的 NCBI
+  # esummary 核验后才纳入；增添/更换后请重跑核验）。分组名 = 小写物种码。
+  vch:
+    out: vch_n16961.fasta
+    organism: Vibrio cholerae O1 biovar El Tor str. N16961 (chromosome I + II)
+    accessions: [NC_002505.1, NC_002506.1]
+    version: NC_002505.1+NC_002506.1
+  vvu:
+    out: vvu_cmcp6.fasta
+    organism: Vibrio vulnificus CMCP6 (chromosome I + II)
+    accessions: [NC_004459.3, NC_004460.3]
+    version: NC_004459.3+NC_004460.3
+  lmo:
+    out: lmo_egde.fasta
+    organism: Listeria monocytogenes EGD-e
+    accessions: [NC_003210.1]
+    version: NC_003210.1
+  sau:
+    out: sau_n315.fasta
+    organism: Staphylococcus aureus N315
+    accessions: [NC_002745.2]
+    version: NC_002745.2
+  kpn:
+    out: kpn_hs11286.fasta
+    organism: Klebsiella pneumoniae HS11286
+    accessions: [NC_016845.1]
+    version: NC_016845.1
+  aba:
+    out: aba_acicu.fasta
+    organism: Acinetobacter baumannii ACICU
+    accessions: [NC_010611.1]
+    version: NC_010611.1
+  pae:
+    out: pae_pao1.fasta
+    organism: Pseudomonas aeruginosa PAO1
+    accessions: [NC_002516.2]
+    version: NC_002516.2
+  efa:
+    out: efa_v583.fasta
+    organism: Enterococcus faecalis V583
+    accessions: [NC_004668.1]
+    version: NC_004668.1
+  spn:
+    out: spn_r6.fasta
+    organism: Streptococcus pneumoniae R6
+    accessions: [NC_003098.1]
+    version: NC_003098.1
+  spy:
+    out: spy_sf370.fasta
+    organism: Streptococcus pyogenes M1 GAS (SF370)
+    accessions: [NC_002737.2]
+    version: NC_002737.2
+  nme:
+    out: nme_mc58.fasta
+    organism: Neisseria meningitidis MC58
+    accessions: [NC_003112.2]
+    version: NC_003112.2
+  ngo:
+    out: ngo_fa1090.fasta
+    organism: Neisseria gonorrhoeae FA1090
+    accessions: [NC_002946.2]
+    version: NC_002946.2
+  cdi:
+    out: cdi_630.fasta
+    organism: Clostridioides difficile 630
+    accessions: [NC_009089.1]
+    version: NC_009089.1
+  lpn:
+    out: lpn_philadelphia1.fasta
+    organism: Legionella pneumophila Philadelphia 1
+    accessions: [NC_002942.5]
+    version: NC_002942.5
+  hpy:
+    out: hpy_26695.fasta
+    organism: Helicobacter pylori 26695
+    accessions: [NC_000915.1]
+    version: NC_000915.1
+  cje:
+    out: cje_nctc11168.fasta
+    organism: Campylobacter jejuni NCTC 11168
+    accessions: [NC_002163.1]
+    version: NC_002163.1
+  bps:
+    out: bps_k96243.fasta
+    organism: Burkholderia pseudomallei K96243 (chromosome 1 + 2)
+    accessions: [NC_006350.1, NC_006351.1]
+    version: NC_006350.1+NC_006351.1
+  ype:
+    out: ype_co92.fasta
+    organism: Yersinia pestis CO92
+    accessions: [NC_003143.1]
+    version: NC_003143.1

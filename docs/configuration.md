@@ -168,7 +168,17 @@ python workflows/bacmap/scripts/fetch_reference_genomes.py \
 ```
 
 Multi-replicon entries (e.g. V. parahaemolyticus chromosomes I+II) are concatenated into one
-reference. Offline failures are non-fatal (per-entry `error`); `--strict` exits non-zero.
+reference. **Verify accessions before trusting them** (a wrong accession poisons the SNP tree):
+
+```bash
+python workflows/bacmap/scripts/verify_reference_accessions.py \
+    --manifest workflows/bacmap/config/reference_accessions.yaml [--strict]
+```
+
+This checks each accession's NCBI esummary title against the entry's organism. The packaged
+manifest ships **21 cohorts** (the 3 original + 18 verified common pathogens: VCH/VVU/LMO/SAU/
+KPN/ABA/PAE/EFA/SPN/SPY/NME/NGO/CDI/LPN/HPY/CJE/BPS/YPE). Offline failures are non-fatal
+(per-entry `error`); `--strict` exits non-zero.
 Each genome's sha256/version is registered into `refs/manifest.json`, so run records (ADR-18)
 trace exactly which reference was used. Groups without a reference simply skip the SNP cohort.
 

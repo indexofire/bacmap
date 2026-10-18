@@ -113,3 +113,20 @@ class TestRunGapitTyping:
         data = json.loads(out.read_text())
         assert data["databases"]["lm_doumith"]["status"] == "failed"
         assert data["databases"]["lm_doumith"]["stage"] == "screen"
+
+    def test_missing_database_is_unavailable(self, tmp_path, monkeypatch):
+        mod = _load()
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        err = json.dumps(
+            {
+                "schema": "gapit.error/1",
+                "code": "DATABASE_NOT_FOUND",
+                "message": "Database ab_k is not in ~/.local/share/gapit/db",
+            }
+        )
+        monkeypatch.setattr(mod.subprocess, "run", lambda *a, **k: _Proc(0, out=err))
+        out = tmp_path / "typing.json"
+        mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", databases=["ab_k"], timeout=30)
+        data = json.loads(out.read_text())
+        # 缺库 ≠ 执行失败：如实记 unavailable（声明了但未 fetch）
+        assert data["databases"]["ab_k"]["status"] == "unavailable"

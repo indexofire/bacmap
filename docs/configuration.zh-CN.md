@@ -160,8 +160,17 @@ python workflows/bacmap/scripts/fetch_reference_genomes.py \
     --refs-dir "$BACMAP_HOME/refs"
 ```
 
-多复制子（如副溶血性弧菌 I+II 号染色体）按顺序拼接为单条参考；离线失败不中断（逐条记
-`error`），`--strict` 时非零退出。每个基因组的 sha256/版本登记进 `refs/manifest.json`，
+多复制子（如副溶血性弧菌 I+II 号染色体）按顺序拼接为单条参考；**信任前先核验 accession**
+(错配的 accession 会污染 SNP 树)：
+
+```bash
+python workflows/bacmap/scripts/verify_reference_accessions.py \
+    --manifest workflows/bacmap/config/reference_accessions.yaml [--strict]
+```
+
+核验逐条取 NCBI esummary 标题并与条目 organism 比对。包内清单现含 **21 个 cohort**（原 3 个 +
+18 个已核验常见病原：VCH/VVU/LMO/SAU/KPN/ABA/PAE/EFA/SPN/SPY/NME/NGO/CDI/LPN/HPY/CJE/BPS/YPE）。
+离线失败不中断（逐条记 `error`），`--strict` 时非零退出。每个基因组的 sha256/版本登记进 `refs/manifest.json`，
 运行记录（ADR-18）据此溯源；没有参考的组自动跳过 SNP cohort。
 
 **鉴定升级**：`species_mode` 为起始 gside 档位；设 `species_escalation: true`（可选
