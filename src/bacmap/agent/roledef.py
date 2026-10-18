@@ -9,12 +9,18 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 _AGENT_DIR = Path(__file__).parent
 _PRINCIPLES_PATH = _AGENT_DIR / "principles.md"
 _SKILLS_DIR = _AGENT_DIR / "skills"
 _ROLES_DIR = _AGENT_DIR / "roles"
+
+# 角色清单的封闭取值（ADR-09 档位 / ADR-16 数据级别 / ADR-06 任务类型 / 端点位置）。
+_TIERS = frozenset({"T0", "T1", "T2"})
+_DATA_CLASSES = frozenset({"D0", "D1", "D2", "D3", "D4"})
+_TASK_TYPES = frozenset({"analyze", "curate", "mine", "write"})
+_LOCATIONS = frozenset({"local", "lan", "cloud"})
 
 
 class RoleDef(BaseModel):
@@ -29,6 +35,36 @@ class RoleDef(BaseModel):
     tools: list[str] = Field(default_factory=list)
     fs_scope: dict[str, list[str]] = Field(default_factory=dict)
     network: bool = False
+
+    @field_validator("min_model_tier")
+    @classmethod
+    def _valid_tier(cls, v: str) -> str:
+        if v not in _TIERS:
+            raise ValueError(f"min_model_tier must be one of {sorted(_TIERS)}, got {v!r}")
+        return v
+
+    @field_validator("max_data_class")
+    @classmethod
+    def _valid_data_class(cls, v: str) -> str:
+        if v not in _DATA_CLASSES:
+            raise ValueError(f"max_data_class must be one of {sorted(_DATA_CLASSES)}, got {v!r}")
+        return v
+
+    @field_validator("task_types")
+    @classmethod
+    def _valid_task_types(cls, v: list[str]) -> list[str]:
+        bad = [t for t in v if t not in _TASK_TYPES]
+        if bad:
+            raise ValueError(f"task_types must be within {sorted(_TASK_TYPES)}, got {bad!r}")
+        return v
+
+    @field_validator("allowed_locations")
+    @classmethod
+    def _valid_locations(cls, v: list[str]) -> list[str]:
+        bad = [x for x in v if x not in _LOCATIONS]
+        if bad:
+            raise ValueError(f"allowed_locations must be within {sorted(_LOCATIONS)}, got {bad!r}")
+        return v
 
 
 def load_principles() -> str:

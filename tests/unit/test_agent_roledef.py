@@ -195,3 +195,30 @@ class TestRoleEnforcement:
 
         with pytest.raises(LlmUnavailableError):
             gw.structured("interpretation", "x", _Out, role="ghost")
+
+
+class TestAllRoleManifests:
+    """所有角色清单的封闭取值与工具白名单一致性（防漂移：坏值会变成远处 KeyError）。"""
+
+    def test_tools_exist_in_registry_or_session_tools(self):
+        from bacmap.agent import roledef
+        from bacmap.tools import registry
+
+        known = {s.name for s in registry.list_specs()} | {"sandbox_run", "sandbox_shell"}
+        for role in roledef.list_roles():
+            rd = roledef.load_role_def(role)
+            missing = [t for t in rd.tools if t not in known]
+            assert not missing, f"{role}: unknown tools {missing}"
+
+    def test_enum_fields_validated(self):
+        from bacmap.agent.roledef import RoleDef
+
+        base = dict(name="x", task_types=["analyze"])
+        with pytest.raises(ValueError, match="min_model_tier"):
+            RoleDef(**base, min_model_tier="T9")
+        with pytest.raises(ValueError, match="max_data_class"):
+            RoleDef(**base, max_data_class="D9")
+        with pytest.raises(ValueError, match="allowed_locations"):
+            RoleDef(**base, allowed_locations=["mars"])
+        with pytest.raises(ValueError, match="task_types"):
+            RoleDef(name="x", task_types=["deploy"])
