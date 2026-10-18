@@ -110,9 +110,10 @@ bacmap web 默认只绑 `127.0.0.1`（ADR-16）。需要从其他电脑访问时
 `--host 0.0.0.0` 裸暴露（界面无认证，局域网内任何人可提交/审批任务）——用 SSH 隧道，
 加密与认证全部由 SSH 承担，bacmap 侧零改动：
 
-> `BACMAP_WEB_TOKEN`（`--token-env`）为**程序化/API** 客户端增加 Bearer 校验。
-> 浏览器无法发送 `Authorization` 头，因此一旦配置 token，HTML 控制台会返回 401——
-> 界面仍走下面的隧道方式。
+> `BACMAP_WEB_TOKEN`（`--token-env`）启用鉴权。默认 `bearer` 模式以 `Authorization` 头发送，
+> 而**浏览器无法设置该头**——故 HTML 控制台返回 401，界面走下面的隧道方式。设
+> `BACMAP_WEB_AUTH=cookie` 可改为在 `/login` 登录（签名 `HttpOnly` 会话 cookie +
+> 每个状态变更 POST 的 CSRF 令牌）；TLS 部署再加 `BACMAP_WEB_COOKIE_SECURE=1`。
 
 ```bash
 # 在你自己的电脑上执行（user 为工作站账号，10.0.0.5 换成工作站实际 IP）：

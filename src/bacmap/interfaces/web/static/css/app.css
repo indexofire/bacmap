@@ -871,3 +871,7 @@ code {
 /* 间距工具类（替代内联 style，配合严格 CSP） */
 .mt-1 { margin-top: 1rem; }
 .mt-075 { margin-top: .75rem; }
+
+/* 顶栏登出入口（cookie 鉴权模式） */
+.topbar__logout { margin-left: auto; }
+.topbar__logout .btn { padding: 3px 10px; }

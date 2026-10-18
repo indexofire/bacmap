@@ -273,6 +273,103 @@ class TestAssistantPage:
         assert c.post("/assistant/execute", data={"sid": "nope"}).status_code == 400
 
 
+class TestWebCookieAuth:
+    """v1.4.15：浏览器 cookie 会话 + CSRF（BACMAP_WEB_AUTH=cookie）。"""
+
+    def _client(self, engine, monkeypatch) -> TestClient:
+        monkeypatch.setenv("BACMAP_WEB_AUTH", "cookie")
+        monkeypatch.setenv("BACMAP_WEB_SECRET", "s3cr3t-sign")
+        return TestClient(create_app(engine, auth_token="tok"))
+
+    def test_unauthenticated_html_redirects_to_login(self, engine, monkeypatch):
+        c = self._client(engine, monkeypatch)
+        r = c.get("/", headers={"accept": "text/html"}, follow_redirects=False)
+        assert r.status_code == 303
+        assert r.headers["location"].startswith("/login")
+
+    def test_unauthenticated_xhr_gets_401(self, engine, monkeypatch):
+        c = self._client(engine, monkeypatch)
+        assert c.get("/tasks/nope/fragment").status_code == 401
+
+    def test_login_sets_httponly_cookies_and_grants_access(self, engine, monkeypatch):
+        c = self._client(engine, monkeypatch)
+        r = c.post("/login", data={"token": "tok", "next": "/"}, follow_redirects=False)
+        assert r.status_code == 303
+        set_cookie = r.headers.get("set-cookie", "")
+        assert "bacmap_session=" in set_cookie
+        assert "HttpOnly" in set_cookie
+        assert "samesite=strict" in set_cookie.lower()
+        assert "bacmap_csrf=" in set_cookie
+        assert c.get("/", headers={"accept": "text/html"}).status_code == 200
+
+    def test_login_wrong_token_401(self, engine, monkeypatch):
+        c = self._client(engine, monkeypatch)
+        assert c.post("/login", data={"token": "nope", "next": "/"}).status_code == 401
+
+    def test_bearer_still_works_in_cookie_mode(self, engine, monkeypatch):
+        c = self._client(engine, monkeypatch)
+        assert c.get("/", headers={"Authorization": "Bearer tok"}).status_code == 200
+
+    def test_open_redirect_blocked(self, engine, monkeypatch):
+        c = self._client(engine, monkeypatch)
+        r = c.post(
+            "/login", data={"token": "tok", "next": "https://evil.example"}, follow_redirects=False
+        )
+        assert r.headers["location"] == "/"
+
+    def test_post_without_csrf_forbidden(self, engine, monkeypatch):
+        c = self._client(engine, monkeypatch)
+        c.post("/login", data={"token": "tok", "next": "/"})
+        r = c.post(
+            "/tasks/submit",
+            data={"task_type": "analyze", "samples": "SAM-001"},
+            headers={"origin": "http://testserver"},
+        )
+        assert r.status_code == 403
+
+    def test_post_with_csrf_ok(self, engine, monkeypatch):
+        c = self._client(engine, monkeypatch)
+        c.post("/login", data={"token": "tok", "next": "/"})
+        csrf = c.cookies.get("bacmap_csrf")
+        r = c.post(
+            "/tasks/submit",
+            data={"task_type": "analyze", "samples": "SAM-001", "csrf": csrf},
+            headers={"origin": "http://testserver"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 303
+
+    def test_post_cross_origin_rejected(self, engine, monkeypatch):
+        c = self._client(engine, monkeypatch)
+        c.post("/login", data={"token": "tok", "next": "/"})
+        csrf = c.cookies.get("bacmap_csrf")
+        r = c.post(
+            "/tasks/submit",
+            data={"task_type": "analyze", "samples": "SAM-001", "csrf": csrf},
+            headers={"origin": "http://evil.example"},
+        )
+        assert r.status_code == 403
+
+    def test_logout_clears_session(self, engine, monkeypatch):
+        c = self._client(engine, monkeypatch)
+        c.post("/login", data={"token": "tok", "next": "/"})
+        csrf = c.cookies.get("bacmap_csrf")
+        assert c.post("/logout", data={"csrf": csrf}, follow_redirects=False).status_code == 303
+        r = c.get("/", headers={"accept": "text/html"}, follow_redirects=False)
+        assert r.status_code == 303
+
+    def test_expired_session_rejected(self, engine, monkeypatch):
+        import time
+
+        from bacmap.interfaces.web.auth import SESSION_COOKIE, _sign
+
+        c = self._client(engine, monkeypatch)
+        past = int(time.time()) - 10
+        c.cookies.set(SESSION_COOKIE, f"sid.{past}.{_sign('s3cr3t-sign', 'sid', past)}")
+        r = c.get("/", headers={"accept": "text/html"}, follow_redirects=False)
+        assert r.status_code == 303
+
+
 class TestWebHardening:
     """巡检加固：安全头 / 报告下载 / 助手输入边界 / 会话上限。"""
 

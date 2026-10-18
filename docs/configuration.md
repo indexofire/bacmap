@@ -37,7 +37,10 @@ Environment variables (for tests and multi-instance deployments):
 | `BACMAP_RUNS_DB` | `$BACMAP_HOME/runs.sqlite` | Run records (ADR-18) |
 | `BACMAP_REFS_DIR` | `$BACMAP_HOME/refs` | External tool databases (ADR-20); `refs/manifest.json` registers them into run records |
 | `BACMAP_ENV_LOCK` | `$BACMAP_HOME/pixi.lock` | Environment lock hashed into run records (ADR-18) |
-| `BACMAP_MCP_TOKEN` / `BACMAP_WEB_TOKEN` | none | Bearer token for MCP HTTP transport / Web API access (ADR-12/14). Sent as an `Authorization: Bearer` header — **browsers cannot set it**, so with a token configured the HTML console returns 401; reach the UI over an SSH tunnel instead (see the usage guide). |
+| `BACMAP_MCP_TOKEN` / `BACMAP_WEB_TOKEN` | none | Bearer token for MCP HTTP transport / Web auth (ADR-12/14). In the default `bearer` mode it is sent as an `Authorization: Bearer` header — **browsers cannot set it**, so the HTML console returns 401 (use an SSH tunnel); in `cookie` mode the browser logs in at `/login` instead. |
+| `BACMAP_WEB_AUTH` | `bearer` | Web auth mode: `bearer` (header only, API clients) or `cookie` (browser `/login` → signed session cookie + CSRF) |
+| `BACMAP_WEB_SECRET` | derived from token | HMAC secret signing the session cookie (cookie mode); set explicitly to decouple from token rotation |
+| `BACMAP_WEB_COOKIE_SECURE` | off | `1` adds `Secure` to auth cookies (TLS deployments) |
 | `CHECKM2_DB` / `GTDBTK_DATA_PATH` | none | Location of large identification databases (optional) |
 
 ## 2. LLM endpoints (config.toml)

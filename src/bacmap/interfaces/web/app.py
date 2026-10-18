@@ -9,17 +9,21 @@ create_app(engine) 与 build_server(engine) 同构——引擎注入，测试可
 
 from __future__ import annotations
 
+import hmac
 import json
+import secrets
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.background import BackgroundTask
 
-from bacmap.interfaces._auth import BearerTokenMiddleware
 from bacmap.interfaces._security import SecurityHeadersMiddleware
 from bacmap.interfaces.views import (
     load_summaries,
@@ -28,12 +32,51 @@ from bacmap.interfaces.views import (
     sample_digest,
     search_rows,
 )
+from bacmap.interfaces.web.auth import (
+    CSRF_COOKIE,
+    SESSION_COOKIE,
+    WebAuthConfig,
+    WebAuthMiddleware,
+    issue_session,
+    safe_next,
+    verify_csrf,
+)
 from bacmap.interfaces.web.static import STATIC_DIR
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 from bacmap.tasks.spec import Approval, TaskId, TaskType
 from bacmap.tools._common import _validate_sample_id
 
-_TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+class _Templates(Jinja2Templates):
+    """注入 CSRF 令牌与鉴权模式（表单隐藏字段、登出入口用）。"""
+
+    def TemplateResponse(
+        self,
+        request: Request,
+        name: str,
+        context: dict[str, Any] | None = None,
+        status_code: int = 200,
+        headers: Mapping[str, str] | None = None,
+        media_type: str | None = None,
+        background: BackgroundTask | None = None,
+    ) -> Any:
+        ctx = dict(context or {})
+        ctx.setdefault("csrf", request.cookies.get(CSRF_COOKIE, ""))
+        cfg = getattr(request.app.state, "web_auth", None)
+        ctx.setdefault("auth_mode", cfg.mode if cfg else "bearer")
+        ctx.setdefault("auth_enabled", bool(cfg and cfg.enabled))
+        return super().TemplateResponse(
+            request,
+            name,
+            ctx,
+            status_code=status_code,
+            headers=headers,
+            media_type=media_type,
+            background=background,
+        )
+
+
+_TEMPLATES = _Templates(directory=str(Path(__file__).parent / "templates"))
 
 _MAX_ASSISTANT_SESSIONS = 32  # 会话上限（LRU 淘汰；防无界增长/内存泄漏）
 _MAX_PROMPT_LEN = 8000  # 单轮需求文本上限（防超大表单/提示词）
@@ -41,13 +84,58 @@ _MAX_PROMPT_LEN = 8000  # 单轮需求文本上限（防超大表单/提示词�
 
 def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI:
     app = FastAPI(title="bacmap", docs_url=None, redoc_url=None)
-    if auth_token:
-        # ADR-14：跨机访问需鉴权；配置 token 时全站 Bearer 校验。
-        app.add_middleware(BearerTokenMiddleware, token=auth_token)
-    # 安全响应头（含 CSP）：最后加入 → 位于最外层，鉴权 401 也带安全头。
+    cfg = WebAuthConfig.from_env(auth_token)
+    app.state.web_auth = cfg
+    if cfg.enabled:
+        # ADR-14/v1.4.15：bearer（API）与 cookie（浏览器）双通道；cookie 模式配 CSRF。
+        app.add_middleware(WebAuthMiddleware, cfg=cfg)
+    # 安全响应头（含 CSP）：最后加入 → 位于最外层，鉴权 401/303 也带安全头。
     app.add_middleware(SecurityHeadersMiddleware)
     # 静态资源仅本地（CSS/图标/脚本；零外联，ADR-16）
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+    # -- 登录 / 登出（cookie 模式；bearer 模式下 /login 直接回首页） --------------
+
+    @app.get("/login", response_class=HTMLResponse)
+    def login_form(request: Request, next: str = "/"):
+        if not (cfg.enabled and cfg.mode == "cookie"):
+            return RedirectResponse("/", status_code=303)
+        return _TEMPLATES.TemplateResponse(
+            request, "login.html", {"next": safe_next(next), "error": None}
+        )
+
+    @app.post("/login", response_class=HTMLResponse)
+    def login_submit(
+        request: Request, token: str = Form(...), next: str = Form("/")
+    ):
+        if not (cfg.enabled and cfg.mode == "cookie"):
+            return RedirectResponse("/", status_code=303)
+        host = request.headers.get("host", "")
+        origin = request.headers.get("origin", "")
+        if origin and urlparse(origin).netloc != host:
+            raise HTTPException(403, "cross-origin login rejected")
+        if not hmac.compare_digest(token, cfg.token):
+            return _TEMPLATES.TemplateResponse(
+                request,
+                "login.html",
+                {"next": safe_next(next), "error": "令牌不正确"},
+                status_code=401,
+            )
+        resp = RedirectResponse(safe_next(next), status_code=303)
+        resp.set_cookie(
+            SESSION_COOKIE, issue_session(cfg.secret, cfg.ttl_s), **cfg.session_cookie_kwargs()
+        )
+        resp.set_cookie(
+            CSRF_COOKIE, secrets.token_urlsafe(24), **cfg.csrf_cookie_kwargs()
+        )
+        return resp
+
+    @app.post("/logout")
+    def logout() -> RedirectResponse:
+        resp = RedirectResponse("/login", status_code=303)
+        resp.delete_cookie(SESSION_COOKIE, path="/")
+        resp.delete_cookie(CSRF_COOKIE, path="/")
+        return resp
 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request) -> HTMLResponse:
@@ -117,10 +205,14 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
 
     @app.post("/tasks/submit")
     def submit_task(
+        request: Request,
         task_type: str = Form(...),
         samples: str = Form(""),
         scope: str = Form(""),
+        csrf: str = Form(""),
     ) -> RedirectResponse:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
         try:
             tt = TaskType(task_type)
         except ValueError as exc:
@@ -169,11 +261,15 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
 
     @app.post("/tasks/{task_id}/approve")
     def approve_task(
+        request: Request,
         task_id: str,
         approver: str = Form(...),
         decision: str = Form(...),
         signature: str = Form(...),
+        csrf: str = Form(""),
     ) -> RedirectResponse:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
         if decision not in ("approve", "reject"):
             raise HTTPException(400, "decision 必须是 approve|reject")
         typed_decision: Literal["approve", "reject"] = (
@@ -218,10 +314,12 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
 
     @app.post("/assistant", response_class=HTMLResponse)
     def assistant_ask(
-        request: Request, text: str = Form(...), sid: str = Form("")
+        request: Request, text: str = Form(...), sid: str = Form(""), csrf: str = Form("")
     ) -> HTMLResponse:
         from uuid import uuid4
 
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
         prompt = text.strip()
         if not prompt:
             raise HTTPException(400, "需求不能为空")
@@ -242,9 +340,13 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
         )
 
     @app.post("/assistant/execute", response_class=HTMLResponse)
-    def assistant_execute(request: Request, sid: str = Form(...)) -> HTMLResponse:
+    def assistant_execute(
+        request: Request, sid: str = Form(...), csrf: str = Form("")
+    ) -> HTMLResponse:
         from bacmap.interfaces.assistant import execute_plan
 
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
         entry = _agent_sessions.get(sid)
         plan = entry["plan"] if entry else None
         if plan is None or not plan.tasks:

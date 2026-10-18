@@ -129,9 +129,12 @@ another computer, do **not** expose it bare with `--host 0.0.0.0` (the UI has no
 authentication, so anyone on the LAN could submit or approve tasks). Use an SSH tunnel
 instead: SSH carries all of the encryption and authentication, and bacmap needs zero changes:
 
-> `BACMAP_WEB_TOKEN` (`--token-env`) adds a Bearer check for **programmatic/API** clients.
-> Browsers cannot send an `Authorization` header, so once a token is configured the HTML
-> console returns 401 — keep the tunnel-first workflow below for the UI.
+> `BACMAP_WEB_TOKEN` (`--token-env`) adds authentication. In the default `bearer` mode it is
+> sent as an `Authorization` header, which **browsers cannot set** — so the HTML console
+> returns 401 and the tunnel-first workflow below is the way in. Set
+> `BACMAP_WEB_AUTH=cookie` to instead log in at `/login` (signed `HttpOnly` session cookie +
+> CSRF token on every state-changing POST); with `BACMAP_WEB_COOKIE_SECURE=1` add `Secure`
+> for TLS deployments.
 
 ```bash
 # 在你自己的电脑上执行（user 为工作站账号，10.0.0.5 换成工作站实际 IP）：

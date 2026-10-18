@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}登录 · bacmap{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1 class="pagehead__title">登录 bacmap</h1>
+  <p class="pagehead__sub">输入部署令牌（环境变量 <span class="mono-dim">BACMAP_WEB_TOKEN</span>）以进入控制台。</p>
+</div>
+<section class="card card--form" aria-labelledby="login-title">
+  <div class="card__head"><h2 class="card__title" id="login-title">访问令牌</h2></div>
+  {% if error %}<p class="field__hint" role="alert">{{ error }}</p>{% endif %}
+  <form class="form" method="post" action="/login">
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="field">
+      <label class="field__label" for="f-token">令牌</label>
+      <input class="field__control" id="f-token" name="token" type="password"
+             required autocomplete="current-password">
+      <p class="field__hint">令牌只用于本机/局域网控制台登录，不会离开本机。</p>
+    </div>
+    <div class="form__actions">
+      <button class="btn btn--primary" type="submit">登录</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

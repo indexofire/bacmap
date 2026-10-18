@@ -12,6 +12,7 @@
       <h2 class="card__title" id="submit-title">提交新任务</h2>
     </div>
     <form class="form" method="post" action="/tasks/submit">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
       <div class="field">
         <label class="field__label" for="f-task-type">任务类型</label>
         <select class="field__control" id="f-task-type" name="task_type">
