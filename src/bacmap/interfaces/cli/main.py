@@ -217,6 +217,8 @@ def _run_task_cancel(args: argparse.Namespace) -> None:
         _engine(args.home).cancel(TaskId(args.task_id))
     except KeyError as exc:
         raise SystemExit(f"任务不存在：{args.task_id}") from exc
+    except ValueError as exc:
+        raise SystemExit(f"取消失败：{exc}") from exc
     _console().print(f"任务 {args.task_id} 已取消")
 
 

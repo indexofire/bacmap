@@ -804,7 +804,8 @@ class DbosTaskEngine:
                 if ws in ("PENDING", "RUNNING"):
                     pass
                 elif ws == "SUCCESS":
-                    result = handle.get_result()
+                    raw_result = handle.get_result()
+                    result = raw_result if isinstance(raw_result, dict) else {}
                     status_val = str(result.get("status", "SUCCEEDED"))
                     state = {
                         "AWAITING_APPROVAL": TaskState.AWAITING_APPROVAL,
@@ -837,10 +838,20 @@ class DbosTaskEngine:
     def cancel(self, task_id: TaskId) -> None:
         with self._conn() as conn:
             row = conn.execute(
-                "SELECT workflow_id FROM tasks WHERE task_id = ?", (task_id,)
+                "SELECT state, workflow_id FROM tasks WHERE task_id = ?", (task_id,)
             ).fetchone()
         if row is None:
             raise KeyError(f"no such task: {task_id}")
+        # 终态任务不得被"取消"改写（否则会篡改已完成/已失败的历史状态）。
+        if row["state"] in (
+            TaskState.SUCCEEDED.value,
+            TaskState.FAILED.value,
+            TaskState.CANCELLED.value,
+        ):
+            raise ValueError(
+                f"task {task_id} is already {row['state']!r}; "
+                "only non-terminal tasks can be cancelled"
+            )
         if row["workflow_id"]:
             DBOS.cancel_workflow(row["workflow_id"])
         self._update_state(task_id, TaskState.CANCELLED)

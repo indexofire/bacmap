@@ -103,6 +103,14 @@ _D4_KEYS = frozenset({
 })
 
 
+def _record_list(value: Any) -> list[dict[str, Any]]:
+    """把候选/产物字段收敛为 dict 列表；非列表或含非 dict 项一律丢弃（门按缺失处理，
+    fail-closed：畸形候选 → REJECT，而非在门里抛异常）。"""
+    if not isinstance(value, list):
+        return []
+    return [r for r in value if isinstance(r, dict)]
+
+
 def evaluate_baseline_release(candidate: dict[str, Any]) -> GateResult:
     """特征库发布门（ADR-07/19）：纳入菌株逐项检查 + D4 泄漏防御。
 
@@ -110,7 +118,8 @@ def evaluate_baseline_release(candidate: dict[str, Any]) -> GateResult:
     特征字段无 D4 泄漏（白名单构造之外的二次防线）。
     """
     now = datetime.now(UTC)
-    strains = candidate.get("strains", [])
+    strains = _record_list(candidate.get("strains"))
+    excluded = candidate.get("excluded", [])
     problems: list[str] = []
     seen: set[str] = set()
     for rec in strains:
@@ -135,7 +144,7 @@ def evaluate_baseline_release(candidate: dict[str, Any]) -> GateResult:
         problems.append("empty_candidate")
     details = {
         "n_strains": len(strains),
-        "n_excluded": len(candidate.get("excluded", [])),
+        "n_excluded": len(excluded) if isinstance(excluded, list) else 0,
         "problems": problems[:50],
     }
     verdict = GateVerdict.PASS if not problems else GateVerdict.REJECT
@@ -153,12 +162,15 @@ def evaluate_mining(payload: dict[str, Any]) -> GateResult:
     检查：产物非空、逐条可复现（有脚本/命令来源）、用户已签字。
     """
     now = datetime.now(UTC)
-    artifacts = payload.get("artifacts", [])
+    raw_artifacts = payload.get("artifacts", [])
+    artifacts = _record_list(raw_artifacts)
     problems: list[str] = []
+    if not isinstance(raw_artifacts, list):
+        problems.append("malformed_artifacts")
     if not artifacts:
         problems.append("empty_artifacts")
     for art in artifacts:
-        if not isinstance(art, dict) or not art.get("name"):
+        if not art.get("name"):
             problems.append("artifact_missing_name")
         elif not art.get("reproducible", False):
             problems.append(f"not_reproducible:{art.get('name')}")
@@ -203,7 +215,11 @@ def evaluate_citation(payload: dict[str, Any]) -> GateResult:
     """
     now = datetime.now(UTC)
     draft = str(payload.get("draft", ""))
-    known = {_normalize_known(c) for c in payload.get("known_citations", [])}
+    known_raw = payload.get("known_citations", [])
+    known = {
+        _normalize_known(c)
+        for c in (known_raw if isinstance(known_raw, list) else [])
+    }
     found: set[str] = set()
     for m in _CITE_RE.finditer(draft):
         pmid = m.group(1) or m.group(2)

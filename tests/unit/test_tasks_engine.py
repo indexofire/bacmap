@@ -70,6 +70,14 @@ class TestDbosTaskEngine:
         assert st.state == TaskState.SUCCEEDED
         assert st.current_step == "analyze"
 
+    def test_cancel_terminal_task_is_rejected(self, engine):
+        """终态任务不得被 cancel 改写（回归：曾无条件置 CANCELLED）。"""
+        tid = engine.submit(TaskType.ANALYZE, {"samples": ["SAM-001"]}, "tester")
+        assert _wait(engine, tid).state == TaskState.SUCCEEDED
+        with pytest.raises(ValueError, match="non-terminal"):
+            engine.cancel(tid)
+        assert engine.status(tid).state == TaskState.SUCCEEDED
+
     def test_analyze_failed_run(self, engine, monkeypatch):
         monkeypatch.setattr(eng, "_run_snakemake", lambda p: _Proc(1))
         tid = engine.submit(TaskType.ANALYZE, {"samples": ["SAM-001"]}, "tester")

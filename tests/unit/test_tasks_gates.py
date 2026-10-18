@@ -157,3 +157,32 @@ class TestCitationGateDoiResearch:
             {"draft": "见 10.1128/JCM.00123-23后面的中文", "known_citations": []}
         )
         assert res.details["citations_found"] == ["10.1128/jcm.00123-23"]
+
+
+class TestGateInputRobustness:
+    """门必须对畸形输入 fail-closed（REJECT），不得在门里抛异常（C5 强制力）。"""
+
+    def test_baseline_release_malformed_strains_rejected(self):
+        r = gates.evaluate_baseline_release({"strains": "not-a-list"})
+        assert r.verdict == GateVerdict.REJECT
+        assert "empty_candidate" in r.details["problems"]
+
+    def test_baseline_release_non_dict_excluded_counted_as_zero(self):
+        r = gates.evaluate_baseline_release({"strains": [], "excluded": 3})
+        assert r.details["n_excluded"] == 0
+
+    def test_mining_malformed_artifacts_rejected(self):
+        r = gates.evaluate_mining({"artifacts": "oops", "signed_by": "x"})
+        assert r.verdict == GateVerdict.REJECT
+        assert "malformed_artifacts" in r.details["problems"]
+
+    def test_mining_artifact_without_name_rejected(self):
+        r = gates.evaluate_mining({"artifacts": [{"reproducible": True}], "signed_by": "x"})
+        assert r.verdict == GateVerdict.REJECT
+        assert "artifact_missing_name" in r.details["problems"]
+
+    def test_citation_non_list_known_is_fail_closed(self):
+        r = gates.evaluate_citation(
+            {"draft": "见 [12345678]", "known_citations": "12345678"}
+        )
+        assert r.verdict == GateVerdict.REJECT
