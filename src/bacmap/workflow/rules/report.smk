@@ -1,23 +1,23 @@
 # 汇总报告：聚合所有步骤结果为 JSON
+#
+# v1.4.24：按病原注册表**条件依赖**——只请求该物种适用的步骤产物，不适用者
+#   既不进入 DAG、也不触发外部工具（SISTR 只属沙门菌；ShigaTyper 只属志贺菌；
+#   ecoh 只属大肠埃希菌；vpara 只属副溶血弧菌；DEC 致病型只属 ECO/SHI）。
+
+
+from bacmap.core.analysis.routing import report_inputs as _routing_report_inputs  # noqa: E402
+
+
+def _report_inputs(wc):
+    """该样本适用的步骤产物（按 registry 路由；不适用者不进入 DAG）。"""
+    return _routing_report_inputs(
+        wc.sample, SAMPLES_DF.loc[wc.sample, "species"], str(WORKDIR)
+    )
+
 
 rule report_summary:
     input:
-        qc_json = str(WORKDIR) + "/{sample}/qc/{sample}_fastp.json",
-        assembly_stats = str(WORKDIR) + "/{sample}/assembly/assembly_stats.tsv",
-        species_id = str(WORKDIR) + "/{sample}/species/species_id.json",
-        mlst = str(WORKDIR) + "/{sample}/typing/mlst.tsv",
-        sistr = str(WORKDIR) + "/{sample}/typing/sistr.json",
-        vfdb = str(WORKDIR) + "/{sample}/amr/abricate_vfdb.tsv",
-        card = str(WORKDIR) + "/{sample}/amr/abricate_card.tsv",
-        amrfinderplus = str(WORKDIR) + "/{sample}/amr/amrfinderplus.tsv",
-        plasmidfinder = str(WORKDIR) + "/{sample}/plasmid/abricate_plasmidfinder.tsv",
-        ectyper = str(WORKDIR) + "/{sample}/dec/ecoh_serotype.json",
-        pathotype = str(WORKDIR) + "/{sample}/dec/pathotype.json",
-        gapit_typing = str(WORKDIR) + "/{sample}/gapit/typing.json",
-        shigella_serotype = str(WORKDIR) + "/{sample}/dec/shigella_serotype.json",
-        vpa_serotype = str(WORKDIR) + "/{sample}/vpa/vpa_serotype.json",
-        vpa_virulence = str(WORKDIR) + "/{sample}/vpara/virulence.json",
-        annotation = str(WORKDIR) + "/{sample}/annotation/annotation.json",
+        unpack(_report_inputs)
     output:
         summary = str(WORKDIR) + "/{sample}/report/{sample}_summary.json"
     script:

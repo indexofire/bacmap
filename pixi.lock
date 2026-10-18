@@ -352,6 +352,7 @@ environments:
       - conda: https://conda.anaconda.org/bioconda/linux-64/seqkit-2.13.0-he881be0_0.conda
       - conda: https://conda.anaconda.org/bioconda/linux-64/seqtk-1.4-he4a0461_2.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/shellingham-1.5.4-pyhd8ed1ab_2.conda
+      - conda: https://conda.anaconda.org/bioconda/noarch/shigatyper-2.0.5-pyhdfd78af_0.tar.bz2
       - conda: https://conda.anaconda.org/bioconda/noarch/shovill-1.1.0-hdfd78af_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/six-1.17.0-pyhe01879c_1.conda
       - conda: https://conda.anaconda.org/bioconda/linux-64/skani-0.3.2-h79ce301_0.conda
@@ -893,6 +894,7 @@ environments:
       - conda: https://conda.anaconda.org/bioconda/linux-64/seqkit-2.13.0-he881be0_0.conda
       - conda: https://conda.anaconda.org/bioconda/linux-64/seqtk-1.4-he4a0461_2.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/shellingham-1.5.4-pyhd8ed1ab_2.conda
+      - conda: https://conda.anaconda.org/bioconda/noarch/shigatyper-2.0.5-pyhdfd78af_0.tar.bz2
       - conda: https://conda.anaconda.org/bioconda/noarch/shovill-1.1.0-hdfd78af_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/six-1.17.0-pyhe01879c_1.conda
       - conda: https://conda.anaconda.org/bioconda/linux-64/skani-0.3.2-h79ce301_0.conda
@@ -10005,6 +10007,21 @@ packages:
   - pkg:pypi/shellingham?source=hash-mapping
   size: 15018
   timestamp: 1762858315311
+- conda: https://conda.anaconda.org/bioconda/noarch/shigatyper-2.0.5-pyhdfd78af_0.tar.bz2
+  sha256: 5afa6b36c93141e1b7318e880a9e3610b2d7f79bc9a5a84e59990d083fc5fa50
+  md5: c1463be702859ddda472a5c25e6e5f1b
+  depends:
+  - bcftools >=1.9
+  - minimap2 >=2.16
+  - pandas >=0.24.2
+  - python >=3.7
+  - samtools >=1.9
+  license: Public Domain
+  license_family: Public Domain
+  purls:
+  - pkg:pypi/shigatyper?source=hash-mapping
+  size: 290522
+  timestamp: 1688603197288
 - conda: https://conda.anaconda.org/bioconda/noarch/shovill-1.1.0-hdfd78af_2.conda
   sha256: b80b379856a9b12bb89cb94db6d13501b7a2dd68f82b1978708589e865e6e521
   md5: 971dd41c9883ec063d78624c726876b4

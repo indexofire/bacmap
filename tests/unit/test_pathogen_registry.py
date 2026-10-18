@@ -41,6 +41,11 @@ GOLDEN_GAPIT_SCREENS = {
     "KPN": ["kpsc_k", "kpsc_o"],
     "ABA": ["ab_k", "ab_o"],
 }
+GOLDEN_SEROTYPE_ENGINES = {
+    "SAL": "sistr",      # SISTR 只做沙门菌血清型
+    "SHI": "shigatyper", # 志贺菌血清型：ShigaTyper（未来迁 gapit）
+    "ECO": "ecoh",       # 大肠埃希菌 O/H：gapit ecoh
+}
 GOLDEN_SNP_GROUPS = {
     "salmonella": (DATA_DIR / "reference/genomes/salmonella_LT2.fasta", ["SAL"]),
     "ecoli": (DATA_DIR / "reference/genomes/ecoli_k12.fasta", ["SHI", "ECO"]),
@@ -128,6 +133,7 @@ class TestGoldenMigration:
         from bacmap.core.pathogen_registry import load_registry
 
         assert load_registry().gapit_screens() == GOLDEN_GAPIT_SCREENS
+        assert load_registry().serotype_engines() == GOLDEN_SEROTYPE_ENGINES
 
     def test_snp_groups_derived_from_membership(self):
         from bacmap.core.pathogen_registry import load_registry

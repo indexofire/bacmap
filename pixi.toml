@@ -39,6 +39,7 @@ kraken2 = ">=2.1"
 bracken = ">=2.9"
 mash = ">=2.3"
 mummer4 = "*"
+shigatyper = ">=2.0.5,<3"
 
 [pypi-dependencies]
 gmlst = "==0.5.5"

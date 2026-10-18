@@ -210,10 +210,22 @@ Doumith serogroup, surfaced as `steps.serotype.serogroup` + `serogroup_scheme`),
 `no_scheme` (the DB exists but was not built with `--typing`, e.g. `ecoh` — gapit returns
 `TYPING_NO_SCHEME` on stderr with a non-zero exit, still recorded as `no_scheme`),
 `unavailable` (the DB is not installed: `DATABASE_NOT_FOUND`), `skipped` (gapit absent),
-`failed` (a real execution error). `ecoli_dec` is handled by the dedicated DEC step. Legacy serotype
-placeholders are now factual rather than `pending_gapit`: E. coli O/H awaits a `--typing`
-gapit DB, Shigella serovar comes from **SISTR**, and V. parahaemolyticus serotyping has no
-upstream database yet.
+`failed` (a real execution error). `ecoli_dec` is handled by the dedicated DEC step.
+
+**Serotyping is routed per species.** After gside identifies the species, only the applicable
+below-species steps enter the DAG — everything else never runs, so no stray artifacts appear in
+the results directory (`serotype_engine` + `gapit_screens` in `core/pathogens.yaml`):
+
+| Engine | Species | Step |
+|---|---|---|
+| `sistr` | Salmonella | SISTR serovar — SISTR predicts **Salmonella only** |
+| `shigatyper` | Shigella | ShigaTyper serotype from reads (planned migration to gapit) |
+| `ecoh` (gapit) | E. coli | O/H serotype, once the DB is built with `--typing` |
+| `ecoli_dec` (gapit) | E. coli | DEC pathotype |
+| `vpara_virulence` (gapit) | V. parahaemolyticus | tdh/trh/tlh virulence + O/K serotype |
+
+For a species where a step does not apply, the summary says so (`steps.serotype.sistr_status`,
+`steps.dec.status`, `steps.dec.pathotype_status` = `not_applicable`) instead of inventing a value.
 
 **cgMLST keys: thresholds and the reference library.** `cgmlst.thresholds` is keyed by the**3-letter species code** (`SAL`/`ECO`/`SHI`/`VPA`); lookups pass an arbitrary species spelling
 (`Salmonella`, `E. coli`, `Vibrio parahaemolyticus`, …) and it is normalized to the code, so

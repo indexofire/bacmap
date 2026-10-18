@@ -83,6 +83,7 @@ class WorkflowTables:
     cgmlst_schemes: dict[str, str]
     amrfinder_organisms: dict[str, str]
     gapit_screens: dict[str, list[str]]
+    serotype_engines: dict[str, str]
     snp_groups: dict[str, dict[str, Any]]
     cgmlst_species_groups: dict[str, dict[str, Any]]
     recombination_groups: list[str]
@@ -135,6 +136,14 @@ class PathogenRegistry:
             c: list(p.gapit_screens)
             for c, p in self.pathogens.items()
             if p.enabled and p.gapit_screens
+        }
+
+    def serotype_engines(self) -> dict[str, str]:
+        """物种码 → 血清型判定引擎（sistr / ecoh / shigatyper / lm_doumith…）。"""
+        return {
+            c: p.serotype_engine
+            for c, p in self.pathogens.items()
+            if p.enabled and p.serotype_engine is not None
         }
 
     def groups_with_plan(self, key: str) -> list[str]:
@@ -332,6 +341,7 @@ def get_workflow_tables() -> WorkflowTables:
         cgmlst_schemes=reg.cgmlst_schemes(),
         amrfinder_organisms=reg.amrfinder_organisms(),
         gapit_screens=reg.gapit_screens(),
+        serotype_engines=reg.serotype_engines(),
         snp_groups=reg.snp_groups(),
         cgmlst_species_groups=reg.cgmlst_species_groups(),
         recombination_groups=reg.groups_with_plan("recombination"),

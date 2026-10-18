@@ -3,12 +3,15 @@ import sys
 # Step 5-9: MLST + AMR + 毒力 + 质粒 + 血清型 (project.md §7.1 steps 5-9)
 
 from bacmap.core.pathogen_registry import get_workflow_tables, resolve_species  # noqa: E402
+from bacmap.core.analysis.routing import serotype_engine as _routing_engine  # noqa: E402
+from bacmap.core.analysis.routing import uses_gapit_db as _routing_uses_db  # noqa: E402
 
 _TABLES = get_workflow_tables()
 
 ABRICATE_MINID = config["tools"]["abricate"]["minid"]
 ABRICATE_MINCOV = config["tools"]["abricate"]["mincov"]
 _GMLST_SCHEMES = _TABLES.mlst_schemes
+_SEROTYPE_ENGINES = _TABLES.serotype_engines
 GMLST_BIN = "gmlst"
 
 _AMRFINDER_ORGANISMS = _TABLES.amrfinder_organisms
@@ -17,6 +20,16 @@ _AMRFINDER_ORGANISMS = _TABLES.amrfinder_organisms
 def _sample_code(sample):
     """samples.tsv species 值（码/标签/显示名）→ 三字母码。"""
     return resolve_species(SAMPLES_DF.loc[sample, "species"])
+
+
+def _serotype_engine(sample):
+    """样本物种 → 血清型引擎（sistr/ecoh/shigatyper…）；无声明 → ""。"""
+    return _routing_engine(SAMPLES_DF.loc[sample, "species"])
+
+
+def _uses_gapit_db(sample, db):
+    """样本物种是否声明了该 gapit 库（决定该分型步骤是否适用）。"""
+    return _routing_uses_db(SAMPLES_DF.loc[sample, "species"], db)
 
 
 def _mlst_scheme(sample):

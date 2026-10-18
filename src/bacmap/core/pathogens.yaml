@@ -13,7 +13,8 @@
 #     cgmlst_scheme       gmlst typing cgmlst 方案（缺省 null）
 #     amrfinder_organism  AMRFinderPlus -O（缺省 null → 不传 -O）
 #     gapit_screens       gapit 数据库（种以下判定：DEC 致病型、血清群、K/O 位点…）
-#     serotype_engine     血清型引擎（gapit 承接；占位待接）
+#     serotype_engine     血清型引擎：sistr（沙门菌）/ shigatyper（志贺菌，未来迁 gapit）/
+#                         ecoh（大肠埃希菌 O/H，gapit）；缺省 null → 该样本不跑血清型步骤
 #     snp_group           SNP cohort 分组名（仅当 snp_groups 已备参考基因组）
 #     plan                分析计划开关：{snp, cgmlst, recombination}
 #     enabled             false 则不进入任何查询表
@@ -32,6 +33,7 @@ pathogens:
   SHI:
     display_name: 志贺菌
     gside_labels: [Shigella_EIEC]
+    serotype_engine: shigatyper
     mlst_scheme: ecoli_1
     cgmlst_scheme: ecoli_2
     amrfinder_organism: Escherichia
@@ -40,6 +42,7 @@ pathogens:
   ECO:
     display_name: 大肠埃希菌
     gside_labels: [DEC]
+    serotype_engine: ecoh
     mlst_scheme: ecoli_1
     cgmlst_scheme: ecoli_2
     amrfinder_organism: Escherichia

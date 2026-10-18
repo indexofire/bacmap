@@ -12,7 +12,7 @@ from types import SimpleNamespace
 _SCRIPT = Path(__file__).resolve().parents[2] / "src/bacmap/workflow/scripts/collect_summary.py"
 
 
-def _run(tmp_path: Path, species_id: dict) -> dict:
+def _run(tmp_path: Path, species_id: dict, omit: set[str] | None = None) -> dict:
     rep = tmp_path / "results" / "S1" / "report"
     rep.mkdir(parents=True, exist_ok=True)
     sid = tmp_path / "species.json"
@@ -20,24 +20,27 @@ def _run(tmp_path: Path, species_id: dict) -> dict:
     out = rep / "S1_summary.json"
 
     missing = str(tmp_path / "missing")
-    nope = SimpleNamespace(
-        qc_json=missing,
-        assembly_stats=missing,
-        mlst=missing,
-        sistr=missing,
-        vfdb=missing,
-        card=missing,
-        amrfinderplus=missing,
-        plasmidfinder=missing,
-        ectyper=missing,
-        pathotype=missing,
-        gapit_typing=missing,
-        shigella_serotype=missing,
-        vpa_serotype=missing,
-        vpa_virulence=missing,
-        annotation=missing,
-    )
-    nope.species_id = str(sid)
+    attrs = {
+        "qc_json": missing,
+        "assembly_stats": missing,
+        "mlst": missing,
+        "sistr": missing,
+        "vfdb": missing,
+        "card": missing,
+        "amrfinderplus": missing,
+        "plasmidfinder": missing,
+        "ectyper": missing,
+        "pathotype": missing,
+        "gapit_typing": missing,
+        "shigella_serotype": missing,
+        "vpa_serotype": missing,
+        "vpa_virulence": missing,
+        "annotation": missing,
+        "species_id": str(sid),
+    }
+    for key in omit or ():
+        attrs.pop(key, None)
+    nope = SimpleNamespace(**attrs)
     snakemake = SimpleNamespace(
         wildcards=SimpleNamespace(sample="S1"),
         input=nope,
@@ -64,3 +67,28 @@ def test_no_marker_is_negative(tmp_path):
 def test_string_markers_do_not_crash(tmp_path):
     summary = _run(tmp_path, {"verdict": "DEC", "detected_markers": ["ipah", "uida"]})
     assert summary["steps"]["dec"]["ipaH"] == "ipaH_positive"
+
+
+def test_non_salmonella_marks_sistr_not_applicable(tmp_path):
+    """SISTR 只属沙门菌：ECO 的 report 依赖里没有 sistr 输入。"""
+    summary = _run(
+        tmp_path,
+        {"verdict": "DEC", "detected_markers": [{"gene": "ipah"}]},
+        omit={"sistr", "pathotype", "shigella_serotype", "vpa_serotype", "vpa_virulence"},
+    )
+    assert summary["steps"]["serotype"]["sistr_status"] == "not_applicable"
+    assert "vpa_serotype" not in summary["steps"]
+    assert "vpa_virulence" not in summary["steps"]
+    # DEC 致病型仍适用（ECO 有 ecoli_dec）
+    # 本桩未提供 pathotype 文件 → 该子步骤不适用
+    assert summary["steps"]["dec"]["pathotype_status"] == "not_applicable"
+
+
+def test_non_dec_species_marks_dec_not_applicable(tmp_path):
+    summary = _run(
+        tmp_path,
+        {"verdict": "Salmonella", "detected_markers": []},
+        omit={"ectyper", "pathotype", "shigella_serotype"},
+    )
+    assert summary["steps"]["dec"]["status"] == "not_applicable"
+    assert summary["steps"]["serotype"]["sistr"] == "N/A"

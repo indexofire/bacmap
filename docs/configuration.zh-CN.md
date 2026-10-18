@@ -195,8 +195,21 @@ python workflows/bacmap/scripts/verify_reference_accessions.py \
 `no_scheme`（库存在但未 `--typing` build，如 `ecoh`；gapit 把 `TYPING_NO_SCHEME` 写在 stderr
 且退出码非 0，仍如实记为 `no_scheme`）、`unavailable`（库未安装：`DATABASE_NOT_FOUND`）、
 `skipped`（gapit 缺失）、`failed`（真正的执行失败）。
-`ecoli_dec` 由 DEC 专用步骤处理。原血清型占位不再是 `pending_gapit` 而是事实性结果：大肠埃希菌
-O/H 待 gapit `--typing` 库；志贺菌血清型由 **SISTR** 给出；副溶血性弧菌血清型上游暂无数据库。
+`ecoli_dec` 由 DEC 专用步骤处理。
+
+**血清型按物种路由**：gside 定种之后，只有**适用**的种以下步骤进入 DAG——不适用者根本不执行，
+结果目录里也不会出现无干的产物（路由依据 `core/pathogens.yaml` 的 `serotype_engine` 与 `gapit_screens`）：
+
+| 引擎 | 物种 | 步骤 |
+|---|---|---|
+| `sistr` | 沙门菌 | SISTR 血清变型——**SISTR 只做沙门菌** |
+| `shigatyper` | 志贺菌 | ShigaTyper（读段级）给出志贺菌血清型；计划迁 gapit |
+| `ecoh`（gapit） | 大肠埃希菌 | O/H 血清型（库 `--typing` build 后生效） |
+| `ecoli_dec`（gapit） | 大肠埃希菌 | DEC 致病型 |
+| `vpara_virulence`（gapit） | 副溶血性弧菌 | tdh/trh/tlh 毒力 + O/K 血清型 |
+
+不适用于该物种的步骤，汇总里如实标 `not_applicable`（`steps.serotype.sistr_status`、
+`steps.dec.status`、`steps.dec.pathotype_status`），不臆造数值。
 
 **cgMLST 键：阈值与参考库**：`cgmlst.thresholds` 以**三字母物种码**建键（`SAL`/`ECO`/`SHI`/`VPA`）；
 调用方传任意物种写法（`Salmonella`/`E. coli`/`Vibrio parahaemolyticus`…）都会被归一为码，
