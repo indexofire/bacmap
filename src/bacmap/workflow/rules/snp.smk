@@ -5,7 +5,7 @@ import sys
 # Each group uses its own reference genome and produces independent tree
 
 import os as _os
-from bacmap.core.pathogen_registry import get_workflow_tables  # noqa: E402
+from bacmap.core.pathogen_registry import get_workflow_tables, resolve_species  # noqa: E402
 
 _PIXI = str(__import__("pathlib").Path(sys.executable).resolve().parent)
 _WD = str(WORKDIR)
@@ -16,10 +16,13 @@ _WD = str(WORKDIR)
 # ──────────────────────────────────────────────────────────────
 _SPECIES_GROUPS = get_workflow_tables().snp_groups
 
-# Derive per-group sample lists (≥2 samples required for joint calling)
+# Derive per-group sample lists (≥2 samples required for joint calling)。
+# samples.tsv 的 species 值可为码/标签/显示名（registry 归一）。
 _GROUP_SAMPLES = {}
 for _grp, _info in _SPECIES_GROUPS.items():
-    _samps = [s for s in SAMPLES if SAMPLES_DF.loc[s, "species"] in _info["species"]]
+    _samps = [
+        s for s in SAMPLES if resolve_species(SAMPLES_DF.loc[s, "species"]) in _info["species"]
+    ]
     if len(_samps) >= 2:
         _GROUP_SAMPLES[_grp] = _samps
 

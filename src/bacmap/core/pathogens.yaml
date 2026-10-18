@@ -1,62 +1,172 @@
-# 病原注册表（R0 重构）：所有 rule / 分析模块的病原配置唯一来源。
+# 病原注册表（码为准，v1.4.16）——所有 rule / 分析模块的病原配置唯一来源。
 #
 # 语义约定：
-# - pathogens 的键 = samples.tsv `species` 列的合法值域
-# - 键的声明顺序即 marker 基因的鉴定优先级（先声明者优先），
-#   pathogen 内 marker_genes 列表顺序为种内优先级
-# - species_label 是 species_identifier 报告的物种名（历史值：
-#   E.coli→DEC、Shigella→Shigella/EIEC，保持不变）
-# - enabled: false 的病原不出现在任何查询表中（P3 管制病原用）
-# - snp_groups.ref 相对项目根解析；species 引用必须已注册
-# - cgMLST 溯源阈值暂留 config.yaml（cgmlst.thresholds），新病原接入时迁移
+# - pathogens 的键 = **三字母物种码**（core/species_codes.py），全系统统一键；
+#   覆盖 gside D1_marker 的 40 条物种标签（见 species_codes.GSIDE_MARKER_LABELS）。
+# - marker 基因归 gside（鉴定外部化，ADR-20）；bacmap 不再保存 marker_genes。
+# - samples.tsv `species` 列**双接受**：码（SAL）或 gside 标签/显示名
+#   （Salmonella / V_parahaemolyticus / E. coli）——由 registry.resolve() 归一。
+# - 字段：
+#     display_name        中文名（展示）
+#     gside_labels        gside 接受的物种标签（含血清型变体）
+#     mlst_scheme         gmlst typing mlst 方案（缺省 null）
+#     cgmlst_scheme       gmlst typing cgmlst 方案（缺省 null）
+#     amrfinder_organism  AMRFinderPlus -O（缺省 null → 不传 -O）
+#     gapit_screens       gapit 数据库（种以下判定：DEC 致病型、血清群、K/O 位点…）
+#     serotype_engine     血清型引擎（gapit 承接；占位待接）
+#     snp_group           SNP cohort 分组名（仅当 snp_groups 已备参考基因组）
+#     plan                分析计划开关：{snp, cgmlst, recombination}
+#     enabled             false 则不进入任何查询表
+# - snp_groups.ref 相对项目根解析；成员（species）由 pathogens 的 snp_group 派生。
+
 pathogens:
-  Salmonella:
+  SAL:
     display_name: 沙门菌
-    species_label: Salmonella
-    marker_genes: [inva]
+    gside_labels: [Salmonella]
     mlst_scheme: salmonella_2
     cgmlst_scheme: senterica_2
     amrfinder_organism: Salmonella
     serotype_engine: sistr
     snp_group: salmonella
-  Shigella:
+    plan: {snp: true, cgmlst: true, recombination: true}
+  SHI:
     display_name: 志贺菌
-    species_label: Shigella/EIEC
-    marker_genes: [ipah]
+    gside_labels: [Shigella_EIEC]
     mlst_scheme: ecoli_1
     cgmlst_scheme: ecoli_2
     amrfinder_organism: Escherichia
-    serotype_engine: shigella
     snp_group: ecoli
-  V.parahaemolyticus:
+    plan: {snp: true, cgmlst: true, recombination: false}
+  ECO:
+    display_name: 大肠埃希菌
+    gside_labels: [DEC]
+    mlst_scheme: ecoli_1
+    cgmlst_scheme: ecoli_2
+    amrfinder_organism: Escherichia
+    gapit_screens: [ecoli_dec, ecoh]
+    snp_group: ecoli
+    plan: {snp: true, cgmlst: true, recombination: false}
+  VPA:
     display_name: 副溶血性弧菌
-    species_label: V_parahaemolyticus
-    marker_genes: [toxr, tlh]
+    gside_labels: [V_parahaemolyticus]
     mlst_scheme: vparahaemolyticus_1
     cgmlst_scheme: vparahaemolyticus_3
-    serotype_engine: vpa
+    gapit_screens: [vpara_virulence]
     snp_group: vpara
-  E.coli:
-    display_name: 大肠埃希菌
-    species_label: DEC
-    marker_genes: [uida]
-    mlst_scheme: ecoli_1
-    cgmlst_scheme: ecoli_2
-    amrfinder_organism: Escherichia
-    serotype_engine: ecoh
-    pathotype: dec
-    snp_group: ecoli
+    plan: {snp: true, cgmlst: true, recombination: false}
+  VCH:
+    display_name: 霍乱弧菌
+    gside_labels: [Vibrio_cholerae, Vibrio_cholerae_O1, Vibrio_cholerae_O139]
+  VVU:
+    display_name: 创伤弧菌
+    gside_labels: [Vibrio_vulnificus]
+  LMO:
+    display_name: 单核细胞增生李斯特菌
+    gside_labels: [Listeria_monocytogenes]
+    gapit_screens: [lm_doumith]
+  SAU:
+    display_name: 金黄色葡萄球菌
+    gside_labels: [Staphylococcus_aureus]
+  KPN:
+    display_name: 肺炎克雷伯菌
+    gside_labels: [Klebsiella_pneumoniae]
+    gapit_screens: [kpsc_k, kpsc_o]
+  ABA:
+    display_name: 鲍曼不动杆菌
+    gside_labels: [Acinetobacter_baumannii]
+    gapit_screens: [ab_k, ab_o]
+  PAE:
+    display_name: 铜绿假单胞菌
+    gside_labels: [Pseudomonas_aeruginosa]
+  EFA:
+    display_name: 粪肠球菌
+    gside_labels: [Enterococcus_faecalis]
+  EFM:
+    display_name: 屎肠球菌
+    gside_labels: [Enterococcus_faecium]
+  SPN:
+    display_name: 肺炎链球菌
+    gside_labels: [Streptococcus_pneumoniae]
+  SPY:
+    display_name: 化脓性链球菌
+    gside_labels: [Streptococcus_pyogenes]
+  SAG:
+    display_name: 无乳链球菌
+    gside_labels: [Streptococcus_agalactiae]
+  SSU:
+    display_name: 猪链球菌
+    gside_labels: [Streptococcus_suis]
+  NME:
+    display_name: 脑膜炎奈瑟菌
+    gside_labels: [Neisseria_meningitidis]
+  NGO:
+    display_name: 淋病奈瑟菌
+    gside_labels: [Neisseria_gonorrhoeae]
+  CDI:
+    display_name: 艰难拟梭菌
+    gside_labels: [Clostridioides_difficile]
+  CDP:
+    display_name: 白喉棒状杆菌
+    gside_labels: [Corynebacterium_diphtheriae]
+  CSA:
+    display_name: 阪崎克罗诺杆菌
+    gside_labels: [Cronobacter_sakazakii]
+  LPN:
+    display_name: 嗜肺军团菌
+    gside_labels: [Legionella_pneumophila]
+  MPN:
+    display_name: 肺炎支原体
+    gside_labels: [Mycoplasma_pneumoniae]
+  HPY:
+    display_name: 幽门螺杆菌
+    gside_labels: [Helicobacter_pylori]
+  BPE:
+    display_name: 百日咳博德特菌
+    gside_labels: [Bordetella_pertussis]
+  HIN:
+    display_name: 流感嗜血杆菌
+    gside_labels: [Haemophilus_influenzae]
+  BPS:
+    display_name: 类鼻疽伯克霍尔德菌
+    gside_labels: [Burkholderia_pseudomallei]
+  LIN:
+    display_name: 问号钩端螺旋体
+    gside_labels: [Leptospira_interrogans]
+  TPA:
+    display_name: 苍白密螺旋体
+    gside_labels: [Treponema_pallidum]
+  BAN:
+    display_name: 炭疽芽孢杆菌
+    gside_labels: [Bacillus_anthracis]
+  YPE:
+    display_name: 鼠疫耶尔森菌
+    gside_labels: [Yersinia_pestis]
+  YEN:
+    display_name: 肠结肠炎耶尔森菌
+    gside_labels: [Yersinia_enterocolitica]
+  AHY:
+    display_name: 嗜水气单胞菌
+    gside_labels: [Aeromonas_hydrophila]
+  CBO:
+    display_name: 肉毒梭菌
+    gside_labels: [Clostridium_botulinum]
+  CPE:
+    display_name: 产气荚膜梭菌
+    gside_labels: [Clostridium_perfringens]
+  CJE:
+    display_name: 空肠弯曲菌
+    gside_labels: [Campylobacter_jejuni]
+  CCO:
+    display_name: 结肠弯曲菌
+    gside_labels: [Campylobacter_coli]
 
 snp_groups:
   salmonella:
     ref: data/reference/genomes/salmonella_LT2.fasta
-    species: [Salmonella]
     organism: Salmonella enterica
   ecoli:
     ref: data/reference/genomes/ecoli_k12.fasta
-    species: [E.coli, Shigella]
     organism: Escherichia coli / Shigella
   vpara:
     ref: data/reference/genomes/vpara_rimd.fasta
-    species: [V.parahaemolyticus]
     organism: Vibrio parahaemolyticus

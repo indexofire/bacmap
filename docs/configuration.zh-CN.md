@@ -104,6 +104,9 @@ SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM
 ```
 
 - 列：`sample`（ID）、`species`（预期物种）、`R1`/`R2`（FASTQ 路径，相对 workflows 目录）
+- `species` **双接受**：三字母码（`SAL`/`ECO`/`SHI`/`VPA`/`KPN`…，见 `core/pathogens.yaml`）
+  或 gside 标签/显示名（`Salmonella`、`V_parahaemolyticus`、`E. coli`）；registry 归一为码。
+  新登记**推荐用码**（gside marker 规则覆盖的 40 条物种均已注册）。
 - 测序数据建议按 `gs/<样本>/<样本>_R{1,2}.fastq.gz` 约定布局
 - 工作流重部署时 samples.tsv 与 `.snakemake/` 续跑状态自动保留
 

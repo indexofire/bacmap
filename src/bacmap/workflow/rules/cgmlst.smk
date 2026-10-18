@@ -10,12 +10,17 @@ import sys
 # Both mappings derive from pathogens.yaml (single source of truth).
 # cgMLST cohort rules are added in todo 11 (gated by config.cgmlst.run_cgmlst_cohort).
 
-from bacmap.core.pathogen_registry import get_workflow_tables  # noqa: E402
+from bacmap.core.pathogen_registry import get_workflow_tables, resolve_species  # noqa: E402
 
 _TABLES = get_workflow_tables()
 
 _CGMLST_SCHEMES = _TABLES.cgmlst_schemes
 GMLST_BIN = "gmlst"
+
+
+def _cgmlst_scheme(sample):
+    """samples.tsv species 值（码/标签/显示名）→ cgMLST 方案。"""
+    return _CGMLST_SCHEMES.get(resolve_species(SAMPLES_DF.loc[sample, "species"]) or "", "ecoli_2")
 
 rule typing_cgmlst:
     input:
@@ -23,9 +28,7 @@ rule typing_cgmlst:
     output:
         str(WORKDIR) + "/{sample}/typing/cgmlst.tsv"
     params:
-        scheme = lambda wc: _CGMLST_SCHEMES.get(
-            SAMPLES_DF.loc[wc.sample, "species"], "ecoli_2"
-        )
+        scheme = lambda wc: _cgmlst_scheme(wc.sample)
     threads: 4
     shell:
         "mkdir -p $(dirname {output}) && "
@@ -53,7 +56,7 @@ _CGMLST_SPECIES_GROUPS = _TABLES.cgmlst_species_groups
 _CGMLST_GROUP_SAMPLES: dict[str, list[str]] = {}
 for _grp, _info in _CGMLST_SPECIES_GROUPS.items():
     _samps = [
-        s for s in SAMPLES if SAMPLES_DF.loc[s, "species"] in _info["species"]
+        s for s in SAMPLES if resolve_species(SAMPLES_DF.loc[s, "species"]) in _info["species"]
     ]
     if len(_samps) >= 2:
         _CGMLST_GROUP_SAMPLES[_grp] = _samps

@@ -2,7 +2,7 @@ import sys
 
 # Step 5-9: MLST + AMR + 毒力 + 质粒 + 血清型 (project.md §7.1 steps 5-9)
 
-from bacmap.core.pathogen_registry import get_workflow_tables  # noqa: E402
+from bacmap.core.pathogen_registry import get_workflow_tables, resolve_species  # noqa: E402
 
 _TABLES = get_workflow_tables()
 
@@ -12,6 +12,20 @@ _GMLST_SCHEMES = _TABLES.mlst_schemes
 GMLST_BIN = "gmlst"
 
 _AMRFINDER_ORGANISMS = _TABLES.amrfinder_organisms
+
+
+def _sample_code(sample):
+    """samples.tsv species 值（码/标签/显示名）→ 三字母码。"""
+    return resolve_species(SAMPLES_DF.loc[sample, "species"])
+
+
+def _mlst_scheme(sample):
+    return _GMLST_SCHEMES.get(_sample_code(sample) or "", "salmonella_2")
+
+
+def _amr_org_flag(sample):
+    code = _sample_code(sample)
+    return f"--organism {_AMRFINDER_ORGANISMS[code]}" if code in _AMRFINDER_ORGANISMS else ""
 _AMRFINDER_DB_BASE = Path(PROJECT_ROOT / "data/db/amrfinderplus")
 # amrfinder -d 需要指向具体版本目录(amrfinder_update 会建 <base>/<version>/)
 _AMRFINDER_DB_VERSIONS = sorted(p for p in _AMRFINDER_DB_BASE.iterdir() if p.is_dir()) if _AMRFINDER_DB_BASE.exists() else []
@@ -24,9 +38,7 @@ rule typing_mlst:
     output:
         result = str(WORKDIR) + "/{sample}/typing/mlst.tsv"
     params:
-        scheme = lambda wc: _GMLST_SCHEMES.get(
-            SAMPLES_DF.loc[wc.sample, "species"], "salmonella_2"
-        )
+        scheme = lambda wc: _mlst_scheme(wc.sample)
     threads: 4
     shell:
         "mkdir -p $(dirname {output.result}) && "
@@ -101,11 +113,7 @@ rule amr_amrfinderplus:
     params:
         db = AMRFINDER_DB,
         mincov = AMRFINDER_MINCOV,
-        org_flag = lambda wc: (
-            f"--organism {_AMRFINDER_ORGANISMS[SAMPLES_DF.loc[wc.sample, 'species']]}"
-            if SAMPLES_DF.loc[wc.sample, "species"] in _AMRFINDER_ORGANISMS
-            else ""
-        )
+        org_flag = lambda wc: _amr_org_flag(wc.sample)
     threads: 4
     shell:
         "mkdir -p $(dirname {output.result}) && "

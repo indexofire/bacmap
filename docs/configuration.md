@@ -105,6 +105,10 @@ SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM
 ```
 
 - Columns: `sample` (ID), `species` (expected species), `R1`/`R2` (FASTQ paths, relative to the workflows directory)
+- `species` is **dual-accept**: a 3-letter code (`SAL`, `ECO`, `SHI`, `VPA`, `KPN`, …; see
+  `core/pathogens.yaml`) or a gside label / display name (`Salmonella`, `V_parahaemolyticus`,
+  `E. coli`). The registry resolves either form to the code — codes are preferred for new
+  registrations (the 40 pathogens gside's marker rules cover are all registered).
 - Sequencing data should follow the `gs/<sample>/<sample>_R{1,2}.fastq.gz` conventional layout
 - When a workflow is redeployed, samples.tsv and the `.snakemake/` checkpoint-resume state are preserved automatically
 
