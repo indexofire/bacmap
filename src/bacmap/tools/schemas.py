@@ -870,3 +870,25 @@ INSPECT_DATASET = {
         },
     },
 }
+
+LIST_REFERENCE_GENOMES = {
+    "name": "bio_list_reference_genomes",
+    "description": (
+        "List the reference genomes in the accession manifest "
+        "(workflow/config/reference_accessions.yaml) and their provisioning status: "
+        "for each group (salmonella/ecoli/vpara) the NCBI accessions, the expected "
+        "output file, whether it has been fetched, and whether it is registered in "
+        "refs/manifest.json. Also returns the exact fetch command to run on a "
+        "networked workstation. Use this before a SNP/cgMLST cohort run, or when a "
+        "user asks how to add or refresh a reference genome."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "group": {
+                "type": "string",
+                "description": "Optional cohort group name to filter (e.g. salmonella).",
+            }
+        },
+    },
+}

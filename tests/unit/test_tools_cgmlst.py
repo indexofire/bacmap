@@ -203,7 +203,7 @@ class TestCgmlstTracebackRegistration:
         # Documented repo count after adding bio_cgmlst (was 24, now 25).
         # v1.4.5 去 vpa_serotype；v1.4.7 去 validate_taxonomy/species_compare/db_setup/db_status
         # v1.4.12 加 bio_inspect_dataset（沙箱数据集登记查看）
-        assert len(_TOOL_REGISTRY) == 25
+        assert len(_TOOL_REGISTRY) == 26
 
     def test_schema_has_required_sample_id(self):
         schema = next(s for n, s, _ in _TOOL_REGISTRY if n == "bio_cgmlst")

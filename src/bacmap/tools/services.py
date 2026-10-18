@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 from bacmap.config import DATA_DIR as _DATA_DIR
 from bacmap.config import DEPLOYED_WORKFLOWS_DIR as _DEPLOYED_WORKFLOWS_DIR
 from bacmap.config import GOM_DB as _GOM_DB
+from bacmap.config import REFS_DIR as _REFS_DIR
 from bacmap.config import RUNS_DB as _RUNS_DB
 from bacmap.core.analysis.cgmlst_projection import (
     CgmlstThresholds,
@@ -643,6 +645,84 @@ def inspect_dataset(args: dict[str, Any], **kwargs: Any) -> str:
             for d in reg.list_all()
         ]
     return json.dumps({"count": len(items), "datasets": items}, ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
+# bio_list_reference_genomes —— 参考基因组清单与供给状态（智能体 skill 支撑）
+# ---------------------------------------------------------------------------
+
+_REFERENCE_MANIFEST = "reference_accessions.yaml"
+
+
+def _reference_manifest_path() -> Path:
+    """部署副本优先（站点可改），缺省回退包内模板。"""
+    deployed = _DEPLOYED_WORKFLOWS_DIR / "config" / _REFERENCE_MANIFEST
+    if deployed.is_file():
+        return deployed
+    return Path(__file__).resolve().parents[1] / "workflow" / "config" / _REFERENCE_MANIFEST
+
+
+@tool_handler
+def list_reference_genomes(args: dict[str, Any], **kwargs: Any) -> str:
+    """列出参考基因组清单与供给状态（供智能体判断 SNP cohort 就绪度）。"""
+    import yaml
+
+    wanted = str(args.get("group", "")).strip()
+    manifest_path = _reference_manifest_path()
+    genomes_dir = _DATA_DIR / "reference" / "genomes"
+    if not manifest_path.is_file():
+        return json.dumps(
+            {"error": f"reference manifest not found: {manifest_path}"}, ensure_ascii=False
+        )
+    try:
+        manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError) as exc:
+        return json.dumps({"error": f"manifest parse failed: {exc}"}, ensure_ascii=False)
+
+    registered: dict[str, dict[str, Any]] = {}
+    refs_manifest = _REFS_DIR / "manifest.json"
+    if refs_manifest.is_file():
+        try:
+            payload = json.loads(refs_manifest.read_text(encoding="utf-8"))
+            for entry in payload.get("databases") or []:
+                if isinstance(entry, dict) and str(entry.get("name", "")).startswith("ref:"):
+                    registered[str(entry["name"])] = entry
+        except (OSError, ValueError):
+            pass
+
+    genomes: list[dict[str, Any]] = []
+    for group, spec in (manifest.get("genomes") or {}).items():
+        if wanted and group != wanted:
+            continue
+        out_path = genomes_dir / str(spec.get("out", ""))
+        rec = registered.get(f"ref:{group}", {})
+        genomes.append(
+            {
+                "group": group,
+                "out": str(out_path),
+                "organism": spec.get("organism", ""),
+                "accessions": [str(a) for a in (spec.get("accessions") or [])],
+                "version": spec.get("version", ""),
+                "present": out_path.is_file(),
+                "registered": bool(rec),
+                "registered_checksum": rec.get("checksum", ""),
+            }
+        )
+    fetch_command = (
+        "python workflows/bacmap/scripts/fetch_reference_genomes.py "
+        f"--manifest {manifest_path} --out-dir {genomes_dir} --refs-dir {_REFS_DIR}"
+    )
+    return json.dumps(
+        {
+            "manifest": str(manifest_path),
+            "genomes_dir": str(genomes_dir),
+            "n_total": len(genomes),
+            "n_present": sum(1 for g in genomes if g["present"]),
+            "genomes": genomes,
+            "fetch_command": fetch_command,
+        },
+        ensure_ascii=False,
+    )
 
 
 # ---------------------------------------------------------------------------

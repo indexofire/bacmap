@@ -2,11 +2,11 @@
 
 [English](tools.md) | **简体中文**
 
-`bacmap.tools.registry` 中的工具注册表是 bacmap 能力的唯一清单。每个条目是一个 `ToolSpec`，带名称、版本、描述、effect 与信任层。同一个事实来源同时供给 MCP 服务器与内置智能体。本页记录全部 25 个注册工具，当前版本统一为 0.1.0。
+`bacmap.tools.registry` 中的工具注册表是 bacmap 能力的唯一清单。每个条目是一个 `ToolSpec`，带名称、版本、描述、effect 与信任层。同一个事实来源同时供给 MCP 服务器与内置智能体。本页记录全部 26 个注册工具，当前版本统一为 0.1.0。
 
-每个工具都标注 effect。`read` 工具只做只读查询；`compute` 工具执行计算或封装外部程序，不写持久状态；`write` 工具会写 GOM 或数据库，绝不直接注册进 MCP。MCP 服务器暴露 22 个 read/compute 工具，外加两个任务工具 `bacmap_submit_task` 与 `bacmap_task_status`。经这一对工具提交任务，就是写操作唯一入口。只读模式（`bacmap mcp --read-only`）下连任务工具也不会注册。
+每个工具都标注 effect。`read` 工具只做只读查询；`compute` 工具执行计算或封装外部程序，不写持久状态；`write` 工具会写 GOM 或数据库，绝不直接注册进 MCP。MCP 服务器暴露 23 个 read/compute 工具，外加两个任务工具 `bacmap_submit_task` 与 `bacmap_task_status`。经这一对工具提交任务，就是写操作唯一入口。只读模式（`bacmap mcp --read-only`）下连任务工具也不会注册。
 
-信任层标记调用方的自主程度：L1 是固定管线，只调用、不改写；L2 是受控探索，经沙箱执行并接受人审；L3 是自由对话，受门约束。25 个工具按 effect 分为 8 个 read、14 个 compute、3 个 write。三个 write 工具是 `bio_analyze_pathogen`、`bio_add_lab_result` 与 `bio_add_metadata`。
+信任层标记调用方的自主程度：L1 是固定管线，只调用、不改写；L2 是受控探索，经沙箱执行并接受人审；L3 是自由对话，受门约束。26 个工具按 effect 分为 9 个 read、14 个 compute、3 个 write。三个 write 工具是 `bio_analyze_pathogen`、`bio_add_lab_result` 与 `bio_add_metadata`。
 
 ## 概览
 
@@ -24,6 +24,7 @@
 | bio_generate_report | compute | 生成含结果与证据链的 HTML 报告 |
 | bio_get_result | read | 获取已完成样本的分析摘要 |
 | bio_inspect_dataset | read | 列出或查看已登记的可沙箱访问数据集 |
+| bio_list_reference_genomes | read | 列出参考基因组及其供给状态 |
 | bio_list_samples | read | 列出全部样本及其分析状态 |
 | bio_query_lab_results | read | 查询样本的湿实验结果 |
 | bio_query_metadata | read | 按流行病学条件查询菌株背景元数据 |
@@ -199,6 +200,16 @@ FASTQ 文件质量控制：逐碱基质量统计、接头污染检查、重复�
 
 - `dataset_id`: `string`。已登记数据集 id（省略则列出全部）。
 - `verify`: `boolean`。重算 SHA256 检测内容变化（默认 false）。
+
+### bio_list_reference_genomes
+
+版本 `v0.1.0` | effect: `read` | 信任层: `L1`
+
+列出 accession 清单（`workflow/config/reference_accessions.yaml`）中的参考基因组及其**供给状态**：各 cohort 组的 NCBI accession、预期输出文件、是否已取回、是否登记进 `refs/manifest.json`，以及联网工作站上的**取回命令**。SNP/cgMLST cohort 运行前，或用户询问如何补/换参考基因组时使用。
+
+**参数**
+
+- `group`: `string`。可选，按 cohort 组名过滤（如 `salmonella`）。
 
 ### bio_list_samples
 

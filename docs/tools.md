@@ -2,11 +2,11 @@
 
 **English** | [简体中文](tools.zh-CN.md)
 
-The tool registry in `bacmap.tools.registry` is the single catalog of what bacmap can do. Each entry is a `ToolSpec` with a name, version, description, effect, and trust layer. One source of truth feeds the MCP server and the built-in agents. This page documents all 25 registered tools; all currently sit at version 0.1.0.
+The tool registry in `bacmap.tools.registry` is the single catalog of what bacmap can do. Each entry is a `ToolSpec` with a name, version, description, effect, and trust layer. One source of truth feeds the MCP server and the built-in agents. This page documents all 26 registered tools; all currently sit at version 0.1.0.
 
-Every tool carries an effect label. `read` tools query stored results. `compute` tools run analysis or wrap external binaries without writing persistent state. `write` tools change the GOM or the database, and they are never registered into MCP directly. The MCP server exposes the 22 read/compute tools plus two task tools, `bacmap_submit_task` and `bacmap_task_status`. Submitting a task through that pair is the sole write entry point. In read-only mode (`bacmap mcp --read-only`), even the task tools stay unregistered.
+Every tool carries an effect label. `read` tools query stored results. `compute` tools run analysis or wrap external binaries without writing persistent state. `write` tools change the GOM or the database, and they are never registered into MCP directly. The MCP server exposes the 23 read/compute tools plus two task tools, `bacmap_submit_task` and `bacmap_task_status`. Submitting a task through that pair is the sole write entry point. In read-only mode (`bacmap mcp --read-only`), even the task tools stay unregistered.
 
-Trust layers mark how much autonomy the calling layer has: L1 is the fixed pipeline, invoke only, no rewriting; L2 is controlled exploration in a sandbox with human review; L3 is free conversation behind gates. The 25 tools split into 8 read, 14 compute, and 3 write. The three write tools are `bio_analyze_pathogen`, `bio_add_lab_result`, and `bio_add_metadata`.
+Trust layers mark how much autonomy the calling layer has: L1 is the fixed pipeline, invoke only, no rewriting; L2 is controlled exploration in a sandbox with human review; L3 is free conversation behind gates. The 26 tools split into 9 read, 14 compute, and 3 write. The three write tools are `bio_analyze_pathogen`, `bio_add_lab_result`, and `bio_add_metadata`.
 
 ## Summary
 
@@ -24,6 +24,7 @@ Trust layers mark how much autonomy the calling layer has: L1 is the fixed pipel
 | bio_generate_report | compute | Generate an HTML report with results and evidence chain |
 | bio_get_result | read | Retrieve the analysis summary for a completed sample |
 | bio_inspect_dataset | read | List or inspect datasets registered for sandbox access |
+| bio_list_reference_genomes | read | List reference genomes and their provisioning status |
 | bio_list_samples | read | List all samples and their analysis status |
 | bio_query_lab_results | read | Query wet lab experiment results for a sample |
 | bio_query_metadata | read | Query strain background metadata with epidemiological filters |
@@ -199,6 +200,16 @@ List or inspect datasets registered for sandbox access — local paths the user 
 
 - `dataset_id`: `string`. Registered dataset id (omit to list all).
 - `verify`: `boolean`. Recompute SHA256 to detect changes (default false).
+
+### bio_list_reference_genomes
+
+Version `v0.1.0` | Effect: `read` | Trust layer: `L1`
+
+List the reference genomes in the accession manifest (`workflow/config/reference_accessions.yaml`) with their provisioning status: the NCBI accessions per cohort group, the expected output file, whether it has been fetched, whether it is registered in `refs/manifest.json`, and the exact fetch command to run on a networked workstation. Use before a SNP/cgMLST cohort run, or when a user asks how to add or refresh a reference genome.
+
+**Parameters**
+
+- `group`: `string`. Optional cohort group name to filter (e.g. `salmonella`).
 
 ### bio_list_samples
 
