@@ -114,14 +114,15 @@ class KnowledgeStore:
     def get(self, entry_id: int) -> dict[str, Any] | None:
         with self._conn() as conn:
             row = conn.execute(
-                f"SELECT {_FIELDS} FROM knowledge_entries WHERE id = ?", (entry_id,)
+                f"SELECT {_FIELDS} FROM knowledge_entries WHERE id = ?",  # noqa: S608 — _FIELDS 为模块常量
+                (entry_id,)
             ).fetchone()
         return dict(row) if row else None
 
     def list_pending(self) -> list[dict[str, Any]]:
         with self._conn() as conn:
             rows = conn.execute(
-                f"SELECT {_FIELDS} FROM knowledge_entries"
+                f"SELECT {_FIELDS} FROM knowledge_entries"  # noqa: S608 — 片段为模块内常量/占位符拼装，值一律 ? 绑定
                 " WHERE approved_by IS NULL ORDER BY id"
             ).fetchall()
         return [dict(r) for r in rows]
@@ -137,7 +138,7 @@ class KnowledgeStore:
             return []
         with self._conn() as conn:
             rows = conn.execute(
-                f"SELECT {_FIELDS} FROM knowledge_entries"
+                f"SELECT {_FIELDS} FROM knowledge_entries"  # noqa: S608 — 片段为模块内常量/占位符拼装，值一律 ? 绑定
                 " WHERE id IN (SELECT rowid FROM knowledge_fts WHERE knowledge_fts MATCH ?)"
                 " ORDER BY id LIMIT ?",
                 (match, limit),

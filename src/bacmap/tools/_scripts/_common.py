@@ -31,7 +31,7 @@ def _available_ram_gb() -> float:
 
 
 def _md5_file(path: Path) -> str:
-    h = hashlib.md5()
+    h = hashlib.md5()  # noqa: S324 — 非密码学用途（遗留脚本内容指纹）
     with path.open("rb") as f:
         for chunk in iter(lambda: f.read(8192 * 1024), b""):
             h.update(chunk)

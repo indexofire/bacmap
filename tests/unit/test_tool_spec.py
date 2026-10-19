@@ -59,8 +59,14 @@ class TestRegistryAccessors:
         from bacmap.tools import registry
         from bacmap.tools.spec import Effect
 
+        # v1.4.29：bio_generate_report 修正为 WRITE（报告落盘，冻结规则 5）。
         names = {s.name for s in registry.by_effect(Effect.WRITE)}
-        assert names == {"bio_analyze_pathogen", "bio_add_metadata", "bio_add_lab_result"}
+        assert names == {
+            "bio_analyze_pathogen",
+            "bio_add_metadata",
+            "bio_add_lab_result",
+            "bio_generate_report",
+        }
 
     def test_by_trust_layer_l1_non_empty(self):
         from bacmap.tools import registry
@@ -75,7 +81,8 @@ class TestRegistrySelfCheck:
     def test_missing_meta_raises(self, monkeypatch):
         from bacmap.tools import registry
 
-        entries = registry._TOOL_REGISTRY + [
+        entries = [
+        *registry._TOOL_REGISTRY,
             ("bio_ghost", {"name": "bio_ghost", "description": "x"}, lambda a, **k: "{}")
         ]
         monkeypatch.setattr(registry, "_TOOL_REGISTRY", entries)

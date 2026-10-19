@@ -223,9 +223,8 @@ class TestGenomeObjectServiceCRUD:
             assert read_back.payload["strain_id"] == "SH2024-001"
 
     def test_read_nonexistent_raises(self, tmp_db_path, fixed_object_id):
-        with GenomeObjectService(tmp_db_path) as svc:
-            with pytest.raises(GOMNotFoundError):
-                svc.read("nonexistent-id", version=1)
+        with GenomeObjectService(tmp_db_path) as svc, pytest.raises(GOMNotFoundError):
+            svc.read("nonexistent-id", version=1)
 
     def test_read_nonexistent_version_raises(self, tmp_db_path, sample_sample_object):
         with GenomeObjectService(tmp_db_path) as svc:
@@ -323,9 +322,8 @@ class TestVersioning:
             assert [v.version for v in versions] == [1, 2, 3]
 
     def test_create_new_version_nonexistent_raises(self, tmp_db_path, fixed_object_id):
-        with GenomeObjectService(tmp_db_path) as svc:
-            with pytest.raises(GOMNotFoundError):
-                svc.create_new_version("nonexistent-id", payload={})
+        with GenomeObjectService(tmp_db_path) as svc, pytest.raises(GOMNotFoundError):
+            svc.create_new_version("nonexistent-id", payload={})
 
     def test_delete_always_rejected(self, tmp_db_path, sample_sample_object):
         with GenomeObjectService(tmp_db_path) as svc:
@@ -425,9 +423,8 @@ class TestFileArtifacts:
         import hashlib
 
         sha = hashlib.sha256(f.read_bytes()).hexdigest()
-        with GenomeObjectService(tmp_db_path) as svc:
-            with pytest.raises(GOMNotFoundError):
-                svc.register_file_artifact(fixed_object_id, 1, "text", f, sha, 1)
+        with GenomeObjectService(tmp_db_path) as svc, pytest.raises(GOMNotFoundError):
+            svc.register_file_artifact(fixed_object_id, 1, "text", f, sha, 1)
 
 
 class TestEventsLog:
@@ -542,3 +539,30 @@ class TestSearchFtsAlignment:
         with GenomeObjectService(tmp_db_path) as gos:
             gos.create(sample_sample_object)
             assert gos.search("   ") == []
+
+    def test_close_is_idempotent_and_methods_fail_clearly(self, tmp_db_path):
+        """close 后再调用方法应给出可定位的 ProgrammingError（而非裸 AttributeError），
+        且重复 close 是安全 no-op。"""
+        import sqlite3
+
+        gos = GenomeObjectService(tmp_db_path)
+        gos.close()
+        gos.close()  # 幂等：不抛
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            gos.list_by_type(ObjectType.ANALYSIS)
+
+    def test_rejects_reserved_gom_prefix_keys(self, sample_sample_object):
+        """__gom_* 是服务层注入保留前缀：用户 payload 携带同名键会被写入覆盖/
+        读出剥离（静默数据损坏），必须在模型边界拒绝（v1.4.29）。"""
+        bad = dict(sample_sample_object.payload)
+        bad["__gom_pipeline_version"] = "forged"
+        with pytest.raises(GOMValidationError, match="__gom_"):
+            GenomeObject(
+                object_id=sample_sample_object.object_id,
+                object_type=ObjectType.SAMPLE,
+                version=1,
+                schema_version="1.0.0",
+                created_at=datetime.now(UTC),
+                created_by="test",
+                payload=bad,
+            )

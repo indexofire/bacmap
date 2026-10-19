@@ -21,7 +21,7 @@
 | bio_diagnose | read | 从 Snakemake 日志或 stderr 诊断流水线失败 |
 | bio_fastq_qc | compute | FASTQ 质量控制，输出精简 JSON 报告 |
 | bio_gene_scan | compute | 扫描 contigs，检测耐药、毒力、血清型或质粒基因 |
-| bio_generate_report | compute | 生成含结果与证据链的 HTML 报告 |
+| bio_generate_report | write | 生成含结果与证据链的 HTML 报告 |
 | bio_get_result | read | 获取已完成样本的分析摘要 |
 | bio_inspect_dataset | read | 列出或查看已登记的可沙箱访问数据集 |
 | bio_list_reference_genomes | read | 列出参考基因组及其供给状态 |
@@ -172,9 +172,9 @@ FASTQ 文件质量控制：逐碱基质量统计、接头污染检查、重复�
 
 ### bio_generate_report
 
-版本 `v0.1.0` | effect: `compute` | 信任层: `L1`
+版本 `v0.1.0` | effect: `write` | 信任层: `L1`
 
-生成包含全部结果、校验器输出与证据链的 HTML 报告。返回文件路径。报告已随 analyze 任务自动生成，本工具用于按需重新生成。
+生成包含全部结果、校验器输出与证据链的 HTML 报告。返回文件路径。报告已随 analyze 任务自动生成，本工具用于按需重新生成。注意：effect 为 `write`（工具会向 `results/` 写入 HTML/PDF 文件），故**不经 MCP 暴露**——按需重新生成请走 CLI/TUI/Web 任务页（冻结规则 5：MCP 只暴露 read/compute 工具）。
 
 **参数**
 

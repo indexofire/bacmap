@@ -48,7 +48,7 @@ def overview_data(engine: DbosTaskEngine) -> dict[str, Any]:
         sandbox += " · 直通通道已开启"
     try:
         counts = engine.count_states()
-    except Exception:  # noqa: BLE001 —— 概览为只读展示，统计失败降级为空
+    except Exception:
         counts = {}
     return {
         "endpoints": endpoints,

@@ -191,7 +191,7 @@ class TestCgmlstTracebackRegistration:
     def test_bio_cgmlst_tuple_in_registry(self):
         matches = [t for t in _TOOL_REGISTRY if t[0] == "bio_cgmlst"]
         assert len(matches) == 1, "bio_cgmlst should appear exactly once"
-        name, schema, handler = matches[0]
+        _, schema, handler = matches[0]
         assert schema["name"] == "bio_cgmlst"
         assert callable(handler)
         assert handler is tools_services.cgmlst_traceback

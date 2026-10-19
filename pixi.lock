@@ -1533,7 +1533,7 @@ packages:
 - pypi: ./
   name: bacmap
   version: 0.1.0
-  sha256: 3799fcdc0079a59425a8b104697c8a2119d7bc7f6ec4f3963f980833c0b5697c
+  sha256: 0686135e39942806cb8f665566c13f8e09da0b797edcda01010ce61cfede0625
   requires_dist:
   - biopython>=1.83
   - pydantic>=2.0

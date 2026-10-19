@@ -152,7 +152,7 @@ class TestGoldenMigration:
         from bacmap.core.pathogen_registry import load_registry
 
         # 每个新组的参考文件名应与 accession 清单一致（防止空组）
-        for name, info in load_registry().snp_groups().items():
+        for _name, info in load_registry().snp_groups().items():
             assert info["ref"].endswith(".fasta")
 
     def test_plan_flags(self):

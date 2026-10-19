@@ -105,7 +105,7 @@ class BwaReadMapper:
         cmd = [bwa, "mem", "-t", str(threads)]
         if extra:
             cmd += extra.split()
-        cmd += [reference] + reads
+        cmd += [reference, *reads]
 
         _run_align_and_sort(cmd, out_bam, threads, "bwa mem")
 
@@ -138,7 +138,7 @@ class Minimap2ReadMapper:
         cmd = [mm2, "-ax", preset, "--secondary=no", "-Y", "-t", str(threads)]
         if extra:
             cmd += extra.split()
-        cmd += [reference] + reads
+        cmd += [reference, *reads]
 
         _run_align_and_sort(cmd, out_bam, threads, "minimap2")
 

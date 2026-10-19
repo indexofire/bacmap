@@ -78,7 +78,7 @@ class TestReportValidationAndErrors:
 
 class TestWorkflowDirBase:
     def test_scripts_common_uses_config_dir(self):
-        import _common as scripts_common  # noqa: N812
+        import _common as scripts_common
 
         from bacmap import config
 

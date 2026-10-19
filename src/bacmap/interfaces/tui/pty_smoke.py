@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fcntl
 import os
 import pty
@@ -112,10 +113,8 @@ def run(home: str, timeout: float = 60.0, rows: int = 45, cols: int = 140) -> in
     finally:
         if not exited:
             os.kill(pid, signal.SIGTERM)
-            try:
+            with contextlib.suppress(ChildProcessError):
                 os.waitpid(pid, 0)
-            except ChildProcessError:
-                pass
         os.close(fd)
 
     frame = _render(bytes(captured))

@@ -96,9 +96,11 @@ def _run_web(args: argparse.Namespace) -> None:
     import uvicorn
 
     from bacmap.interfaces.web.app import create_app
+    from bacmap.interfaces.web.auth import require_auth_when_exposed
 
     token = os.environ.get(args.token_env, "")
     _warn_if_exposed(args.host)
+    require_auth_when_exposed(args.host, token or None)
     engine = _engine(args.home)
     mode = (os.environ.get("BACMAP_WEB_AUTH") or "bearer").strip().lower()
     if not token:
@@ -332,7 +334,8 @@ def _present_and_execute(args: argparse.Namespace, engine: Any, reply: Any) -> N
     if not args.yes and not Confirm.ask("确认提交该计划？", default=False, console=c):
         c.print("已取消。")
         return
-    results = execute_plan(engine, plan, submitted_by=args.by)
+    # confirmed=True：交互确认或 --yes 显式跳过（脚本化场景的用户断言）。
+    results = execute_plan(engine, plan, submitted_by=args.by, confirmed=True)
     for r in results:
         mark = "✓" if r["ok"] else "✗"
         c.print(f"{mark} {_safe(r['task_type'])}: {_safe(r.get('task_id') or r.get('error'))}")

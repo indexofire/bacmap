@@ -348,7 +348,7 @@ class TestLoadThresholdsFromConfig:
         assert load_thresholds_from_config(CONFIG, "SALMONELLA").outbreak_allele_dist == 10
 
     def test_unknown_species_raises(self):
-        with pytest.raises(ValueError, match="no cgmlst.thresholds"):
+        with pytest.raises(ValueError, match=r"no cgmlst.thresholds"):
             load_thresholds_from_config(CONFIG, "Listeria")
 
     def test_missing_config_file_raises(self, tmp_path):
@@ -369,7 +369,7 @@ class TestLoadThresholdsFromConfig:
     def test_missing_threshold_block_raises(self, tmp_path):
         bare = tmp_path / "bare.yaml"
         bare.write_text("threads: 8\n")
-        with pytest.raises(ValueError, match="no cgmlst.thresholds"):
+        with pytest.raises(ValueError, match=r"no cgmlst.thresholds"):
             load_thresholds_from_config(bare, "Salmonella")
 
     def test_round_trip_with_project_sample_vpara(self, refs):

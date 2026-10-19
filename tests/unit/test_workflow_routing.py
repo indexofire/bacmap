@@ -79,5 +79,5 @@ class TestReportInputsGating:
 
     def test_common_inputs_always_present(self):
         files = report_inputs("S1", "DEC", "/w")
-        assert _COMMON <= set(files)
+        assert set(files) >= _COMMON
         assert files["gapit_typing"] == "/w/S1/gapit/typing.json"

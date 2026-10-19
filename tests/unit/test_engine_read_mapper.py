@@ -12,6 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 from subprocess import CompletedProcess
+from typing import ClassVar
 from unittest.mock import patch
 
 import pytest
@@ -39,7 +40,7 @@ class _FakePopen:
 
     rc = 0
     err_text = ""
-    instances: list[_FakePopen] = []
+    instances: ClassVar[list[_FakePopen]] = []
 
     def __init__(self, cmd, stdout=None, stderr=None, **kwargs):
         self.cmd = cmd
@@ -106,9 +107,8 @@ class TestEnsureBwaIndex:
     def test_raises_when_bwa_missing(self, tmp_path):
         ref = tmp_path / "ref.fasta"
         ref.write_text(">r\nACGT\n")
-        with patch("bacmap.core.engine.read_mapper.which", return_value=None):
-            with pytest.raises(RuntimeError, match="bwa not found"):
-                _ensure_bwa_index(str(ref))
+        with patch("bacmap.core.engine.read_mapper.which", return_value=None), pytest.raises(RuntimeError, match="bwa not found"):
+            _ensure_bwa_index(str(ref))
 
 
 # ===========================================================================
@@ -173,27 +173,24 @@ class TestRunAlignAndSort:
         assert "index" in index_cmd
 
     def test_raises_when_samtools_missing(self, tmp_path):
-        with patch("bacmap.core.engine.read_mapper.which", return_value=None):
-            with pytest.raises(RuntimeError, match="samtools not found"):
-                _run_align_and_sort(
-                    ["x"], str(tmp_path / "out.bam"), threads=2, aligner_name="bwa mem"
-                )
+        with patch("bacmap.core.engine.read_mapper.which", return_value=None), pytest.raises(RuntimeError, match="samtools not found"):
+            _run_align_and_sort(
+                ["x"], str(tmp_path / "out.bam"), threads=2, aligner_name="bwa mem"
+            )
 
     def test_raises_on_sort_failure(self, tmp_path):
         w, run, popen = _patch_aligner(run=_proc(stderr="bad sort", returncode=1))
-        with w, run, popen:
-            with pytest.raises(RuntimeError, match="samtools sort failed"):
-                _run_align_and_sort(
-                    ["x"], str(tmp_path / "out.bam"), threads=2, aligner_name="bwa mem"
-                )
+        with w, run, popen, pytest.raises(RuntimeError, match="samtools sort failed"):
+            _run_align_and_sort(
+                ["x"], str(tmp_path / "out.bam"), threads=2, aligner_name="bwa mem"
+            )
 
     def test_raises_on_aligner_failure_with_stderr(self, tmp_path):
         w, run, popen = _patch_aligner(popen_rc=1, popen_err="mem fail")
-        with w, run, popen:
-            with pytest.raises(RuntimeError, match=r"bwa mem failed \(exit 1\): mem fail"):
-                _run_align_and_sort(
-                    ["x"], str(tmp_path / "out.bam"), threads=2, aligner_name="bwa mem"
-                )
+        with w, run, popen, pytest.raises(RuntimeError, match=r"bwa mem failed \(exit 1\): mem fail"):
+            _run_align_and_sort(
+                ["x"], str(tmp_path / "out.bam"), threads=2, aligner_name="bwa mem"
+            )
 
 
 # ===========================================================================
@@ -283,9 +280,8 @@ class TestBwaReadMapper:
         r1.write_text("@r\nACGT\n+\n!!!!\n")
         out_bam = tmp_path / "out.bam"
         w, run, popen = _patch_aligner(popen_rc=1, popen_err="mem fail")
-        with w, run, popen:
-            with pytest.raises(RuntimeError, match="bwa mem failed"):
-                BwaReadMapper().map([str(r1)], str(ref), str(out_bam))
+        with w, run, popen, pytest.raises(RuntimeError, match="bwa mem failed"):
+            BwaReadMapper().map([str(r1)], str(ref), str(out_bam))
 
 
 # ===========================================================================
@@ -334,9 +330,8 @@ class TestMinimap2ReadMapper:
         r1.write_text("@r\nACGT\n+\n!!!!\n")
         out_bam = tmp_path / "out.bam"
         w, run, popen = _patch_aligner(popen_rc=1, popen_err="mm2 fail")
-        with w, run, popen:
-            with pytest.raises(RuntimeError, match="minimap2 failed"):
-                Minimap2ReadMapper().map([str(r1)], str(ref), str(out_bam))
+        with w, run, popen, pytest.raises(RuntimeError, match="minimap2 failed"):
+            Minimap2ReadMapper().map([str(r1)], str(ref), str(out_bam))
 
 
 # ===========================================================================

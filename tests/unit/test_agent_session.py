@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json as _json
 
+import pytest
+
 from bacmap.agent.llm.endpoints import LlmConfig, LlmEndpoint
 from bacmap.agent.llm.gateway import LlmGateway
 from bacmap.agent.session import (
@@ -15,7 +17,7 @@ from bacmap.agent.session import (
     PlannedTask,
     build_read_tools,
 )
-from bacmap.interfaces.assistant import execute_plan, format_plan
+from bacmap.interfaces.assistant import PlanNotConfirmedError, execute_plan, format_plan
 
 
 class _Result:
@@ -34,7 +36,7 @@ class _FakeToolAgent:
 
     def run_sync(self, prompt, message_history=None):
         self.calls += 1
-        history = list(message_history or []) + [
+        history = [*(message_history or []),
             {"role": "user", "content": prompt},
             {"role": "assistant", "content": "done"},
         ]
@@ -116,7 +118,7 @@ class TestExecutePlan:
                 PlannedTask(task_type="curate", params={}),
             ],
         )
-        results = execute_plan(_Engine(), plan, submitted_by="test")
+        results = execute_plan(_Engine(), plan, submitted_by="test", confirmed=True)
         assert [r["ok"] for r in results] == [True, True]
         assert [s[0] for s in seen] == ["analyze", "curate"]
 
@@ -128,9 +130,35 @@ class TestExecutePlan:
         results = execute_plan(
             _Engine(),
             AnalysisPlan(reply="", tasks=[PlannedTask(task_type="analyze", params={})]),
+            confirmed=True,
         )
         assert results[0]["ok"] is False
         assert "invalid sample" in results[0]["error"]
+
+    def test_unconfirmed_plan_is_refused(self):
+        # requires_confirmation 的强制点：未经接口层确认的计划拒绝提交。
+        class _Engine:
+            def submit(self, task_type, params, submitted_by):  # pragma: no cover
+                raise AssertionError("must not be called")
+
+        with pytest.raises(PlanNotConfirmedError, match="human confirmation"):
+            execute_plan(_Engine(), AnalysisPlan(reply="", tasks=[PlannedTask(task_type="mine")]))
+
+    def test_confirmed_false_tasks_pass_without_confirmation(self):
+        # 计划内所有任务都声明不需要确认时，可直接提交（读侧快速路径）。
+        seen: list[str] = []
+
+        class _Engine:
+            def submit(self, task_type, params, submitted_by):
+                seen.append(str(task_type))
+                return "tid-1"
+
+        plan = AnalysisPlan(
+            reply="",
+            tasks=[PlannedTask(task_type="analyze", params={}, requires_confirmation=False)],
+        )
+        results = execute_plan(_Engine(), plan)
+        assert results[0]["ok"] is True and seen == ["analyze"]
 
     def test_format_plan(self):
         plan = AnalysisPlan(

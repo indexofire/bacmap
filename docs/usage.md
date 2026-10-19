@@ -130,9 +130,10 @@ Run `bacmap web`, then open `http://127.0.0.1:8800` in a browser:
 ### Remote access: SSH tunnel (the recommended way)
 
 `bacmap web` binds to `127.0.0.1` only by default (ADR-16). If you need to reach it from
-another computer, do **not** expose it bare with `--host 0.0.0.0` (the UI has no
-authentication, so anyone on the LAN could submit or approve tasks). Use an SSH tunnel
-instead: SSH carries all of the encryption and authentication, and bacmap needs zero changes:
+another computer, do **not** expose it bare with `--host 0.0.0.0`: without `BACMAP_WEB_TOKEN`
+set, bacmap **refuses to start on a non-loopback host** (fail-fast, aligned with MCP HTTP);
+with a token set it will start, but an SSH tunnel is still the recommended path.
+Use an SSH tunnel instead: SSH carries all of the encryption and authentication, and bacmap needs zero changes:
 
 > `BACMAP_WEB_TOKEN` (`--token-env`) adds authentication. In the default `bearer` mode it is
 > sent as an `Authorization` header, which **browsers cannot set** — the HTML console answers

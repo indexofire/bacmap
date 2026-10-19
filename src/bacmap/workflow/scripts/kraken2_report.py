@@ -50,7 +50,7 @@ def _bracken_rows(text: str) -> list[dict[str, str]]:
     for ln in lines[1:]:
         cols = ln.split("\t")
         if len(cols) == len(header):
-            rows.append(dict(zip(header, cols)))
+            rows.append(dict(zip(header, cols, strict=True)))  # 上面已判长度相等
     return rows
 
 

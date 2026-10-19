@@ -190,140 +190,165 @@ def _get_sequence(args: dict[str, Any]) -> tuple[str, str]:
     return "", f"Record '{rid}' not found in {path}."
 
 
+def _seq_reverse_complement(args: dict[str, Any]) -> str:
+    seq, err = _get_sequence(args)
+    if err:
+        return json.dumps({"error": err})
+    rc = seq.translate(_COMPLEMENT)[::-1]
+    return json.dumps({"input_length": len(seq), "reverse_complement": rc})
+
+
+def _seq_translate(args: dict[str, Any]) -> str:
+    seq, err = _get_sequence(args)
+    if err:
+        return json.dumps({"error": err})
+    if not _ensure_biopython():
+        return json.dumps({"error": "Biopython required for translation."})
+    from Bio.Seq import Seq
+
+    frame = args.get("frame", 0)
+    protein = str(Seq(seq[frame:]).translate())
+    return json.dumps(
+        {
+            "input_length": len(seq),
+            "frame": frame,
+            "protein": protein,
+            "protein_length": len(protein),
+        }
+    )
+
+
+def _seq_gc_content(args: dict[str, Any]) -> str:
+    seq, err = _get_sequence(args)
+    if err:
+        return json.dumps({"error": err})
+    gc = seq.count("G") + seq.count("C")
+    return json.dumps(
+        {
+            "length": len(seq),
+            "gc_count": gc,
+            "gc_content": round(gc / len(seq) * 100, 3) if seq else 0,
+        }
+    )
+
+
+def _seq_gc_skew(args: dict[str, Any]) -> str:
+    seq, err = _get_sequence(args)
+    if err:
+        return json.dumps({"error": err})
+    window = args.get("window", 1000)
+    skew_vals = []
+    for i in range(0, len(seq), window):
+        chunk = seq[i : i + window]
+        g = chunk.count("G")
+        c = chunk.count("C")
+        skew = (g - c) / (g + c) if (g + c) else 0
+        skew_vals.append({"pos": i, "skew": round(skew, 4)})
+    return json.dumps({"window_size": window, "skew_profile": skew_vals})
+
+
+def _seq_motif_search(args: dict[str, Any]) -> str:
+    seq, err = _get_sequence(args)
+    if err:
+        return json.dumps({"error": err})
+    motif = args.get("motif", "").upper()
+    if not motif:
+        return json.dumps({"error": "Provide 'motif' (IUPAC pattern)."})
+    regex = "".join(_IUPAC.get(c, c) for c in motif)
+    matches = [(m.start(), m.end()) for m in re.finditer(regex, seq)]
+    return json.dumps(
+        {
+            "motif": motif,
+            "match_count": len(matches),
+            "positions": matches[:200],
+        }
+    )
+
+
+def _seq_find_orfs(args: dict[str, Any]) -> str:
+    seq, err = _get_sequence(args)
+    if err:
+        return json.dumps({"error": err})
+    min_len = args.get("min_orf_len", 30)
+    orfs = _find_orfs(seq, min_len)
+    return json.dumps(
+        {
+            "min_orf_length": min_len,
+            "orf_count": len(orfs),
+            "orfs": orfs[:100],
+        }
+    )
+
+
+# 常用限制性内切酶（识别位点）
+_RESTRICTION_ENZYMES = {
+    "EcoRI": "GAATTC",
+    "BamHI": "GGATCC",
+    "HindIII": "AAGCTT",
+    "XhoI": "CTCGAG",
+    "NotI": "GCGGCCGC",
+    "NheI": "GCTAGC",
+    "SacI": "GAGCTC",
+    "KpnI": "GGTACC",
+    "PstI": "CTGCAG",
+    "SmaI": "CCCGGG",
+    "SalI": "GTCGAC",
+}
+
+
+def _seq_restriction_sites(args: dict[str, Any]) -> str:
+    seq, err = _get_sequence(args)
+    if err:
+        return json.dumps({"error": err})
+    sites = {}
+    for name, site in _RESTRICTION_ENZYMES.items():
+        pos = [m.start() for m in re.finditer(site, seq)]
+        if pos:
+            sites[name] = {"sequence": site, "positions": pos[:50], "count": len(pos)}
+    return json.dumps({"restriction_sites": sites})
+
+
+def _seq_kmer_count(args: dict[str, Any]) -> str:
+    seq, err = _get_sequence(args)
+    if err:
+        return json.dumps({"error": err})
+    k = args.get("k", 3)
+    top = args.get("top", 20)
+    kmers = Counter(seq[i : i + k] for i in range(len(seq) - k + 1))
+    top_kmers = [
+        {"kmer": km, "count": cnt, "frequency": round(cnt / len(seq), 5)}
+        for km, cnt in kmers.most_common(top)
+    ]
+    out_file = args.get("output_file")
+    if out_file:
+        with open(out_file, "w") as f:
+            for km, cnt in kmers.most_common():
+                f.write(f"{km}\t{cnt}\n")
+    return json.dumps({"k": k, "unique_kmers": len(kmers), "top": top_kmers})
+
+
+# 操作分发表：新增操作在此注册，seq_ops 只做校验与分发。
+_SEQ_OPERATIONS = {
+    "reverse_complement": _seq_reverse_complement,
+    "translate": _seq_translate,
+    "gc_content": _seq_gc_content,
+    "gc_skew": _seq_gc_skew,
+    "motif_search": _seq_motif_search,
+    "find_orfs": _seq_find_orfs,
+    "restriction_sites": _seq_restriction_sites,
+    "kmer_count": _seq_kmer_count,
+}
+
+
 @tool_handler
 def seq_ops(args: dict[str, Any], **kwargs: Any) -> str:
     op = args.get("operation", "")
     if not op:
         return json.dumps({"error": "Specify 'operation'."})
-
-    if op == "reverse_complement":
-        seq, err = _get_sequence(args)
-        if err:
-            return json.dumps({"error": err})
-        rc = seq.translate(_COMPLEMENT)[::-1]
-        return json.dumps({"input_length": len(seq), "reverse_complement": rc})
-
-    if op == "translate":
-        seq, err = _get_sequence(args)
-        if err:
-            return json.dumps({"error": err})
-        if not _ensure_biopython():
-            return json.dumps({"error": "Biopython required for translation."})
-        from Bio.Seq import Seq
-
-        frame = args.get("frame", 0)
-        protein = str(Seq(seq[frame:]).translate())
-        return json.dumps(
-            {
-                "input_length": len(seq),
-                "frame": frame,
-                "protein": protein,
-                "protein_length": len(protein),
-            }
-        )
-
-    if op == "gc_content":
-        seq, err = _get_sequence(args)
-        if err:
-            return json.dumps({"error": err})
-        gc = seq.count("G") + seq.count("C")
-        return json.dumps(
-            {
-                "length": len(seq),
-                "gc_count": gc,
-                "gc_content": round(gc / len(seq) * 100, 3) if seq else 0,
-            }
-        )
-
-    if op == "gc_skew":
-        seq, err = _get_sequence(args)
-        if err:
-            return json.dumps({"error": err})
-        window = args.get("window", 1000)
-        skew_vals = []
-        for i in range(0, len(seq), window):
-            chunk = seq[i : i + window]
-            g = chunk.count("G")
-            c = chunk.count("C")
-            skew = (g - c) / (g + c) if (g + c) else 0
-            skew_vals.append({"pos": i, "skew": round(skew, 4)})
-        return json.dumps({"window_size": window, "skew_profile": skew_vals})
-
-    if op == "motif_search":
-        seq, err = _get_sequence(args)
-        if err:
-            return json.dumps({"error": err})
-        motif = args.get("motif", "").upper()
-        if not motif:
-            return json.dumps({"error": "Provide 'motif' (IUPAC pattern)."})
-        regex = "".join(_IUPAC.get(c, c) for c in motif)
-        matches = [(m.start(), m.end()) for m in re.finditer(regex, seq)]
-        return json.dumps(
-            {
-                "motif": motif,
-                "match_count": len(matches),
-                "positions": matches[:200],
-            }
-        )
-
-    if op == "find_orfs":
-        seq, err = _get_sequence(args)
-        if err:
-            return json.dumps({"error": err})
-        min_len = args.get("min_orf_len", 30)
-        orfs = _find_orfs(seq, min_len)
-        return json.dumps(
-            {
-                "min_orf_length": min_len,
-                "orf_count": len(orfs),
-                "orfs": orfs[:100],
-            }
-        )
-
-    if op == "restriction_sites":
-        seq, err = _get_sequence(args)
-        if err:
-            return json.dumps({"error": err})
-        # Common restriction enzymes
-        enzymes = {
-            "EcoRI": "GAATTC",
-            "BamHI": "GGATCC",
-            "HindIII": "AAGCTT",
-            "XhoI": "CTCGAG",
-            "NotI": "GCGGCCGC",
-            "NheI": "GCTAGC",
-            "SacI": "GAGCTC",
-            "KpnI": "GGTACC",
-            "PstI": "CTGCAG",
-            "SmaI": "CCCGGG",
-            "SalI": "GTCGAC",
-        }
-        sites = {}
-        for name, site in enzymes.items():
-            pos = [m.start() for m in re.finditer(site, seq)]
-            if pos:
-                sites[name] = {"sequence": site, "positions": pos[:50], "count": len(pos)}
-        return json.dumps({"restriction_sites": sites})
-
-    if op == "kmer_count":
-        seq, err = _get_sequence(args)
-        if err:
-            return json.dumps({"error": err})
-        k = args.get("k", 3)
-        top = args.get("top", 20)
-        kmers = Counter(seq[i : i + k] for i in range(len(seq) - k + 1))
-        top_kmers = [
-            {"kmer": km, "count": cnt, "frequency": round(cnt / len(seq), 5)}
-            for km, cnt in kmers.most_common(top)
-        ]
-        out_file = args.get("output_file")
-        if out_file:
-            with open(out_file, "w") as f:
-                for km, cnt in kmers.most_common():
-                    f.write(f"{km}\t{cnt}\n")
-        return json.dumps({"k": k, "unique_kmers": len(kmers), "top": top_kmers})
-
-    return json.dumps({"error": f"Unknown operation: {op}"})
+    handler = _SEQ_OPERATIONS.get(op)
+    if handler is None:
+        return json.dumps({"error": f"Unknown operation: {op}"})
+    return handler(args)
 
 
 def _find_orfs(seq: str, min_codons: int = 30) -> list[dict[str, Any]]:

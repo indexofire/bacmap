@@ -52,12 +52,12 @@ class TestKmaBackendParsing:
         assert product == "product text"
 
     def test_parse_template_2_fields(self):
-        gene, acc, product = KmaBackend._parse_template("db~~~gene1")
+        gene, acc, _product = KmaBackend._parse_template("db~~~gene1")
         assert gene == "gene1"
         assert acc == ""
 
     def test_parse_template_single(self):
-        gene, acc, product = KmaBackend._parse_template("just_a_name")
+        gene, _acc, _product = KmaBackend._parse_template("just_a_name")
         assert gene == "just_a_name"
 
 

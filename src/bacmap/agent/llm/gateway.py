@@ -247,7 +247,7 @@ class LlmGateway:
                 else:
                     result = agent.run_sync(prompt)
                 return result.output
-            except Exception as exc:  # noqa: BLE001 —— 校验/网络异常统一重试
+            except Exception as exc:
                 last_exc = exc
                 logger.warning(
                     "structured attempt %d/%d failed on %s: %s",
@@ -285,7 +285,7 @@ class LlmGateway:
                     with sem:
                         return agent.run_sync(prompt, message_history=message_history)
                 return agent.run_sync(prompt, message_history=message_history)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 last_exc = exc
                 logger.warning(
                     "agent attempt %d/%d failed on %s: %s",
@@ -325,7 +325,7 @@ class LlmGateway:
             try:
                 async with sem:
                     return await agent.run(prompt, message_history=message_history)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 last_exc = exc
                 logger.warning(
                     "agent(async) attempt %d/%d failed on %s: %s",
@@ -356,7 +356,7 @@ class LlmGateway:
                 async with sem:
                     result = await agent.run(prompt)
                 return result.output
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 last_exc = exc
                 logger.warning(
                     "structured(async) attempt %d/%d failed on %s: %s",

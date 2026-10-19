@@ -253,8 +253,8 @@ class TestAssistantPage:
         monkeypatch.setattr(
             A,
             "execute_plan",
-            lambda engine, plan, submitted_by="assistant": (
-                executed.append(plan),
+            lambda engine, plan, submitted_by="assistant", confirmed=False: (
+                executed.append((plan, confirmed)),
                 [{"task_type": "analyze", "task_id": "t1", "ok": True}],
             )[1],
         )
@@ -267,6 +267,8 @@ class TestAssistantPage:
         r2 = c.post("/assistant/execute", data={"sid": sid})
         assert "t1" in r2.text
         assert executed
+        # Web 确认按钮路径必须以 confirmed=True 调用（requires_confirmation 强制点）。
+        assert executed[0][1] is True
 
     def test_execute_without_plan_400(self, client):
         c, _ = client
@@ -357,6 +359,13 @@ class TestWebCookieAuth:
         assert c.post("/logout", data={"csrf": csrf}, follow_redirects=False).status_code == 303
         r = c.get("/", headers={"accept": "text/html"}, follow_redirects=False)
         assert r.status_code == 303
+
+    def test_logout_requires_csrf(self, engine, monkeypatch):
+        """登出也是状态变更 POST：跨站不得强制登出（错误的 csrf → 403）。"""
+        c = self._client(engine, monkeypatch)
+        c.post("/login", data={"token": "tok", "next": "/"})
+        r = c.post("/logout", data={"csrf": "wrong"}, follow_redirects=False)
+        assert r.status_code == 403
 
     def test_expired_session_rejected(self, engine, monkeypatch):
         import time

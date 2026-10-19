@@ -197,8 +197,8 @@ class TestTuiChat:
         monkeypatch.setattr(
             A,
             "execute_plan",
-            lambda engine, plan, submitted_by="assistant": (
-                submitted.append(plan),
+            lambda engine, plan, submitted_by="assistant", confirmed=False: (
+                submitted.append((plan, confirmed)),
                 [{"task_type": "analyze", "task_id": "t1", "ok": True}],
             )[1],
         )
@@ -548,7 +548,7 @@ class TestTuiHardening:
         )
         calls: list = []
 
-        def _exec(engine, plan, submitted_by="assistant"):
+        def _exec(engine, plan, submitted_by="assistant", confirmed=False):
             calls.append(plan)
             _time.sleep(0.3)  # 制造并发窗口：第二次 Ctrl+Y 应被忽略
             return [{"task_type": "analyze", "task_id": "t1", "ok": True}]

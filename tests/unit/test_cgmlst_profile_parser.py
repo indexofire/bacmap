@@ -146,7 +146,7 @@ class TestParseCgmlstProfileMultiRowContract:
 
     def test_three_rows_raises(self):
         tsv = "File\tScheme\tST\tlocusA\nS1\tsch\t-\t1\nS2\tsch\t-\t2\nS3\tsch\t-\t3\n"
-        with pytest.raises(ValueError, match="2 data rows|3 data rows"):
+        with pytest.raises(ValueError, match=r"2 data rows|3 data rows"):
             parse_cgmlst_profile(tsv)
 
 

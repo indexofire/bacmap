@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 # Ensure the bacmap package is importable under the pixi env.
-from bacmap.core.utils import parse_cgmlst_profiles  # noqa: E402
+from bacmap.core.utils import parse_cgmlst_profiles
 
 
 def _missing_rate(profiles_tsv: str) -> float:

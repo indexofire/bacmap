@@ -68,10 +68,30 @@ def endpoint_status(engine: DbosTaskEngine) -> str:
     return f"{endpoint.name} [{endpoint.location}] {endpoint.model} · {conn}"
 
 
+class PlanNotConfirmedError(ValueError):
+    """计划含需人工确认的任务，但调用方未断言已完成确认。"""
+
+
 def execute_plan(
-    engine: DbosTaskEngine, plan: AnalysisPlan, *, submitted_by: str = "assistant"
+    engine: DbosTaskEngine,
+    plan: AnalysisPlan,
+    *,
+    submitted_by: str = "assistant",
+    confirmed: bool = False,
 ) -> list[dict[str, Any]]:
-    """把已确认的计划逐条提交（analyze/curate/mine/write 走同一任务引擎与门）。"""
+    """把已确认的计划逐条提交（analyze/curate/mine/write 走同一任务引擎与门）。
+
+    ``confirmed`` 是"人工确认已发生"的事实断言，由接口层在取得用户确认后传入
+    （Web 确认按钮 / CLI ``Confirm.ask`` 或 ``--yes`` / TUI Ctrl+Y）。含
+    ``requires_confirmation`` 任务的计划在未确认时拒绝提交——这是
+    ``PlannedTask.requires_confirmation`` 的强制点，防止绕过确认 UI 直接执行
+    LLM 规划的写操作（写侧分级确认）。
+    """
+    if not confirmed and any(t.requires_confirmation for t in plan.tasks):
+        raise PlanNotConfirmedError(
+            "plan contains tasks that require human confirmation; "
+            "route it through a confirmation UI (web assistant / CLI ask / TUI chat) first"
+        )
     results: list[dict[str, Any]] = []
     for task in plan.tasks:
         results.append(_submit_one(engine, task, submitted_by))

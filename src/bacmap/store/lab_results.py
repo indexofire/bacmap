@@ -121,11 +121,12 @@ class LabResultService:
         cols = ", ".join(core_fields.keys())
         placeholders = ", ".join("?" for _ in core_fields)
         self._conn.execute(
-            f"INSERT INTO lab_results ({cols}) VALUES ({placeholders})",
+            f"INSERT INTO lab_results ({cols}) VALUES ({placeholders})",  # noqa: S608 — 片段为模块内常量/占位符拼装，值一律 ? 绑定
             list(core_fields.values()),
         )
         added = self.get_by_id(result_id)
-        assert added is not None
+        if added is None:  # pragma: no cover — 刚插入即读不回，库损坏
+            raise RuntimeError(f"lab result {result_id} vanished after insert")
         return added
 
     def add_batch(
@@ -191,7 +192,7 @@ class LabResultService:
                 params.extend(strain_ids)
 
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
-        sql = f"SELECT * FROM lab_results{where} ORDER BY created_at DESC LIMIT ?"
+        sql = f"SELECT * FROM lab_results{where} ORDER BY created_at DESC LIMIT ?"  # noqa: S608 — 片段为模块内常量/占位符拼装，值一律 ? 绑定
         params.append(limit)
         rows = self._conn.execute(sql, params).fetchall()
         return [self._row_to_result(r) for r in rows]

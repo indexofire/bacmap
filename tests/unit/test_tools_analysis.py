@@ -225,7 +225,7 @@ class TestVerifyResult:
         r = _parse(tools.verify_result({"sample_id": "SAM-LIS"}))
         assert r["passed"] is False
         assert r["failed_count"] >= 1
-        species = [c for c in r["checks"] if c["name"] == "species"][0]
+        species = next(c for c in r["checks"] if c["name"] == "species")
         assert species["passed"] is False
 
 

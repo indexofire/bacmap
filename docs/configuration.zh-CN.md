@@ -37,7 +37,7 @@ $BACMAP_HOME/
 | `BACMAP_RUNS_DB` | `$BACMAP_HOME/runs.sqlite` | 运行记录（ADR-18） |
 | `BACMAP_REFS_DIR` | `$BACMAP_HOME/refs` | 外部工具数据库（ADR-20）；`refs/manifest.json` 将登记写入运行记录 |
 | `BACMAP_ENV_LOCK` | `$BACMAP_HOME/pixi.lock` | 计入运行记录的环境锁（ADR-18） |
-| `BACMAP_MCP_TOKEN` / `BACMAP_WEB_TOKEN` | 无 | MCP HTTP 传输 / Web 鉴权的 Bearer token（ADR-12/14）。默认 `bearer` 模式以 `Authorization: Bearer` 头发送——**浏览器无法设置该头**，故 HTML 控制台返回 401（请用 SSH 隧道）；`cookie` 模式下浏览器改为在 `/login` 登录。 |
+| `BACMAP_MCP_TOKEN` / `BACMAP_WEB_TOKEN` | 无 | MCP HTTP 传输 / Web 鉴权的 Bearer token（ADR-12/14）。默认 `bearer` 模式以 `Authorization: Bearer` 头发送——**浏览器无法设置该头**，故 HTML 控制台返回 401（请用 SSH 隧道）；`cookie` 模式下浏览器改为在 `/login` 登录。非回环 `--host` 且未设 token 时**拒绝启动**（fail-fast）。 |
 | `BACMAP_WEB_AUTH` | `bearer` | Web 鉴权模式：`bearer`（仅头，API 客户端）或 `cookie`（浏览器 `/login` → 签名会话 cookie + CSRF） |
 | `BACMAP_WEB_SECRET` | 由 token 派生 | 会话 cookie 的 HMAC 签名密钥（cookie 模式）；显式设置可与 token 轮换解耦 |
 | `BACMAP_WEB_COOKIE_SECURE` | 关 | 置 `1` 给鉴权 cookie 加 `Secure`（TLS 部署） |

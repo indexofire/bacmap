@@ -40,18 +40,54 @@ target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP"]
+# E/F/W 基础 + I 导入排序 + UP 现代化 + B bugbear + C90 复杂度 + SIM 简化
+# + RUF ruff 专属 + S 安全（bandit；安全敏感项目应启用）。
+select = ["E", "F", "W", "I", "UP", "B", "C90", "SIM", "RUF", "S"]
+# RUF001/002/003：中文文档/字符串中的全角标点与中文引号是本项目常态（双语制）。
+# S603/S607：包装外部生信 CLI（ADR-20）是核心模式，参数不含用户数据；
+#   partial path 经 PATH 解析为有意行为（工具由 pixi 环境固定）。
+ignore = ["RUF001", "RUF002", "RUF003", "S603", "S607"]
 
 [tool.ruff.lint.per-file-ignores]
 # 遗留迁移脚本（HTML/CSS 模板行超长，源仓库 scripts/ 同样不参与 lint）
-"src/bacmap/tools/_scripts/*" = ["E501"]
+"src/bacmap/tools/_scripts/*" = ["E501", "C901"]
 # Snakemake script: 上下文注入 snakemake 全局对象（F821 误报）；迁移遗留长行
-"src/bacmap/workflow/scripts/*" = ["E501", "F821", "F841"]
+"src/bacmap/workflow/scripts/*" = ["E501", "F821", "F841", "C901"]
+# 测试：断言即语言（S101）；样例数据/monkeypatch 面大
+"tests/*" = [
+    "S101", "S105", "S106", "S108", "S110", "S311", "S603", "S607",
+    "B011", "B017", "E501",
+]
+# PTY 冒烟脚本：非交互面（S606 无 shell 启动进程为冒烟目的本身）
+"src/bacmap/interfaces/tui/pty_smoke.py" = ["S606", "C901"]
+
+[tool.ruff.lint.mccabe]
+# 复杂度上限：v1.4.28 重构后全仓无超线函数（原 create_app/samtools_op/seq_ops/
+# _extract_genotype 四个热点已拆解）；新代码不得超线。
+max-complexity = 15
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q"
+
+# 覆盖率：基线门槛只升不降（规则 7 精神的度量面）。
+# 忽略 Snakemake 运行时契约脚本与遗留迁移脚本（它们经真实管线冒烟覆盖）。
+[tool.coverage.run]
+source = ["bacmap"]
+omit = [
+    "*/workflow/scripts/*",
+    "*/tools/_scripts/*",
+]
+
+[tool.coverage.report]
+# 门槛只升不降：2026-10 首次全量测量 87%，取 85 起步（留环境抖动余量）。
+fail_under = 85
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "pragma: no cover",
+]
 
 [tool.mypy]
 python_version = "3.12"
@@ -59,6 +95,12 @@ ignore_missing_imports = true
 warn_unused_ignores = true
 # Snakemake 脚本注入全局 snakemake 对象，非普通模块；由运行时契约保证。
 exclude = ['^src/bacmap/workflow/scripts/']
+
+# 领域层（core/store）函数签名必须完整标注——信任边界的 pydantic 模型
+# 与 SQLite 访问都集中在这两层（ADR-02 下层）。上层逐步跟进。
+[[tool.mypy.overrides]]
+module = ["bacmap.core.*", "bacmap.store.*"]
+disallow_untyped_defs = true
 
 # ADR-02：依赖方向契约。core/store/tools 不得导入 agent/tasks/interfaces/workflow。
 [tool.importlinter]

@@ -1,5 +1,7 @@
 """Analysis algorithms: gene scanning, species ID, taxonomy, annotation, verification."""
 
+from typing import Any
+
 from .failure_diagnostics import Diagnosis, diagnose, diagnose_from_log
 from .gene_identity import normalize_amr
 from .species_canon import (
@@ -12,6 +14,10 @@ from .species_canon import (
 )
 
 __all__ = [
+    "ECOLI",
+    "SALMONELLA",
+    "SHIGELLA",
+    "VPARA",
     "AnnotationResult",
     "AtomicClaim",
     "CheckResult",
@@ -19,17 +25,13 @@ __all__ = [
     "ClaimVerdict",
     "DeterministicVerifier",
     "Diagnosis",
-    "ECOLI",
     "Feature",
     "ReflectionResult",
-    "SALMONELLA",
-    "SHIGELLA",
     "SpeciesIdResult",
     "StrainFacts",
     "TaxonomyResult",
-    "VerificationResult",
     "Verdict",
-    "VPARA",
+    "VerificationResult",
     "annotate",
     "canonical_from_verdict",
     "collapse_binomial",
@@ -60,7 +62,7 @@ _VERIFY_LAZY: dict[str, tuple[str, str]] = {
 }
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     import importlib
 
     if name in _VERIFY_LAZY:

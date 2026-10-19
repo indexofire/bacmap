@@ -209,6 +209,39 @@ class TestFastqResolution:
         assert len(got) == 2
 
 
+class TestMapWorkflowOutcome:
+    """DBOS 工作流原始状态 → 任务终态映射（纯函数，status() 的可单测核心）。"""
+
+    def test_unfinished_returns_none(self):
+        assert eng._map_workflow_outcome("PENDING", {}, None) is None
+        assert eng._map_workflow_outcome("RUNNING", {}, None) is None
+
+    def test_success_maps_result_status_and_message(self):
+        state, msg = eng._map_workflow_outcome(
+            "SUCCESS", {"status": "AWAITING_APPROVAL", "message": "gate pending"}, None
+        )
+        assert state is TaskState.AWAITING_APPROVAL
+        assert msg == "gate pending"
+
+    def test_success_without_message_falls_back_to_gates_json(self):
+        state, msg = eng._map_workflow_outcome(
+            "SUCCESS", {"gates": {"S1": {"verdict": "pass"}}}, None
+        )
+        assert state is TaskState.SUCCEEDED
+        assert "pass" in msg
+
+    def test_cancelled_keeps_stored_message(self):
+        state, msg = eng._map_workflow_outcome("CANCELLED", {}, "original")
+        assert state is TaskState.CANCELLED
+        assert msg is None  # None → SQL COALESCE 保持库中原值
+
+    def test_error_uses_fallback_then_status_hint(self):
+        state, msg = eng._map_workflow_outcome("ERROR", {}, None)
+        assert (state, msg) == (TaskState.FAILED, "workflow ERROR")
+        _state, msg2 = eng._map_workflow_outcome("ERROR", {}, "kept")
+        assert msg2 == "kept"
+
+
 class TestEngineStateMachineHardening:
     """深度审计循环 4：approve 状态守卫（防 V11③ 引擎层绕过）/ analyze REJECT 不得静默
     SUCCEEDED / status 条件更新（防 approve 后被降级回 awaiting）。"""

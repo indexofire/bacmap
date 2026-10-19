@@ -21,7 +21,7 @@ Trust layers mark how much autonomy the calling layer has: L1 is the fixed pipel
 | bio_diagnose | read | Diagnose pipeline failures from Snakemake logs or stderr |
 | bio_fastq_qc | compute | Quality control for FASTQ files with a compact JSON report |
 | bio_gene_scan | compute | Scan contigs for AMR, virulence, serotype, or plasmid genes |
-| bio_generate_report | compute | Generate an HTML report with results and evidence chain |
+| bio_generate_report | write | Generate an HTML report with results and evidence chain |
 | bio_get_result | read | Retrieve the analysis summary for a completed sample |
 | bio_inspect_dataset | read | List or inspect datasets registered for sandbox access |
 | bio_list_reference_genomes | read | List reference genomes and their provisioning status |
@@ -172,9 +172,9 @@ Scan assembled contigs against a gene database (card/vfdb/ecoh/plasmidfinder/res
 
 ### bio_generate_report
 
-Version `v0.1.0` | Effect: `compute` | Trust layer: `L1`
+Version `v0.1.0` | Effect: `write` | Trust layer: `L1`
 
-Generate HTML report with all results, verifier output, and evidence chain. Returns file path. Reports are already generated automatically at the end of every analyze task; use this tool to regenerate on demand.
+Generate HTML report with all results, verifier output, and evidence chain. Returns file path. Reports are already generated automatically at the end of every analyze task; use this tool to regenerate on demand. Note: the effect is `write` (the tool writes an HTML/PDF file under `results/`), so it is **not exposed over MCP** — regenerate via the CLI/TUI/Web task pages instead (frozen rule 5: MCP only exposes read/compute tools).
 
 **Parameters**
 

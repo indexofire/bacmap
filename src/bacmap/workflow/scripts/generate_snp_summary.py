@@ -43,7 +43,7 @@ def pairwise_distances(seqs: dict[str, str]) -> dict[str, int]:
             s1, s2 = seqs[names[i]], seqs[names[j]]
             d = 0
             compared = 0
-            for a, b in zip(s1, s2):
+            for a, b in zip(s1, s2, strict=False):
                 if a != "N" and b != "N":
                     compared += 1
                     if a != b:

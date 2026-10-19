@@ -171,9 +171,12 @@ def build_sandbox_tool(workspace_root: Path) -> Any:
 _SHELL_DESCRIPTION = (
     "在沙箱内执行一条 shell 命令（无网络），用于在已挂载的数据上运行标准工具"
     "（ls/cat/grep/zcat/samtools/bcftools/seqkit/python 等）。"
-    "命令必须在只读/分析白名单内,否则会被拒绝——需要更高自由度时改为规划 mine 任务"
-    "（经挖掘门 + 人工签字）。要访问用户给定的外部数据,先在 datasets 传已登记的 dataset_id。"
-    "不做任何宿主操作:只在容器内、只读挂载点、工作区可写。"
+    "命令的每个管道/命令段（含换行分隔）的命令词都必须命中只读/分析白名单，"
+    "且不得含命令替换/反引号/-exec 等隐藏执行语法，否则会被拒绝——"
+    "需要更高自由度时改为规划 mine 任务（经挖掘门 + 人工签字）。"
+    "要访问用户给定的外部数据,先在 datasets 传已登记的 dataset_id。"
+    "注意：白名单是**意图分类**而非安全边界（python 等图灵完备命令天然可做任意计算）；"
+    "真正的边界是容器后端的 --network none 与只读挂载——直通模式仅限受控开发环境。"
 )
 
 _SHELL_SCHEMA = {
@@ -203,13 +206,16 @@ _SHELL_ALLOWLIST = frozenset(
     }
 )
 
-# 禁用模式（纵深防御：容器内本就无网络，主要防直通模式与误操作）
+# 禁用模式（纵深防御：容器内本就无网络，主要防直通模式与误操作）。
+# 结构性隐藏执行语法（命令替换/反引号/进程替换/-exec/awk-python 的 system()）
+# 一律硬拒：它们能让白名单外的命令词绕过首词检查（v1.4.13 巡检后收紧）。
 _SHELL_DENY_PATTERNS = (
     r"\bpodman\b", r"\bdocker\b", r"\bapptainer\b", r"\bsingularity\b", r"\bnsenter\b",
     r"\bmount\b", r"\bumount\b", r"\bsudo\b", r"\bsu\b", r"\bchown\b",
     r"\bcurl\b", r"\bwget\b", r"\bssh\b", r"\bscp\b", r"\brsync\b",
     r"\bdd\b", r"\bmkfs\b", r"\bshutdown\b", r"\breboot\b", r"\bkill\b",
     r"/proc/1\b", r"/dev/(sd|nvme|disk)", r":\(\)\s*\{",
+    r"\$\(", r"`", r"<\(", r"\s-exec(?:dir)?\s", r"\bsystem\s*\(",
 )
 _SHELL_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
@@ -217,8 +223,10 @@ _SHELL_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 def classify_shell(command: str) -> str:
     """命令风险分类：``deny`` | ``allow`` | ``confirm``。
 
-    拒绝：命中禁用模式。
-    放行：每个 ``|``/``;``/``&&`` 段的命令词都在白名单内（允许前置 ``VAR=`` 与重定向）。
+    拒绝：命中禁用模式（含命令替换/反引号/-exec 等隐藏执行语法）。
+    放行：每个 ``|``/``;``/``&``/**换行** 段的命令词都在白名单内（允许前置
+    ``VAR=`` 与重定向）——换行与管道一样是命令段边界，不检查即存在
+    "首段白名单、后续段任意命令"的绕过。
     其余：需要确认——接口层据此引导改用 ``mine`` 任务（过挖掘门+签字）。
     """
     text = command.strip()
@@ -228,7 +236,7 @@ def classify_shell(command: str) -> str:
     for pattern in _SHELL_DENY_PATTERNS:
         if re.search(pattern, low):
             return "deny"
-    for segment in re.split(r"[|;&]+", text):
+    for segment in re.split(r"[|;&\n]+", text):
         tokens = segment.strip().split()
         while tokens and _SHELL_ASSIGN_RE.match(tokens[0]):
             tokens = tokens[1:]

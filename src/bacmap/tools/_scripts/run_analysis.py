@@ -237,7 +237,7 @@ def main() -> int:
 
         if status["done"]:
             print(f"\n  ✅ 完成 ({len(status['done'])} 株):")
-            for s, steps in status["done"].items():
+            for s, _steps in status["done"].items():
                 print(f"     {s}")
         if status["in_progress"]:
             print(f"\n  🔄 进行中 ({len(status['in_progress'])} 株):")

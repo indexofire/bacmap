@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import hmac
+import logging
 import os
 import secrets
 import time
@@ -22,10 +23,30 @@ from urllib.parse import quote, urlparse
 
 from starlette.requests import Request
 
+_logger = logging.getLogger(__name__)
+
 SESSION_COOKIE = "bacmap_session"
 CSRF_COOKIE = "bacmap_csrf"
 SESSION_TTL_S = 12 * 3600
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+# 回环绑定（文档化的免鉴权单机形态；ADR-16 默认只绑本机）
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"})
+
+
+def require_auth_when_exposed(host: str, token: str | None, *, prog: str = "bacmap web") -> None:
+    """非回环绑定且未配置 token 时拒绝启动（对齐 MCP HTTP 的 fail-fast，ADR-14/16）。
+
+    回环免鉴权是文档化的单机形态；非回环一旦放开，任务提交/审批签名就
+    暴露给整个网段——漏配 token 不应静默降级为无鉴权（v1.4.13 巡检后收紧）。
+    """
+    if token or host in _LOOPBACK_HOSTS:
+        return
+    raise SystemExit(
+        f"[{prog}] 拒绝启动：绑定非本机地址 {host!r} 但未设置鉴权 token。\n"
+        "请设置 BACMAP_WEB_TOKEN（或 --token-env 指定的环境变量）后重启，"
+        "或改绑回环地址（--host 127.0.0.1）。"
+    )
 
 
 def _sign(secret: str, sid: str, exp: int) -> str:
@@ -73,6 +94,12 @@ class WebAuthConfig:
         tok = token or ""
         mode = (env.get("BACMAP_WEB_AUTH") or "bearer").strip().lower()
         if mode not in ("bearer", "cookie"):
+            # 静默回退会掩盖配置错误（如 cookie 拼错落回 bearer，浏览器 401 难排查）。
+            _logger.warning(
+                "invalid BACMAP_WEB_AUTH=%r (expected 'bearer' or 'cookie');"
+                " falling back to 'bearer'",
+                mode,
+            )
             mode = "bearer"
         secret = env.get("BACMAP_WEB_SECRET") or ""
         if not secret:
@@ -124,7 +151,7 @@ def _cookies(scope: dict[str, Any]) -> dict[str, str]:
     jar = SimpleCookie()
     try:
         jar.load(_headers(scope).get("cookie", ""))
-    except Exception:  # noqa: BLE001 —— 畸形 Cookie 头按无 cookie 处理
+    except Exception:
         return {}
     return {k: v.value for k, v in jar.items()}
 
@@ -234,12 +261,9 @@ def verify_csrf(request: Request, form_csrf: str) -> bool:
     host = request.headers.get("host", "")
     origin = request.headers.get("origin", "")
     referer = request.headers.get("referer", "")
-    if origin:
-        if urlparse(origin).netloc != host:
-            return False
-    elif referer:
-        if urlparse(referer).netloc != host:
-            return False
+    source = origin or referer
+    if source and urlparse(source).netloc != host:
+        return False
     cookie = request.cookies.get(CSRF_COOKIE, "")
     return bool(cookie) and hmac.compare_digest(cookie, form_csrf or "")
 

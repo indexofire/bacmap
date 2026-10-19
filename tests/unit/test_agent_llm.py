@@ -99,6 +99,17 @@ cloud_max_data_class = "D1"
         assert cfg.resolve("p").name == "e"
         assert cfg.resolve("unknown") is not None  # 回退到首个可用端点
 
+    def test_resolve_fallback_warns(self, caplog):
+        """漏配路由的 purpose 静默回退是 ADR-16 面（cloud 端点 + 默认 D0）——必须留痕。"""
+        import logging
+
+        cfg = _make_config()
+        with caplog.at_level(logging.WARNING, logger="bacmap.agent.llm.endpoints"):
+            ep = cfg.resolve("unknown_purpose")
+        assert ep is not None
+        assert "no routing entry" in caplog.text
+        assert "unknown_purpose" in caplog.text
+
     def test_full_section_45_config_parses(self, tmp_path: Path):
         """§4.5 文档样例的完整字段必须可解析（extra=forbid 曾拒绝能力/管理字段）。"""
         cfg_file = tmp_path / "config.toml"

@@ -9,6 +9,7 @@ store (lazy imports). All handlers return JSON strings. Errors are {"error": "..
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -52,39 +53,33 @@ def query_metadata(args: dict[str, Any], **kwargs: Any) -> str:
     if not db_path.exists():
         return json.dumps({"error": "Database not found. Run analysis first."})
 
-    try:
-        from bacmap.store.strain_metadata import StrainMetadataService
+    from bacmap.store.strain_metadata import StrainMetadataService
 
-        strain_id = args.get("strain_id")
-        search_kwargs = {}
-        for key in (
-            "province",
-            "outbreak_id",
-            "sample_source",
-            "isolation_date_from",
-            "isolation_date_to",
-        ):
-            val = args.get(key)
-            if val:
-                search_kwargs[key] = val
+    strain_id = args.get("strain_id")
+    search_kwargs = {}
+    for key in (
+        "province",
+        "outbreak_id",
+        "sample_source",
+        "isolation_date_from",
+        "isolation_date_to",
+    ):
+        val = args.get(key)
+        if val:
+            search_kwargs[key] = val
 
-        with StrainMetadataService(db_path) as svc:
-            if strain_id:
-                meta = svc.get(strain_id)
-                if not meta:
-                    return json.dumps({"error": f"Strain {strain_id} not found"})
-                return json.dumps(meta.to_dict(), ensure_ascii=False)
-            else:
-                results = svc.search(**search_kwargs) if search_kwargs else svc.list_all()
-                return json.dumps(
-                    {"count": len(results), "results": [m.to_dict() for m in results]},
-                    ensure_ascii=False,
-                )
-    except Exception as e:
-        logger.exception("query_metadata failed")
-        return json.dumps({"error": f"Query failed: {e}"})
-
-
+    with StrainMetadataService(db_path) as svc:
+        if strain_id:
+            meta = svc.get(strain_id)
+            if not meta:
+                return json.dumps({"error": f"Strain {strain_id} not found"})
+            return json.dumps(meta.to_dict(), ensure_ascii=False)
+        else:
+            results = svc.search(**search_kwargs) if search_kwargs else svc.list_all()
+            return json.dumps(
+                {"count": len(results), "results": [m.to_dict() for m in results]},
+                ensure_ascii=False,
+            )
 @tool_handler
 def add_metadata(args: dict[str, Any], **kwargs: Any) -> str:
     """Add or update strain background metadata."""
@@ -98,24 +93,18 @@ def add_metadata(args: dict[str, Any], **kwargs: Any) -> str:
 
     db_path = _DEFAULT_DB_PATH
 
-    try:
-        from bacmap.store.strain_metadata import StrainMetadataService
+    from bacmap.store.strain_metadata import StrainMetadataService
 
-        with StrainMetadataService(db_path) as svc:
-            meta = svc.upsert(strain_id, data)
-            return json.dumps(
-                {
-                    "strain_id": strain_id,
-                    "status": "saved",
-                    "data": meta.to_dict(),
-                },
-                ensure_ascii=False,
-            )
-    except Exception as e:
-        logger.exception("add_metadata failed")
-        return json.dumps({"error": f"Add metadata failed: {e}"})
-
-
+    with StrainMetadataService(db_path) as svc:
+        meta = svc.upsert(strain_id, data)
+        return json.dumps(
+            {
+                "strain_id": strain_id,
+                "status": "saved",
+                "data": meta.to_dict(),
+            },
+            ensure_ascii=False,
+        )
 @tool_handler
 def query_lab_results(args: dict[str, Any], **kwargs: Any) -> str:
     """Query wet lab experiment results."""
@@ -123,41 +112,35 @@ def query_lab_results(args: dict[str, Any], **kwargs: Any) -> str:
     if not db_path.exists():
         return json.dumps({"error": "Database not found."})
 
-    try:
-        from bacmap.store.lab_results import LabResultService
+    from bacmap.store.lab_results import LabResultService
 
-        sample_id = args.get("sample_id", "")
-        category = args.get("category", "")
-        interpretation = args.get("interpretation", "")
-        test_name = args.get("test_name", "")
-        result = args.get("result", "")
+    sample_id = args.get("sample_id", "")
+    category = args.get("category", "")
+    interpretation = args.get("interpretation", "")
+    test_name = args.get("test_name", "")
+    result = args.get("result", "")
 
-        with LabResultService(db_path) as svc:
-            if sample_id:
-                results = svc.get_by_strain(sample_id, category=category or None)
-            elif any([category, interpretation, test_name, result]):
-                search_kwargs: dict[str, Any] = {}
-                if category:
-                    search_kwargs["category"] = category
-                if interpretation:
-                    search_kwargs["interpretation"] = interpretation
-                if test_name:
-                    search_kwargs["test_name"] = test_name
-                if result:
-                    search_kwargs["result"] = result
-                results = svc.search(**search_kwargs)
-            else:
-                results = svc.search(limit=200)
+    with LabResultService(db_path) as svc:
+        if sample_id:
+            results = svc.get_by_strain(sample_id, category=category or None)
+        elif any([category, interpretation, test_name, result]):
+            search_kwargs: dict[str, Any] = {}
+            if category:
+                search_kwargs["category"] = category
+            if interpretation:
+                search_kwargs["interpretation"] = interpretation
+            if test_name:
+                search_kwargs["test_name"] = test_name
+            if result:
+                search_kwargs["result"] = result
+            results = svc.search(**search_kwargs)
+        else:
+            results = svc.search(limit=200)
 
-            return json.dumps(
-                {"count": len(results), "results": [r.to_dict() for r in results]},
-                ensure_ascii=False,
-            )
-    except Exception as e:
-        logger.exception("query_lab_results failed")
-        return json.dumps({"error": f"Query failed: {e}"})
-
-
+        return json.dumps(
+            {"count": len(results), "results": [r.to_dict() for r in results]},
+            ensure_ascii=False,
+        )
 @tool_handler
 def add_lab_result(args: dict[str, Any], **kwargs: Any) -> str:
     """Record a wet lab experiment result."""
@@ -171,41 +154,35 @@ def add_lab_result(args: dict[str, Any], **kwargs: Any) -> str:
 
     db_path = _DEFAULT_DB_PATH
 
-    try:
-        from bacmap.store.lab_results import LabResultService
+    from bacmap.store.lab_results import LabResultService
 
-        optional = {}
-        for key in (
-            "interpretation",
-            "method",
-            "unit",
-            "standard",
-            "tested_date",
-            "tested_by",
-            "lab",
-        ):
-            val = args.get(key)
-            if val:
-                optional[key] = val
+    optional = {}
+    for key in (
+        "interpretation",
+        "method",
+        "unit",
+        "standard",
+        "tested_date",
+        "tested_by",
+        "lab",
+    ):
+        val = args.get(key)
+        if val:
+            optional[key] = val
 
-        with LabResultService(db_path) as svc:
-            lr = svc.add(strain_id, category, test_name, result, **optional)
-            return json.dumps(
-                {
-                    "status": "saved",
-                    "id": lr.id,
-                    "strain_id": strain_id,
-                    "category": category,
-                    "test_name": test_name,
-                    "result": result,
-                },
-                ensure_ascii=False,
-            )
-    except Exception as e:
-        logger.exception("add_lab_result failed")
-        return json.dumps({"error": f"Add lab result failed: {e}"})
-
-
+    with LabResultService(db_path) as svc:
+        lr = svc.add(strain_id, category, test_name, result, **optional)
+        return json.dumps(
+            {
+                "status": "saved",
+                "id": lr.id,
+                "strain_id": strain_id,
+                "category": category,
+                "test_name": test_name,
+                "result": result,
+            },
+            ensure_ascii=False,
+        )
 @tool_handler
 def snp_tree(args: dict[str, Any], **kwargs: Any) -> str:
     """Retrieve cohort-level SNP phylogenetic tree and distance matrix."""
@@ -223,19 +200,20 @@ def snp_tree(args: dict[str, Any], **kwargs: Any) -> str:
                     and o.strain_id.endswith("-snp")
                 ]
                 if cohort_objs:
-                    latest = max(cohort_objs, key=lambda o: o.version)
-                    result = {
-                        "analysis_type": latest.payload.get("analysis_type"),
-                        "samples": latest.payload.get("samples", []),
-                        "n_samples": latest.payload.get("n_samples", 0),
-                        "n_snp_sites": latest.payload.get("n_snp_sites", 0),
-                        "missing_rate": latest.payload.get("missing_rate", 0),
-                        "tree_newick": latest.payload.get("tree_newick", ""),
-                        "pairwise_distances": latest.payload.get("pairwise_distances", {}),
-                        "source": "gom",
-                        "object_id": latest.object_id,
-                        "version": latest.version,
+                    # list_by_type 已按 created_at DESC：首个即最新（此前 max(version)
+                    # 跨 object_id 比较无意义，只是碰巧与排序结果一致）。
+                    latest = cohort_objs[0]
+                    defaults: dict[str, Any] = {
+                        "analysis_type": None, "samples": [], "n_samples": 0,
+                        "n_snp_sites": 0, "missing_rate": 0,
+                        "tree_newick": "", "pairwise_distances": {},
                     }
+                    result: dict[str, Any] = {
+                        k: latest.payload.get(k, d) for k, d in defaults.items()
+                    }
+                    result["source"] = "gom"
+                    result["object_id"] = latest.object_id
+                    result["version"] = latest.version
                     return json.dumps(result, ensure_ascii=False)
         except Exception:
             logger.exception("GOM SNP lookup failed, falling back to disk")
@@ -318,7 +296,8 @@ def _load_cgmlst_profile_payload(sample_id: str) -> dict[str, Any] | None:
                     and o.payload.get("analysis_type") == "cgmlst_profile"
                 ]
                 if objs:
-                    latest = max(objs, key=lambda o: o.version)
+                    # 同 snp_tree：排序已保证首个为最新。
+                    latest = objs[0]
                     payload = dict(latest.payload)
                     payload["_from_gom"] = True
                     return payload
@@ -409,145 +388,151 @@ def _load_species_thresholds(species_key: str) -> CgmlstThresholds | str:
         return f"failed to load cgmlst thresholds for species {species_key!r}"
 
 
+def _search_structured(
+    serotype: str, mlst_st: str, amr_gene: str, organism: str, limit: int
+) -> str:
+    """结构化基因型检索（索引连接由 ``with`` 管理，异常路径不泄漏）。"""
+    from bacmap.store.strain_index import StrainGenotypeIndex
+
+    with StrainGenotypeIndex(_GOM_DB) as idx:
+        results = idx.search(
+            serotype=serotype or None,
+            mlst_st=mlst_st or None,
+            amr_gene=amr_gene or None,
+            organism=organism or None,
+            limit=limit,
+        )
+    return json.dumps(
+        {
+            "filters": {
+                k: v
+                for k, v in {
+                    "serotype": serotype,
+                    "mlst_st": mlst_st,
+                    "amr_gene": amr_gene,
+                    "organism": organism,
+                }.items()
+                if v
+            },
+            "count": len(results),
+            "results": [
+                {
+                    "strain_id": m.strain_id,
+                    "organism": m.organism,
+                    "species": m.species,
+                    "serotype": m.serotype or "N/A",
+                    "mlst_st": m.mlst_st or "N/A",
+                    "amr_genes": sorted(set(m.amr_genes))[:20],
+                    "analysis_date": m.analysis_date,
+                }
+                for m in results
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+
+def _search_fulltext(query: str, limit: int) -> str:
+    r"""GOM FTS 全文检索 + ``ST\d+`` 正则 + 血清型/AMR 逐字段归因。"""
+    from bacmap.store.genome_object_service import GenomeObjectService, ObjectType
+
+    with GenomeObjectService(_GOM_DB) as gos:
+        fts_results = gos.search(query, object_type=ObjectType.ANALYSIS, limit=limit * 2)
+
+    st_match = re.match(r"^ST\s*(\d+)$", query.strip(), re.IGNORECASE)
+    st_number = st_match.group(1) if st_match else None
+    query_lower = query.lower()
+
+    matches = []
+    seen = set()
+    for obj in fts_results:
+        if not obj.strain_id:
+            continue
+        if obj.strain_id in seen or obj.strain_id.startswith("cohort:"):
+            continue
+        seen.add(obj.strain_id)
+
+        p = obj.payload
+        sero = p.get("serotype", {})
+        serovar = sero.get("sistr", "") if isinstance(sero, dict) else ""
+
+        mlst_raw = p.get("mlst", "")
+        st_val = ""
+        if mlst_raw and isinstance(mlst_raw, str):
+            parsed_st = parse_mlst(mlst_raw)["st"]
+            if parsed_st != "N/A":
+                st_val = parsed_st
+
+        amr = p.get("amr", {})
+        amr_genes = []
+        if isinstance(amr, dict):
+            for db_name in ("abricate_card", "abricate_vfdb"):
+                for hit in amr.get(db_name, []):
+                    if isinstance(hit, dict) and hit.get("GENE"):
+                        amr_genes.append(hit["GENE"])
+
+        reasons = []
+        if serovar and query_lower in serovar.lower():
+            reasons.append(f"serotype={serovar}")
+        if st_number and st_val == st_number:
+            reasons.append(f"MLST ST={st_val}")
+        if any(query_lower in g.lower() for g in amr_genes):
+            matched = [g for g in amr_genes if query_lower in g.lower()][:3]
+            reasons.append(f"AMR: {', '.join(matched)}")
+        if not reasons:
+            reasons.append("full-text match")
+
+        matches.append(
+            {
+                "strain_id": obj.strain_id,
+                "organism": obj.organism,
+                "serotype": serovar or "N/A",
+                "mlst_st": f"ST{st_val}" if st_val else "N/A",
+                "amr_genes": sorted(set(amr_genes))[:20],
+                "matched_fields": reasons[:3],
+            }
+        )
+
+    return json.dumps(
+        {"query": query, "count": len(matches), "results": matches[:limit]},
+        ensure_ascii=False,
+    )
+
+
+def _parse_limit(args: dict[str, Any], default: int = 50) -> int:
+    """``args["limit"]`` → 非负整数；非法值回退默认（两处调用共用口径）。"""
+    try:
+        return max(0, int(args.get("limit", default)))
+    except (TypeError, ValueError):
+        return default
+
+
 @tool_handler
 def search_samples(args: dict[str, Any], **kwargs: Any) -> str:
-    """Search ingested samples by structured genotype fields or full-text query."""
+    """Search ingested samples by structured genotype fields or full-text query.
+
+    编排层：结构化字段走 ``_search_structured``，全文查询走 ``_search_fulltext``；
+    未捕获异常由 ``@tool_handler`` 统一转 JSON 错误信封（不在本层重复兜底）。
+    """
     query = args.get("query", "").strip()
     serotype = args.get("serotype", "").strip()
     mlst_st = args.get("mlst_st", "").strip()
     amr_gene = args.get("amr_gene", "").strip()
     organism = args.get("organism", "").strip()
-    try:
-        limit = max(0, int(args.get("limit", 50)))
-    except (TypeError, ValueError):
-        limit = 50
+    limit = _parse_limit(args)
 
-    db_path = _GOM_DB
-    if not db_path.exists():
+    if not _GOM_DB.exists():
         return json.dumps(
             {"error": "GOM database not found. Run an analysis first to populate it."}
         )
 
-    try:
-        from bacmap.store.strain_index import StrainGenotypeIndex
-
-        idx = StrainGenotypeIndex(db_path)
-        has_structured = any([serotype, mlst_st, amr_gene, organism])
-
-        if has_structured:
-            results = idx.search(
-                serotype=serotype or None,
-                mlst_st=mlst_st or None,
-                amr_gene=amr_gene or None,
-                organism=organism or None,
-                limit=limit,
-            )
-            idx.close()
-
-            return json.dumps(
-                {
-                    "filters": {
-                        k: v
-                        for k, v in {
-                            "serotype": serotype,
-                            "mlst_st": mlst_st,
-                            "amr_gene": amr_gene,
-                            "organism": organism,
-                        }.items()
-                        if v
-                    },
-                    "count": len(results),
-                    "results": [
-                        {
-                            "strain_id": m.strain_id,
-                            "organism": m.organism,
-                            "species": m.species,
-                            "serotype": m.serotype or "N/A",
-                            "mlst_st": m.mlst_st or "N/A",
-                            "amr_genes": sorted(set(m.amr_genes))[:20],
-                            "analysis_date": m.analysis_date,
-                        }
-                        for m in results
-                    ],
-                },
-                ensure_ascii=False,
-            )
-
-        idx.close()
-
-        if not query:
-            return json.dumps(
-                {"error": "Provide at least one of: query, serotype, mlst_st, amr_gene, organism"}
-            )
-
-        from bacmap.store.genome_object_service import GenomeObjectService, ObjectType
-
-        with GenomeObjectService(db_path) as gos:
-            fts_results = gos.search(query, object_type=ObjectType.ANALYSIS, limit=limit * 2)
-
-            import re as _re
-
-            st_match = _re.match(r"^ST\s*(\d+)$", query.strip(), _re.IGNORECASE)
-            st_number = st_match.group(1) if st_match else None
-            query_lower = query.lower()
-
-            matches = []
-            seen = set()
-            for obj in fts_results:
-                if not obj.strain_id:
-                    continue
-                if obj.strain_id in seen or obj.strain_id.startswith("cohort:"):
-                    continue
-                seen.add(obj.strain_id)
-
-                p = obj.payload
-                sero = p.get("serotype", {})
-                serovar = sero.get("sistr", "") if isinstance(sero, dict) else ""
-
-                mlst_raw = p.get("mlst", "")
-                st_val = ""
-                if mlst_raw and isinstance(mlst_raw, str):
-                    parsed_st = parse_mlst(mlst_raw)["st"]
-                    if parsed_st != "N/A":
-                        st_val = parsed_st
-
-                amr = p.get("amr", {})
-                amr_genes = []
-                if isinstance(amr, dict):
-                    for db_name in ("abricate_card", "abricate_vfdb"):
-                        for hit in amr.get(db_name, []):
-                            if isinstance(hit, dict) and hit.get("GENE"):
-                                amr_genes.append(hit["GENE"])
-
-                reasons = []
-                if serovar and query_lower in serovar.lower():
-                    reasons.append(f"serotype={serovar}")
-                if st_number and st_val == st_number:
-                    reasons.append(f"MLST ST={st_val}")
-                if any(query_lower in g.lower() for g in amr_genes):
-                    matched = [g for g in amr_genes if query_lower in g.lower()][:3]
-                    reasons.append(f"AMR: {', '.join(matched)}")
-                if not reasons:
-                    reasons.append("full-text match")
-
-                matches.append(
-                    {
-                        "strain_id": obj.strain_id,
-                        "organism": obj.organism,
-                        "serotype": serovar or "N/A",
-                        "mlst_st": f"ST{st_val}" if st_val else "N/A",
-                        "amr_genes": sorted(set(amr_genes))[:20],
-                        "matched_fields": reasons[:3],
-                    }
-                )
-
-            return json.dumps(
-                {"query": query, "count": len(matches), "results": matches[:limit]},
-                ensure_ascii=False,
-            )
-    except Exception as e:
-        logger.exception("search_samples failed")
-        return json.dumps({"error": f"Search failed: {e}"})
+    if any([serotype, mlst_st, amr_gene, organism]):
+        return _search_structured(serotype, mlst_st, amr_gene, organism, limit)
+    if not query:
+        return json.dumps(
+            {"error": "Provide at least one of: query, serotype, mlst_st, amr_gene, organism"}
+        )
+    return _search_fulltext(query, limit)
 
 
 @tool_handler
@@ -564,10 +549,7 @@ def review_flags(args: dict[str, Any], **kwargs: Any) -> str:
 
     from bacmap.store.genome_object_service import GenomeObjectService, ObjectType
 
-    try:
-        limit = max(0, int(args.get("limit", 50)))
-    except (TypeError, ValueError):
-        limit = 50
+    limit = _parse_limit(args)
     events = []
     with GenomeObjectService(db_path) as gos:
         for obj in gos.list_by_type(ObjectType.ANALYSIS):
@@ -613,7 +595,8 @@ def inspect_dataset(args: dict[str, Any], **kwargs: Any) -> str:
             if verify:
                 reg.verify(dataset_id)
                 ds = reg.get(dataset_id)
-                assert ds is not None
+                if ds is None:  # pragma: no cover — verify 通过后必然可读
+                    raise RuntimeError(f"dataset {dataset_id} vanished after verify")
             return json.dumps(
                 {
                     "dataset_id": ds.dataset_id,
@@ -775,7 +758,7 @@ def compare_runs(args: dict[str, Any], **kwargs: Any) -> str:
     run_a = str(args.get("run_a", ""))
     run_b = str(args.get("run_b", ""))
     if not (sample_id and run_a and run_b):
-        return json.dumps({"error": "sample_id、run_a、run_b 均为必填"}, ensure_ascii=False)
+        return json.dumps({"error": "sample_id, run_a, run_b are required"}, ensure_ascii=False)
     if not _validate_sample_id(sample_id):
         return json.dumps({"error": f"invalid sample_id: {sample_id!r}"})
 
@@ -784,7 +767,8 @@ def compare_runs(args: dict[str, Any], **kwargs: Any) -> str:
     missing = [r for r, rec in ((run_a, rec_a), (run_b, rec_b)) if rec is None]
     if missing:
         return json.dumps({"error": f"run not found: {missing}"}, ensure_ascii=False)
-    assert rec_a is not None and rec_b is not None
+    if rec_a is None or rec_b is None:  # pragma: no cover — 上面 missing 已拦截
+        raise RuntimeError("unreachable: both records checked above")
 
     provenance = runs_store.compare_runs(rec_a, rec_b)
     summary_a = _gom_summary_for_run(sample_id, run_a)

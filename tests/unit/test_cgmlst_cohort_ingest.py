@@ -230,24 +230,23 @@ class TestCohortCgmlstIngest:
             "n_samples": cgmlst_data["n_samples"],
             "allele_distances": cgmlst_data["allele_distances"],
         }
-        with GenomeObjectService(tmp_db_path) as gos:
-            with pytest.raises(GOMValidationError):
-                gos.create(
-                    GenomeObject(
-                        object_id=str(uuid4()),
-                        object_type=ObjectType.ANALYSIS,
-                        version=1,
-                        schema_version="0.1.0",
-                        created_at=datetime.now(UTC).replace(tzinfo=None),
-                        created_by="cgmlst-pipeline",
-                        payload=payload,
-                        pipeline_version=CGMLST_PIPELINE_VERSION,
-                        database_versions={"cgmlst_scheme": "unversioned"},
-                        tool_versions={"gmlst": "0.1.1"},
-                        organism="Salmonella enterica",
-                        strain_id=COHORT_STRAIN_ID,
-                    )
+        with GenomeObjectService(tmp_db_path) as gos, pytest.raises(GOMValidationError):
+            gos.create(
+                GenomeObject(
+                    object_id=str(uuid4()),
+                    object_type=ObjectType.ANALYSIS,
+                    version=1,
+                    schema_version="0.1.0",
+                    created_at=datetime.now(UTC).replace(tzinfo=None),
+                    created_by="cgmlst-pipeline",
+                    payload=payload,
+                    pipeline_version=CGMLST_PIPELINE_VERSION,
+                    database_versions={"cgmlst_scheme": "unversioned"},
+                    tool_versions={"gmlst": "0.1.1"},
+                    organism="Salmonella enterica",
+                    strain_id=COHORT_STRAIN_ID,
                 )
+            )
 
     def test_validator_rejects_missing_allele_distances(self, tmp_db_path):
         cgmlst_data = _make_cgmlst_summary()
@@ -259,21 +258,20 @@ class TestCohortCgmlstIngest:
             "samples": cgmlst_data["samples"],
             "n_samples": cgmlst_data["n_samples"],
         }
-        with GenomeObjectService(tmp_db_path) as gos:
-            with pytest.raises(GOMValidationError):
-                gos.create(
-                    GenomeObject(
-                        object_id=str(uuid4()),
-                        object_type=ObjectType.ANALYSIS,
-                        version=1,
-                        schema_version="0.1.0",
-                        created_at=datetime.now(UTC).replace(tzinfo=None),
-                        created_by="cgmlst-pipeline",
-                        payload=payload,
-                        pipeline_version=CGMLST_PIPELINE_VERSION,
-                        database_versions={"cgmlst_scheme": "unversioned"},
-                        tool_versions={"gmlst": "0.1.1"},
-                        organism="Salmonella enterica",
-                        strain_id=COHORT_STRAIN_ID,
-                    )
+        with GenomeObjectService(tmp_db_path) as gos, pytest.raises(GOMValidationError):
+            gos.create(
+                GenomeObject(
+                    object_id=str(uuid4()),
+                    object_type=ObjectType.ANALYSIS,
+                    version=1,
+                    schema_version="0.1.0",
+                    created_at=datetime.now(UTC).replace(tzinfo=None),
+                    created_by="cgmlst-pipeline",
+                    payload=payload,
+                    pipeline_version=CGMLST_PIPELINE_VERSION,
+                    database_versions={"cgmlst_scheme": "unversioned"},
+                    tool_versions={"gmlst": "0.1.1"},
+                    organism="Salmonella enterica",
+                    strain_id=COHORT_STRAIN_ID,
                 )
+            )

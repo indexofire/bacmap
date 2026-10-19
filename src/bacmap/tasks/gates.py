@@ -24,7 +24,7 @@ from bacmap.core.verify import nli_reflector
 
 
 class GateVerdict(StrEnum):
-    PASS = "pass"
+    PASS = "pass"  # noqa: S105 — 门判定字面量，非凭据
     NEEDS_HUMAN_REVIEW = "needs_human_review"
     REJECT = "reject"
 

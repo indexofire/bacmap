@@ -135,7 +135,7 @@ class TestRunnerSubprocess:
     def test_run_builds_correct_command(self, tmp_path: Path, monkeypatch):
         recorded: dict = {}
 
-        def fake_run(cmd, cwd=None, timeout=None, text=None, capture_output=None, env=None):  # noqa: ARG001
+        def fake_run(cmd, cwd=None, timeout=None, text=None, capture_output=None, env=None):
             recorded["cmd"] = cmd
             recorded["cwd"] = cwd
 

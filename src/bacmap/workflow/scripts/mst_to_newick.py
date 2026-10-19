@@ -63,7 +63,8 @@ def main() -> int:
     ap.add_argument("out", nargs="?", help="输出 treefile（缺省 stdout）")
     args = ap.parse_args()
 
-    payload = json.loads(open(args.payload, encoding="utf-8").read())
+    with open(args.payload, encoding="utf-8") as fh:
+        payload = json.loads(fh.read())
     newick = to_newick(payload)
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:

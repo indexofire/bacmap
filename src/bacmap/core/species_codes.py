@@ -82,11 +82,8 @@ def species_code(label: str) -> str:
     if override:
         return override
     genus = tokens[0]
-    if len(tokens) == 1:
-        # 只有属名（未细分到种）：取属名前 3 字母
-        code = _letters(genus, 3)
-    else:
-        code = _first_alpha(genus) + _letters(tokens[1], 2)
+    # 只有属名（未细分到种）：取属名前 3 字母
+    code = _letters(genus, 3) if len(tokens) == 1 else _first_alpha(genus) + _letters(tokens[1], 2)
     return code if len(code) == 3 else UNK
 
 

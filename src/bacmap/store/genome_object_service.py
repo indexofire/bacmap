@@ -15,34 +15,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 from uuid import uuid4
 
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.]+)?$")
 
-_VALID_EVENT_TYPES = frozenset(
-    {
-        "uploaded",
-        "qc_finished",
-        "assembly_finished",
-        "annotation_finished",
-        "amr_finished",
-        "mlst_finished",
-        "serotype_finished",
-        "snp_finished",
-        "report_generated",
-        "analysis_failed",
-        "version_created",
-        "nli_reflected",
-        "species_identified",
-    }
-)
+_logger = logging.getLogger(__name__)
 
 
 class GOMValidationError(Exception):
@@ -82,6 +67,9 @@ EventType = Literal[
     "nli_reflected",
     "species_identified",
 ]
+
+# 运行期校验集合由 Literal 派生（单一事实来源：新增事件类型只改上面一处）。
+_VALID_EVENT_TYPES = frozenset(get_args(EventType))
 
 
 # cgMLST-only; every other analysis_type stays opaque (additive, no migration).
@@ -160,6 +148,14 @@ class GenomeObject:
     database_signature: str | None = None
 
     def __post_init__(self) -> None:
+        # 保留前缀防护：__gom_* 由服务层注入管线/数据库版本（_go_to_row 写入、
+        # _row_to_go 剥离）。用户 payload 携带同名键会在写入时被静默覆盖、读出时
+        # 被静默剥离——数据损坏且无检测，故在模型边界直接拒绝。
+        reserved = [str(k) for k in self.payload if str(k).startswith("__gom_")]
+        if reserved:
+            raise GOMValidationError(
+                f"payload keys with reserved prefix '__gom_' are not allowed: {reserved}"
+            )
         if isinstance(self.object_type, str) and not isinstance(self.object_type, ObjectType):
             try:
                 object.__setattr__(self, "object_type", ObjectType(self.object_type))
@@ -318,7 +314,9 @@ class GenomeObjectService:
         try:
             self._conn.execute("ROLLBACK")
         except Exception:
-            pass  # already rolled back or no active transaction
+            # 已回滚/无活动事务属预期；其余（如连接损坏）留 debug 痕迹便于排查。
+            _logger.debug("ROLLBACK skipped (no active transaction or broken conn)",
+                          exc_info=True)
 
     @staticmethod
     def _go_to_row(obj: GenomeObject) -> dict[str, Any]:
@@ -365,20 +363,22 @@ class GenomeObjectService:
         )
 
     def create(self, obj: GenomeObject) -> GenomeObject:
-        existing = self._conn.execute(
-            "SELECT 1 FROM genome_objects WHERE object_id = ? AND version = ?",
-            (obj.object_id, obj.version),
-        ).fetchone()
-        if existing:
-            raise GOMImmutableError(
-                f"GenomeObject ({obj.object_id}, v{obj.version}) already exists. "
-                "Use create_new_version() for new versions (project.md §4.6 Immutable)."
-            )
-
         row = self._go_to_row(obj)
         payload_json = row.pop("payload_json")
         self._begin()
         try:
+            # 不可变检查必须在 BEGIN IMMEDIATE 事务内：并发写者后到者会命中
+            # 这里的 SELECT（或下方 IntegrityError 兜底）得到 GOMImmutableError，
+            # 而非裸 sqlite3.IntegrityError——dbos_engine 依赖该异常类型实现幂等重跑。
+            existing = self._conn.execute(
+                "SELECT 1 FROM genome_objects WHERE object_id = ? AND version = ?",
+                (obj.object_id, obj.version),
+            ).fetchone()
+            if existing:
+                raise GOMImmutableError(
+                    f"GenomeObject ({obj.object_id}, v{obj.version}) already exists. "
+                    "Use create_new_version() for new versions (project.md §4.6 Immutable)."
+                )
             cur = self._conn.execute(
                 """INSERT INTO genome_objects
                    (object_id, object_type, version, schema_version, created_at, created_by,
@@ -413,6 +413,13 @@ class GenomeObjectService:
                 ),
             )
             self._commit()
+        except sqlite3.IntegrityError as exc:
+            # 并发兜底：另一写者已插入同 (object_id, version)（如唯一索引/主键冲突）。
+            self._rollback()
+            raise GOMImmutableError(
+                f"GenomeObject ({obj.object_id}, v{obj.version}) already exists. "
+                "Use create_new_version() for new versions (project.md §4.6 Immutable)."
+            ) from exc
         except Exception:
             self._rollback()
             raise
@@ -427,58 +434,54 @@ class GenomeObjectService:
             raise GOMNotFoundError(f"GenomeObject not found: ({object_id}, v{version})")
         return self._row_to_go(row)
 
+    def _list_latest(
+        self, where: str, params: tuple[Any, ...], suffix: str = ""
+    ) -> list[GenomeObject]:
+        """按条件取每个 object_id 的最新版本（单一 SQL 模板，避免四处复制粘贴）。
+
+        ``where`` 只允许本模块内拼入（参数一律走 ``params`` 绑定，不拼用户输入）。
+        """
+        cond = f"WHERE {where}" if where else ""
+
+        sql = (
+            "SELECT g.* FROM genome_objects g"  # noqa: S608 — 片段为本模块常量拼装，值经 params 绑定
+            " INNER JOIN (SELECT object_id, MAX(version) AS max_v FROM genome_objects"
+            f" {cond} GROUP BY object_id)"
+            " latest ON g.object_id = latest.object_id AND g.version = latest.max_v"
+            f" {suffix}"
+        )
+        rows = self._conn.execute(sql, params).fetchall()
+        return [self._row_to_go(r) for r in rows]
+
     def list_by_type(
         self, object_type: ObjectType, limit: int = 100, offset: int = 0
     ) -> list[GenomeObject]:
-        rows = self._conn.execute(
-            """SELECT g.* FROM genome_objects g
-               INNER JOIN (
-                   SELECT object_id, MAX(version) AS max_v
-                   FROM genome_objects
-                   WHERE object_type = ?
-                   GROUP BY object_id
-               ) latest ON g.object_id = latest.object_id AND g.version = latest.max_v
-               ORDER BY g.created_at DESC
-               LIMIT ? OFFSET ?""",
+        return self._list_latest(
+            "object_type = ?",
             (object_type.value, limit, offset),
-        ).fetchall()
-        return [self._row_to_go(r) for r in rows]
+            suffix="ORDER BY g.created_at DESC LIMIT ? OFFSET ?",
+        )
 
     def list_species_identifications(self, strain_id: str) -> list[GenomeObject]:
         """Latest-version species_identification ANALYSIS objects for one strain."""
-        rows = self._conn.execute(
-            """SELECT g.* FROM genome_objects g
-               INNER JOIN (
-                    SELECT object_id, MAX(version) AS max_v
-                    FROM genome_objects
-                    WHERE object_type = 'analysis' AND strain_id = ?
-                    GROUP BY object_id
-                ) latest ON g.object_id = latest.object_id AND g.version = latest.max_v
-                ORDER BY g.created_at DESC""",
-            (strain_id,),
-        ).fetchall()
         return [
             go
-            for go in (self._row_to_go(r) for r in rows)
+            for go in self._list_latest(
+                "object_type = 'analysis' AND strain_id = ?",
+                (strain_id,),
+                suffix="ORDER BY g.created_at DESC",
+            )
             if go.payload.get("analysis_type") == "species_identification"
         ]
 
     def list_by_organism(
         self, organism: str, limit: int = 100, offset: int = 0
     ) -> list[GenomeObject]:
-        rows = self._conn.execute(
-            """SELECT g.* FROM genome_objects g
-               INNER JOIN (
-                   SELECT object_id, MAX(version) AS max_v
-                   FROM genome_objects
-                   WHERE organism = ?
-                   GROUP BY object_id
-               ) latest ON g.object_id = latest.object_id AND g.version = latest.max_v
-               ORDER BY g.created_at DESC
-               LIMIT ? OFFSET ?""",
+        return self._list_latest(
+            "organism = ?",
             (organism, limit, offset),
-        ).fetchall()
-        return [self._row_to_go(r) for r in rows]
+            suffix="ORDER BY g.created_at DESC LIMIT ? OFFSET ?",
+        )
 
     def create_new_version(
         self,
@@ -545,11 +548,11 @@ class GenomeObjectService:
         sha256: str,
         size_bytes: int,
     ) -> FileArtifact:
-        try:
-            self.read(object_id, version)
-        except GOMNotFoundError:
-            raise
+        self.read(object_id, version)  # 对象不存在 → GOMNotFoundError 透传
 
+        # 格式校验前置：避免先白读一遍大文件再报格式错误。
+        if not sha256 or len(sha256) != 64:
+            raise GOMValidationError("sha256 must be a 64-character hex string")
         if not file_path.exists():
             raise GOMValidationError(f"File not found: {file_path}")
         actual_sha = hashlib.sha256()
@@ -566,8 +569,6 @@ class GenomeObjectService:
             raise GOMValidationError(
                 f"Size mismatch for {file_path}: expected {size_bytes}, got {actual_size}"
             )
-        if not sha256 or len(sha256) != 64:
-            raise GOMValidationError("sha256 must be a 64-character hex string")
 
         artifact_id = str(uuid4())
         artifact = FileArtifact(
@@ -594,13 +595,10 @@ class GenomeObjectService:
         return artifact
 
     def list_file_artifacts(self, object_id: str, version: int | None = None) -> list[FileArtifact]:
-        try:
-            if version is not None:
-                self.read(object_id, version)
-            else:
-                self.get_latest_version(object_id)
-        except GOMNotFoundError:
-            raise
+        if version is not None:
+            self.read(object_id, version)
+        else:
+            self.get_latest_version(object_id)
 
         if version is not None:
             rows = self._conn.execute(
@@ -632,10 +630,7 @@ class GenomeObjectService:
                 f"Invalid event_type: {event_type!r}. Must be one of {sorted(_VALID_EVENT_TYPES)}"
                 " or 'gate.<name>'"
             )
-        try:
-            self.get_latest_version(object_id)
-        except GOMNotFoundError:
-            raise
+        self.get_latest_version(object_id)  # 对象不存在 → GOMNotFoundError 透传
 
         event_id = str(uuid4())
         timestamp = datetime.now(UTC).replace(tzinfo=None)
@@ -666,10 +661,7 @@ class GenomeObjectService:
         return event
 
     def list_events(self, object_id: str, since: datetime | None = None) -> list[Event]:
-        try:
-            self.get_latest_version(object_id)
-        except GOMNotFoundError:
-            raise
+        self.get_latest_version(object_id)  # 对象不存在 → GOMNotFoundError 透传
 
         if since is not None:
             since_naive = since.replace(tzinfo=None) if since.tzinfo else since
@@ -712,6 +704,7 @@ class GenomeObjectService:
             f'"{term.replace('"', '""')}"' for term in query.split() if term.strip()
         )
 
+        # 注：FTS5 的 MATCH 左侧须为表名形式（别名 fts 仅用于 ON 连接）。
         sql = """
             SELECT DISTINCT g.* FROM genome_objects g
             INNER JOIN (
@@ -735,10 +728,12 @@ class GenomeObjectService:
         return [self._row_to_go(r) for r in rows]
 
     def close(self) -> None:
+        # 幂等关闭：保留已关闭的连接对象（sqlite3 连接可重复 close）。此后再调用
+        # 任何方法会得到 sqlite3.ProgrammingError("Cannot operate on a closed
+        # database")——比删除属性后的裸 AttributeError 更可定位。
         conn = self.__dict__.get("_conn")
         if conn is not None:
             conn.close()
-            del self.__dict__["_conn"]
 
     def __enter__(self) -> GenomeObjectService:
         return self
@@ -747,8 +742,12 @@ class GenomeObjectService:
         self.close()
 
 
-def new_object_id() -> str:
+def _new_uuid() -> str:
     return str(uuid4())
+
+
+def new_object_id() -> str:
+    return _new_uuid()
 
 
 def record_gate_event(
@@ -764,8 +763,8 @@ def record_gate_event(
 
 
 def new_artifact_id() -> str:
-    return str(uuid4())
+    return _new_uuid()
 
 
 def new_event_id() -> str:
-    return str(uuid4())
+    return _new_uuid()

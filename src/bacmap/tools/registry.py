@@ -66,7 +66,9 @@ _META: dict[str, tuple[TrustLayer, Effect, DataClass, bool]] = {
     "bio_analyze_pathogen": (TrustLayer.L1, Effect.WRITE, DataClass.D2, True),
     "bio_get_result": (TrustLayer.L1, Effect.READ, DataClass.D2, False),
     "bio_verify_result": (TrustLayer.L1, Effect.COMPUTE, DataClass.D2, False),
-    "bio_generate_report": (TrustLayer.L1, Effect.COMPUTE, DataClass.D2, False),
+    # effect=WRITE（v1.4.29 修正）：报告生成会落盘 HTML/PDF（_scripts/generate_report.py
+    # 三处 write_text），按冻结规则 5 不得经 MCP 只读面直接暴露——此前误标 COMPUTE。
+    "bio_generate_report": (TrustLayer.L1, Effect.WRITE, DataClass.D2, False),
     "bio_list_samples": (TrustLayer.L1, Effect.READ, DataClass.D2, False),
     "bio_gene_scan": (TrustLayer.L1, Effect.COMPUTE, DataClass.D2, False),
     "bio_snp_tree": (TrustLayer.L1, Effect.COMPUTE, DataClass.D2, False),

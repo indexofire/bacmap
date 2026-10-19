@@ -87,7 +87,7 @@ def _read_tsv(path: Path) -> dict[str, str]:
         return {}
     header = lines[0].split("\t")
     values = lines[1].split("\t")
-    return dict(zip(header, values))
+    return dict(zip(header, values, strict=False))
 
 
 def run(

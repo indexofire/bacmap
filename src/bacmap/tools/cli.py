@@ -174,12 +174,12 @@ def _blast_local(
             return json.dumps({"error": "makeblastdb failed", "stderr": r["stderr"]})
 
     query_path = query if is_file else None
-    tmp_query = None
+    tmp_path: str | None = None
     if not query_path:
-        tmp_query = tempfile.NamedTemporaryFile(mode="w", suffix=".fa", delete=False)
-        tmp_query.write(f">query\n{query}\n")
-        tmp_query.close()
-        query_path = tmp_query.name
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".fa", delete=False) as tf:
+            tf.write(f">query\n{query}\n")
+            tmp_path = tf.name
+        query_path = tmp_path
 
     cmd = [
         program,
@@ -195,8 +195,8 @@ def _blast_local(
         "6",
     ]
     r = _run_cmd(cmd)
-    if tmp_query:
-        os.unlink(tmp_query.name)
+    if tmp_path:
+        os.unlink(tmp_path)
 
     if r["returncode"] != 0:
         return json.dumps({"error": f"{program} failed", "stderr": r["stderr"]})
@@ -301,6 +301,52 @@ def align(args: dict[str, Any], **kwargs: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _samtools_build_cmd(
+    op: str, args: dict[str, Any], inp_path: str, output_path: str | None
+) -> list[str] | None:
+    """按 operation 构造 samtools 命令行；需要但缺少必要参数时返回 None。
+
+    返回 ``None`` 时调用方以 "sort/mpileup needs 'output'." 一类错误信封回复
+    （具体缺失项由 ``_SAMTOOLS_REQUIRED`` 前置校验给出，不在此重复）。
+    """
+    region = args.get("region", "")
+    flags = args.get("flags", "")
+    extra = args.get("extra_args", "")
+    cmd: list[str] = ["samtools"]
+
+    if op == "sort":
+        cmd += ["sort", "-@", str(os.cpu_count() or 4)]
+        if extra:
+            cmd += extra.split()
+        cmd += ["-o", output_path or "", inp_path]
+    elif op == "index":
+        cmd += ["index", inp_path]
+    elif op == "view":
+        cmd += ["view"]
+        if flags:
+            cmd += flags.split()
+        if extra:
+            cmd += extra.split()
+        if output_path:
+            cmd += ["-o", output_path]
+        cmd += [inp_path]
+        if region:
+            cmd.append(region)
+    elif op == "depth":
+        cmd += ["depth"]
+        if region:
+            cmd += ["-r", region]
+        cmd += [inp_path]
+    elif op in ("faidx", "fasta_index"):
+        cmd += ["faidx", inp_path]
+    else:  # flagstat / idxstats / mpileup（参数已前置校验）
+        if op == "mpileup":
+            cmd += ["mpileup", "-f", args.get("reference", ""), "-o", output_path or "", inp_path]
+        else:
+            cmd += [op, inp_path]  # flagstat / idxstats
+    return cmd
+
+
 @tool_handler
 def samtools_op(args: dict[str, Any], **kwargs: Any) -> str:
     op = args.get("operation", "")
@@ -320,52 +366,18 @@ def samtools_op(args: dict[str, Any], **kwargs: Any) -> str:
 
     output = args.get("output")
     output_path = _resolve_path(output) if output else None
-    region = args.get("region", "")
-    flags = args.get("flags", "")
-    extra = args.get("extra_args", "")
-
-    cmd: list[str] = ["samtools"]
-
-    if op == "sort":
-        if not output_path:
-            return json.dumps({"error": "sort needs 'output'."})
-        cmd += ["sort", "-@", str(os.cpu_count() or 4)]
-        if extra:
-            cmd += extra.split()
-        cmd += ["-o", output_path, inp_path]
-    elif op == "index":
-        cmd += ["index", inp_path]
-    elif op == "view":
-        cmd += ["view"]
-        if flags:
-            cmd += flags.split()
-        if extra:
-            cmd += extra.split()
-        if output_path:
-            cmd += ["-o", output_path]
-        cmd += [inp_path]
-        if region:
-            cmd.append(region)
-    elif op == "depth":
-        cmd += ["depth"]
-        if region:
-            cmd += ["-r", region]
-        cmd += [inp_path]
-    elif op == "flagstat":
-        cmd += ["flagstat", inp_path]
-    elif op == "idxstats":
-        cmd += ["idxstats", inp_path]
-    elif op == "mpileup":
-        if not output_path:
-            return json.dumps({"error": "mpileup needs 'output'."})
-        cmd += ["mpileup", "-f", args.get("reference", ""), "-o", output_path, inp_path]
-        if not args.get("reference"):
-            return json.dumps({"error": "mpileup needs 'reference' FASTA."})
-    elif op == "faidx" or op == "fasta_index":
-        cmd += ["faidx", inp_path]
-    else:
+    # 各 operation 的必要参数前置校验（构造器只管拼命令，不混校验）。
+    if op in ("sort", "mpileup") and not output_path:
+        return json.dumps({"error": f"{op} needs 'output'."})
+    if op == "mpileup" and not args.get("reference"):
+        return json.dumps({"error": "mpileup needs 'reference' FASTA."})
+    if op not in (
+        "sort", "index", "view", "depth", "flagstat", "idxstats", "mpileup",
+        "faidx", "fasta_index",
+    ):
         return json.dumps({"error": f"Unknown operation: {op}"})
 
+    cmd = _samtools_build_cmd(op, args, inp_path, output_path) or []
     r = _run_cmd(cmd)
     if r["returncode"] != 0:
         return json.dumps({"error": f"samtools {op} failed", "stderr": r["stderr"]})
@@ -458,7 +470,8 @@ def _var_mpileup_call(inp: str, args: dict[str, Any]) -> str:
 
     with tempfile.TemporaryFile() as mpileup_err:
         p1 = subprocess.Popen(mpileup_cmd, stdout=subprocess.PIPE, stderr=mpileup_err)
-        assert p1.stdout is not None
+        if p1.stdout is None:  # pragma: no cover — stdout=PIPE 保证非空
+            raise RuntimeError("mpileup stdout pipe not established")
         try:
             with open(out_path, "wb") as f:
                 p2 = subprocess.run(

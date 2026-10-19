@@ -111,7 +111,8 @@ bacmap › 建议先统计再绘图。
 ### 远程访问：SSH 隧道（推荐方式）
 
 bacmap web 默认只绑 `127.0.0.1`（ADR-16）。需要从其他电脑访问时，**不要**直接
-`--host 0.0.0.0` 裸暴露（界面无认证，局域网内任何人可提交/审批任务）——用 SSH 隧道，
+`--host 0.0.0.0` 裸暴露：未设置 `BACMAP_WEB_TOKEN` 时 bacmap 会**拒绝在非回环地址启动**
+（fail-fast，与 MCP HTTP 传输一致）；设了 token 虽可启动，仍建议优先用 SSH 隧道，
 加密与认证全部由 SSH 承担，bacmap 侧零改动：
 
 > `BACMAP_WEB_TOKEN`（`--token-env`）启用鉴权。默认 `bearer` 模式以 `Authorization` 头发送，

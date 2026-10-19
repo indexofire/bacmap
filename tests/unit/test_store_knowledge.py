@@ -127,7 +127,7 @@ class TestGosSearchErrorPropagation:
             def close(self) -> None:
                 return None
 
-        gos._conn = _BoomConn()  # noqa: SLF001
+        gos._conn = _BoomConn()
         with pytest.raises(sqlite3.OperationalError):
             gos.search("anything")
         gos.close()

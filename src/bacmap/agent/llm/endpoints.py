@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import logging
 import tomllib
 from pathlib import Path
 from typing import Any, Literal
@@ -15,6 +16,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from bacmap.tools.spec import DataClass
+
+_logger = logging.getLogger(__name__)
 
 DEFAULT_STRATA_BASE_URL = "http://127.0.0.1:8080/v1"
 DEFAULT_STRATA_MODEL = "qwen3.8-flash-next-iq3_xxs"
@@ -76,6 +79,13 @@ class LlmConfig(BaseModel):
             return ep if ep and ep.enabled else None
         for ep in self.endpoints.values():
             if ep.enabled:
+                # 漏配路由的 purpose 会静默落回首个 enabled 端点——若该端点在
+                # cloud，默认 D0 的流量会被意外外发（ADR-16 面）。留警告便于排查。
+                _logger.warning(
+                    "no routing entry for purpose %r; falling back to first enabled"
+                    " endpoint %r [%s] — add [llm.routing] %s = <name> to pin it",
+                    purpose, ep.name, ep.location, purpose,
+                )
                 return ep
         return None
 
@@ -123,9 +133,7 @@ def load_llm_config(config_path: Path) -> LlmConfig:
     routing = dict(llm.get("routing", {}))
     policy_raw = llm.get("data_policy", {})
     raw_limit = policy_raw.get("cloud_max_data_class", "D1")
-    if isinstance(raw_limit, str):
-        limit = DataClass[raw_limit]  # "D1" 名称查找（§4.5 TOML 字符串形式）
-    else:
-        limit = DataClass(raw_limit)
+    # "D1" 名称查找（§4.5 TOML 字符串形式）
+    limit = DataClass[raw_limit] if isinstance(raw_limit, str) else DataClass(raw_limit)
     policy = DataPolicy(cloud_max_data_class=limit)
     return LlmConfig(endpoints=endpoints, routing=routing, policy=policy, resources=resources)

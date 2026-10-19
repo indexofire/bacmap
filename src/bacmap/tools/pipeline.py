@@ -296,7 +296,7 @@ def gene_scan(args: dict[str, Any], **kwargs: Any) -> str:
                 continue
             fields = line.split("	")
             if len(fields) >= 6:
-                hits.append(dict(zip(columns, fields)))
+                hits.append(dict(zip(columns, fields, strict=False)))  # 行超长时截断多余列
         return {"tool": "gapit", "database": db, "hits": hits, "n_hits": len(hits)}
 
     db_list = [d.strip() for d in database.split(",")]

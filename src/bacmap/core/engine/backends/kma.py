@@ -100,7 +100,7 @@ class KmaBackend:
             parts = line.split("\t")
             if len(parts) < len(header):
                 parts += [""] * (len(header) - len(parts))
-            row = dict(zip(header, parts))
+            row = dict(zip(header, parts, strict=False))  # 行超长时截断多余列
 
             template = row.get("Template", "")
             if not template:

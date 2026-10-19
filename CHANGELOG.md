@@ -5,6 +5,83 @@
 
 ## [未发布]
 
+### 安全（2026-10 代码质量评估整改）
+- **沙箱 shell 白名单结构性绕过修复**（`agent/sandbox/tool.py`）：①命令分段正则补上**换行符**——此前
+  `ls\nrm -rf …` 因首段白名单整段放行；②禁用清单新增**隐藏执行语法**（命令替换 `$(...)`、反引号、
+  进程替换 `<(...)`、`find -exec/-execdir`、`system(...)`）——引号拼接（`cu""rl`）不再绕过表面积黑名单；
+  ③`_SHELL_DESCRIPTION` 如实降级承诺：白名单是**意图分类**而非安全边界（python 等图灵完备命令天然可任意
+  计算），真正边界是容器后端 `--network none` + 只读挂载，直通模式仅限受控开发环境。
+- **Web 非回环绑定 fail-fast**（对齐 MCP HTTP）：未设 `BACMAP_WEB_TOKEN` 且 `--host` 非回环地址时
+  拒绝启动（此前静默无鉴权暴露任务提交/审批签名给整个网段）。回环免鉴权单机形态不变。
+- **助手计划确认强制点**：`PlannedTask.requires_confirmation` 此前无任何代码消费。现
+  `execute_plan` 增加 `confirmed` 参数——含需确认任务的计划未经确认**拒绝提交**
+  （`PlanNotConfirmedError`）；Web 确认按钮 / CLI `Confirm.ask`、`--yes` / TUI `Ctrl+Y` 为确认事实来源。
+- **Web 助手确认界面展示完整任务参数**（`script`/`input_paths`/`sandbox_image` 此前对用户不可见，
+  人工确认形同虚设）；并修复会话表并发竞态（LRU 淘汰加锁、计划原子取出防双击重复提交、
+  执行中也刷新活跃时间）。
+- 登录 token 比较改 UTF-8 bytes 常量时间比较（非 ASCII 输入不再触发未捕获 500）。
+
+### 修复（正确性/资源）
+- **GOM `create()` 并发契约**：不可变检查移入 `BEGIN IMMEDIATE` 事务内 + `IntegrityError` 兜底转换
+  为 `GOMImmutableError`——并发写者不再以裸 `sqlite3.IntegrityError` 冒泡，`dbos_engine` 的幂等重跑
+  契约在并发下仍成立。
+- **连接泄漏两处**：`search_samples` 的 `StrainGenotypeIndex`（手动双 `close` 无 finally，异常路径泄漏）
+  改 `with` 管理（`StrainGenotypeIndex` 新增上下文管理器）；`_ensure_task_object` 同样改 `with`。
+- mine 产物清单推导、GOM"最新版本"SQL 子查询（×4）、`EventType` Literal/frozenset 双写——三处
+  复制粘贴消除（单一事实来源）；`register_file_artifact` 的 sha256 格式校验前置（不再先白读大文件）。
+
+### 变更（工程/工具链）
+- **ruff 收紧**：select 扩至 `B`/`C90`/`SIM`/`RUF`/`S`（max-complexity=15），修复全部 178 项违规
+  （含 F821 未定义名、W605 无效转义、恒真断言等真问题）；已知复杂度热点（`create_app`/`samtools_op`/
+  `seq_ops`/`_extract_genotype`）带 noqa 标注列入重构清单。
+- **mypy 收紧**：`bacmap.core.*`/`bacmap.store.*` 启用 `disallow_untyped_defs`（领域层函数签名完整标注）。
+- **覆盖率基线**：新增 `[tool.coverage]` 配置（忽略 Snakemake 脚本/遗留迁移脚本）与
+  `pixi run -e dev coverage` 任务，门槛见 `pyproject.toml`（只升不降）。
+- `DbosTaskEngine.approve()` 类型专属副作用拆为模块级终态化函数 + 分发表
+  （新增任务类型注册即可，不再改长 if 链）；reject 的任务消息如实为 `rejected by …`（原为误导性的
+  `approved by …`）。
+- `search_samples` 拆分为编排层 + `_search_structured`/`_search_fulltext`（原 138 行 6 层嵌套）；
+  未捕获异常统一由 `@tool_handler` 转错误信封（错误前缀从 `Search failed:` 统一为
+  `search_samples failed:`，不再双层兜底）。
+- **巧合代码消除**：`snp_tree`/`_load_cgmlst_profile_payload` 的 `max(objs, key=version)` 跨
+  object_id 比较无意义（碰巧与 `list_by_type` 的 created_at DESC 排序一致）——改为显式取排序首个。
+- **`dbos_engine`**：`init_dbos` 的 check-then-set 加锁（Web 线程池 + CLI 并发不双 launch）；
+  `_fastqs` 改 `csv.DictReader`（表头校验 + 转义处理，替代魔法列索引）；`status()` 的
+  工作流状态映射提取为纯函数 `_map_workflow_outcome`（可单测，新增 5 个 case）。
+- **Web**：`/logout` 补 CSRF 校验（跨站不得强制登出）；`task_detail`/`task_fragment` 双胞胎路由
+  合并渲染；`BACMAP_WEB_AUTH` 非法值从静默回退改为 warning 日志。
+- **GOM**：`close()` 后再调用给出可定位的 `sqlite3.ProgrammingError`（原为裸 `AttributeError`）；
+  三个逐字相同的 ID 生成函数合一（`_new_uuid`，公共名保留）。
+- **LLM 路由**：`LlmConfig.resolve` 对漏配路由的 purpose 回退首个 enabled 端点时打 warning
+  （cloud 端点 + 默认 D0 的意外外发面，ADR-16）。
+- **双层错误兜底移除**：`query_metadata`/`add_metadata`/`query_lab_results`/`add_lab_result` 的
+  内层 try/except 与 `@tool_handler` 重复且错误前缀不一致，统一交装饰器兜底；
+  `search_samples`/`review_flags` 共用 `_parse_limit`；工具错误消息统一英文。
+
+### 安全（遗留修复，第四轮 A1-A3）
+- **`bio_generate_report` effect 修正为 `WRITE`**（冻结规则 5 的实锤违例）：报告生成会向
+  `results/` 落盘 HTML/PDF（三处 `write_text`），此前误标 `COMPUTE` 而暴露在 MCP 只读面。
+  改标后从 MCP 摘除；内部调用（`_step_report`）与 CLI/TUI/Web 不受影响。docs/tools 双语同步。
+- **GOM 保留前缀防护**：`GenomeObject` 模型边界拒绝 `__gom_*` 前缀的 payload 键——此前
+  用户 payload 携带同名键会在写入时被静默覆盖、读出时被静默剥离（无检测的数据损坏）。
+- **工具错误信封收敛**：`tool_handler` 兜底只返回异常**类型名**（原文常含宿主绝对路径，
+  经 MCP 进入客户端与 LLM 上下文）；完整堆栈保留在服务日志。
+
+### 变更（重构收尾，第三轮）
+- **`dbos_engine.py` 拆分**（1044 → 715 行）：DBOS 生命周期 → `_runtime.py`（40 行）；
+  审批副作用 + 工作流状态映射 → `_outcomes.py`（103 行）；`DbosTaskEngine` 类 →
+  `task_engine.py`（261 行，submit 内延迟导入 workflow——保持测试对 dbos_engine 模块的
+  monkeypatch 契约且无顶层循环导入）。dbos_engine 只留 step/workflow 编排核（step 与可注入
+  辅助、workflow 与 step 必须同模块：DBOS 恢复语义 + 测试 patch 点），其余旧名全部
+  re-export——`from bacmap.tasks.engine.dbos_engine import X` 的既有路径不变。
+- **`create_app` 拆分**（290 行单闭包工厂 → 组装器 + 4 个路由工厂）：`_build_auth_routes`/
+  `_build_sample_routes`/`_build_task_routes`/`_build_assistant_routes`，各 <15 复杂度；
+  提交表单解析（`_submit_task_payload`）与审批构造（`_approval_from_form`）独立可测。
+- **复杂度热点清零**（C901 noqa 全部移除）：`samtools_op`（24）拆出 `_samtools_build_cmd` +
+  必要参数前置校验；`seq_ops`（25）拆为 8 个 `_seq_*` 操作函数 + `_SEQ_OPERATIONS` 分发表
+  （新增操作只注册即可）；`_extract_genotype`（20）拆为血清型/MLST/AMR/质粒四个独立提取器。
+  **全仓无超线函数**（mccabe 上限 15）。
+
 ### 新增
 - **深度挖掘执行**：内置助手可调用 `sandbox_run`（ADR-11 L2）执行 Python 脚本并产出图表
   （PNG/CSV）；可反复调用迭代，成熟脚本再作为 `mine` 任务经挖掘门/人工签字进入报告。

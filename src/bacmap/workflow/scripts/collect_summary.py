@@ -40,7 +40,7 @@ def parse_tsv(path, default=None):
     for line in lines[1:]:
         fields = line.split("\t")
         if len(fields) >= len(headers):
-            rows.append(dict(zip(headers, fields)))
+            rows.append(dict(zip(headers, fields, strict=False)))
     return rows
 
 qc = read_json(snakemake.input.qc_json, {})
@@ -113,7 +113,7 @@ if _dec_applicable:
         dec_serotype = {}
     # DEC 致病型：gapit `ecoli_dec` 的 typing 结果（v1.4.18，判定外部化）
     from bacmap.core.analysis.dec_pathotype import (
-        summarize as summarize_dec_pathotype,  # noqa: E402
+        summarize as summarize_dec_pathotype,
     )
 
     dec_pt = summarize_dec_pathotype(read_json(pathotype_path, {}) if pathotype_path else {})

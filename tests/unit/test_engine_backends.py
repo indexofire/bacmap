@@ -101,9 +101,8 @@ class TestBlastInit:
         assert b.threads == 4
 
     def test_init_raises_when_binary_missing(self):
-        with patch("bacmap.core.engine.backends.blast.which", return_value=None):
-            with pytest.raises(RuntimeError, match="blastn not found"):
-                BlastBackend(tool="blastn")
+        with patch("bacmap.core.engine.backends.blast.which", return_value=None), pytest.raises(RuntimeError, match="blastn not found"):
+            BlastBackend(tool="blastn")
 
 
 class TestBlastMakeDb:
@@ -269,9 +268,8 @@ class TestBlastFind:
         with patch(
             "bacmap.core.engine.backends.blast.subprocess.run",
             return_value=_proc(stderr="blast err", returncode=2),
-        ):
-            with pytest.raises(RuntimeError, match="blastn failed"):
-                blast_backend.find(query=query, db_path="/fake/db")
+        ), pytest.raises(RuntimeError, match="blastn failed"):
+            blast_backend.find(query=query, db_path="/fake/db")
 
     def test_skips_malformed_lines(self, tmp_path, blast_backend):
         query = tmp_path / "q.fasta"
@@ -458,9 +456,8 @@ class TestMinimapInit:
         assert m.threads == 4
 
     def test_init_raises_when_binary_missing(self):
-        with patch("bacmap.core.engine.backends.minimap2.which", return_value=None):
-            with pytest.raises(RuntimeError, match="minimap2 not found"):
-                MinimapBackend()
+        with patch("bacmap.core.engine.backends.minimap2.which", return_value=None), pytest.raises(RuntimeError, match="minimap2 not found"):
+            MinimapBackend()
 
 
 class TestMinimapMakeIndex:
@@ -545,9 +542,8 @@ class TestMinimapFind:
         with patch(
             "bacmap.core.engine.backends.minimap2.subprocess.run",
             return_value=_proc(stderr="boom", returncode=1),
-        ):
-            with pytest.raises(RuntimeError, match="minimap2 failed"):
-                minimap_backend.find(query=query, target=target)
+        ), pytest.raises(RuntimeError, match="minimap2 failed"):
+            minimap_backend.find(query=query, target=target)
 
     def test_basic_command_construction(self, tmp_path):
         query = tmp_path / "q.fasta"
@@ -686,9 +682,8 @@ class TestKmaInit:
         assert k.threads == 4
 
     def test_init_raises_when_binary_missing(self):
-        with patch("bacmap.core.engine.backends.kma.which", return_value=None):
-            with pytest.raises(RuntimeError, match="kma not found"):
-                KmaBackend()
+        with patch("bacmap.core.engine.backends.kma.which", return_value=None), pytest.raises(RuntimeError, match="kma not found"):
+            KmaBackend()
 
 
 class TestKmaMakeIndex:
@@ -803,9 +798,8 @@ class TestKmaFind:
         with patch(
             "bacmap.core.engine.backends.kma.subprocess.run",
             return_value=_proc(stderr="kma err", returncode=1),
-        ):
-            with pytest.raises(RuntimeError, match="KMA failed"):
-                kma_backend.find(r1, idx, output_dir=tmp_path / "out")
+        ), pytest.raises(RuntimeError, match="KMA failed"):
+            kma_backend.find(r1, idx, output_dir=tmp_path / "out")
 
     def test_find_default_output_dir_uses_tempdir(self, tmp_path, kma_backend):
         """When output_dir=None, kma creates a temporary directory."""
@@ -883,9 +877,8 @@ class TestMashInit:
         assert m.threads == 4
 
     def test_init_raises_when_binary_missing(self):
-        with patch("bacmap.core.engine.backends.kmer.which", return_value=None):
-            with pytest.raises(RuntimeError, match="mash not found"):
-                MashBackend()
+        with patch("bacmap.core.engine.backends.kmer.which", return_value=None), pytest.raises(RuntimeError, match="mash not found"):
+            MashBackend()
 
 
 class TestMashSketch:
@@ -994,9 +987,8 @@ class TestMashDistance:
         with patch(
             "bacmap.core.engine.backends.kmer.subprocess.run",
             return_value=_proc(stderr="err", returncode=1),
-        ):
-            with pytest.raises(RuntimeError, match="mash dist failed"):
-                mash_backend.distance(q, r)
+        ), pytest.raises(RuntimeError, match="mash dist failed"):
+            mash_backend.distance(q, r)
 
     def test_appends_kwargs(self, tmp_path, mash_backend):
         q = tmp_path / "q.msh"
@@ -1053,9 +1045,8 @@ class TestSourmashInit:
         assert s.scaled == 1000
 
     def test_init_raises_when_binary_missing(self):
-        with patch("bacmap.core.engine.backends.kmer.which", return_value=None):
-            with pytest.raises(RuntimeError, match="sourmash not found"):
-                SourmashBackend()
+        with patch("bacmap.core.engine.backends.kmer.which", return_value=None), pytest.raises(RuntimeError, match="sourmash not found"):
+            SourmashBackend()
 
 
 class TestSourmashSketch:
@@ -1124,9 +1115,8 @@ class TestSourmashDistance:
         with patch(
             "bacmap.core.engine.backends.kmer.subprocess.run",
             return_value=_proc(stderr="err", returncode=2),
-        ):
-            with pytest.raises(RuntimeError, match="sourmash search failed"):
-                sourmash_backend.distance(q, r)
+        ), pytest.raises(RuntimeError, match="sourmash search failed"):
+            sourmash_backend.distance(q, r)
 
     def test_empty_output(self, tmp_path, sourmash_backend):
         q = tmp_path / "q.sig"

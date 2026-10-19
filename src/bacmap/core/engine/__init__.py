@@ -21,9 +21,9 @@ __all__ = [
     "Hit",
     "ReadMapper",
     "available",
-    "merge_intervals",
-    "confidence_tier",
     "classify_allele",
+    "confidence_tier",
+    "merge_intervals",
 ]
 
 

@@ -182,7 +182,7 @@ class StrainGenotypeIndex:
 
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
         sql = (
-            "SELECT DISTINCT g.* FROM strain_genotype_index g"
+            "SELECT DISTINCT g.* FROM strain_genotype_index g"  # noqa: S608 — 片段为模块内常量/占位符拼装，值一律 ? 绑定
             + amr_join
             + where
             + " ORDER BY g.analysis_date DESC LIMIT ?"
@@ -244,7 +244,7 @@ class StrainGenotypeIndex:
         if len(conditions) == 1:
             return []  # 无可用分型键（血清型/MLST 均空）：不得把全库其余菌株当"相似"
         sql = (
-            "SELECT DISTINCT g.* FROM strain_genotype_index g"
+            "SELECT DISTINCT g.* FROM strain_genotype_index g"  # noqa: S608 — 片段为模块内常量/占位符拼装，值一律 ? 绑定
             + " WHERE "
             + " AND ".join(conditions)
             + " ORDER BY g.analysis_date DESC LIMIT ?"
@@ -378,11 +378,17 @@ class StrainGenotypeIndex:
         conn = getattr(self, "_conn", None)
         if conn is not None:
             conn.close()
+            del self._conn  # 幂等关闭：再次 close 时 getattr 取不到即跳过
+
+    def __enter__(self) -> StrainGenotypeIndex:
+        return self
+
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+        self.close()
 
 
-def _extract_genotype(payload: dict[str, Any]) -> dict[str, Any]:
-    species = payload.get("species_verdict", "")
-
+def _extract_serotype(payload: dict[str, Any]) -> tuple[str, str]:
+    """血清型 (值, 方法)：SISTR/serotype 键优先，缺失时回退 DEC 主血清型。"""
     serotype_val = ""
     serotype_method = ""
     serotype_data = payload.get("serotype", {})
@@ -392,8 +398,6 @@ def _extract_genotype(payload: dict[str, Any]) -> dict[str, Any]:
         serotype_val = serotype_data.get("sistr", "") or serotype_data.get("serotype", "")
         if serotype_val and serotype_val != "N/A":
             serotype_method = "SISTR"
-    else:
-        serotype_val = ""
     if not serotype_val:
         dec = payload.get("dec", {})
         if isinstance(dec, dict):
@@ -402,7 +406,11 @@ def _extract_genotype(payload: dict[str, Any]) -> dict[str, Any]:
             if primary and primary not in ("N/A", "-:-", "Undetermined"):
                 serotype_val = primary
                 serotype_method = method
+    return serotype_val, serotype_method
 
+
+def _extract_mlst(payload: dict[str, Any]) -> tuple[str, str]:
+    """MLST (scheme, ST)：原始串经 parse_mlst 归一（ST 前缀去重）。"""
     mlst_scheme = ""
     mlst_st = ""
     mlst_raw = payload.get("mlst", "")
@@ -412,7 +420,11 @@ def _extract_genotype(payload: dict[str, Any]) -> dict[str, Any]:
         raw_st = parsed["st"]
         if raw_st and raw_st not in ("N/A", "-", ""):
             mlst_st = f"ST{raw_st}" if not raw_st.upper().startswith("ST") else raw_st
+    return mlst_scheme, mlst_st
 
+
+def _extract_amr_genes(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """AMR 基因命中（abricate CARD/VFDB；含覆盖率/一致度/产物）。"""
     amr_genes: list[dict[str, Any]] = []
     amr_data = payload.get("amr", {})
     if isinstance(amr_data, dict):
@@ -433,7 +445,11 @@ def _extract_genotype(payload: dict[str, Any]) -> dict[str, Any]:
                                     "product": hit.get("PRODUCT", ""),
                                 }
                             )
+    return amr_genes
 
+
+def _extract_plasmid_types(payload: dict[str, Any]) -> list[str]:
+    """质粒复制子类型（plasmidfinder 命中基因名）。"""
     plasmid_types: list[str] = []
     plasmid_data = payload.get("plasmid", {})
     if isinstance(plasmid_data, dict):
@@ -444,13 +460,19 @@ def _extract_genotype(payload: dict[str, Any]) -> dict[str, Any]:
                     gene = hit.get("GENE", "").strip()
                     if gene:
                         plasmid_types.append(gene)
+    return plasmid_types
 
+
+def _extract_genotype(payload: dict[str, Any]) -> dict[str, Any]:
+    """summary payload → 索引列（各字段提取器单独可测）。"""
+    serotype_val, serotype_method = _extract_serotype(payload)
+    mlst_scheme, mlst_st = _extract_mlst(payload)
     return {
-        "species": species,
+        "species": payload.get("species_verdict", ""),
         "serotype": serotype_val,
         "serotype_method": serotype_method,
         "mlst_scheme": mlst_scheme,
         "mlst_st": mlst_st,
-        "amr_genes": amr_genes,
-        "plasmid_types": plasmid_types,
+        "amr_genes": _extract_amr_genes(payload),
+        "plasmid_types": _extract_plasmid_types(payload),
     }

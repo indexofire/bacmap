@@ -708,7 +708,7 @@ class TestVariant:
         assert r["output_vcf"] == out
         # 1 non-header, non-empty data line in canned VCF
         assert r["variant_count"] == 1
-        assert written == {} or True
+        assert not written  # 解析阶段不落盘
 
     def test_mpileup_call_call_failure(self, monkeypatch, tmp_path):
         bam = _write(tmp_path, "x.bam", "")

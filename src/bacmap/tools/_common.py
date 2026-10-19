@@ -42,9 +42,9 @@ __all__ = [
     "_detect_format",
     "_ensure_biopython",
     "_resolve_path",
-    "_validate_sample_id",
     "_run_cmd",
     "_run_project_script",
+    "_validate_sample_id",
     "_which_or_error",
     "logger",
     "tool_handler",
@@ -64,7 +64,7 @@ def _run_project_script(script_name: str, args: list[str], timeout: int = 3600) 
     env = dict(_PIXI_ENV)
     src_root = str(Path(__file__).resolve().parents[2])
     env["PYTHONPATH"] = src_root + (":" + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
-    cmd = [PIXI_PYTHON, str(Path(__file__).resolve().parent / "_scripts" / script_name)] + args
+    cmd = [PIXI_PYTHON, str(Path(__file__).resolve().parent / "_scripts" / script_name), *args]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
     if result.returncode != 0:
         return json.dumps({"error": f"{script_name} failed", "stderr": result.stderr[-500:]})
@@ -77,7 +77,7 @@ def _ensure_biopython() -> bool:
     if _BIOPYTHON_AVAILABLE is not None:
         return _BIOPYTHON_AVAILABLE
     try:
-        import Bio  # noqa: F401
+        import Bio
 
         _BIOPYTHON_AVAILABLE = True
         return True
@@ -159,7 +159,11 @@ def tool_handler[F: Callable[..., str]](func: F) -> F:
             return func(args, **kwargs)
         except Exception as e:
             logger.exception("%s failed", func.__name__)
-            return json.dumps({"error": f"{func.__name__} failed: {e}"}, ensure_ascii=False)
+            # 错误信封只报异常类型：异常原文常含宿主绝对路径，经 MCP 进入客户端
+            # 与 LLM 工具上下文（信息泄漏面，L2）；排障细节看服务日志的完整堆栈。
+            return json.dumps(
+                {"error": f"{func.__name__} failed: {type(e).__name__}"}, ensure_ascii=False
+            )
 
     return cast(F, wrapper)
 

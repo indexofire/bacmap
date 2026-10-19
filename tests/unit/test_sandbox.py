@@ -76,7 +76,7 @@ class TestFallbackChain:
                 calls.append("fake")
                 return ["echo", "ok"]
 
-        monkeypatch.setattr("bacmap.agent.sandbox._which", lambda b: "fake" == b or None)
+        monkeypatch.setattr("bacmap.agent.sandbox._which", lambda b: b == "fake" or None)
         ex = SandboxExecutor(runners=[_FakeRunner()])  # type: ignore[list-item]
         result = ex.run(SandboxSpec(image="i", command=["x"], workspace=tmp_path))
         assert result.backend == "fake"

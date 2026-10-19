@@ -71,7 +71,7 @@ def parse_abricate_tsv(tsv_text: str) -> list[dict[str, str]]:
         parts = line.split("\t")
         if len(parts) < len(header):
             parts += [""] * (len(header) - len(parts))
-        rows.append(dict(zip(header, parts)))
+        rows.append(dict(zip(header, parts, strict=False)))  # 行超长时截断多余列
     return rows
 
 

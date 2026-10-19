@@ -134,7 +134,8 @@ class DatasetRegistry:
         ).fetchone()
         if existing:
             found = self.get(existing["dataset_id"])
-            assert found is not None
+            if found is None:  # pragma: no cover — 刚登记即读不回，库损坏
+                raise RuntimeError(f"dataset {existing['dataset_id']} vanished after insert")
             return found  # 内容去重：同清单复用既有 dataset_id
 
         st = resolved.stat()
@@ -162,7 +163,8 @@ class DatasetRegistry:
             ),
         )
         found = self.get(dataset_id)
-        assert found is not None
+        if found is None:  # pragma: no cover — 刚插入即读不回，库损坏
+            raise RuntimeError(f"dataset {dataset_id} vanished after insert")
         return found
 
     # ------------------------------------------------------------------ 读取

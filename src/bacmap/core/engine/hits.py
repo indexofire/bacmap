@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from typing import Any
 
@@ -87,10 +88,8 @@ class Hit:
         for tag in f[12:]:
             parts = tag.split(":", 2)
             if len(parts) == 3 and parts[0] == "NM" and parts[1] == "i":
-                try:
+                with contextlib.suppress(ValueError):  # 非整数 NM：保持 iNaN 语义
                     mismatches = int(parts[2])
-                except ValueError:
-                    pass
 
         return cls(
             query_id=f[0],

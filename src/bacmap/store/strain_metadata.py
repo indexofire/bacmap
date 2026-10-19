@@ -194,8 +194,8 @@ class StrainMetadataService:
         try:
             if existing:
                 sets = ", ".join(f"{k} = ?" for k in core)
-                values = list(core.values()) + [strain_id]
-                self._conn.execute(f"UPDATE strain_metadata SET {sets} WHERE strain_id = ?", values)
+                values = [*core.values(), strain_id]
+                self._conn.execute(f"UPDATE strain_metadata SET {sets} WHERE strain_id = ?", values)  # noqa: S608 — 片段为模块内常量/占位符拼装，值一律 ? 绑定
             else:
                 # 仅在插入时补默认 sample_id；部分更新不得覆盖已存的 sample_id。
                 if not core.get("sample_id"):
@@ -204,7 +204,7 @@ class StrainMetadataService:
                 cols = ", ".join(core.keys())
                 placeholders = ", ".join("?" for _ in core)
                 self._conn.execute(
-                    f"INSERT INTO strain_metadata ({cols}) VALUES ({placeholders})",
+                    f"INSERT INTO strain_metadata ({cols}) VALUES ({placeholders})",  # noqa: S608 — 片段为模块内常量/占位符拼装，值一律 ? 绑定
                     list(core.values()),
                 )
             self._conn.execute("COMMIT")
@@ -213,7 +213,8 @@ class StrainMetadataService:
             raise
 
         result = self.get(strain_id)
-        assert result is not None
+        if result is None:  # pragma: no cover — 刚写入即读不回，库损坏
+            raise RuntimeError(f"strain metadata {strain_id} vanished after upsert")
         return result
 
     def get(self, strain_id: str) -> StrainMeta | None:
@@ -259,7 +260,7 @@ class StrainMetadataService:
                 params.append(v)
 
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
-        sql = f"SELECT * FROM strain_metadata{where} ORDER BY isolation_date DESC LIMIT ?"
+        sql = f"SELECT * FROM strain_metadata{where} ORDER BY isolation_date DESC LIMIT ?"  # noqa: S608 — 片段为模块内常量/占位符拼装，值一律 ? 绑定
         params.append(limit)
         rows = self._conn.execute(sql, params).fetchall()
         return [self._row_to_meta(r) for r in rows]

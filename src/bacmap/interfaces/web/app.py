@@ -12,13 +12,14 @@ from __future__ import annotations
 import hmac
 import json
 import secrets
+import threading
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -82,22 +83,23 @@ _MAX_ASSISTANT_SESSIONS = 32  # 会话上限（LRU 淘汰；防无界增长/内�
 _MAX_PROMPT_LEN = 8000  # 单轮需求文本上限（防超大表单/提示词）
 
 
-def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI:
-    app = FastAPI(title="bacmap", docs_url=None, redoc_url=None)
-    cfg = WebAuthConfig.from_env(auth_token)
-    app.state.web_auth = cfg
-    if cfg.enabled:
-        # ADR-14/v1.4.15：bearer（API）与 cookie（浏览器）双通道；cookie 模式配 CSRF。
-        app.add_middleware(WebAuthMiddleware, cfg=cfg)
-    # 安全响应头（含 CSP）：最后加入 → 位于最外层，鉴权 401/303 也带安全头。
-    app.add_middleware(SecurityHeadersMiddleware)
-    # 静态资源仅本地（CSS/图标/脚本；零外联，ADR-16）
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+def _consteq(a: str, b: str) -> bool:
+    """常量时间字符串比较（非 ASCII 输入编码失败按不匹配处理，而非 500）。
 
-    # -- 登录 / 登出（cookie 模式；bearer 模式下 /login 直接回首页） --------------
+    ``hmac.compare_digest`` 对 str 要求 ASCII-only：登录表单提交含非 ASCII
+    token 时会抛 TypeError → 未捕获 500。这里统一走 UTF-8 bytes 比较。
+    """
+    try:
+        return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+    except UnicodeEncodeError:
+        return False
+
+
+def _build_auth_routes(app: FastAPI, cfg: WebAuthConfig) -> None:
+    """登录/登出（cookie 模式登录；bearer/未启用模式给说明页）。"""
 
     @app.get("/login", response_class=HTMLResponse)
-    def login_form(request: Request, next: str = "/"):
+    def login_form(request: Request, next: str = "/") -> HTMLResponse:
         # 始终渲染（不重定向）：cookie 模式给登录表单；bearer/未启用模式给说明页。
         # 旧实现在非 cookie 模式 303 回首页，与中间件"HTML→/login"形成死循环（v1.4.25 修复）。
         return _TEMPLATES.TemplateResponse(
@@ -113,14 +115,14 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
     @app.post("/login", response_class=HTMLResponse)
     def login_submit(
         request: Request, token: str = Form(...), next: str = Form("/")
-    ):
+    ) -> Response:
         if not (cfg.enabled and cfg.mode == "cookie"):
             return RedirectResponse("/", status_code=303)
         host = request.headers.get("host", "")
         origin = request.headers.get("origin", "")
         if origin and urlparse(origin).netloc != host:
             raise HTTPException(403, "cross-origin login rejected")
-        if not hmac.compare_digest(token, cfg.token):
+        if not _consteq(token, cfg.token):
             return _TEMPLATES.TemplateResponse(
                 request,
                 "login.html",
@@ -137,21 +139,18 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
         return resp
 
     @app.post("/logout")
-    def logout() -> RedirectResponse:
+    def logout(request: Request, csrf: str = Form("")) -> RedirectResponse:
+        # 登出也过 CSRF（bearer 模式放行）：跨站不得强制登出用户（骚扰面）。
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
         resp = RedirectResponse("/login", status_code=303)
         resp.delete_cookie(SESSION_COOKIE, path="/")
         resp.delete_cookie(CSRF_COOKIE, path="/")
         return resp
 
-    @app.get("/", response_class=HTMLResponse)
-    def index(request: Request) -> HTMLResponse:
-        return _TEMPLATES.TemplateResponse(
-            request, "index.html", {"tasks": engine.list_tasks()}
-        )
 
-    @app.get("/overview", response_class=HTMLResponse)
-    def overview(request: Request) -> HTMLResponse:
-        return _TEMPLATES.TemplateResponse(request, "overview.html", overview_data(engine))
+def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
+    """样本列表/详情/内联报告/搜索页。"""
 
     @app.get("/samples", response_class=HTMLResponse)
     def samples_page(request: Request) -> HTMLResponse:
@@ -214,6 +213,62 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
             },
         )
 
+
+def _submit_task_payload(
+    task_type: str, samples: str, scope: str
+) -> tuple[TaskType, dict[str, Any]]:
+    """提交表单 → (任务类型, 引擎参数)；非法值抛 HTTPException。"""
+    try:
+        tt = TaskType(task_type)
+    except ValueError as exc:
+        raise HTTPException(400, f"未知任务类型: {task_type}") from exc
+    # 表单仅提供 analyze|curate；mine/write 属开放路径，需 script/draft 参数，
+    # 不经本表单提交（防止伪造 POST 产生空任务）。
+    if tt not in (TaskType.ANALYZE, TaskType.CURATE):
+        raise HTTPException(400, f"任务类型 {tt.value!r} 不支持 Web 提交")
+    params: dict[str, Any] = {}
+    if samples.strip():
+        sample_list = [s.strip() for s in samples.replace("\n", ",").split(",") if s.strip()]
+        bad = [s for s in sample_list if not _validate_sample_id(s)]
+        if bad:
+            raise HTTPException(400, f"非法样本 ID: {bad!r}")
+        params["samples"] = sample_list
+    if scope.strip():
+        try:
+            params["scope"] = json.loads(scope)
+        except ValueError as exc:
+            raise HTTPException(400, "scope 不是合法 JSON") from exc
+    return tt, params
+
+
+def _approval_from_form(approver: str, decision: str, signature: str) -> Approval:
+    """审批表单 → Approval；非法 decision 抛 HTTPException。"""
+    if decision not in ("approve", "reject"):
+        raise HTTPException(400, "decision 必须是 approve|reject")
+    typed_decision: Literal["approve", "reject"] = (
+        "approve" if decision == "approve" else "reject"
+    )
+    return Approval(
+        approver=approver,
+        decision=typed_decision,
+        signature=signature,
+        at=datetime.now(UTC),
+    )
+
+
+def _build_task_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
+    """任务列表/概览/提交/详情/轮询 fragment/审批。"""
+
+    @app.get("/", response_class=HTMLResponse)
+    def index(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(
+            request, "index.html", {"tasks": engine.list_tasks()}
+        )
+
+    @app.get("/overview", response_class=HTMLResponse)
+    def overview(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(request, "overview.html", overview_data(engine))
+
     @app.post("/tasks/submit")
     def submit_task(
         request: Request,
@@ -224,26 +279,7 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
     ) -> RedirectResponse:
         if not verify_csrf(request, csrf):
             raise HTTPException(403, "CSRF 校验失败")
-        try:
-            tt = TaskType(task_type)
-        except ValueError as exc:
-            raise HTTPException(400, f"未知任务类型: {task_type}") from exc
-        # 表单仅提供 analyze|curate；mine/write 属开放路径，需 script/draft 参数，
-        # 不经本表单提交（防止伪造 POST 产生空任务）。
-        if tt not in (TaskType.ANALYZE, TaskType.CURATE):
-            raise HTTPException(400, f"任务类型 {tt.value!r} 不支持 Web 提交")
-        params: dict[str, Any] = {}
-        if samples.strip():
-            sample_list = [s.strip() for s in samples.replace("\n", ",").split(",") if s.strip()]
-            bad = [s for s in sample_list if not _validate_sample_id(s)]
-            if bad:
-                raise HTTPException(400, f"非法样本 ID: {bad!r}")
-            params["samples"] = sample_list
-        if scope.strip():
-            try:
-                params["scope"] = json.loads(scope)
-            except ValueError as exc:
-                raise HTTPException(400, "scope 不是合法 JSON") from exc
+        tt, params = _submit_task_payload(task_type, samples, scope)
         try:
             tid = engine.submit(tt, params, submitted_by="web")
         except (ValueError, NotImplementedError) as exc:
@@ -256,19 +292,20 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
         except KeyError as exc:
             raise HTTPException(404, "任务不存在") from exc
 
-    @app.get("/tasks/{task_id}", response_class=HTMLResponse)
-    def task_detail(request: Request, task_id: str) -> HTMLResponse:
+    def _render_task_page(request: Request, task_id: str, template: str) -> HTMLResponse:
+        """task 详情页与轮询 fragment 共用渲染（仅模板不同）。"""
         st = _status_or_404(task_id)
         return _TEMPLATES.TemplateResponse(
-            request, "task_detail.html", {"st": st, "task_id": task_id}
+            request, template, {"st": st, "task_id": task_id}
         )
+
+    @app.get("/tasks/{task_id}", response_class=HTMLResponse)
+    def task_detail(request: Request, task_id: str) -> HTMLResponse:
+        return _render_task_page(request, task_id, "task_detail.html")
 
     @app.get("/tasks/{task_id}/fragment", response_class=HTMLResponse)
     def task_fragment(request: Request, task_id: str) -> HTMLResponse:
-        st = _status_or_404(task_id)
-        return _TEMPLATES.TemplateResponse(
-            request, "task_fragment.html", {"st": st, "task_id": task_id}
-        )
+        return _render_task_page(request, task_id, "task_fragment.html")
 
     @app.post("/tasks/{task_id}/approve")
     def approve_task(
@@ -281,28 +318,18 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
     ) -> RedirectResponse:
         if not verify_csrf(request, csrf):
             raise HTTPException(403, "CSRF 校验失败")
-        if decision not in ("approve", "reject"):
-            raise HTTPException(400, "decision 必须是 approve|reject")
-        typed_decision: Literal["approve", "reject"] = (
-            "approve" if decision == "approve" else "reject"
-        )
         try:
-            engine.approve(
-                TaskId(task_id),
-                Approval(
-                    approver=approver,
-                    decision=typed_decision,
-                    signature=signature,
-                    at=datetime.now(UTC),
-                ),
-            )
+            engine.approve(TaskId(task_id), _approval_from_form(approver, decision, signature))
         except KeyError as exc:
             raise HTTPException(404, "任务不存在") from exc
         return RedirectResponse(f"/tasks/{task_id}", status_code=303)
 
-    # -- 会话式助手（LLM 规划 → 确认 → 提交） --------------------------------
 
+def _build_assistant_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
+    """会话式助手（LLM 规划 → 确认 → 提交）；会话表带锁的 LRU。"""
     _agent_sessions: dict[str, dict[str, Any]] = {}
+    # 同步路由跑线程池：会话表的 LRU 淘汰/写入须持锁（并发下不超上限、不竞态）。
+    _agent_sessions_lock = threading.Lock()
 
     @app.get("/assistant", response_class=HTMLResponse)
     def assistant_page(request: Request) -> HTMLResponse:
@@ -313,15 +340,16 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
     def _new_session(sid: str) -> None:
         from bacmap.interfaces.assistant import build_session
 
-        # LRU 上限：超限淘汰最旧会话（其 LLM 历史随之释放）。
-        if len(_agent_sessions) >= _MAX_ASSISTANT_SESSIONS:
-            oldest = min(_agent_sessions, key=lambda k: _agent_sessions[k]["at"])
-            _agent_sessions.pop(oldest, None)
-        _agent_sessions[sid] = {
-            "session": build_session(engine),
-            "plan": None,
-            "at": datetime.now(UTC),
-        }
+        with _agent_sessions_lock:
+            # LRU 上限：超限淘汰最旧会话（其 LLM 历史随之释放）。
+            if len(_agent_sessions) >= _MAX_ASSISTANT_SESSIONS:
+                oldest = min(_agent_sessions, key=lambda k: _agent_sessions[k]["at"])
+                _agent_sessions.pop(oldest, None)
+            _agent_sessions[sid] = {
+                "session": build_session(engine),
+                "plan": None,
+                "at": datetime.now(UTC),
+            }
 
     @app.post("/assistant", response_class=HTMLResponse)
     def assistant_ask(
@@ -341,9 +369,11 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
             sid = uuid4().hex
             _new_session(sid)
         entry = _agent_sessions[sid]
-        entry["at"] = datetime.now(UTC)
+        with _agent_sessions_lock:
+            entry["at"] = datetime.now(UTC)
         reply = entry["session"].respond(prompt)
-        entry["plan"] = reply.plan
+        with _agent_sessions_lock:
+            entry["plan"] = reply.plan
         return _TEMPLATES.TemplateResponse(
             request,
             "assistant.html",
@@ -359,16 +389,39 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
         if not verify_csrf(request, csrf):
             raise HTTPException(403, "CSRF 校验失败")
         entry = _agent_sessions.get(sid)
-        plan = entry["plan"] if entry else None
+        # 原子取出并清空计划：双击/并发提交第二个请求会看到空计划而拒绝，
+        # 不会重复执行同一计划（重复提交重复任务）。
+        with _agent_sessions_lock:
+            plan = entry.pop("plan", None) if entry else None
+            if entry is not None:
+                entry["at"] = datetime.now(UTC)
         if plan is None or not plan.tasks:
             raise HTTPException(400, "没有待执行的计划")
-        results = execute_plan(engine, plan, submitted_by="web")
-        if entry is not None:
-            entry["plan"] = None
+        # confirmed=True：本路由的唯一入口是用户在看到完整计划（含参数）后
+        # 点击"确认并提交计划"按钮——即人工确认的事实断言。
+        results = execute_plan(engine, plan, submitted_by="web", confirmed=True)
         return _TEMPLATES.TemplateResponse(
             request,
             "assistant.html",
             {"sid": sid, "reply": None, "text": "", "results": results},
         )
 
+
+def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI:
+    """组装 Web 应用：中间件/静态 + 四组路由（auth/sample/task/assistant）。"""
+    app = FastAPI(title="bacmap", docs_url=None, redoc_url=None)
+    cfg = WebAuthConfig.from_env(auth_token)
+    app.state.web_auth = cfg
+    if cfg.enabled:
+        # ADR-14/v1.4.15：bearer（API）与 cookie（浏览器）双通道；cookie 模式配 CSRF。
+        app.add_middleware(WebAuthMiddleware, cfg=cfg)
+    # 安全响应头（含 CSP）：最后加入 → 位于最外层，鉴权 401/303 也带安全头。
+    app.add_middleware(SecurityHeadersMiddleware)
+    # 静态资源仅本地（CSS/图标/脚本；零外联，ADR-16）
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+    _build_auth_routes(app, cfg)
+    _build_sample_routes(app, engine)
+    _build_task_routes(app, engine)
+    _build_assistant_routes(app, engine)
     return app

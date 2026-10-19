@@ -12,7 +12,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+import contextlib
+from typing import Any, ClassVar
 
 from rich.markup import escape as _esc
 from textual import work
@@ -111,7 +112,7 @@ class BacmapTUI(App[None]):
 
     CSS = _CSS
     TITLE = "bacmap"
-    BINDINGS = [
+    BINDINGS: ClassVar[list[Any]] = [
         ("ctrl+c", "quit", "退出"),
         ("ctrl+b", "toggle_sidebar", "侧栏"),
         ("ctrl+r", "refresh", "刷新"),
@@ -124,7 +125,7 @@ class BacmapTUI(App[None]):
     ]
 
     # leader 和弦（Ctrl+G 之后）：键 → 本类同步动作方法
-    _LEADER_CHORDS = {
+    _LEADER_CHORDS: ClassVar[dict[str, str]] = {
         "n": "action_new_session",
         "i": "action_focus_input",
         "l": "action_focus_tasks",
@@ -203,7 +204,7 @@ class BacmapTUI(App[None]):
 
         try:
             status = endpoint_status(self.engine)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             status = f"检查失败（{type(exc).__name__}）"
         self.call_from_thread(self._chat_append, f"[#8b949e]LLM 端点：{status}[/]")
         self.call_from_thread(setattr, self, "sub_title", f"LLM · {status}")
@@ -267,17 +268,16 @@ class BacmapTUI(App[None]):
             if table.row_count == 0:
                 return None
             return str(table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value)
-        except Exception:  # noqa: BLE001 —— 空表/无光标
+        except Exception:
             return None
 
     @staticmethod
     def _restore_selection(table: DataTable, key: str | None) -> None:
         if key is None:
             return
-        try:
+        # 行已消失（刷新竞态）：保持无选中即可，不视为错误。
+        with contextlib.suppress(Exception):
             table.move_cursor(row=table.get_row_index(key))
-        except Exception:  # noqa: BLE001 —— 行已不存在
-            pass
 
     def _chat_append(self, markup: str) -> None:
         try:
@@ -499,7 +499,7 @@ class BacmapTUI(App[None]):
         except asyncio.CancelledError:
             self._set_hint("[#d29922]已在途请求已取消[/]")
             raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._chat_append(
                 f"[#f85149]助手调用失败：{_esc(type(exc).__name__)}: {_esc(str(exc))}[/]"
             )
@@ -528,8 +528,9 @@ class BacmapTUI(App[None]):
         from bacmap.interfaces.assistant import execute_plan
 
         try:
-            results = execute_plan(self.engine, plan, submitted_by="tui")
-        except Exception as exc:  # noqa: BLE001
+            # confirmed=True：唯一入口是用户按 Ctrl+Y（_pending_plan 待确认提示）。
+            results = execute_plan(self.engine, plan, submitted_by="tui", confirmed=True)
+        except Exception as exc:
             self.call_from_thread(
                 self._chat_append,
                 f"[#f85149]提交失败：{_esc(type(exc).__name__)}: {_esc(str(exc))}[/]",

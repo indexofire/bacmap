@@ -19,21 +19,21 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from bacmap.config import GOM_DB as _NLI_DB_PATH  # noqa: E402
+from bacmap.config import GOM_DB as _NLI_DB_PATH
 from bacmap.config import REF_DIR, RESULTS_DIR, WORKFLOWS_DIR
-from bacmap.core.analysis.cgmlst_projection import (  # noqa: E402
+from bacmap.core.analysis.cgmlst_projection import (
     ProjectionResult,
     Verdict,
     load_thresholds_from_config,
     project_sample,
 )
-from bacmap.core.analysis.cgmlst_types import CgmlstProfile  # noqa: E402
-from bacmap.core.utils import (  # noqa: E402
+from bacmap.core.analysis.cgmlst_types import CgmlstProfile
+from bacmap.core.utils import (
     parse_abricate_tsv,
     parse_cgmlst_profile,
     parse_mlst,
 )
-from bacmap.core.verify.deterministic_verifier import DeterministicVerifier  # noqa: E402
+from bacmap.core.verify.deterministic_verifier import DeterministicVerifier
 
 RESULTS_DIR = RESULTS_DIR
 # Module-level so tests can monkey-patch without touching disk.
@@ -724,7 +724,7 @@ def html_to_pdf(html_path: Path, pdf_path: Path) -> bool:
         for sandbox in (True, False):
             cmd = base_cmd if sandbox else [*base_cmd[:3], "--no-sandbox", *base_cmd[3:]]
             try:
-                proc = subprocess.run(  # noqa: S603
+                proc = subprocess.run(
                     cmd, capture_output=True, timeout=120, check=False
                 )
             except subprocess.TimeoutExpired:

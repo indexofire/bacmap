@@ -311,5 +311,5 @@ class TestIntegration:
 
             assert meta.patient_name == "张三"
             assert len(labs) == 2
-            sero = [lr for lr in labs if lr.category == "serology"][0]
+            sero = next(lr for lr in labs if lr.category == "serology")
             assert sero.result == "O4"

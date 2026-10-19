@@ -47,7 +47,7 @@ def _run(tmp_path: Path, species_id: dict, omit: set[str] | None = None) -> dict
         output=SimpleNamespace(summary=str(out)),
     )
     src = _SCRIPT.read_text()
-    exec(
+    exec(  # noqa: S102 — 按运行时契约装载 snakemake 脚本源（测试替身）
         compile(src, str(_SCRIPT), "exec"),
         {"snakemake": snakemake, "__name__": "collect_summary"},
     )
