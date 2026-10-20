@@ -90,10 +90,23 @@ Screen { background: $background; }
 #tasks-table, #samples-table { height: 1fr; }
 #main { width: 1fr; }
 #conversation { height: 1fr; padding: 0 2; }
+#stream {
+    display: none;
+    dock: bottom;
+    height: auto;
+    max-height: 8;
+    padding: 0 2 0 2;
+    border-top: solid $border;
+    color: $text-muted;
+}
+#stream.on { display: block; }
 #plan-hint { padding: 0 2; color: $warning; height: auto; }
 #prompt { dock: bottom; border: round $border; }
 #prompt:focus { border: round $accent; }
 """
+
+# 思考/活动指示的 spinner 帧（opencode 式 braille throbber）
+_SPIN_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 _HELP = (
     "[b #3fb950]bacmap 会话助手[/]\n"
@@ -149,6 +162,13 @@ class BacmapTUI(App[None]):
         self._follow = True  # 会话是否跟随最新（tui-design：follow 显式）
         self._task_states: dict[str, str] = {}  # 上次渲染看到的任务状态（失败回显去重）
         self._tasks_seeded = False  # 首次渲染只登记、不回显历史失败
+        # 流式展示状态（v1.4.31）：spinner/活动文案/思考尾窗/回复缓冲
+        self._spin_i = 0
+        self._spin_timer: Any = None
+        self._activity = ""
+        self._think_tail = ""
+        self._reply_buf = ""
+        self._cursor_on = True
 
     # -- 布局 ---------------------------------------------------------------
 
@@ -162,6 +182,7 @@ class BacmapTUI(App[None]):
                 yield DataTable(id="samples-table")
             with Vertical(id="main"):
                 yield RichLog(id="conversation", markup=True, wrap=True)
+                yield Static("", id="stream")
                 yield Static("", id="plan-hint")
                 yield Input(
                     placeholder="输入分析需求；/ 查看斜杠命令；Enter 发送 · Ctrl+G 引导键",
@@ -291,6 +312,57 @@ class BacmapTUI(App[None]):
         except NoMatches:
             return
 
+    # -- 流式展示（v1.4.31）--------------------------------------------------
+
+    def _start_busy(self, activity: str) -> None:
+        """开始"思考中"动态指示：spinner 定时器 + 流式显示区。"""
+        self._activity = activity
+        self._think_tail = ""
+        self._reply_buf = ""
+        self._spin_i = 0
+        with contextlib.suppress(NoMatches):
+            self.query_one("#stream", Static).set_class(True, "on")
+        if self._spin_timer is None:
+            self._spin_timer = self.set_interval(0.12, self._tick_busy)
+
+    def _stop_busy(self) -> None:
+        """结束动态指示：停 spinner、隐藏并清空流式显示区。"""
+        if self._spin_timer is not None:
+            self._spin_timer.stop()
+            self._spin_timer = None
+        self._activity = ""
+        with contextlib.suppress(NoMatches):
+            stream = self.query_one("#stream", Static)
+            stream.set_class(False, "on")
+            stream.update("")
+        if not self._pending_plan:
+            self._set_hint("")
+
+    def _tick_busy(self) -> None:
+        self._spin_i = (self._spin_i + 1) % len(_SPIN_FRAMES)
+        self._cursor_on = not self._cursor_on
+        self._render_busy()
+
+    def _render_busy(self) -> None:
+        """渲染指示行（spinner + 活动）与流式显示区（思考尾窗 + 回复缓冲）。"""
+        frame = _SPIN_FRAMES[self._spin_i]
+        if self._activity:
+            self._set_hint(f"[b #d29922]{frame}[/] {_esc(self._activity)}")
+        think = self._think_tail[-240:]
+        lines = []
+        if think:
+            shown = ("…" + think) if len(self._think_tail) > 240 else think
+            lines.append(f"[i]{_esc(shown)}[/]")
+        if self._reply_buf:
+            cursor = "▌" if self._cursor_on else " "
+            lines.append(f"[green]{_esc(self._reply_buf[-800:])}{cursor}[/green]")
+        elif not think:
+            lines.append(f"[#8b949e]{frame}[/]")
+        try:
+            self.query_one("#stream", Static).update("\n".join(lines))
+        except NoMatches:
+            return
+
     # -- 动作 ---------------------------------------------------------------
 
     def action_refresh(self) -> None:
@@ -313,6 +385,7 @@ class BacmapTUI(App[None]):
         inp = self.query_one("#prompt", Input)
         inp.value = ""
         self._reply_seq += 1  # 丢弃迟到的回复
+        self._stop_busy()
         if self._cancel_chat():
             self._chat_append("[#d29922]已取消在途请求[/]")
         if self._leader:
@@ -489,17 +562,35 @@ class BacmapTUI(App[None]):
         self._reply_seq += 1
         token = self._reply_seq
         self._chat_append(f"[#79c0ff]你[/] › {_esc(text)}")
-        self._set_hint("…思考中（首次调用较慢，Esc 可取消）")
+        self._start_busy("思考中（Esc 可取消）")
+
+        async def on_event(kind: str, payload: str) -> None:
+            if token != self._reply_seq:
+                return  # 已被 Esc 放弃：不再渲染
+            if kind == "thinking_delta":
+                self._think_tail = (self._think_tail + payload)[-2000:]
+            elif kind in ("text_delta", "reply_delta"):
+                self._reply_buf += payload
+            elif kind == "tool_call":
+                self._activity = f"调用 {payload or '工具'}…"
+            elif kind == "tool_result":
+                self._activity = f"{payload or '工具'} ✓"
+            elif kind == "retry":
+                self._activity = "请求失败，重试中…"
+            self._render_busy()
+
         try:
             if self._session is None:
                 from bacmap.interfaces.assistant import build_session
 
                 self._session = build_session(self.engine)
-            reply = await self._session.respond_async(text)
+            reply = await self._session.respond_stream(text, on_event)
         except asyncio.CancelledError:
+            self._stop_busy()
             self._set_hint("[#d29922]已在途请求已取消[/]")
             raise
         except Exception as exc:
+            self._stop_busy()
             self._chat_append(
                 f"[#f85149]助手调用失败：{_esc(type(exc).__name__)}: {_esc(str(exc))}[/]"
             )
@@ -507,6 +598,7 @@ class BacmapTUI(App[None]):
             return
         if token != self._reply_seq:  # 已被 Esc 放弃
             return
+        self._stop_busy()
         self._chat_reply(reply)
 
     def _chat_reply(self, reply: Any) -> None:

@@ -37,8 +37,29 @@ READ_TOOL_NAMES: tuple[str, ...] = (
     "bio_compare_runs",
 )
 
-# 助手可能读到 D4（元数据）——本地端点无碍；cloud 端点会被 ADR-16 拦截（助手仅 local/lan）。
+# 助手可能读到 D4（元数据）——本地/局域网端点无碍。云端端点按 ADR-16 裁剪工具带：
+# 高于云端上限（管理员最多放宽到 D2）的工具不进会话，会话数据级别由实际工具带派生
+# （v1.4.28：助手可上云，D3/D4 工具永不路由到 cloud——红线不放松，能力做裁剪）。
 _ASSISTANT_DATA_CLASS = DataClass.D4
+
+
+def session_belt(limit: DataClass) -> tuple[tuple[str, ...], DataClass]:
+    """按数据级别上限裁剪只读工具带，返回 (工具名, 会话数据级别)。
+
+    工具的 ``output_data_class`` 取自注册表元数据；会话级别 = 工具带中最高级别
+    （工具结果会回流进模型上下文，会话级别必须覆盖全部工具输出）。
+    沙箱工具（sandbox_run/sandbox_shell）输出无界（可 cat 原始数据），不在此列——
+    云端会话由 build_session 整体排除。
+    """
+    from bacmap.tools import registry
+
+    names = tuple(
+        n for n in READ_TOOL_NAMES if registry.get(n).output_data_class <= limit
+    )
+    data_class = max(
+        (registry.get(n).output_data_class for n in names), default=DataClass.D0
+    )
+    return names, data_class
 
 # 单轮提示词上限（字符）与保留的历史轮数上限（防无界上下文增长）。
 _MAX_PROMPT_CHARS = 8000
@@ -138,11 +159,13 @@ class AgentSession:
         tools: list[Any] | None = None,
         extra_tools: list[Any] | None = None,
         purpose: str = "intent_classifier",
+        data_class: DataClass = _ASSISTANT_DATA_CLASS,
     ) -> None:
         self._gateway = gateway
         self._home = home
         self._role = role
         self._purpose = purpose
+        self._data_class = data_class
         base = build_read_tools() if tools is None else tools
         self._tools = list(base) + list(extra_tools or [])
         self._history: list[Any] = []
@@ -159,7 +182,7 @@ class AgentSession:
                 prompt=_build_prompt(text, self._home),
                 output_type=AnalysisPlan,
                 tools=self._tools,
-                data_class=_ASSISTANT_DATA_CLASS,
+                data_class=self._data_class,
                 role=self._role,
                 message_history=self._history or None,
             )
@@ -169,15 +192,27 @@ class AgentSession:
 
     async def respond_async(self, text: str) -> AgentReply:
         """``respond`` 的异步版：可被取消（TUI 用），工具在线程中执行不阻塞事件循环。"""
+        return await self.respond_stream(text)
+
+    async def respond_stream(
+        self,
+        text: str,
+        on_event: Any | None = None,
+    ) -> AgentReply:
+        """流式版 ``respond_async``（v1.4.31）：过程事件经 ``on_event(kind, payload)``
+        回调（可 async），见 ``LlmGateway.run_agent_events_async``；无事件回调时
+        行为与 ``respond_async`` 一致。降级语义（LlmUnavailableError → C3）不变。
+        """
         try:
-            result = await self._gateway.run_agent_async(
+            result = await self._gateway.run_agent_events_async(
                 purpose=self._purpose,
                 prompt=_build_prompt(text, self._home),
                 output_type=AnalysisPlan,
                 tools=self._tools,
-                data_class=_ASSISTANT_DATA_CLASS,
+                data_class=self._data_class,
                 role=self._role,
                 message_history=self._history or None,
+                on_event=on_event,
             )
         except LlmUnavailableError as exc:
             return self._degraded(exc)

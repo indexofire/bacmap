@@ -71,20 +71,88 @@ gmlst scheme list              # ✓ = 已缓存可用
 
 CheckM2 / GTDB-Tk 等大型数据库通过环境变量指向（见配置指南），不随包分发。
 
-## 5. 本地 LLM（可选）
+## 5. LLM 端点：本地模型或外部 API（可选）
 
-智能体层默认使用 Strata（`http://127.0.0.1:8080/v1`，OpenAI 兼容）。
-部署 Strata 与模型文件后系统自动可用；也可改用任意第三方 OpenAI 兼容 API
-（见配置指南 §2），或完全不配 LLM（确定性降级）。
+智能体层默认使用 Strata（`http://127.0.0.1:8080/v1`，OpenAI 兼容）。也可改用任意
+第三方 OpenAI 兼容 API（GLM、DeepSeek、Kimi、vLLM 等），或完全不配 LLM（确定性降级，
+任务表单/CLI/MCP 全部可用，仅对话助手不可用）。
 
-## 6. 沙箱运行时（mine 任务用）
+### 5.1 外部 API 接入（以 GLM 为例，完整步骤）
 
-挖掘任务的脚本在沙箱内执行，回退链：**Apptainer → Podman →（显式开启）直通**。
+**① 写配置** `$BACMAP_HOME/config.toml`（默认 `~/.local/share/bacmap/config.toml`）：
+
+```toml
+[llm.endpoints.glm]
+location = "cloud"                     # 外部 API 都是 cloud，受数据分级约束（§3/ADR-16）
+base_url = "https://open.bigmodel.cn/api/paas/v4/"   # GLM 通用端点
+model = "glm-4.6"                      # 改成你实际开通的模型
+api_key_env = "GLM_API_KEY"            # 只存变量名；密钥本身绝不写入文件
+tier = "T2"
+supports_tools_with_schema = true      # 对话助手需要 function calling
+
+[llm.routing]
+intent_classifier = "glm"              # 会话助手
+interpretation = "glm"                 # 分析解读
+
+[llm.data_policy]
+cloud_max_data_class = "D2"            # 对话助手完整能力所需（上限即 D2，D3/D4 不可配置）
+
+[llm.resources]
+co_located = false                     # 模型不在本机时关闭内存仲裁
+```
+
+**② 注入密钥**（环境变量，按 `api_key_env` 指定的名字）：
 
 ```bash
-which apptainer podman            # 有其一即可
-export BACMAP_ALLOW_UNSANDBOXED=1 # 仅受控开发环境可用的直通通道（不推荐生产）
+echo 'export GLM_API_KEY="你的密钥"' >> ~/.bashrc
+source ~/.bashrc
 ```
+
+> systemd 服务运行时改用服务单元的 `Environment=GLM_API_KEY=...`。
+> `export` 只对当前 shell 生效——换个终端要重新 `source`，否则 bacmap 进程拿到
+> 的是占位值，表现为 401。
+
+**③ 端点与密钥必须匹配**（GLM 常见踩坑）：
+
+| 密钥类型 | base_url | 说明 |
+|---|---|---|
+| 普通 API 密钥（控制台「API Keys」页） | `https://open.bigmodel.cn/api/paas/v4/` | 按量计费/资源包 |
+| GLM Coding Plan 订阅密钥 | `https://open.bigmodel.cn/api/coding/paas/v4/` | 订阅额度，仅 coding 端点有效 |
+
+密钥有效但端点不匹配时同样报错（见 §5.2 排查表）。
+
+**④ 验证**：
+
+```bash
+bacmap ask "你好，你能做什么"    # 正常回复即接通（CLI 流式输出）
+bacmap tui                       # 顶部标题显示「LLM · glm [cloud] … 已连接」
+```
+
+### 5.2 LLM 接入排查表
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| `payload D4 exceeds cloud limit …`（DataClassViolationError） | 数据分级拦截：该用途载荷级别超过云端上限 | 对话助手在云端自动裁剪工具带（v1.4.30）后不应再出现；若出现请确认 bacmap 为当前版本 |
+| HTTP 401「令牌已过期或验证不正确」 | 密钥未传进进程（export 在别的 shell），或密钥与端点类型不匹配 | 同 shell `echo $GLM_API_KEY` 自查；按 §5.1③ 对照端点 |
+| HTTP 429 code 1113「余额不足或无可用资源包」 | 账户无该模型额度 | 控制台充值/换用免费模型（如 `glm-4-flash`），或换用有订阅的密钥 |
+| 模型不存在（code 1211） | 模型名不在你的订阅范围 | 改 `model` 为实际开通的模型名 |
+| `内置助手暂不可用（agent run failed …）` | 以上任意原因重试耗尽后的统一降级提示 | 运行 `bacmap ask "你好" 2>&1`，WARNING 行会打印每次尝试的**真实失败原因** |
+
+## 6. 沙箱运行时（mine 任务与外部数据读取的前提）
+
+挖掘任务（mine）的脚本在沙箱内执行，回退链：**Apptainer → Podman →（显式开启）直通**。
+**注意：docker 不在支持链内**（守护进程是 root 权限面，且被刻意列入 shell 禁用清单）。
+
+```bash
+sudo apt-get install podman         # 推荐：无守护进程、无 root、单工作站最合适
+# 或 sudo apt-get install apptainer
+which apptainer podman              # 有其一即可，装完零配置
+export BACMAP_ALLOW_UNSANDBOXED=1   # 仅受控开发环境的直通通道（无隔离，不推荐生产）
+```
+
+没有沙箱后端时，凡带脚本的 mine 任务（包括对话助手读取外部数据的链路）都会失败并
+提示「沙箱不可用」——这是执行环境问题，不是权限配置问题。数据接入方式见
+[使用指南](usage.zh-CN.md) §2「给助手一份数据路径」。
 
 ## 7. 首次验证
 

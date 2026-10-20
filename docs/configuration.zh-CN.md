@@ -72,7 +72,13 @@ cloud_max_data_class = "D1"            # 见 §3，不可通过配置放宽超�
 
 - **多端点并存**，`[llm.routing]` 按 purpose（`intent_classifier` / `interpretation`）分流；
 - 密钥只存环境变量**名**（`api_key_env`），值在 shell/服务环境里注入；
-- 端点 `enabled = false` 可临时停用。
+- 端点 `enabled = false` 可临时停用；
+- **会话助手在云端端点下自动裁剪工具带（v1.4.30）**：`intent_classifier` 路由到 `cloud`
+  端点时，高于 `cloud_max_data_class` 的只读工具（D4 元数据/检验、D3 数据集查看）不进
+  会话，沙箱工具整体排除，会话级别由裁剪后工具带派生（≤D2）。要获得完整能力请放宽到
+  `"D2"`；只允许 D1 时助手仅剩 D0 工具（参考基因组清单/诊断）。本地/局域网端点不受影响；
+- 密钥注入方式、GLM 通用端点与 coding 端点的匹配关系、以及 401/429 等接入报错的
+  完整排查表，见[安装指南 §5](installation.zh-CN.md)。
 
 ## 3. 数据分级政策（ADR-16，安全红线）
 

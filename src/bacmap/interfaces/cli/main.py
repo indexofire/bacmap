@@ -315,15 +315,48 @@ def _run_search(args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _present_and_execute(args: argparse.Namespace, engine: Any, reply: Any) -> None:
+def _stream_respond(session: Any, text: str, *, show_thinking: bool = False) -> Any:
+    """CLI 流式版 respond（v1.4.31）：回复增量直接写 stdout，工具活动写 stderr。
+
+    思考流默认不打印（终端噪声）；``show_thinking`` 供需要时开启。
+    """
+    import asyncio
+    import sys
+
+    async def _go() -> Any:
+        async def on_event(kind: str, payload: str) -> None:
+            if kind in ("reply_delta", "text_delta"):
+                sys.stdout.write(payload)
+                sys.stdout.flush()
+            elif kind == "tool_call" and payload:
+                sys.stderr.write(f"\x1b[2m· 调用 {payload}…\x1b[0m\n")
+                sys.stderr.flush()
+            elif kind == "thinking_delta" and show_thinking:
+                sys.stderr.write(f"\x1b[2m{payload}\x1b[0m")
+                sys.stderr.flush()
+
+        return await session.respond_stream(text, on_event)
+
+    return asyncio.run(_go())
+
+
+def _present_and_execute(
+    args: argparse.Namespace,
+    engine: Any,
+    reply: Any,
+    *,
+    message_shown: bool = False,
+) -> None:
     from rich.markup import escape as _esc
     from rich.prompt import Confirm
 
     from bacmap.interfaces.assistant import execute_plan, format_plan
 
     c = _console()
-    if reply.message:
+    if reply.message and not message_shown:
         c.print(_esc(reply.message))
+    elif message_shown:
+        c.print()  # 流式输出后补一个换行，与后续内容分隔
     plan = reply.plan
     if plan is None or not plan.tasks:
         return
@@ -345,8 +378,9 @@ def _run_ask(args: argparse.Namespace) -> None:
     from bacmap.interfaces.assistant import build_session
 
     engine = _engine(args.home)
-    reply = build_session(engine).respond(args.text)
+    session = build_session(engine)
     if args.json:
+        reply = session.respond(args.text)
         _emit_json(
             {
                 "message": reply.message,
@@ -355,7 +389,9 @@ def _run_ask(args: argparse.Namespace) -> None:
             }
         )
         return
-    _present_and_execute(args, engine, reply)
+    reply = _stream_respond(session, args.text)
+    # degraded（无 LLM）时没有增量流出，降级提示仍需完整打印
+    _present_and_execute(args, engine, reply, message_shown=not reply.degraded)
 
 
 def _run_chat(args: argparse.Namespace) -> None:
@@ -374,7 +410,8 @@ def _run_chat(args: argparse.Namespace) -> None:
             break
         if not text.strip():
             break
-        _present_and_execute(args, engine, session.respond(text))
+        reply = _stream_respond(session, text)
+        _present_and_execute(args, engine, reply, message_shown=not reply.degraded)
 
 
 # ---------------------------------------------------------------------------

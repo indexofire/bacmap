@@ -76,22 +76,90 @@ gmlst scheme list              # ✓ = 已缓存可用
 
 Large databases such as CheckM2 / GTDB-Tk are located through environment variables (see the configuration guide) and are not distributed with the package.
 
-## 5. Local LLM (optional)
+## 5. LLM endpoint: local model or external API (optional)
 
 The agent layer uses Strata by default (`http://127.0.0.1:8080/v1`, OpenAI-compatible).
-Once Strata and its model files are deployed, the system picks it up automatically. You can
-also switch to any third-party OpenAI-compatible API (see configuration guide §2), or
-configure no LLM at all (deterministic degradation).
+You can also switch to any third-party OpenAI-compatible API (GLM, DeepSeek, Kimi, vLLM, …),
+or configure no LLM at all (deterministic degradation — the task form / CLI / MCP keep
+working; only the conversational assistant is unavailable).
 
-## 6. Sandbox runtime (for mine tasks)
+### 5.1 External API setup (GLM example, step by step)
 
-Scripts from mining tasks execute inside a sandbox. Fallback chain:
-**Apptainer → Podman → passthrough (explicitly enabled)**.
+**① Write the config** at `$BACMAP_HOME/config.toml` (default `~/.local/share/bacmap/config.toml`):
+
+```toml
+[llm.endpoints.glm]
+location = "cloud"                     # external APIs are all cloud — data-class constrained (ADR-16)
+base_url = "https://open.bigmodel.cn/api/paas/v4/"   # GLM standard endpoint
+model = "glm-4.6"                      # change to a model you actually subscribe to
+api_key_env = "GLM_API_KEY"            # only the variable NAME is stored; never the key itself
+tier = "T2"
+supports_tools_with_schema = true      # the chat assistant needs function calling
+
+[llm.routing]
+intent_classifier = "glm"              # conversational assistant
+interpretation = "glm"                 # analysis interpretation
+
+[llm.data_policy]
+cloud_max_data_class = "D2"            # needed for the full cloud assistant belt (max D2; D3/D4 impossible)
+
+[llm.resources]
+co_located = false                     # disable memory arbitration when the model is off-machine
+```
+
+**② Inject the key** (environment variable, named per `api_key_env`):
 
 ```bash
-which apptainer podman            # 有其一即可
-export BACMAP_ALLOW_UNSANDBOXED=1 # 仅受控开发环境可用的直通通道（不推荐生产）
+echo 'export GLM_API_KEY="your-key"' >> ~/.bashrc
+source ~/.bashrc
 ```
+
+> Under a systemd service use `Environment=GLM_API_KEY=...` in the unit instead.
+> `export` only affects the current shell — re-`source` in other terminals, otherwise the
+> bacmap process sees a placeholder and you get 401s.
+
+**③ Endpoint must match the key type** (a common GLM pitfall):
+
+| Key type | base_url | Notes |
+|---|---|---|
+| Standard API key (console "API Keys" page) | `https://open.bigmodel.cn/api/paas/v4/` | pay-as-you-go / resource packs |
+| GLM Coding Plan subscription key | `https://open.bigmodel.cn/api/coding/paas/v4/` | subscription quota, valid only on the coding endpoint |
+
+A valid key pointed at the wrong endpoint still fails (see §5.2).
+
+**④ Verify**:
+
+```bash
+bacmap ask "hi, what can you do"    # a normal reply means connected (CLI streams)
+bacmap tui                          # header shows "LLM · glm [cloud] … 已连接/connected"
+```
+
+### 5.2 LLM troubleshooting table
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `payload D4 exceeds cloud limit …` (DataClassViolationError) | Data-class block: payload level above the cloud cap | The cloud assistant trims its tool belt automatically (v1.4.30) and should not hit this; if it does, check the bacmap version |
+| HTTP 401 "token expired or incorrect" | Key not visible to the process (exported in another shell), or key/endpoint mismatch | `echo $GLM_API_KEY` in the same shell; match the endpoint per §5.1③ |
+| HTTP 429 code 1113 "insufficient balance / no resource pack" | Account has no quota for that model | Recharge, switch to a free model (e.g. `glm-4-flash`), or use a subscribed key |
+| Model not found (code 1211) | Model name outside your subscription | Set `model` to one you actually have |
+| `内置助手暂不可用 (agent run failed …)` | Unified degrade notice after retries of any of the above | Run `bacmap ask "hi" 2>&1` — the WARNING lines print the real per-attempt failure |
+
+## 6. Sandbox runtime (prerequisite for mine tasks and external-data access)
+
+Scripts from mining tasks (mine) execute inside a sandbox. Fallback chain:
+**Apptainer → Podman → passthrough (explicitly enabled)**.
+**Docker is deliberately NOT supported** (root daemon surface; also on the shell deny-list).
+
+```bash
+sudo apt-get install podman         # recommended: daemonless, rootless, best for a single workstation
+# or: sudo apt-get install apptainer
+which apptainer podman              # either one suffices; zero configuration afterwards
+export BACMAP_ALLOW_UNSANDBOXED=1   # passthrough for controlled dev environments only (no isolation)
+```
+
+Without a sandbox backend, every script-bearing mine task (including the assistant's
+external-data path) fails with "沙箱不可用 / sandbox unavailable" — an environment issue,
+not a permission setting. See the usage guide §2, "Giving the assistant a data path".
 
 ## 7. First verification
 

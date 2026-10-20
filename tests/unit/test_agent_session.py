@@ -344,3 +344,295 @@ class TestAssistantRoleToolAlignment:
         role_tools = set(roledef.load_role_def("assistant").tools)
         assert role_tools == session_names
         assert set(READ_TOOL_NAMES) | {"sandbox_run", "sandbox_shell"} == role_tools
+
+
+class TestCloudAssistantBelt:
+    """云端助手（v1.4.28）：工具带按云端上限裁剪，D3/D4 永不路由到 cloud。"""
+
+    def test_belt_d2_excludes_d3_d4(self):
+        from bacmap.agent.session import READ_TOOL_NAMES, session_belt
+        from bacmap.tools.spec import DataClass
+
+        names, dc = session_belt(DataClass.D2)
+        assert set(names) <= set(READ_TOOL_NAMES)
+        assert "bio_query_metadata" not in names  # D4（患者元数据）
+        assert "bio_inspect_dataset" not in names  # D3（原始数据集）
+        assert "bio_list_samples" in names  # D2（菌株级结果）在带内
+        assert dc == DataClass.D2  # 会话级别 = 工具带最高级别
+
+    def test_belt_d1_keeps_only_public_tools(self):
+        from bacmap.agent.session import session_belt
+        from bacmap.tools.spec import DataClass
+
+        names, dc = session_belt(DataClass.D1)
+        assert all(n in names for n in ("bio_list_reference_genomes", "bio_diagnose"))
+        assert "bio_list_samples" not in names
+        assert dc <= DataClass.D1
+
+    def test_belt_d4_is_full_belt(self):
+        from bacmap.agent.session import READ_TOOL_NAMES, session_belt
+        from bacmap.tools.spec import DataClass
+
+        names, dc = session_belt(DataClass.D4)
+        assert set(names) == set(READ_TOOL_NAMES)
+        assert dc == DataClass.D4
+
+    def test_belt_never_empty(self):
+        """任意上限下工具带非空（D0 工具恒在）——助手在云端不至失明。"""
+        from bacmap.agent.session import session_belt
+        from bacmap.tools.spec import DataClass
+
+        for limit in DataClass:
+            names, _dc = session_belt(limit)
+            assert names, f"belt empty at {limit}"
+
+    def test_cloud_belt_subset_of_role_tools(self):
+        """云端工具带必须是角色白名单的子集（角色清单仍是权威边界）。"""
+        from bacmap.agent import roledef
+        from bacmap.agent.session import session_belt
+        from bacmap.tools.spec import DataClass
+
+        role_tools = set(roledef.load_role_def("assistant").tools)
+        names, _dc = session_belt(DataClass.D2)
+        assert set(names) <= role_tools
+
+
+_CLOUD_CONFIG = """\
+[llm.endpoints.glm]
+location = "cloud"
+base_url = "https://api.example.com/v1"
+model = "glm-test"
+api_key_env = "GLM_API_KEY"
+tier = "T2"
+
+[llm.routing]
+intent_classifier = "glm"
+
+[llm.data_policy]
+cloud_max_data_class = "D2"
+"""
+
+
+class TestBuildSessionCloudBelt:
+    """build_session 按端点位置选工具带：cloud 裁剪 + 排除沙箱工具。"""
+
+    def test_cloud_session_trimmed(self, tmp_path, monkeypatch):
+        from bacmap import config as cfg
+        from bacmap.interfaces.assistant import build_session
+
+        (tmp_path / "config.toml").write_text(_CLOUD_CONFIG, encoding="utf-8")
+        monkeypatch.setattr(cfg, "BACMAP_HOME", tmp_path)
+
+        class _Engine:
+            home = tmp_path
+
+        session = build_session(_Engine())  # type: ignore[arg-type]
+        names = {t.name for t in session._tools}
+        assert "bio_query_metadata" not in names
+        assert "bio_inspect_dataset" not in names
+        assert "bio_list_samples" in names
+        assert "sandbox_run" not in names and "sandbox_shell" not in names
+        from bacmap.tools.spec import DataClass
+
+        assert session._data_class == DataClass.D2
+
+    def test_local_session_full_belt(self, tmp_path, monkeypatch):
+        from bacmap import config as cfg
+        from bacmap.interfaces.assistant import build_session
+
+        # 无 config.toml → 内置本地默认端点，全量工具带 + 沙箱。
+        monkeypatch.setattr(cfg, "BACMAP_HOME", tmp_path)
+
+        class _Engine:
+            home = tmp_path
+
+        session = build_session(_Engine())  # type: ignore[arg-type]
+        names = {t.name for t in session._tools}
+        assert "bio_query_metadata" in names
+        assert "sandbox_run" in names and "sandbox_shell" in names
+        from bacmap.tools.spec import DataClass
+
+        assert session._data_class == DataClass.D4
+
+    def test_cloud_session_passes_gateway_data_class_check(self):
+        """裁剪后的 D2 会话在 cloud 端点 + D2 策略下通过网关校验（不再被拦截）。"""
+        from bacmap.agent.llm.endpoints import DataPolicy
+        from bacmap.agent.session import AgentSession, build_read_tools, session_belt
+        from bacmap.tools.spec import DataClass
+
+        gw = LlmGateway(
+            LlmConfig(
+                endpoints={
+                    "glm": LlmEndpoint(
+                        name="glm",
+                        location="cloud",
+                        base_url="https://api.example.com/v1",
+                        model="glm-test",
+                        tier="T2",
+                    )
+                },
+                routing={"intent_classifier": "glm"},
+                policy=DataPolicy(cloud_max_data_class=DataClass.D2),
+            ),
+            tool_agent_factory=_factory(AnalysisPlan(reply="x")),
+        )
+        names, dc = session_belt(DataClass.D2)
+        session = AgentSession(gw, tools=build_read_tools(names), data_class=dc)
+        reply = session.respond("列出所有样本")
+        assert reply.degraded is False  # 未触发 DataClassViolationError（否则降级）
+        assert reply.message == "x"
+
+
+class TestReplyPrefixExtraction:
+    """输出工具参数的 reply 增量提取（v1.4.31 流式展示的纯函数核心）。"""
+
+    def test_key_absent(self):
+        from bacmap.agent.llm.gateway import _extract_reply_prefix
+
+        found, prefix = _extract_reply_prefix('{"other": "x", "tasks": []}')
+        assert found is False and prefix == ""
+
+    def test_partial_value(self):
+        from bacmap.agent.llm.gateway import _extract_reply_prefix
+
+        found, prefix = _extract_reply_prefix('{"reply": "沙门菌监')
+        assert found is True and prefix == "沙门菌监"
+
+    def test_complete_value(self):
+        from bacmap.agent.llm.gateway import _extract_reply_prefix
+
+        found, prefix = _extract_reply_prefix(
+            '{"reply": "line1\\nline2", "needs_clarification": false, "tasks": []}'
+        )
+        assert found is True and prefix == "line1\nline2"
+
+    def test_truncated_escape_waits(self):
+        from bacmap.agent.llm.gateway import _extract_reply_prefix
+
+        # 转义序列被增量截断：只显示已确定安全的前缀
+        found, prefix = _extract_reply_prefix('{"reply": "ab\\')
+        assert found is True and prefix == "ab"
+
+    def test_unicode_escape_incomplete(self):
+        from bacmap.agent.llm.gateway import _extract_reply_prefix
+
+        found, prefix = _extract_reply_prefix('{"reply": "ab\\u4e2')
+        assert found is True and prefix == "ab"
+
+    def test_unicode_escape_complete(self):
+        from bacmap.agent.llm.gateway import _extract_reply_prefix
+
+        found, prefix = _extract_reply_prefix('{"reply": "\\u6c99"')
+        assert found is True and prefix == "沙"
+
+
+class TestRespondStream:
+    """respond_stream：事件回调接线 + 降级语义 + 历史续接。"""
+
+    def test_events_forwarded_and_reply_returned(self):
+        import asyncio
+
+        from bacmap.agent.llm.gateway import LlmGateway
+
+        class _IterAgent:
+            """支持 iter() 的罐头 agent：模拟一次成功的流式运行。"""
+
+            def iter(self, prompt, message_history=None):
+                import contextlib
+
+                @contextlib.asynccontextmanager
+                async def _cm():
+                    class _Run:
+                        result = type(
+                            "R",
+                            (),
+                            {
+                                "output": AnalysisPlan(reply="ok"),
+                                "all_messages": staticmethod(lambda: []),
+                            },
+                        )()
+
+                        def __aiter__(self):
+                            return self
+
+                        async def __anext__(self):
+                            raise StopAsyncIteration
+
+                    yield _Run()
+
+                return _cm()
+
+        events: list[tuple[str, str]] = []
+        gw = LlmGateway(
+            _cfg(),
+            tool_agent_factory=lambda ep, ot, instructions, tools: _IterAgent(),
+        )
+        session = AgentSession(gw)
+
+        async def go():
+            async def on_event(kind, payload):
+                events.append((kind, payload))
+
+            return await session.respond_stream("hi", on_event)
+
+        reply = asyncio.run(go())
+        assert reply.message == "ok"
+        # 罐头节点流为空：无事件但正常完成（接线不炸）
+        assert events == []
+        assert reply.degraded is False
+
+    def test_degraded_when_stream_exhausted(self):
+        import asyncio
+
+        from bacmap.agent.llm.gateway import LlmGateway
+
+        class _BrokenAgent:
+            def iter(self, prompt, message_history=None):
+                raise AttributeError("no iter support")
+
+        gw = LlmGateway(
+            _cfg(),
+            tool_agent_factory=lambda ep, ot, instructions, tools: _BrokenAgent(),
+        )
+        session = AgentSession(gw)
+        reply = asyncio.run(session.respond_stream("hi"))
+        assert reply.degraded is True
+
+    def test_respond_async_delegates_to_stream(self, monkeypatch):
+        """respond_async 与 respond_stream 同路径（TUI 取消语义依赖同一入口）。"""
+        import asyncio
+
+        from bacmap.agent.llm.gateway import LlmGateway
+
+        class _OkAgent:
+            def iter(self, prompt, message_history=None):
+                import contextlib
+
+                @contextlib.asynccontextmanager
+                async def _cm():
+                    class _Run:
+                        result = type(
+                            "R",
+                            (),
+                            {
+                                "output": AnalysisPlan(reply="via-async"),
+                                "all_messages": staticmethod(lambda: []),
+                            },
+                        )()
+
+                        def __aiter__(self):
+                            return self
+
+                        async def __anext__(self):
+                            raise StopAsyncIteration
+
+                    yield _Run()
+
+                return _cm()
+
+        gw = LlmGateway(
+            _cfg(),
+            tool_agent_factory=lambda ep, ot, instructions, tools: _OkAgent(),
+        )
+        session = AgentSession(gw)
+        assert asyncio.run(session.respond_async("hi")).message == "via-async"

@@ -73,7 +73,15 @@ Key points:
 
 - **Multiple endpoints coexist**; `[llm.routing]` splits traffic by purpose (`intent_classifier` / `interpretation`);
 - Only the environment variable **name** is stored (`api_key_env`); the value is injected in the shell or service environment;
-- Set `enabled = false` on an endpoint to disable it temporarily.
+- Set `enabled = false` on an endpoint to disable it temporarily;
+- **The session assistant trims its tool belt on cloud endpoints (v1.4.30)**: when
+  `intent_classifier` routes to a `cloud` endpoint, read tools above `cloud_max_data_class`
+  (D4 metadata/lab results, D3 dataset inspection) stay out of the session, sandbox tools are
+  excluded entirely, and the session data class is derived from the trimmed belt (≤D2). Relax
+  to `"D2"` for full capability; with only D1 allowed the assistant keeps just the D0 tools
+  (reference-genome listing / diagnostics). Local/lan endpoints are unaffected;
+- Key injection, matching GLM's standard vs coding endpoints, and a full table for 401/429
+  style access errors: see [installation guide §5](installation.md).
 
 ## 3. Data classification policy (ADR-16, security red line)
 

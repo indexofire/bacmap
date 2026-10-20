@@ -59,7 +59,7 @@ class _NoopArbiter:
         return None
 
 
-async def _respond_async_ok(self, text):
+async def _respond_stream_ok(self, text, on_event=None):
     from bacmap.agent.session import AgentReply, AnalysisPlan, PlannedTask
 
     return AgentReply(
@@ -181,7 +181,7 @@ class TestTuiChat:
         from bacmap.interfaces import assistant as A
 
         class _FakeSession:
-            async def respond_async(self, text):
+            async def respond_stream(self, text, on_event=None):
                 return AgentReply(
                     message="规划完成",
                     plan=AnalysisPlan(
@@ -231,7 +231,7 @@ class TestTuiChat:
             lambda engine, submitted_by="assistant": type(
                 "_S",
                 (),
-                {"respond_async": _respond_async_ok},
+                {"respond_stream": _respond_stream_ok},
             )(),
         )
 
@@ -312,7 +312,7 @@ class TestTuiAsyncCancel:
         from bacmap.interfaces import assistant as A
 
         class _SlowSession:
-            async def respond_async(self, text):
+            async def respond_stream(self, text, on_event=None):
                 await asyncio.sleep(30)
                 raise AssertionError("should have been cancelled")
 
@@ -534,7 +534,7 @@ class TestTuiHardening:
         from bacmap.interfaces import assistant as A
 
         class _FakeSession:
-            async def respond_async(self, text):
+            async def respond_stream(self, text, on_event=None):
                 return AgentReply(
                     message="规划完成",
                     plan=AnalysisPlan(

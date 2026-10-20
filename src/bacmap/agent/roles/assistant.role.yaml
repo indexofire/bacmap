@@ -1,7 +1,10 @@
 name: assistant
 task_types: [analyze, curate, mine, write]
 min_model_tier: T2
-allowed_locations: [local, lan]
+# cloud 自 v1.4.28 起允许：会话工具带由 build_session 按 cloud_max_data_class 裁剪
+# （D4 元数据/检验、D3 数据集查看与沙箱工具不进云端会话），会话级别 ≤D2；
+# D3/D4 载荷仍被网关按 ADR-16 拦截——本字段只放行位置，不放宽数据红线。
+allowed_locations: [local, lan, cloud]
 max_data_class: D4
 trust_layer: L2
 tools:

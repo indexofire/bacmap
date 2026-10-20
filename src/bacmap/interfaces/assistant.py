@@ -12,7 +12,14 @@ from typing import Any
 
 from bacmap.agent.llm.endpoints import load_llm_config
 from bacmap.agent.llm.gateway import LlmGateway
-from bacmap.agent.session import AgentReply, AgentSession, AnalysisPlan, PlannedTask
+from bacmap.agent.session import (
+    AgentReply,
+    AgentSession,
+    AnalysisPlan,
+    PlannedTask,
+    build_read_tools,
+    session_belt,
+)
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 from bacmap.tasks.spec import TaskType
 
@@ -20,7 +27,15 @@ logger = logging.getLogger(__name__)
 
 
 def build_session(engine: DbosTaskEngine, *, submitted_by: str = "assistant") -> AgentSession:
-    """按 ``$BACMAP_HOME/config.toml`` 的 LLM 配置构建会话（role=assistant）。"""
+    """按 ``$BACMAP_HOME/config.toml`` 的 LLM 配置构建会话（role=assistant）。
+
+    端点位置决定工具带（v1.4.28，ADR-16 内的云端助手支持）：
+    - local/lan：全量只读工具（含 D4 元数据查询）+ 沙箱工具，会话级别 D4；
+    - cloud：工具带裁剪到 ``cloud_max_data_class``（注册表 output_data_class 过滤，
+      D4 元数据/检验与 D3 数据集查看不进会话），沙箱工具（输出无界）整体排除，
+      会话级别由裁剪后工具带派生（≤D2）。安全上限只允许 D0-D1 的策略下
+      助手仍可用（仅 D0 工具），放宽到 D2 才有完整的样本查询/规划能力。
+    """
     home = Path(engine.home)
     from bacmap import config as _config
 
@@ -32,7 +47,25 @@ def build_session(engine: DbosTaskEngine, *, submitted_by: str = "assistant") ->
             _config.BACMAP_HOME,
             home,
         )
-    gateway = LlmGateway(load_llm_config(home / "config.toml"))
+    cfg = load_llm_config(home / "config.toml")
+    gateway = LlmGateway(cfg)
+    endpoint = cfg.resolve("intent_classifier")
+    if endpoint is not None and endpoint.location == "cloud":
+        names, data_class = session_belt(cfg.policy.cloud_max_data_class)
+        logger.info(
+            "cloud endpoint %s [%s]: assistant belt trimmed to %s (data class %s);"
+            " sandbox tools excluded; D3/D4 tools never route to cloud (ADR-16)",
+            endpoint.name,
+            endpoint.model,
+            names,
+            data_class.name,
+        )
+        return AgentSession(
+            gateway,
+            home=home,
+            tools=build_read_tools(names),
+            data_class=data_class,
+        )
     from bacmap.agent.sandbox.tool import build_sandbox_tool, build_shell_tool
 
     workspace = home / "workspaces" / "assistant"

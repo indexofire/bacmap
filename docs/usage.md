@@ -50,6 +50,24 @@ It is the shared **agent session** (`agent/session.py`) used by all three interf
 5. **Degrade (C3)**: if the LLM endpoint is unavailable, the assistant says so and you fall
    back to the explicit subcommands / task form — the deterministic path always works.
 
+**Streaming output & thinking indicator (v1.4.31)**: TUI chat and CLI `ask`/`chat` consume
+an event stream — model thinking deltas (native reasoning streams such as GLM's) scroll live,
+tool calls appear as an activity line (e.g. `⠋ 调用 bio_list_samples…`), and the final reply
+streams in segments when the provider streams output-tool arguments. The TUI shows an
+OpenCode-style spinner at the bottom; `Esc` cancels the in-flight request. Web `/assistant`
+remains a full-page round trip for now. The structured-plan contract is unchanged (ADR-10
+planner; streaming is presentation-only — the final result is still fully validated by
+pydantic-ai).
+
+**Assistant on a cloud endpoint (v1.4.30)**: when the assistant routes to a `cloud` endpoint
+(GLM, DeepSeek, …), its tool belt is trimmed against `cloud_max_data_class` — the D4
+metadata/lab-result queries (`bio_query_metadata`, …) and the D3 dataset inspector
+(`bio_inspect_dataset`) stay out of the session, sandbox tools (`sandbox_run`/`sandbox_shell`)
+are excluded entirely, and the session data class is ≤D2; local/lan endpoints keep the full
+belt. For full sample-query and planning capability on cloud, the administrator relaxes
+`cloud_max_data_class` to `"D2"` (the maximum, configuration doc §3). The ADR-16 red line is
+unchanged: D3/D4 data never reaches a cloud endpoint under any configuration.
+
 Example:
 
 ```bash
@@ -63,20 +81,40 @@ bacmap › 建议先统计再绘图。
 
 ### Giving the assistant a data path
 
-The assistant cannot read arbitrary host paths. To use data you provide:
+The assistant cannot read arbitrary host paths — by design (ADR-11: raw data is D3 and never
+enters LLM context), not a fault. The single entry point for external data is the `mine`
+task's `input_paths` parameter. **Just give the path in conversation**:
 
-1. Have it plan a `mine` task with the path in `input_paths` — the task registers it
-   **zero-copy** (per-file SHA256) and bind-mounts it read-only into the sandbox at
-   `/input/<dataset_id>`.
-2. Inspect what was registered with `bio_inspect_dataset`; pass the `dataset_id` to
-   `sandbox_run` (its `datasets` argument), or have the script read the mount from
-   `context.json`.
-3. `bio_inspect_dataset` with a `dataset_id` and `verify=true` recomputes SHA256 to detect
-   content changes.
+```bash
+$ bacmap ask "读取 /data/2026批次/st_list.csv，按 ST 统计样本数并画柱状图"
+bacmap › 收到。/data/... is an external path; a mine task is required:
+       zero-copy registration (SHA256) → read-only mount into the sandbox → stats inside.
+建议执行的分析计划：
+  1. mine —— register the CSV as an input dataset; group by ST, emit st_counts.csv + st_counts.png
+确认提交该计划？ [y/N]
+```
 
-The registry lives in the GOM DB. Hashes are SHA256 and are **evidence** (a fingerprint for
-integrity/dedup), not a way to recover a deleted original — ask for materialization (a copy)
-if you need durability or portability.
+After confirmation the task runs: **register → read-only mount → script in sandbox →
+artifacts in the workspace → mining gate awaits your signature**. The script locates data
+via the workspace `context.json` `datasets` mapping (`id → path` — an **object, not an array**).
+
+Rules for `input_paths` (`store/datasets.py`):
+
+- The path **must already exist**; a file or a directory (registered recursively); an empty
+  directory is rejected;
+- **Zero-copy**: only hashes and identity (dev/inode/mtime) are recorded — the original stays
+  where it is. Do **not move or delete** it afterwards, or the mount breaks (dataset marked
+  `missing`);
+- Identical content deduplicates by manifest hash (reuses the `dataset_id`);
+- `bio_inspect_dataset` with `verify=true` recomputes SHA256 to detect content changes;
+- There is **no global config item** for it — it is a per-task parameter, and form/CLI/MCP do
+  not accept mine at all (see §4 task form details).
+
+**Execution prerequisite**: a sandbox backend (Apptainer or Podman — installation guide §6).
+Without one the task fails with "沙箱不可用 / sandbox unavailable"; installing `podman` fixes
+it with zero further configuration. The cloud GLM assistant can *plan* mine tasks, but cannot
+inspect registered datasets (D3 tools are trimmed on cloud) or iterate scripts in-session —
+for a "look at the data, then adjust the script" workflow, configure a local/lan endpoint.
 
 Besides `sandbox_run` (a Python script), a restricted **`sandbox_shell`** runs a single shell
 command inside the same sandbox — only read/analysis commands (`ls`, `cat`, `grep`, `zcat`,
@@ -126,6 +164,30 @@ Run `bacmap web`, then open `http://127.0.0.1:8800` in a browser:
 > Approval is one of the six gates: unsigned mining output cannot enter a report, and a
 > baseline library that misses the gold standard cannot be released. That is by design
 > (agents cannot sign off on their own), not a fault.
+
+### Task form details
+
+The **sample list** field (for `analyze`) takes **registered sample IDs** (e.g. `SAM-TYP-001`) —
+not file paths, not natural language:
+
+- Separate multiple IDs with **half-width (ASCII) commas or newlines**. The full-width comma
+  `，` is NOT recognized — the whole entry becomes one invalid ID and the form rejects it with
+  "非法样本 ID" (the TUI `/analyze` command additionally accepts spaces);
+- The ID whitelist is `^[A-Za-z0-9._-]+$` — letters/digits/`.`/`_`/`-`; **no CJK characters
+  or spaces**;
+- Where IDs come from: the `gs/<ID>/<ID>_R{1,2}.fastq.gz` convention, or registration in
+  `$BACMAP_HOME/workflows/bacmap/config/samples.tsv` (registration wins; see §7 and the
+  configuration guide §5).
+
+**scope** (for `curate`, optional) is a JSON object scoping which samples enter the local
+epidemiological baseline: `{"pathogen": "Salmonella"}` filters by species substring;
+`{"strains": ["SAM-001", "SAM-002"]}` by explicit list; empty includes every qualifying
+sample (strains failing per-strain checks are recorded as excluded). `analyze` ignores it.
+
+**mine/write never go through the form**: they are open paths (script/draft parameters) and
+are submitted only via the conversational assistant (after confirmation) or the Python API —
+the web form, CLI `task submit`, and MCP deliberately decline them, to prevent forged
+requests and script injection.
 
 ### Remote access: SSH tunnel (the recommended way)
 
@@ -237,3 +299,31 @@ ls ~/.local/share/bacmap/results/SAM-NEW-100/report/
 | Species identification GTDB-Tk standard profile / classification | ⏳ `pending_gside` placeholder | gside GTDB-Tk profile |
 
 The pipeline keeps running on these fields and emits placeholder values. Once the external capability is ready, only the rules need replacing; no architectural change required.
+
+## 9. Troubleshooting FAQ
+
+**Submission & forms**
+
+| Symptom | Cause / fix |
+|---|---|
+| "非法样本 ID" rejected | The ID contains characters outside `A-Za-z0-9._-`, or you separated IDs with a **full-width comma** — use ASCII `,` or newlines |
+| Not sure what the sample-list field takes | **Registered sample IDs** (the name used in samples.tsv / the `gs/` layout), not paths; see §4 task form details |
+| Want to submit mine from the form | Form/CLI/MCP deliberately accept only analyze/curate; mine goes through the conversational assistant (confirmed) or the Python API |
+
+**Assistant & LLM** (setup tutorial and full table: installation guide §5)
+
+| Symptom | Cause / fix |
+|---|---|
+| `payload D4 exceeds cloud limit` | Data-class block (ADR-16); since v1.4.30 the cloud assistant trims its belt automatically — if you see this, upgrade first |
+| 401 / 429 (1113) / model-not-found | Key not injected, key/endpoint mismatch (GLM standard vs coding endpoint), or no quota for the model — installation guide §5.2 |
+| "内置助手暂不可用" | The unified degrade notice; run `bacmap ask "hi" 2>&1` — the WARNING lines show the real per-attempt failure |
+| No streaming in chat | Streaming is in the TUI and CLI `ask`/`chat` (v1.4.31); Web `/assistant` is still a full-page round trip |
+| Assistant says it cannot read a path "for security" | By design: external data goes through mine registration (§2); if the task then says "sandbox unavailable", install podman (installation guide §6) |
+
+**Samples & data**
+
+| Symptom | Cause / fix |
+|---|---|
+| analyze cannot find FASTQs | The sample is not registered: follow the `gs/<ID>/<ID>_R{1,2}.fastq.gz` layout or register in samples.tsv (§7, configuration guide §5) |
+| A registered dataset no longer readable | The original file was moved/deleted (zero-copy registration depends on the original path); detect with `bio_inspect_dataset verify=true` |
+| A task is stuck at "pending approval" | Normal: the mining/release gate awaits a human signature — use the approval card on the detail page (§4) |
