@@ -149,6 +149,27 @@ class DbosTaskEngine:
             task_id=task_id, state=state, current_step=row["current_step"], message=message
         )
 
+    def resolve_task_id(self, prefix: str) -> TaskId:
+        """短前缀 → 完整任务 ID（git 短 SHA 式）：精确命中优先，唯一前缀放行，
+        多义报错。``task ls``（12 位）/TUI（10 位）显示的都是截断 ID——直接
+        粘贴给 task show/approve/cancel 由本方法兜住。"""
+        with self._conn() as conn:
+            exact = conn.execute(
+                "SELECT task_id FROM tasks WHERE task_id = ?", (prefix,)
+            ).fetchone()
+            if exact is not None:
+                return TaskId(str(exact["task_id"]))
+            rows = conn.execute(
+                "SELECT task_id FROM tasks WHERE task_id LIKE ? ORDER BY created_at DESC",
+                (prefix + "%",),
+            ).fetchall()
+        if not rows:
+            raise KeyError(f"no such task: {prefix}")
+        if len(rows) > 1:
+            shown = ", ".join(str(r["task_id"])[:12] for r in rows[:5])
+            raise ValueError(f"task id prefix {prefix!r} matches {len(rows)} tasks: {shown}")
+        return TaskId(str(rows[0]["task_id"]))
+
     def _transition_from_running(
         self, task_id: TaskId, new_state: str, message: str | None
     ) -> bool:

@@ -63,6 +63,39 @@ def _wait(e: eng.DbosTaskEngine, tid: str, timeout_s: float = 30.0):
     return e.status(tid)
 
 
+class TestResolveTaskId:
+    """短前缀解析：task list 显示 12 位截断 ID，show/approve/cancel 必须能直接用（git 短 SHA 式）。"""
+
+    @staticmethod
+    def _insert(e: eng.DbosTaskEngine, tid: str) -> None:
+        now = datetime.now(UTC).isoformat()
+        with e._conn() as conn:
+            conn.execute(
+                "INSERT INTO tasks (task_id, task_type, state, params_json, submitted_by,"
+                " created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+                (tid, "analyze", "succeeded", "{}", "t", now, now),
+            )
+
+    def test_exact_full_id(self, engine):
+        self._insert(engine, "a" * 32)
+        assert engine.resolve_task_id("a" * 32) == "a" * 32
+
+    def test_unique_prefix(self, engine):
+        full = "abc123" + "0" * 26
+        self._insert(engine, full)
+        assert engine.resolve_task_id("abc123") == full
+
+    def test_ambiguous_prefix(self, engine):
+        self._insert(engine, "ffff1111" + "0" * 24)
+        self._insert(engine, "ffff2222" + "0" * 24)
+        with pytest.raises(ValueError, match="matches 2"):
+            engine.resolve_task_id("ffff")
+
+    def test_not_found(self, engine):
+        with pytest.raises(KeyError):
+            engine.resolve_task_id("deadbeef")
+
+
 class TestDbosTaskEngine:
     def test_analyze_roundtrip_succeeded(self, engine):
         tid = engine.submit(TaskType.ANALYZE, {"samples": ["SAM-001"]}, "tester")

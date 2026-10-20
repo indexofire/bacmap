@@ -6,7 +6,7 @@
 - ``bacmap tui``       全屏 TUI（Textual；监控 + 写操作 + 智能体对话）
 - ``bacmap console``   交互式菜单（面向不使用子命令的用户）
 - ``bacmap overview``  系统概览
-- ``bacmap task ls|show|submit|approve|cancel``   任务查询与写操作
+- ``bacmap task list|show|submit|approve|cancel``  任务查询与写操作（list 别名 ls）
 - ``bacmap sample ls|show``                        样本查询
 - ``bacmap search``                                样本检索
 - ``bacmap version``   版本号
@@ -158,10 +158,12 @@ def _run_task_ls(args: argparse.Namespace) -> None:
     if args.json:
         _emit_json(tasks)
         return
+    from rich import box
     from rich.table import Table
 
     c = _console()
-    table = Table(title=f"任务（最近 {len(tasks)}）", show_lines=False)
+    # box.SQUARE：全线细线（默认 HEAVY_HEAD 的表头粗线与表体不一致，视觉突兀）
+    table = Table(title=f"任务（最近 {len(tasks)}）", show_lines=False, box=box.SQUARE)
     for col in ("task_id", "type", "state", "step", "submitted_by", "updated_at"):
         table.add_column(col)
     for t in tasks:
@@ -176,11 +178,25 @@ def _run_task_ls(args: argparse.Namespace) -> None:
     c.print(table)
 
 
-def _run_task_show(args: argparse.Namespace) -> None:
+def _resolve_task_id(engine: Any, raw: str) -> Any:
+    """CLI 任务命令的 ID 入参归一：完整 ID 直用，短前缀（task list 显示 12 位）解析。"""
     from bacmap.tasks.spec import TaskId
 
+    if len(raw) == 32:  # 完整 ID：无需查表
+        return TaskId(raw)
     try:
-        st = _engine(args.home).status(TaskId(args.task_id))
+        return engine.resolve_task_id(raw)
+    except KeyError as exc:
+        raise SystemExit(f"任务不存在：{raw}") from exc
+    except ValueError as exc:
+        raise SystemExit(f"ID 前缀多义，请加长：{exc}") from exc
+
+
+def _run_task_show(args: argparse.Namespace) -> None:
+    engine = _engine(args.home)
+    task_id = _resolve_task_id(engine, args.task_id)
+    try:
+        st = engine.status(task_id)
     except KeyError as exc:
         raise SystemExit(f"任务不存在：{args.task_id}") from exc
     if args.json:
@@ -218,7 +234,7 @@ def _run_task_submit(args: argparse.Namespace) -> None:
 
 
 def _run_task_approve(args: argparse.Namespace) -> None:
-    from bacmap.tasks.spec import Approval, TaskId
+    from bacmap.tasks.spec import Approval
 
     approval = Approval(
         approver=args.approver,
@@ -228,17 +244,17 @@ def _run_task_approve(args: argparse.Namespace) -> None:
         at=datetime.now(UTC),
     )
     try:
-        _engine(args.home).approve(TaskId(args.task_id), approval)
+        engine = _engine(args.home)
+        engine.approve(_resolve_task_id(engine, args.task_id), approval)
     except (KeyError, ValueError) as exc:
         raise SystemExit(f"审批失败：{exc}") from exc
     _console().print(f"任务 {args.task_id} 已{('通过' if args.decision == 'approve' else '拒绝')}")
 
 
 def _run_task_cancel(args: argparse.Namespace) -> None:
-    from bacmap.tasks.spec import TaskId
-
     try:
-        _engine(args.home).cancel(TaskId(args.task_id))
+        engine = _engine(args.home)
+        engine.cancel(_resolve_task_id(engine, args.task_id))
     except KeyError as exc:
         raise SystemExit(f"任务不存在：{args.task_id}") from exc
     except ValueError as exc:
@@ -436,7 +452,7 @@ def build_parser() -> argparse.ArgumentParser:
             "命令（一次性查询/写操作，均支持 --json）：overview · task · sample · "
             "search · ask · chat\n"
             "注：bacmap 本身即命令行界面；web/tui/console 是并列的其他交互形态，"
-            "故命令直接挂在顶层（bacmap task ls），不再套一层 cli 子命令。"
+            "故命令直接挂在顶层（bacmap task list），不再套一层 cli 子命令。"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -480,7 +496,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_task = sub.add_parser("task", help="任务查询与写操作")
     task_sub = p_task.add_subparsers(dest="task_command", required=True)
 
-    t_ls = task_sub.add_parser("ls", help="列出最近任务")
+    t_ls = task_sub.add_parser("list", aliases=["ls"], help="列出最近任务")
     _add_home(t_ls)
     _add_json(t_ls)
     t_ls.add_argument("--limit", type=int, default=50)
