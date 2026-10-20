@@ -1,0 +1,48 @@
+name: Docs Pages
+
+# 文档站部署：main 分支文档/mkdocs 配置变化时构建并发布到 GitHub Pages。
+# 构建走 pixi dev 环境（与 CI/本地 docs-build 同源，Material 主题版本一致）。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          environments: dev
+          cache: true
+
+      - name: build (mkdocs via pixi)
+        run: pixi run -e dev docs-build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
