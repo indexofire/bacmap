@@ -23,6 +23,8 @@ concurrency:
 
 jobs:
   deploy:
+    # 私有仓库（Free 计划）无 Pages 服务：跳过而非失败；转公开后自动生效。
+    if: github.repository.visibility == 'public'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
