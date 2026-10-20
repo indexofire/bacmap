@@ -18,10 +18,15 @@ _SPECIES_GROUPS = get_workflow_tables().snp_groups
 
 # Derive per-group sample lists (≥2 samples required for joint calling)。
 # samples.tsv 的 species 值可为码/标签/显示名（registry 归一）。
+# v1.4.33：SNP 联合分析按 reads 比对参考基因组——assembly 直入样本（无 reads）
+# 不参与群组（rule all 形态下避免缺输入断 DAG；引擎按样本目标本就不含群组）。
 _GROUP_SAMPLES = {}
 for _grp, _info in _SPECIES_GROUPS.items():
     _samps = [
-        s for s in SAMPLES if resolve_species(SAMPLES_DF.loc[s, "species"]) in _info["species"]
+        s
+        for s in SAMPLES
+        if resolve_species(SAMPLES_DF.loc[s, "species"]) in _info["species"]
+        and s in READS_SAMPLES
     ]
     if len(_samps) >= 2:
         _GROUP_SAMPLES[_grp] = _samps

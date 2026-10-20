@@ -26,6 +26,19 @@ def _extra(species_value: str) -> set[str]:
     return set(report_inputs("S1", species_value, "/w")) - _COMMON
 
 
+class TestAssemblyEntryGating:
+    """v1.4.33 assembly 直入：无 reads 的样本 qc_json 不进 DAG。"""
+
+    def test_fasta_sample_drops_qc(self):
+        files = report_inputs("S1", "SAL", "/w", has_qc=False)
+        assert "qc_json" not in files
+        assert files["assembly_stats"] == "/w/S1/assembly/assembly_stats.tsv"
+
+    def test_reads_sample_keeps_qc_by_default(self):
+        files = report_inputs("S1", "SAL", "/w")
+        assert files["qc_json"] == "/w/S1/qc/S1_fastp.json"
+
+
 class TestSerotypeEngine:
     def test_engines(self):
         assert serotype_engine("SAL") == "sistr"

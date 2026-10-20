@@ -33,11 +33,16 @@ def uses_gapit_db(species_value: str, db: str) -> bool:
     return db in get_workflow_tables().gapit_screens.get(code, [])
 
 
-def report_inputs(sample: str, species_value: str, workdir: str) -> dict[str, str]:
-    """样本的 summary 依赖（只含适用步骤；不适用者不进入 DAG）。"""
+def report_inputs(
+    sample: str, species_value: str, workdir: str, *, has_qc: bool = True
+) -> dict[str, str]:
+    """样本的 summary 依赖（只含适用步骤；不适用者不进入 DAG）。
+
+    ``has_qc=False`` 用于 assembly 直入样本（无 reads，无 fastp 产物）：
+    qc_json 不进 DAG，summary 的 qc 段由脚本侧容错为空。
+    """
     base = f"{workdir}/{sample}"
     files: dict[str, str] = {
-        "qc_json": f"{base}/qc/{sample}_fastp.json",
         "assembly_stats": f"{base}/assembly/assembly_stats.tsv",
         "species_id": f"{base}/species/species_id.json",
         "mlst": f"{base}/typing/mlst.tsv",
@@ -48,6 +53,8 @@ def report_inputs(sample: str, species_value: str, workdir: str) -> dict[str, st
         "gapit_typing": f"{base}/gapit/typing.json",
         "annotation": f"{base}/annotation/annotation.json",
     }
+    if has_qc:
+        files["qc_json"] = f"{base}/qc/{sample}_fastp.json"
     engine = serotype_engine(species_value)
     if engine == "sistr":
         files["sistr"] = f"{base}/typing/sistr.json"

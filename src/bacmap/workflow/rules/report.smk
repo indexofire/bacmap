@@ -9,9 +9,15 @@ from bacmap.core.analysis.routing import report_inputs as _routing_report_inputs
 
 
 def _report_inputs(wc):
-    """该样本适用的步骤产物（按 registry 路由；不适用者不进入 DAG）。"""
+    """该样本适用的步骤产物（按 registry 路由；不适用者不进入 DAG）。
+
+    assembly 直入样本（无 reads）不依赖 fastp 产物（v1.4.33）。
+    """
     return _routing_report_inputs(
-        wc.sample, SAMPLES_DF.loc[wc.sample, "species"], str(WORKDIR)
+        wc.sample,
+        SAMPLES_DF.loc[wc.sample, "species"],
+        str(WORKDIR),
+        has_qc=wc.sample in READS_SAMPLES,
     )
 
 

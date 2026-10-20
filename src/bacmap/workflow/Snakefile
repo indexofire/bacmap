@@ -14,11 +14,35 @@ if not _SAMPLES_FILE.is_absolute():
 SAMPLES_DF = pd.read_csv(_SAMPLES_FILE, sep="\t").set_index("sample")
 SAMPLES = SAMPLES_DF.index.tolist()
 
+
+def _col(sample: str, col: str) -> str:
+    """samples.tsv 单元格取值（列缺失/空/NaN 归一为空串）。"""
+    if col not in SAMPLES_DF.columns:
+        return ""
+    v = SAMPLES_DF.loc[sample, col]
+    if v is None or str(v) == "nan":
+        return ""
+    return str(v).strip()
+
+
+# 输入形态分支（v1.4.33）：reads 样本走 fastp→shovill；assembly 直入样本
+# （已组装 FASTA，samples.tsv 的 assembly 列）跳过 QC/组装，直接进 contigs 通道。
+READS_SAMPLES = [s for s in SAMPLES if _col(s, "R1") and _col(s, "R2")]
+FASTA_SAMPLES = [s for s in SAMPLES if _col(s, "assembly") and s not in READS_SAMPLES]
+_NO_INPUT = [s for s in SAMPLES if s not in READS_SAMPLES and s not in FASTA_SAMPLES]
+if _NO_INPUT:
+    raise ValueError(
+        "samples.tsv 输入不完整（R1/R2 或 assembly 至少其一）: " + ", ".join(_NO_INPUT)
+    )
+
 def r1_path(wc):
     return str(PROJECT_ROOT / SAMPLES_DF.loc[wc.sample, "R1"])
 
 def r2_path(wc):
     return str(PROJECT_ROOT / SAMPLES_DF.loc[wc.sample, "R2"])
+
+def assembly_path(wc):
+    return str(PROJECT_ROOT / SAMPLES_DF.loc[wc.sample, "assembly"])
 
 include: "rules/qc.smk"
 include: "rules/assembly.smk"
@@ -48,7 +72,7 @@ if bool(config.get("kraken2_prefilter", False)) and not _KRAKEN2_ACTIVE:
 _EXTRA_TARGETS = []
 if _KRAKEN2_ACTIVE:
     _EXTRA_TARGETS += expand(
-        str(WORKDIR) + "/{sample}/kraken2/kraken2_prefilter.json", sample=SAMPLES
+        str(WORKDIR) + "/{sample}/kraken2/kraken2_prefilter.json", sample=READS_SAMPLES
     )
 
 rule all:

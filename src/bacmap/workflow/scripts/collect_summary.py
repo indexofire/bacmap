@@ -43,7 +43,8 @@ def parse_tsv(path, default=None):
             rows.append(dict(zip(headers, fields, strict=False)))
     return rows
 
-qc = read_json(snakemake.input.qc_json, {})
+qc_path = getattr(snakemake.input, "qc_json", None)
+qc = read_json(qc_path, {}) if qc_path else {}  # assembly 直入样本无 fastp 产物
 summary["steps"]["qc"] = {
     "after_filtering": qc.get("filtering_result", {}),
     "before_filtering": qc.get("summary", {}).get("before_filtering", {}),
