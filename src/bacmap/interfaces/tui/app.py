@@ -13,12 +13,13 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 from typing import Any, ClassVar
 
 from rich.markup import escape as _esc
 from textual import work
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.theme import Theme
 from textual.widgets import (
@@ -26,7 +27,6 @@ from textual.widgets import (
     Footer,
     Header,
     Input,
-    RichLog,
     Static,
 )
 
@@ -34,6 +34,10 @@ from textual.widgets import (
 _SIDEBAR_MIN_WIDTH = 96
 # 单轮需求文本上限（与 Web 一致，防超大提示词）
 _MAX_PROMPT_LEN = 8000
+# 流式组件刷新节流（思考/回复增量高频到达，重渲染按帧合并）
+_STREAM_FLUSH_S = 0.06
+# 思考直播窗口上限（防超长 reasoning 刷爆渲染；完成后全文可经 Ctrl+T 展开）
+_THINK_LIVE_LIMIT = 4000
 
 # 语义调色板（对齐 opencode 的克制暗色 + hermes skin 的语义槽 + tui-design 技能）。
 # 主题值集中在 Theme.variables，CSS 只用语义槽，不写死颜色。
@@ -90,16 +94,7 @@ Screen { background: $background; }
 #tasks-table, #samples-table { height: 1fr; }
 #main { width: 1fr; }
 #conversation { height: 1fr; padding: 0 2; }
-#stream {
-    display: none;
-    dock: bottom;
-    height: auto;
-    max-height: 8;
-    padding: 0 2 0 2;
-    border-top: solid $border;
-    color: $text-muted;
-}
-#stream.on { display: block; }
+#conversation .msg { width: 1fr; margin: 0 0 1 0; }
 #plan-hint { padding: 0 2; color: $warning; height: auto; }
 #prompt { dock: bottom; border: round $border; }
 #prompt:focus { border: round $accent; }
@@ -116,7 +111,8 @@ _HELP = (
     "  Leader（Ctrl+G）：n 新会话 · i 输入框 · l 任务 · s 样本 · "
     "m 模型 · t 主题 · h 帮助 · q 退出\n"
     "  其它：Enter 发送 · Shift/Alt+Enter 换行 · Esc 中断 · Ctrl+Y 确认计划 · "
-    "Ctrl+F 跟随开关 · Ctrl+B 侧栏 · Ctrl+R 刷新 · Ctrl+L 清屏 · Ctrl+P 命令面板"
+    "Ctrl+F 跟随开关 · Ctrl+T 展开/收起最近思考 · Ctrl+B 侧栏 · Ctrl+R 刷新 · "
+    "Ctrl+L 清屏 · Ctrl+P 命令面板"
 )
 
 
@@ -132,6 +128,7 @@ class BacmapTUI(App[None]):
         ("ctrl+l", "clear_conversation", "清屏"),
         ("ctrl+p", "command_palette", "命令面板"),
         ("ctrl+f", "toggle_follow", "跟随"),
+        ("ctrl+t", "toggle_thinking", "思考展开"),
         ("ctrl+y", "confirm_plan", "确认计划"),
         ("ctrl+g", "leader", "Leader"),
         ("escape", "interrupt", "中断/清空"),
@@ -162,12 +159,18 @@ class BacmapTUI(App[None]):
         self._follow = True  # 会话是否跟随最新（tui-design：follow 显式）
         self._task_states: dict[str, str] = {}  # 上次渲染看到的任务状态（失败回显去重）
         self._tasks_seeded = False  # 首次渲染只登记、不回显历史失败
-        # 流式展示状态（v1.4.31）：spinner/活动文案/思考尾窗/回复缓冲
+        # 流式展示状态（v1.4.32）：spinner/活动文案在提示行；思考与回复作为
+        # 会话主区的消息组件**内联流式**（OpenCode 式），完成即折叠/定稿。
         self._spin_i = 0
         self._spin_timer: Any = None
         self._activity = ""
-        self._think_tail = ""
+        self._think_w: Static | None = None  # 本轮思考块（内联）
+        self._think_buf = ""
+        self._reply_w: Static | None = None  # 本轮流式回复块
         self._reply_buf = ""
+        self._last_think: tuple[Static, str] | None = None  # 最近完成的思考（Ctrl+T）
+        self._think_expanded = False
+        self._last_flush = 0.0
         self._cursor_on = True
 
     # -- 布局 ---------------------------------------------------------------
@@ -181,8 +184,7 @@ class BacmapTUI(App[None]):
                 yield Static("样本", classes="side-title")
                 yield DataTable(id="samples-table")
             with Vertical(id="main"):
-                yield RichLog(id="conversation", markup=True, wrap=True)
-                yield Static("", id="stream")
+                yield VerticalScroll(id="conversation")
                 yield Static("", id="plan-hint")
                 yield Input(
                     placeholder="输入分析需求；/ 查看斜杠命令；Enter 发送 · Ctrl+G 引导键",
@@ -200,7 +202,7 @@ class BacmapTUI(App[None]):
         samples = self.query_one("#samples-table", DataTable)
         samples.cursor_type = "row"
         samples.add_columns("sample", "species", "ST")
-        self.query_one("#conversation", RichLog).write(_HELP)
+        self._chat_append(_HELP)
         self._apply_sidebar()
         self._show_endpoint()
         self.refresh_data()
@@ -301,10 +303,14 @@ class BacmapTUI(App[None]):
             table.move_cursor(row=table.get_row_index(key))
 
     def _chat_append(self, markup: str) -> None:
+        """追加一条会话消息（组件化消息流；不可信文本由调用方 ``_esc`` 转义）。"""
         try:
-            self.query_one("#conversation", RichLog).write(markup)
+            conv = self.query_one("#conversation", VerticalScroll)
         except NoMatches:  # 关闭/卸载中，忽略
             return
+        conv.mount(Static(markup, markup=True, classes="msg"))
+        if self._follow:
+            conv.scroll_end(animate=False)
 
     def _set_hint(self, text: str) -> None:
         try:
@@ -312,29 +318,26 @@ class BacmapTUI(App[None]):
         except NoMatches:
             return
 
-    # -- 流式展示（v1.4.31）--------------------------------------------------
+    # -- 流式展示（v1.4.32：思考/回复内联主区，提示行只留 spinner/活动）----------
 
     def _start_busy(self, activity: str) -> None:
-        """开始"思考中"动态指示：spinner 定时器 + 流式显示区。"""
+        """开始"思考中"动态指示：spinner 定时器 + 提示行活动文案。"""
         self._activity = activity
-        self._think_tail = ""
+        self._think_w = None
+        self._think_buf = ""
+        self._reply_w = None
         self._reply_buf = ""
+        self._last_flush = 0.0
         self._spin_i = 0
-        with contextlib.suppress(NoMatches):
-            self.query_one("#stream", Static).set_class(True, "on")
         if self._spin_timer is None:
             self._spin_timer = self.set_interval(0.12, self._tick_busy)
 
     def _stop_busy(self) -> None:
-        """结束动态指示：停 spinner、隐藏并清空流式显示区。"""
+        """结束动态指示：停 spinner、清活动文案（思考/回复组件由定稿逻辑处理）。"""
         if self._spin_timer is not None:
             self._spin_timer.stop()
             self._spin_timer = None
         self._activity = ""
-        with contextlib.suppress(NoMatches):
-            stream = self.query_one("#stream", Static)
-            stream.set_class(False, "on")
-            stream.update("")
         if not self._pending_plan:
             self._set_hint("")
 
@@ -342,26 +345,79 @@ class BacmapTUI(App[None]):
         self._spin_i = (self._spin_i + 1) % len(_SPIN_FRAMES)
         self._cursor_on = not self._cursor_on
         self._render_busy()
+        self._flush_stream()  # 光标闪烁节奏顺带刷新流式组件
 
     def _render_busy(self) -> None:
-        """渲染指示行（spinner + 活动）与流式显示区（思考尾窗 + 回复缓冲）。"""
+        """渲染提示行（spinner + 活动文案）；思考/回复在会话主区，不在此处。"""
         frame = _SPIN_FRAMES[self._spin_i]
         if self._activity:
             self._set_hint(f"[b #d29922]{frame}[/] {_esc(self._activity)}")
-        think = self._think_tail[-240:]
-        lines = []
-        if think:
-            shown = ("…" + think) if len(self._think_tail) > 240 else think
-            lines.append(f"[i]{_esc(shown)}[/]")
-        if self._reply_buf:
-            cursor = "▌" if self._cursor_on else " "
-            lines.append(f"[green]{_esc(self._reply_buf[-800:])}{cursor}[/green]")
-        elif not think:
-            lines.append(f"[#8b949e]{frame}[/]")
+        else:
+            self._set_hint(f"[#8b949e]{frame}[/]")
+
+    def _ensure_stream_w(self, which: str) -> Static | None:
+        """惰性创建本轮的思考/回复消息组件（首个增量到达时挂载进主区）。"""
+        w = self._think_w if which == "think" else self._reply_w
+        if w is not None:
+            return w
         try:
-            self.query_one("#stream", Static).update("\n".join(lines))
+            conv = self.query_one("#conversation", VerticalScroll)
+        except NoMatches:
+            return None
+        w = Static("", markup=True, classes="msg " + ("thinking" if which == "think" else ""))
+        conv.mount(w)
+        if which == "think":
+            self._think_w = w
+        else:
+            self._reply_w = w
+        return w
+
+    def _flush_stream(self, force: bool = False) -> None:
+        """把累计的思考/回复增量刷进内联组件（节流合并高频 delta）。"""
+        now = time.monotonic()
+        if not force and (now - self._last_flush) < _STREAM_FLUSH_S:
+            return
+        self._last_flush = now
+        if self._think_w is not None and self._think_buf:
+            shown = self._think_buf[-_THINK_LIVE_LIMIT:]
+            head = "…" if len(self._think_buf) > _THINK_LIVE_LIMIT else ""
+            self._think_w.update(f"[i #8b949e]✻ {_esc(head + shown)}[/]")
+        if self._reply_w is not None and self._reply_buf:
+            cursor = "▌" if self._cursor_on else " "
+            self._reply_w.update(f"[green]{_esc(self._reply_buf)}{cursor}[/green]")
+        self._autoscroll()
+
+    def _autoscroll(self) -> None:
+        if not self._follow:
+            return
+        try:
+            self.query_one("#conversation", VerticalScroll).scroll_end(animate=False)
         except NoMatches:
             return
+
+    def _finalize_thinking(self, note: str = "") -> None:
+        """本轮思考定稿：**保留全文可见**（用户裁定：完成后不自动消失），Ctrl+T 可折叠。"""
+        w, buf = self._think_w, self._think_buf
+        self._think_w, self._think_buf = None, ""
+        if w is None or not buf:
+            return
+        self._last_think = (w, buf)
+        self._think_expanded = True
+        extra = f"（{note}）" if note else ""
+        w.update(f"[i #8b949e]✻ 思考{extra}：{_esc(buf)}[/]")
+
+    def action_toggle_thinking(self) -> None:
+        """折叠/展开最近一次完成的思考块（默认保留全文，按需收起）。"""
+        if self._last_think is None:
+            self._set_hint("没有可展开的思考块")
+            return
+        w, buf = self._last_think
+        self._think_expanded = not self._think_expanded
+        if self._think_expanded:
+            w.update(f"[i #8b949e]✻ 思考：{_esc(buf)}[/]")
+        else:
+            w.update(f"[#8b949e]✻ 思考 {len(buf)} 字符 · Ctrl+T 展开[/]")
+        self._autoscroll()
 
     # -- 动作 ---------------------------------------------------------------
 
@@ -374,11 +430,12 @@ class BacmapTUI(App[None]):
 
     def action_toggle_follow(self) -> None:
         self._follow = not self._follow
-        self.query_one("#conversation", RichLog).auto_scroll = self._follow
         self._set_hint(f"会话跟随：{'开' if self._follow else '关（滚动回看中）'}")
 
     def action_clear_conversation(self) -> None:
-        self.query_one("#conversation", RichLog).clear()
+        self.query_one("#conversation", VerticalScroll).remove_children()
+        self._last_think = None
+        self._think_expanded = False
         self._set_hint("")
 
     def action_interrupt(self) -> None:
@@ -568,9 +625,13 @@ class BacmapTUI(App[None]):
             if token != self._reply_seq:
                 return  # 已被 Esc 放弃：不再渲染
             if kind == "thinking_delta":
-                self._think_tail = (self._think_tail + payload)[-2000:]
+                self._think_buf += payload
+                self._ensure_stream_w("think")
+                self._flush_stream()
             elif kind in ("text_delta", "reply_delta"):
                 self._reply_buf += payload
+                self._ensure_stream_w("reply")
+                self._flush_stream()
             elif kind == "tool_call":
                 self._activity = f"调用 {payload or '工具'}…"
             elif kind == "tool_result":
@@ -587,10 +648,12 @@ class BacmapTUI(App[None]):
             reply = await self._session.respond_stream(text, on_event)
         except asyncio.CancelledError:
             self._stop_busy()
+            self._finalize_thinking("已中断")
             self._set_hint("[#d29922]已在途请求已取消[/]")
             raise
         except Exception as exc:
             self._stop_busy()
+            self._finalize_thinking("失败")
             self._chat_append(
                 f"[#f85149]助手调用失败：{_esc(type(exc).__name__)}: {_esc(str(exc))}[/]"
             )
@@ -603,7 +666,13 @@ class BacmapTUI(App[None]):
 
     def _chat_reply(self, reply: Any) -> None:
         # 助手文本被视为不可信显示数据：转义 Rich 标记，避免注入改版式/控制序列。
-        self._chat_append(f"[#3fb950]bacmap[/] › {_esc(reply.message)}")
+        # 已有流式回复组件则原位定稿（权威文本以 reply.message 为准），否则补一条。
+        text = f"[#3fb950]bacmap[/] › {_esc(reply.message)}"
+        if self._reply_w is not None:
+            self._reply_w.update(text)
+        else:
+            self._chat_append(text)
+        self._finalize_thinking()
         plan = reply.plan
         if plan is not None and plan.tasks:
             from bacmap.interfaces.assistant import format_plan

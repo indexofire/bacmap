@@ -253,6 +253,132 @@ class TestTuiChat:
         asyncio.run(_run())
 
 
+class TestInlineThinkingStream:
+    """v1.4.32：思考/回复内联会话主区流式（OpenCode 式），完成后折叠、Ctrl+T 展开。
+
+    旧行为（思考尾窗在输入框上方逆向流动、主区只显示最终回答）不再存在。
+    """
+
+    def _stream_session(self):
+        from bacmap.agent.session import AgentReply, AnalysisPlan
+
+        class _StreamSession:
+            async def respond_stream(self, text, on_event=None):
+                if on_event is not None:
+                    for kind, payload in (
+                        ("thinking_delta", "先查样本，"),
+                        ("thinking_delta", "再定流程……"),
+                        ("reply_delta", "好的，"),
+                    ):
+                        r = on_event(kind, payload)
+                        if r is not None and hasattr(r, "__await__"):
+                            await r
+                return AgentReply(
+                    message="好的，规划完成",
+                    plan=AnalysisPlan(reply="好的，规划完成", tasks=[]),
+                )
+
+        return _StreamSession()
+
+    def test_thinking_streams_inline_then_collapses(self, engine, monkeypatch):
+        from bacmap.interfaces import assistant as A
+
+        monkeypatch.setattr(
+            A, "build_session", lambda engine, submitted_by="assistant": self._stream_session()
+        )
+
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                inp = app.query_one("#prompt", Input)
+                inp.value = "分析 SAM-001"
+                inp.focus()
+                await pilot.press("enter")
+                await asyncio.sleep(0.3)
+                await pilot.pause()
+                # ① 底部流式面板已不存在（旧实现的位置）
+                assert list(app.query("#stream")) == []
+                # ② 思考以独立消息组件出现在主区，完成后**保留全文**（不自动消失）
+                assert app._last_think is not None
+                w, buf = app._last_think
+                assert buf == "先查样本，再定流程……"
+                assert "先查样本，再定流程……" in w.content
+                assert app._think_expanded is True
+                # ③ 流式回复组件被权威文本原位定稿（不是另起一条）
+                msgs = [m.content for m in app.query("#conversation .msg")]
+                assert any("bacmap" in m and "好的，规划完成" in m for m in msgs)
+                assert app._reply_buf == "好的，"  # 流式缓冲保留，无重复追加
+
+        asyncio.run(_run())
+
+    def test_ctrl_t_collapses_and_expands_last_thinking(self, engine, monkeypatch):
+        from bacmap.interfaces import assistant as A
+
+        monkeypatch.setattr(
+            A, "build_session", lambda engine, submitted_by="assistant": self._stream_session()
+        )
+
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                inp = app.query_one("#prompt", Input)
+                inp.value = "统计一下"
+                inp.focus()
+                await pilot.press("enter")
+                await asyncio.sleep(0.3)
+                await pilot.pause()
+                w = app._last_think[0]
+                app.query_one("#tasks-table", DataTable).focus()  # ctrl+t 不被 Input 吞
+                await pilot.press("ctrl+t")
+                await pilot.pause()
+                assert app._think_expanded is False  # 完成后默认展开：首按收起
+                assert "Ctrl+T" in w.content and "字符" in w.content
+                await pilot.press("ctrl+t")
+                await pilot.pause()
+                assert app._think_expanded is True
+                assert "先查样本，再定流程……" in w.content  # 再按展开全文
+
+        asyncio.run(_run())
+
+    def test_interrupt_collapses_thinking_with_note(self, engine, monkeypatch):
+        from bacmap.interfaces import assistant as A
+
+        class _SlowSession:
+            async def respond_stream(self, text, on_event=None):
+                if on_event is not None:
+                    r = on_event("thinking_delta", "想了一半")
+                    if r is not None and hasattr(r, "__await__"):
+                        await r
+                import asyncio as _a
+
+                await _a.sleep(30)
+
+        monkeypatch.setattr(
+            A, "build_session", lambda engine, submitted_by="assistant": _SlowSession()
+        )
+
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                inp = app.query_one("#prompt", Input)
+                inp.value = "慢请求"
+                inp.focus()
+                await pilot.press("enter")
+                await asyncio.sleep(0.2)
+                await pilot.press("escape")
+                await asyncio.sleep(0.2)
+                await pilot.pause()
+                assert app._last_think is not None
+                w, _buf = app._last_think
+                assert "已中断" in w.content
+                assert "想了一半" in w.content  # 中断也保留已流出的思考全文
+
+        asyncio.run(_run())
+
+
 class TestSkillGuidelines:
     """tui-design 技能要点：不可信文本转义、跟随模式、响应式折叠。"""
 
@@ -273,18 +399,21 @@ class TestSkillGuidelines:
         asyncio.run(_run())
 
     def test_follow_toggle(self, engine):
-        from textual.widgets import RichLog
+        from textual.containers import VerticalScroll
 
         async def _run():
             app = BacmapTUI(engine)
             async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
                 app.query_one("#tasks-table", DataTable).focus()
-                assert app.query_one("#conversation", RichLog).auto_scroll is True
+                assert app._follow is True
                 await pilot.press("ctrl+f")
                 await pilot.pause()
                 assert app._follow is False
-                assert app.query_one("#conversation", RichLog).auto_scroll is False
+                await pilot.press("ctrl+f")
+                await pilot.pause()
+                assert app._follow is True  # 再按回归
+                assert app.query_one("#conversation", VerticalScroll) is not None
 
         asyncio.run(_run())
 
