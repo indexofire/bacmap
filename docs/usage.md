@@ -13,7 +13,8 @@ bacmap chat                                        # 多轮对话式分析助手
 bacmap tui [--home H]                              # 全屏 TUI（Textual）
 bacmap console [--home H]                          # 交互式菜单
 bacmap overview [--json]                           # 系统概览
-bacmap task ls|show|submit|approve|cancel          # 任务查询与写操作（显式、无 LLM）
+bacmap task list|show|submit|approve|cancel         # 任务查询与写操作（显式、无 LLM；list alias ls）
+bacmap task show <short-prefix>                    # IDs accept git-style prefixes: the 12 chars shown by list just work; lengthen on ambiguity
 bacmap sample ls|show                              # 样本浏览
 bacmap search --query <kw>                          # 样本检索
 bacmap web [--host 127.0.0.1] [--port 8800]        # Web 控制台（含助手）
@@ -25,7 +26,7 @@ Query subcommands accept `--json`. Writes always go through the same gates as We
 Top-level commands fall into two kinds: **interfaces/modes** (`mcp`, `web`, `tui`, `console`)
 that take over a terminal or bind a port, and **commands** (`overview`, `task`, `sample`,
 `search`, `ask`, `chat`) that perform one query or write and exit. `bacmap` itself *is* the
-CLI, so commands stay at the top level (`bacmap task ls`) rather than nested under a `cli`
+CLI, so commands stay at the top level (`bacmap task list`) rather than nested under a `cli`
 subcommand; `web`/`tui`/`console` are sibling interaction modes.
 
 ## 2. LLM-driven assistant (CLI ask/chat, TUI Chat, Web /assistant)
@@ -50,11 +51,13 @@ It is the shared **agent session** (`agent/session.py`) used by all three interf
 5. **Degrade (C3)**: if the LLM endpoint is unavailable, the assistant says so and you fall
    back to the explicit subcommands / task form — the deterministic path always works.
 
-**Streaming output & thinking indicator (v1.4.31)**: TUI chat and CLI `ask`/`chat` consume
-an event stream — model thinking deltas (native reasoning streams such as GLM's) scroll live,
-tool calls appear as an activity line (e.g. `⠋ 调用 bio_list_samples…`), and the final reply
-streams in segments when the provider streams output-tool arguments. The TUI shows an
-OpenCode-style spinner at the bottom; `Esc` cancels the in-flight request. Web `/assistant`
+**Streaming output & thinking indicator (v1.4.31; v1.4.32 thinking inline in the main
+view)**: TUI chat and CLI `ask`/`chat` consume an event stream — model thinking deltas
+(native reasoning streams such as GLM's) stream **inline in the conversation view** (dim
+italic; the full text **stays visible** when the turn ends, `Ctrl+T` collapses/expands the
+most recent one), the reply types out in place and is finalized with
+the authoritative text, and tool calls appear as an activity line (e.g.
+`⠋ 调用 bio_list_samples…`); `Esc` cancels the in-flight request. Web `/assistant`
 remains a full-page round trip for now. The structured-plan contract is unchanged (ADR-10
 planner; streaming is presentation-only — the final result is still fully validated by
 pydantic-ai).
@@ -275,12 +278,33 @@ A typical exchange with an agent:
 
 Checkpoint resume: the task engine is built on DBOS. Kill a running process and restart it, and the task continues from its checkpoint (verified in V2).
 
+**Closed vs open paths: the LLM's capability boundary.** The four task types split into two
+execution shapes: `analyze`/`curate` take the **closed path** (a fixed Snakemake DAG whose rule
+set is a frozen decision — no runtime additions or edits); `mine`/`write` take the **open
+path** (LLM-generated scripts/text under sandbox and gate constraints). The division of labor
+has three layers:
+
+| Layer | The LLM may | Deliberately may not |
+|---|---|---|
+| Planning (before submit) | choose which tasks, which samples, which parameters; compose at the **task level** within one plan (e.g. `analyze → mine(stats) → mine(charts) → write(report)`) | pick or combine DAG rules; touch pipeline logic beyond parameters |
+| Execution — `analyze` | — (the closed DAG runs as-is) | there is no entry point for runtime pipeline building |
+| Execution — `mine` | write arbitrary Python over **already-produced** data (stats, cross-checks, plots) | the sandbox is offline and the default image (python:3.12-slim) ships no bio tools — an improvised bioinformatics pipeline cannot be assembled |
+
+Why runtime orchestration by the LLM is blocked: ① every `analyze` run is sealed into a run
+record with seeds, tool versions, and hashes (ADR-18) — improvised pipelines cannot be sealed
+or reproduced; ② fixed outputs can pass deterministic verifiers and gates, while free-form
+ones have no predefinable checks; ③ bioinformatics is externalized to gside/gapit/gmlst, and
+the orchestration itself must stay deterministic and versioned (ADR-20). **The right path for
+a new analysis capability is a developer action**: add an `.smk` rule + adapter + tests →
+versioned deploy (tree-hash stamp) → it joins the closed set — after which every analyze task
+and the assistant's planning can use it automatically.
+
 ## 7. End-to-end example (new sample on the sequencer → report)
 
 ```bash
-# ① 布局数据并注册
+# ① 布局数据并注册（reads 样本；已组装 FASTA 则登记 assembly 列，R1/R2 留空）
 cp /mnt/seq_run/SAM-NEW-100_R{1,2}.fastq.gz ~/.local/share/bacmap/gs/SAM-NEW-100/
-echo -e "SAM-NEW-100\tSalmonella\tgs/SAM-NEW-100/SAM-NEW-100_R1.fastq.gz\tgs/SAM-NEW-100/SAM-NEW-100_R2.fastq.gz" \
+echo -e "SAM-NEW-100\tSalmonella\tgs/SAM-NEW-100/SAM-NEW-100_R1.fastq.gz\tgs/SAM-NEW-100/SAM-NEW-100_R2.fastq.gz\t" \
   >> ~/.local/share/bacmap/workflows/bacmap/config/samples.tsv
 
 # ② 提交（Web 表单选 analyze 填 SAM-NEW-100，或智能体对话）
@@ -319,11 +343,12 @@ The pipeline keeps running on these fields and emits placeholder values. Once th
 | "内置助手暂不可用" | The unified degrade notice; run `bacmap ask "hi" 2>&1` — the WARNING lines show the real per-attempt failure |
 | No streaming in chat | Streaming is in the TUI and CLI `ask`/`chat` (v1.4.31); Web `/assistant` is still a full-page round trip |
 | Assistant says it cannot read a path "for security" | By design: external data goes through mine registration (§2); if the task then says "sandbox unavailable", install podman (installation guide §6) |
+| mine task fails with a bare "workflow ERROR" | Older builds collapsed environmental failures into that generic message; the task message now names the cause and remedy (e.g. "沙箱启动失败: no apptainer/podman on PATH → install podman") — upgrade and resubmit |
 
 **Samples & data**
 
 | Symptom | Cause / fix |
 |---|---|
-| analyze cannot find FASTQs | The sample is not registered: follow the `gs/<ID>/<ID>_R{1,2}.fastq.gz` layout or register in samples.tsv (§7, configuration guide §5) |
+| analyze cannot find FASTQs | The sample is not registered: follow the `gs/<ID>/<ID>_R{1,2}.fastq.gz` layout or register in samples.tsv (§7, configuration guide §5); **pre-assembled FASTA can enter the closed path via the `assembly` column** (v1.4.33, skips QC/assembly) |
 | A registered dataset no longer readable | The original file was moved/deleted (zero-copy registration depends on the original path); detect with `bio_inspect_dataset verify=true` |
 | A task is stuck at "pending approval" | Normal: the mining/release gate awaits a human signature — use the approval card on the detail page (§4) |

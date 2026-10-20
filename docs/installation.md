@@ -153,6 +153,7 @@ Scripts from mining tasks (mine) execute inside a sandbox. Fallback chain:
 ```bash
 sudo apt-get install podman         # recommended: daemonless, rootless, best for a single workstation
 # or: sudo apt-get install apptainer
+# Arch / Omarchy: sudo pacman -S podman
 which apptainer podman              # either one suffices; zero configuration afterwards
 export BACMAP_ALLOW_UNSANDBOXED=1   # passthrough for controlled dev environments only (no isolation)
 ```

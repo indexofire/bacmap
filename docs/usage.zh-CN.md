@@ -13,7 +13,8 @@ bacmap chat                                        # 多轮对话式分析助手
 bacmap tui [--home H]                              # 全屏 TUI（Textual）
 bacmap console [--home H]                          # 交互式菜单
 bacmap overview [--json]                           # 系统概览
-bacmap task ls|show|submit|approve|cancel          # 任务查询与写操作（显式、无 LLM）
+bacmap task list|show|submit|approve|cancel         # 任务查询与写操作（显式、无 LLM；list 别名 ls）
+bacmap task show <短前缀>                          # ID 支持 git 式短前缀：list 显示 12 位直接可用，多义时加长
 bacmap sample ls|show                              # 样本浏览
 bacmap search --query <kw>                          # 样本检索
 bacmap web [--host 127.0.0.1] [--port 8800]        # Web 控制台（含助手）
@@ -43,11 +44,12 @@ ADR-10 规划型 + ADR-11 开放路径）：
    （CLI 交互确认，`--yes` 跳过；TUI 按 `Ctrl+Y` 或点按钮；Web 点确认按钮）。
 5. **降级（C3）**：LLM 端点不可用时助手明确告知，回退到显式子命令/任务表单——确定性路径始终可用。
 
-**流式输出与思考指示（v1.4.31）**：TUI 对话与 CLI `ask`/`chat` 走事件流——模型思考增量
-（GLM 等原生 reasoning 流）实时滚动显示，工具调用以活动行提示（如 `⠋ 调用 bio_list_samples…`），
-最终回复增量落盘（服务商支持输出参数流式时逐段显示）。TUI 底部为 OpenCode 式 spinner 动态指示，
-`Esc` 取消在途请求。Web `/assistant` 暂为整页返回（无流式）。结构化计划契约不变
-（ADR-10 规划型；流式仅是展示层，最终结果仍经 pydantic-ai 完整校验）。
+**流式输出与思考指示（v1.4.31；v1.4.32 思考内联主区）**：TUI 对话与 CLI `ask`/`chat` 走
+事件流——模型思考增量（GLM 等原生 reasoning 流）**内联显示在会话主区**（dim 斜体实时滚动，
+回合结束**保留全文**，`Ctrl+T` 折叠/展开最近一次），回复以打字机效果原位流式打出并以权威
+文本定稿，工具调用以活动行提示（如 `⠋ 调用 bio_list_samples…`），`Esc` 取消在途请求。
+Web `/assistant` 暂为整页返回（无流式）。结构化计划契约不变（ADR-10 规划型；流式仅是展示层，
+最终结果仍经 pydantic-ai 完整校验）。
 
 **云端端点下的助手（v1.4.30）**：助手路由到 `cloud` 端点（GLM、DeepSeek 等外部 API）时，
 工具带按 `cloud_max_data_class` 自动裁剪——D4 元数据/检验查询（`bio_query_metadata` 等）与
@@ -243,12 +245,28 @@ bacmap mcp --transport http --host 127.0.0.1 --port 8765
 
 断点恢复：任务引擎基于 DBOS，运行中 kill 进程重启后从断点继续（V2 已验证）。
 
+**封闭与开放：LLM 的能力边界。** 四类任务分两种执行形态：`analyze`/`curate` 走**封闭路径**
+（固定 Snakemake DAG，规则集合属冻结决策，运行时不可增删改）；`mine`/`write` 走**开放路径**
+（LLM 生成脚本/文本，在沙箱与门约束下执行）。LLM 的分工是三层边界：
+
+| 层 | LLM 能做什么 | 刻意不能做什么 |
+|---|---|---|
+| 规划层（提交前） | 决定跑哪些任务、哪些样本、什么参数；一个计划内可**任务级组合**（如 `analyze → mine(统计) → mine(绘图) → write(报告)`） | 挑选/拼接 DAG 规则；改参数以外的流程逻辑 |
+| 执行层 `analyze` | ——（封闭 DAG 原样执行） | 运行时"自由搭建流程"没有入口 |
+| 执行层 `mine` | 写任意 Python 处理**已产出**的数据（统计/交叉验证/绘图） | 沙箱断网、默认镜像（python:3.12-slim）不含生信工具——拼不出即兴生信流水线 |
+
+为什么堵死"LLM 运行时编排流程"：① `analyze` 每次运行封存为带种子、工具版本与哈希的运行
+记录（ADR-18），即兴流程无法封存与复现；② 固定产出才能过确定性校验器与门，自由流程没有
+可预定义的校验规则；③ 生信分析外部化给 gside/gapit/gmlst，编排本身也必须确定性与版本化
+（ADR-20）。**新分析能力的正确路径是开发者行为**：新增 `.smk` 规则 + 适配器 + 测试 →
+版本化部署（树哈希 stamp）→ 进入封闭集合——之后所有 analyze 任务与助手规划自动可用。
+
 ## 7. 端到端示例（新样本上机 → 报告）
 
 ```bash
-# ① 布局数据并注册
+# ① 布局数据并注册（reads 样本；已组装 FASTA 则登记 assembly 列，R1/R2 留空）
 cp /mnt/seq_run/SAM-NEW-100_R{1,2}.fastq.gz ~/.local/share/bacmap/gs/SAM-NEW-100/
-echo -e "SAM-NEW-100\tSalmonella\tgs/SAM-NEW-100/SAM-NEW-100_R1.fastq.gz\tgs/SAM-NEW-100/SAM-NEW-100_R2.fastq.gz" \
+echo -e "SAM-NEW-100\tSalmonella\tgs/SAM-NEW-100/SAM-NEW-100_R1.fastq.gz\tgs/SAM-NEW-100/SAM-NEW-100_R2.fastq.gz\t" \
   >> ~/.local/share/bacmap/workflows/bacmap/config/samples.tsv
 
 # ② 提交（Web 表单选 analyze 填 SAM-NEW-100，或智能体对话）
@@ -287,11 +305,12 @@ ls ~/.local/share/bacmap/results/SAM-NEW-100/report/
 | 「内置助手暂不可用」 | 统一降级提示，真实原因用 `bacmap ask "你好" 2>&1` 看 WARNING 行 |
 | 对话没有流式输出 | 流式在 TUI 与 CLI `ask`/`chat`（v1.4.31）；Web `/assistant` 暂为整页返回 |
 | 助手说「安全问题无法读取」路径数据 | 设计行为：外部数据走 mine 登记（§2「给助手一份数据路径」）；若任务报「沙箱不可用」装 podman（安装指南 §6） |
+| mine 任务失败、消息只剩「workflow ERROR」 | 旧版环境级异常被吞成笼统消息；现任务消息会指出原因与方向（如「沙箱启动失败：no apptainer/podman on PATH → 安装 podman」）——升级后重提任务即可 |
 
 **样本与数据**
 
 | 现象 | 原因与处理 |
 |---|---|
-| analyze 找不到 FASTQ | 样本未注册：按 `gs/<ID>/<ID>_R{1,2}.fastq.gz` 布局或登记 samples.tsv（§7、配置指南 §5） |
+| analyze 找不到 FASTQ | 样本未注册：按 `gs/<ID>/<ID>_R{1,2}.fastq.gz` 布局或登记 samples.tsv（§7、配置指南 §5）；**已组装 FASTA 可登记 `assembly` 列直入封闭路径**（v1.4.33，跳过 QC/组装） |
 | 登记过的数据集读不到 | 原文件被移动/删除（零拷贝登记依赖原路径）；`bio_inspect_dataset verify=true` 可检测 |
 | 任务停在「待审批」 | 正常：挖掘门/发布门等人工签字，详情页审批卡操作（§4） |

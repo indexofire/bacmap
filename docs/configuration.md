@@ -108,11 +108,15 @@ Requests over the limit are intercepted by the LlmGateway **before they are sent
 The full analyze task requires samples to be registered. Edit `$BACMAP_HOME/workflows/bacmap/config/samples.tsv`:
 
 ```tsv
-sample	species	R1	R2
-SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz
+sample	species	R1	R2	assembly
+SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz	
+ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta
 ```
 
-- Columns: `sample` (ID), `species` (expected species), `R1`/`R2` (FASTQ paths, relative to the workflows directory)
+- Columns: `sample` (ID), `species` (expected species), `R1`/`R2` (FASTQ paths, relative to
+  the workflows directory), `assembly` (optional, v1.4.33: **pre-assembled FASTA entry** —
+  skips QC/assembly and feeds typing/AMR downstream directly; path relative to BACMAP_HOME;
+  either reads or assembly per sample — when both are listed, reads win)
 - `species` is **dual-accept**: a 3-letter code (`SAL`, `ECO`, `SHI`, `VPA`, `KPN`, …; see
   `core/pathogens.yaml`) or a gside label / display name (`Salmonella`, `V_parahaemolyticus`,
   `E. coli`). The registry resolves either form to the code — codes are preferred for new

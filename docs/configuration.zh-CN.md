@@ -105,11 +105,14 @@ cloud_max_data_class = "D1"            # 见 §3，不可通过配置放宽超�
 analyze 全流程任务要求样本已注册。编辑 `$BACMAP_HOME/workflows/bacmap/config/samples.tsv`：
 
 ```tsv
-sample	species	R1	R2
-SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz
+sample	species	R1	R2	assembly
+SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz	
+ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta
 ```
 
-- 列：`sample`（ID）、`species`（预期物种）、`R1`/`R2`（FASTQ 路径，相对 workflows 目录）
+- 列：`sample`（ID）、`species`（预期物种）、`R1`/`R2`（FASTQ 路径，相对 workflows 目录）、
+  `assembly`（可选，v1.4.33：**已组装 FASTA 直入**——跳过 QC/组装直接进分型/耐药等下游，
+  路径相对 BACMAP_HOME；与 `R1`/`R2` 二选一，同时登记时 reads 优先）
 - `species` **双接受**：三字母码（`SAL`/`ECO`/`SHI`/`VPA`/`KPN`…，见 `core/pathogens.yaml`）
   或 gside 标签/显示名（`Salmonella`、`V_parahaemolyticus`、`E. coli`）；registry 归一为码。
   新登记**推荐用码**（gside marker 规则覆盖的 40 条物种均已注册）。

@@ -146,6 +146,7 @@ bacmap tui                       # 顶部标题显示「LLM · glm [cloud] … �
 ```bash
 sudo apt-get install podman         # 推荐：无守护进程、无 root、单工作站最合适
 # 或 sudo apt-get install apptainer
+# Arch / Omarchy：sudo pacman -S podman
 which apptainer podman              # 有其一即可，装完零配置
 export BACMAP_ALLOW_UNSANDBOXED=1   # 仅受控开发环境的直通通道（无隔离，不推荐生产）
 ```
