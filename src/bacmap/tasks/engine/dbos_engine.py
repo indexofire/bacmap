@@ -75,22 +75,30 @@ def _load_summary(home: Path, sample: str) -> dict[str, Any]:
 
 
 def _fastqs(home: Path, samples: list[str]) -> list[Path]:
-    """样本 FASTQ 解析：samples.tsv 登记优先（路径相对部署目录 workflows/bacmap），
-    gs/ 约定布局回退——登记在任意位置的样本不再丢失 input_files（C4 证据链）。"""
+    """样本输入文件解析：samples.tsv 登记优先（路径相对部署目录 workflows/bacmap），
+    gs/ 约定布局回退——登记在任意位置的样本不再丢失 input_files（C4 证据链）。
+    v1.4.33：assembly 直入样本（无 R1/R2，登记 assembly 列）以 FASTA 入证据链。"""
     tsv = home / "workflows" / "bacmap" / "config" / "samples.tsv"
     registered: dict[str, tuple[str, str]] = {}
+    registered_asm: dict[str, str] = {}
     if tsv.is_file():
         with tsv.open(encoding="utf-8", newline="") as fh:
             for row in csv.DictReader(fh, delimiter="\t"):
                 sid = (row.get("sample") or "").strip()
                 r1 = (row.get("R1") or "").strip()
                 r2 = (row.get("R2") or "").strip()
+                asm = (row.get("assembly") or "").strip()
                 if sid and r1 and r2:
                     registered[sid] = (r1, r2)
+                elif sid and asm:
+                    registered_asm[sid] = asm
     out: list[Path] = []
     for s in samples:
         if s in registered:
             pair = [home / "workflows" / "bacmap" / p for p in registered[s]]
+        elif s in registered_asm:
+            # assembly 直入：与 Snakefile assembly_path 同约定（相对 BACMAP_HOME）
+            pair = [home / registered_asm[s]]
         else:
             pair = [home / "gs" / s / f"{s}_{r}.fastq.gz" for r in ("R1", "R2")]
         out.extend(f for f in pair if f.exists())
@@ -569,7 +577,11 @@ def _step_mine_run(params: dict[str, Any]) -> dict[str, Any]:
             results_dir=home / "results", gom_db=home / "gom.sqlite", datasets=datasets
         ),
     )
-    result = _run_sandbox(spec)
+    try:
+        result = _run_sandbox(spec)
+    except Exception as exc:
+        # 环境级失败（无沙箱后端等）不是脚本问题：带回可操作原因，而非笼统 workflow ERROR。
+        result = _mine_sandbox_failure(exc, workspace, datasets)
     return {
         "returncode": result.returncode,
         "artifacts": _mine_artifacts(workspace),
@@ -578,6 +590,22 @@ def _step_mine_run(params: dict[str, Any]) -> dict[str, Any]:
         # 失败时把脚本 stderr 带回任务 message（便于在 TUI/Web 直接看到原因）。
         "stderr": (getattr(result, "stderr", "") or "").strip()[-500:],
     }
+
+
+def _mine_sandbox_failure(exc: Exception, workspace: Path, datasets: list[Any]) -> Any:
+    """沙箱启动失败 → rc=1 结果信封（stderr 带原因；mine_workflow 转成 FAILED message）。"""
+    from bacmap.agent.sandbox import SandboxResult
+
+    hint = (
+        "（安装 Apptainer 或 Podman 即解，见安装指南 §6；受控开发环境可设 "
+        "BACMAP_ALLOW_UNSANDBOXED=1）" if "no apptainer" in str(exc) else ""
+    )
+    return SandboxResult(
+        returncode=1,
+        stdout="",
+        stderr=f"沙箱启动失败：{type(exc).__name__}: {exc}{hint}",
+        backend="unavailable",
+    )
 
 
 def _build_sandbox_spec(

@@ -4,6 +4,7 @@
 可读写、GOM 导出只读；宿主机无 Apptainer 时回退 rootless Podman
 （``--network none``）。回退链：Apptainer → Podman → 直接执行（仅当
 BACMAP_ALLOW_UNSANDBOXED=1 显式开启——默认拒绝，防静默降级）。
+Docker 刻意不在链内（root 守护进程权限面，安装指南 §6）。
 """
 
 from __future__ import annotations
@@ -63,7 +64,21 @@ def _which(binary: str) -> str | None:
     return shutil.which(binary, path=os.environ.get("PATH", ""))
 
 
-class ApptainerRunner:
+def _normalize_image(image: str) -> str:
+    """OCI 镜像引用归一化：``docker://x`` → ``x``（podman 用 registry:tag 形式）。"""
+    return image[len("docker://") :] if image.startswith("docker://") else image
+
+
+class ContainerRunner:
+    """容器后端公共基类（build_cmd 由各后端实现；沙箱技术属冻结文档"可替换"列）。"""
+
+    backend_name = "container"
+
+    def build_cmd(self, spec: SandboxSpec) -> list[str]:  # pragma: no cover - 接口
+        raise NotImplementedError
+
+
+class ApptainerRunner(ContainerRunner):
     """Apptainer 后端（生信/HPC 标准，SIF 镜像离线分发）。"""
 
     backend_name = "apptainer"
@@ -78,7 +93,7 @@ class ApptainerRunner:
         return cmd
 
 
-class PodmanRunner:
+class PodmanRunner(ContainerRunner):
     """rootless Podman 回退后端。"""
 
     backend_name = "podman"
@@ -89,7 +104,7 @@ class PodmanRunner:
         cmd += ["-v", f"{spec.workspace}:/workspace:Z"]
         for host, guest in spec.readonly_mounts.items():
             cmd += ["-v", f"{host}:{guest}:ro,Z"]
-        cmd += [spec.image, *spec.command]
+        cmd += [_normalize_image(spec.image), *spec.command]
         return cmd
 
 
@@ -113,12 +128,12 @@ def _run(cmd: list[str], timeout: int, cwd: Path | None = None) -> SandboxResult
 
 
 class SandboxExecutor:
-    """回退链：Apptainer → Podman →（显式开启时）直接执行。"""
+    """回退链：Apptainer → Podman → Docker →（显式开启时）直接执行。"""
 
     def __init__(
         self,
         allow_unsandboxed: bool | None = None,
-        runners: list[ApptainerRunner | PodmanRunner] | None = None,
+        runners: list[ContainerRunner] | None = None,
         timeout: int = 3600,
     ) -> None:
         if allow_unsandboxed is None:
@@ -129,7 +144,7 @@ class SandboxExecutor:
         self._runners = runners
         self.timeout = timeout
 
-    def _pick_runner(self) -> tuple[ApptainerRunner | PodmanRunner, None] | tuple[None, str]:
+    def _pick_runner(self) -> tuple[ContainerRunner, None] | tuple[None, str]:
         for runner in self._runners:
             binary = runner.backend_name
             if _which(binary):
@@ -160,7 +175,8 @@ class SandboxExecutor:
                     cmd[0] = sys.executable
                 return _run(cmd, self.timeout, cwd=spec.workspace)
             raise SandboxUnavailableError(
-                f"{reason}; 安装 Apptainer 或设置 BACMAP_ALLOW_UNSANDBOXED=1（不推荐）"
+                f"{reason}; 安装 Apptainer/Podman（见安装指南 §6），或设置 "
+                "BACMAP_ALLOW_UNSANDBOXED=1（不推荐）"
             )
         host_cmd = runner.build_cmd(spec)
         result = _run(host_cmd, self.timeout)

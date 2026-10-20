@@ -130,6 +130,26 @@ class TestDeploy:
         wf_runner.deploy()
         assert (d1 / ".bacmap_workflow_sha").read_text() == stamp_before
 
+    def test_deploy_self_heals_polluted_config(self, tmp_path: Path, monkeypatch):
+        """stamp 命中但 config.yaml 指向别处（历史测试写穿残留）→ 非 force 也重部署修复；
+        用户的 samples.tsv 与 .snakemake 续跑状态照常保留。"""
+        pkg = tmp_path / "pkg_heal"
+        (pkg / "config").mkdir(parents=True)
+        (pkg / "config" / "config.yaml").write_text('project_root: "../.."\n')
+        monkeypatch.setattr(wf_runner, "WORKFLOW_PKG_DIR", pkg)
+        monkeypatch.setattr(wf_runner, "WORKFLOWS_DIR", tmp_path / "workflows")
+        monkeypatch.setattr(wf_runner, "BACMAP_HOME", tmp_path / "home")
+        d1 = wf_runner.deploy()
+        (d1 / "config" / "samples.tsv").write_text("user\tdata\n")
+        # 写穿形态：stamp 与包哈希一致（deploy 空转条件齐备），但 config 指向已删除的旧目录
+        (d1 / "config" / "config.yaml").write_text(
+            'project_root: "/tmp/pytest-of-x/pytest-0/gone"\n'
+        )
+        d2 = wf_runner.deploy()  # 非 force：自愈检查应触发重部署
+        cfg = (d2 / "config" / "config.yaml").read_text()
+        assert f'project_root: "{tmp_path / "home"}"' in cfg
+        assert (d2 / "config" / "samples.tsv").read_text() == "user\tdata\n"
+
 
 class TestRunnerSubprocess:
     def test_run_builds_correct_command(self, tmp_path: Path, monkeypatch):

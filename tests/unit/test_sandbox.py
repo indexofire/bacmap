@@ -8,6 +8,7 @@ import pytest
 
 from bacmap.agent.sandbox import (
     ApptainerRunner,
+    ContainerRunner,
     PodmanRunner,
     SandboxExecutor,
     SandboxSpec,
@@ -51,6 +52,44 @@ class TestCommandBuilding:
             SandboxSpec(image="i", command=["x"], workspace=tmp_path / "nope")
 
 
+class TestImageNormalization:
+    """OCI 镜像前缀归一化：podman 收 registry:tag；apptainer 保留 docker://（指明 registry）。"""
+
+    def test_podman_strips_docker_prefix(self, tmp_path: Path):
+        cmd = PodmanRunner().build_cmd(_spec(tmp_path))
+        assert "alpine:3" in cmd
+        assert "docker://alpine:3" not in cmd
+
+    def test_apptainer_keeps_docker_prefix(self, tmp_path: Path):
+        cmd = ApptainerRunner().build_cmd(_spec(tmp_path))
+        assert "docker://alpine:3" in cmd
+
+    def test_container_runner_base_interface(self):
+        assert ContainerRunner().backend_name == "container"
+
+
+class TestMineSandboxFailureEnvelope:
+    """mine 步骤环境级失败要给出可操作信息（不再是笼统 workflow ERROR）。"""
+
+    def test_unavailable_hint_actionable(self, tmp_path: Path):
+        from bacmap.agent.sandbox import SandboxUnavailableError
+        from bacmap.tasks.engine.dbos_engine import _mine_sandbox_failure
+
+        exc = SandboxUnavailableError("no apptainer/podman on PATH; ...")
+        r = _mine_sandbox_failure(exc, tmp_path, [])
+        assert r.returncode == 1
+        assert "沙箱启动失败" in r.stderr
+        assert "Apptainer 或 Podman" in r.stderr
+
+    def test_other_exception_still_enveloped(self, tmp_path: Path):
+        from bacmap.tasks.engine.dbos_engine import _mine_sandbox_failure
+
+        r = _mine_sandbox_failure(OSError("boom"), tmp_path, [])
+        assert r.returncode == 1
+        assert "OSError" in r.stderr and "boom" in r.stderr
+        assert "BACMAP_ALLOW_UNSANDBOXED" not in r.stderr  # 非后端缺失不带安装提示
+
+
 class TestFallbackChain:
     def test_no_backend_refuses_by_default(self, tmp_path: Path, monkeypatch):
         monkeypatch.delenv("BACMAP_ALLOW_UNSANDBOXED", raising=False)
@@ -82,9 +121,11 @@ class TestFallbackChain:
         assert result.backend == "fake"
         assert calls == ["fake"]
 
-    def test_timeout_returns_result(self, tmp_path: Path):
+    def test_timeout_returns_result(self, tmp_path: Path, monkeypatch):
         """深度审计修订：超时转为 SandboxResult(returncode=-1)而非裸抛——
-        保留 stdout/stderr 诊断且不破坏调用方契约（sleep 5s 超 1s 真实触发）。"""
+        保留 stdout/stderr 诊断且不破坏调用方契约（sleep 5s 超 1s 真实触发）。
+        强制 direct 后端：宿主机装有 docker/apptainer 时不得真调容器（测试密闭性）。"""
+        monkeypatch.setattr("bacmap.agent.sandbox._which", lambda b: None)
         result = SandboxExecutor(allow_unsandboxed=True, timeout=1).run(
             SandboxSpec(image="i", command=["sleep", "5"], workspace=tmp_path)
         )
@@ -119,6 +160,7 @@ class TestSandboxHardening:
 
     def test_workspace_with_space_unsandboxed(self, tmp_path, monkeypatch):
         monkeypatch.setenv("BACMAP_ALLOW_UNSANDBOXED", "1")
+        monkeypatch.setattr("bacmap.agent.sandbox._which", lambda b: None)  # 密闭：强制 direct
         from bacmap.agent.sandbox import SandboxExecutor, SandboxSpec
 
         ws = tmp_path / "my workspace"

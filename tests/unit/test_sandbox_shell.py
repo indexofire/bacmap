@@ -76,6 +76,7 @@ class TestRunShell:
 
         monkeypatch.setattr(config, "BACMAP_HOME", tmp_path)
         monkeypatch.setenv("BACMAP_ALLOW_UNSANDBOXED", "1")
+        monkeypatch.setattr("bacmap.agent.sandbox._which", lambda b: None)  # 密闭：强制直通语义
         monkeypatch.delenv("BACMAP_SANDBOX_ALLOW_SHELL_PASSTHROUGH", raising=False)
         out = json.loads(run_shell(tmp_path / "ws", "ls"))
         assert "error" in out and "直通模式拒绝 shell" in out["error"]

@@ -277,6 +277,7 @@ class TestMineInputPaths:
 class TestSandboxRunDatasets:
     def test_passthrough_reads_registered_dataset(self, tmp_path, data_dir, monkeypatch):
         monkeypatch.setenv("BACMAP_ALLOW_UNSANDBOXED", "1")
+        monkeypatch.setattr("bacmap.agent.sandbox._which", lambda b: None)  # 密闭：强制直通
         from bacmap import config
         from bacmap.agent.sandbox.tool import run_script
 

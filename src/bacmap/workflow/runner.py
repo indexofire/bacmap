@@ -84,12 +84,30 @@ def deployed_stamp() -> Path:
     return _deployed_dir() / ".bacmap_workflow_sha"
 
 
+def _config_points_at_home(deployed: Path) -> bool:
+    """部署的 config.yaml 是否指向当前 BACMAP_HOME（自愈检查；BACMAP_HOME 动态取值）。"""
+    cfg = deployed / "config" / "config.yaml"
+    try:
+        return cfg.is_file() and f'project_root: "{BACMAP_HOME}"' in cfg.read_text()
+    except OSError:
+        return False
+
+
 def deploy(force: bool = False) -> Path:
-    """包内工作流 → BACMAP_HOME；内容变化时自动更新（保留 samples.tsv 与 .snakemake 续跑状态）。"""
+    """包内工作流 → BACMAP_HOME；内容变化时自动更新（保留 samples.tsv 与 .snakemake 续跑状态）。
+
+    自愈：stamp 命中但部署的 config.yaml 未指向当前 BACMAP_HOME（历史测试写穿/
+    home 迁移残留）时强制重部署——否则污染态会因 stamp 空转而永久保留。
+    """
     deployed = _deployed_dir()
     pkg_hash = _tree_hash(WORKFLOW_PKG_DIR)
     stamp = deployed_stamp()
-    if not force and stamp.is_file() and stamp.read_text().strip() == pkg_hash:
+    if (
+        not force
+        and stamp.is_file()
+        and stamp.read_text().strip() == pkg_hash
+        and _config_points_at_home(deployed)
+    ):
         return deployed
 
     keeps: list[tuple[Path, Path]] = []

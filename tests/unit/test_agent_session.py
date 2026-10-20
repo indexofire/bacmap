@@ -258,7 +258,9 @@ class TestSandboxTool:
 
     def test_run_script_plotting_via_passthrough(self, tmp_path, monkeypatch):
         # 无 apptainer/podman：显式开启受控直通，脚本在本机 python 中绘图。
+        # （_which 置空保证密闭：宿主机装有后端时仍确定性地走直通路径。）
         monkeypatch.setenv("BACMAP_ALLOW_UNSANDBOXED", "1")
+        monkeypatch.setattr("bacmap.agent.sandbox._which", lambda b: None)
         from bacmap.agent.sandbox.tool import run_script
 
         script = (
