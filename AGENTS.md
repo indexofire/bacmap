@@ -5,7 +5,7 @@ bacmap：本地病原菌基因组分析系统（单工作站、数据不出网�
 
 ## 黄金规则（违反任何一条即返工）
 
-1. **冻结文档是宪法**：`docs/architecture-frozen-v1.md`（v1.4.10）中标"冻结"的决策，
+1. **冻结文档是宪法**：`docs/architecture-frozen-v1.md`（v1.4.39）中标"冻结"的决策，
    修改必须在该文档第 10 节新增一条 `v1.4.x` 修订记录（原因、证据、迁移成本），
    并同步 `dev/research-framework-evidence.md` 的对应 §10.x 证据小节。
 2. **依赖方向契约（ADR-02）**：`core/store/tools` 不得导入
@@ -61,8 +61,8 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟）
 
 ## 外部工具依赖（pixi [pypi-dependencies]）
 
-- `gside`：PyPI 发布版（当前 ==0.1.1）
-- `gapit ==0.5.4`、`gmlst ==0.5.5`：PyPI 发布版
+- `gside`：PyPI 发布版（当前 ==0.1.4）
+- `gapit ==0.5.6`、`gmlst ==0.5.5`：PyPI 发布版
 - 升级这些工具后必须复核：CLI 接口签名 + bacmap 侧解析器 + V10 式单株冒烟
 
 ## 已知占位（等外部能力就绪后替换）

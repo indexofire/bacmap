@@ -3,7 +3,7 @@ authors = ["indexofire <indexofire@gmail.com>"]
 channels = ["conda-forge", "bioconda"]
 name = "bacmap"
 platforms = ["linux-64"]
-version = "0.1.0"
+version = "1.4.39"
 
 # 环境分两层：default = 运行时（Python + 域依赖）；dev = 开发工具。
 # 生信 CLI 工具与 Snakemake 9 在迁移第 4 步（workflow 层）加入，避免骨架阶段拖入 4GB 依赖。
@@ -27,6 +27,11 @@ openjdk = ">=11,<17"
 shovill = "1.1.0.*"
 snakemake = "9.27.*"
 pandas = ">=2.3"
+# sistr-cmd（bioconda）要求 numpy<2；显式钉住防止未来全量 pixi update 解到 numpy 2.x 破坏 sistr。
+numpy = "<2"
+# gapit 0.5.5 使用 click.argument(help=...)；上游未声明 click 下限，此处在
+# conda 层钉住（8.2.1 会让 gapit 导入即 TypeError），随 bioconda 工具链一致求解。
+click = ">=8.5"
 fastp = "1.3.5.*"
 abricate = ">=1.4.0,<2"
 ncbi-amrfinderplus = "3.12.*"
@@ -52,7 +57,9 @@ mappy = ">=2.24"
 pyhmmer = ">=0.10"
 pyyaml = ">=6.0"
 sourmash = ">=4.8"
-gapit = "==0.5.4"
+gapit = "==0.5.6"
+# gapit 0.5.5 需要 click.argument(help=...)（上游未声明下限；click 经 conda
+# 层进入环境，下限钉在 conda [dependencies] 段）。
 dbos = ">=2.0"
 mcp = ">=2.3,<3"
 fastapi = ">=0.110"
@@ -60,7 +67,7 @@ uvicorn = ">=0.29"
 jinja2 = ">=3.1"
 httpx = ">=0.27"
 pydantic-ai-slim = { version = ">=2.0,<3", extras = ["openai"] }
-gside = "==0.1.1"
+gside = "==0.1.4"
 textual = ">=0.80"
 bacmap = { path = ".", editable = true }
 
@@ -70,6 +77,10 @@ pytest-cov = ">=4.0"
 ruff = ">=0.5"
 mypy = ">=1.10"
 import-linter = ">=2.0"
+
+# mkdocs 走 pypi：conda-forge 的 mkdocs 1.6.x 钉 click<8.3，与 gapit 0.5.5
+# 所需的 click>=8.5 冲突；pypi 版无此上界（依赖重组）。
+[feature.dev.pypi-dependencies]
 mkdocs = ">=1.6"
 mkdocs-material = ">=9.5"
 
