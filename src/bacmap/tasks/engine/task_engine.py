@@ -71,9 +71,14 @@ class DbosTaskEngine:
         p.setdefault("cores", 8)
         p.setdefault("submitted_by", submitted_by)
 
-        # analyze 必须有样本：否则工作流会以 KeyError 落成静默 FAILED 任务。
-        if task_type == TaskType.ANALYZE and not p.get("samples"):
-            raise ValueError("analyze requires at least one sample id")
+        # analyze 必须有样本输入：samples 列表或目录直入（fasta_dir/fastq_dir，
+        # 工作流首步自动登记，v1.4.38/39）——否则工作流会以 KeyError 落成静默 FAILED。
+        if (
+            task_type == TaskType.ANALYZE
+            and not p.get("samples")
+            and not (p.get("fasta_dir") or p.get("fastq_dir"))
+        ):
+            raise ValueError("analyze requires samples or fasta_dir/fastq_dir")
 
         # 防御纵深：样本 ID 白名单（MCP/Web 已校验；引擎是最终写入口）。
         samples = p.get("samples")

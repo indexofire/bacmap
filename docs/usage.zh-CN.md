@@ -15,6 +15,12 @@ bacmap console [--home H]                          # 交互式菜单
 bacmap overview [--json]                           # 系统概览
 bacmap task list|show|submit|approve|cancel         # 任务查询与写操作（显式、无 LLM；list 别名 ls）
 bacmap task show <短前缀>                          # ID 支持 git 式短前缀：list 显示 12 位直接可用，多义时加长
+bacmap task submit --type analyze --fasta-dir <目录> [--species <码|名>]
+                                                   # 组装 FASTA 目录直入：自动扫描登记后提交标准
+                                                   # analyze；--species 省略时逐株 gside 自动识别（v1.4.38）
+bacmap task submit --type analyze --fastq-dir <目录> [--species <码|名>]
+                                                   # reads 目录直入：自动识别 *_R1/_R2 配对登记；
+                                                   # 物种省略登记 UNK（管线内鉴定，血清型等不路由）
 bacmap sample ls|show                              # 样本浏览
 bacmap search --query <kw>                          # 样本检索
 bacmap web [--host 127.0.0.1] [--port 8800]        # Web 控制台（含助手）
@@ -114,14 +120,17 @@ bacmap › 收到。/data/... 是外部路径，需要先走 mine 任务：
 
 - **直接按键**：`Enter` 发送 · `Shift/Alt+Enter` 换行 · `Esc` 中断/忽略待确认计划 ·
   `Ctrl+C` 退出 · `Ctrl+B` 侧栏 · `Ctrl+R` 刷新 · `Ctrl+L` 清屏 · `Ctrl+F` 跟随开关
-  （回看时停止自动滚动）· `Ctrl+P` 命令面板 · `Ctrl+Y` 确认计划。**开屏即聚焦输入框**，
+  （回看时停止自动滚动）· `Ctrl+P` 命令面板 · `Ctrl+Y` 确认计划/待签批。**开屏即聚焦输入框**，
   可直接输入。
 - **Leader `Ctrl+G` 和弦**：`n` 新会话 · `i` 输入框 · `l` 任务 · `s` 样本 · `m` 模型/端点 · `t` 主题 ·
-  `h` 帮助 · `q` 退出。
+  `a` **签批选中的 `awaiting_approval` 任务**（提示栏显示任务与签名，`Ctrl+Y` 确认、`Esc` 取消；
+  签名默认系统用户名）· `h` 帮助 · `q` 退出。
 - **失败回显**：提交的任务进入 `failed`/`cancelled` 时，会话区会追加一行
   `任务 <id> failed（<step>）：<原因>`（每个任务只报一次），不必盯着侧栏。
-- **斜杠命令**：`/help /new /clear /tasks /samples /search <kw> /model /analyze <样本>
-  /curate [scope] /quit`（`/analyze`、`/curate` 为显式无 LLM 路径）。
+- **斜杠命令**：`/help /new /clear /tasks /samples /search <kw> /result <样本> /model
+  /approve <ID> [签名] /analyze <样本> /curate [scope] /quit`（`/analyze`、`/curate` 为显式
+  无 LLM 路径；`/approve` 的 ID 支持 `task list` 显示的短前缀，无参时签批任务表选中项；
+  `/result` 无参时渲染样本表选中样本的关键结果与报告路径）。
 
 输入框即助手：规划 → 确认（`Ctrl+Y`）→ 提交。窄终端下侧栏自动折叠，宽度恢复时还原用户偏好。
 `bacmap console` 仍是编号菜单，面向偏好引导式操作的用户。

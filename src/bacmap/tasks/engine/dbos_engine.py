@@ -66,7 +66,20 @@ def _run_snakemake(params: dict[str, Any]) -> Any:
     targets = [
         str(home / "results" / s / "report" / f"{s}_summary.json") for s in params["samples"]
     ]
-    return runner.run(targets=targets, cores=params.get("cores", 8))
+    # 同一部署目录有 Snakemake 目录锁：并发 analyze（TUI+CLI 同时提交是合法用户行为）
+    # 会撞 LockException——退避重试而非直接失败（v1.4.39）。
+    import time as _time
+
+    for attempt in range(4):
+        result = runner.run(targets=targets, cores=params.get("cores", 8))
+        if result.returncode == 0 or "LockException" not in (result.stderr or ""):
+            return result
+        wait_s = 45 * (attempt + 1)
+        logger.warning(
+            "snakemake 目录锁被占用（attempt %d/4），%ds 后重试", attempt + 1, wait_s
+        )
+        _time.sleep(wait_s)
+    return result
 
 
 def _load_summary(home: Path, sample: str) -> dict[str, Any]:
@@ -451,9 +464,35 @@ def _step_gate_audit(home_s: str, task_id: str, gate_result: dict[str, Any]) -> 
 # ---------------------------------------------------------------------------
 
 
+@DBOS.step()
+def _step_register_inputs(params: dict[str, Any]) -> dict[str, Any]:
+    """目录直入登记（v1.4.38/39）：``fasta_dir``（物种逐株 gside 自动识别）或
+    ``fastq_dir``（配对识别，species 省略时登记 UNK）→ samples.tsv。
+    登记是写操作，经由任务引擎执行（助手可直接规划这些参数）。"""
+    from bacmap.workflow.samples_registry import register_fastas, register_fastqs_dir
+
+    home = Path(params["home"])
+    species = str(params.get("species") or "")
+    if params.get("fasta_dir"):
+        return register_fastas(home, Path(str(params["fasta_dir"])).expanduser(), species)
+    return register_fastqs_dir(home, Path(str(params["fastq_dir"])).expanduser(), species)
+
+
 @DBOS.workflow()
 def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
     home = Path(params["home"])
+
+    if params.get("fasta_dir") or params.get("fastq_dir"):
+        reg = _step_register_inputs(params)
+        if not reg["samples"]:
+            reasons = "；".join(f"{s['file']}: {s['reason']}" for s in reg["skipped"][:3])
+            return {
+                "status": "FAILED",
+                "snakemake_returncode": 0,
+                "message": f"目录登记后无可分析样本。{reasons}",
+                "gates": {},
+            }
+        params = {**params, "samples": reg["samples"]}
 
     rc = _step_run(params)
     if rc["returncode"] != 0:

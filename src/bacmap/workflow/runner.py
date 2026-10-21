@@ -84,11 +84,16 @@ def deployed_stamp() -> Path:
     return _deployed_dir() / ".bacmap_workflow_sha"
 
 
-def _config_points_at_home(deployed: Path) -> bool:
-    """部署的 config.yaml 是否指向当前 BACMAP_HOME（自愈检查；BACMAP_HOME 动态取值）。"""
+def _deploy_state_ok(deployed: Path) -> bool:
+    """部署自愈检查：config 指向当前 BACMAP_HOME 且 samples.tsv 存在
+    （历史写穿/误删任一形态都触发重部署恢复，模板重新落位）。"""
     cfg = deployed / "config" / "config.yaml"
     try:
-        return cfg.is_file() and f'project_root: "{BACMAP_HOME}"' in cfg.read_text()
+        return (
+            cfg.is_file()
+            and f'project_root: "{BACMAP_HOME}"' in cfg.read_text()
+            and (deployed / "config" / "samples.tsv").is_file()
+        )
     except OSError:
         return False
 
@@ -106,7 +111,7 @@ def deploy(force: bool = False) -> Path:
         not force
         and stamp.is_file()
         and stamp.read_text().strip() == pkg_hash
-        and _config_points_at_home(deployed)
+        and _deploy_state_ok(deployed)
     ):
         return deployed
 

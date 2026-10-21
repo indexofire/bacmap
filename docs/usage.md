@@ -15,6 +15,14 @@ bacmap console [--home H]                          # 交互式菜单
 bacmap overview [--json]                           # 系统概览
 bacmap task list|show|submit|approve|cancel         # 任务查询与写操作（显式、无 LLM；list alias ls）
 bacmap task show <short-prefix>                    # IDs accept git-style prefixes: the 12 chars shown by list just work; lengthen on ambiguity
+bacmap task submit --type analyze --fasta-dir <dir> [--species <code|name>]
+                                                   # assembled-FASTA directory entry: scan, register,
+                                                   # submit standard analyze; with --species omitted each
+                                                   # genome is auto-identified by gside (v1.4.38)
+bacmap task submit --type analyze --fastq-dir <dir> [--species <code|name>]
+                                                   # reads directory entry: auto-detect *_R1/_R2 pairs;
+                                                   # species omitted → UNK (identified in-pipeline; no
+                                                   # species-specific typing routes)
 bacmap sample ls|show                              # 样本浏览
 bacmap search --query <kw>                          # 样本检索
 bacmap web [--host 127.0.0.1] [--port 8800]        # Web 控制台（含助手）
@@ -134,15 +142,20 @@ the **conversation**, a **plan hint**, and the **prompt**, with a **footer** of 
 - **Direct keys**: `Enter` send · `Shift/Alt+Enter` newline · `Esc` interrupt / ignore the
   pending plan · `Ctrl+C` quit · `Ctrl+B` toggle sidebar · `Ctrl+R` refresh · `Ctrl+L` clear
   conversation · `Ctrl+F` toggle follow (stop auto-scroll while reading back) · `Ctrl+P`
-  command palette · `Ctrl+Y` confirm the pending plan. The input box is **focused on start**,
-  so you can type immediately.
+  command palette · `Ctrl+Y` confirm the pending plan / approval. The input box is
+  **focused on start**, so you can type immediately.
 - **Leader `Ctrl+G`** chords: `n` new session · `i` focus input · `l` tasks · `s` samples ·
-  `m` model/endpoint · `t` theme · `h` help · `q` quit.
+  `m` model/endpoint · `t` theme · `a` **approve the selected `awaiting_approval` task**
+  (the hint bar shows the task and signature; `Ctrl+Y` confirms, `Esc` cancels; the
+  signature defaults to the system username) · `h` help · `q` quit.
 - **Failure echo**: when a submitted task ends `failed`/`cancelled`, the conversation gets one
   line — `任务 <id> failed（<step>）：<reason>` — so you need not watch the sidebar.
 - **Slash commands** in the prompt: `/help /new /clear /tasks /samples /search <kw> /model`
-  `/analyze <样本> /curate [scope] /quit` (the `/analyze` and `/curate` commands are the
-  explicit no-LLM path).
+  `/result <sample>` `/approve <ID> [signature]` `/analyze <样本> /curate [scope] /quit`
+  (the `/analyze` and `/curate` commands are the explicit no-LLM path; `/approve` accepts the
+  short ID prefix shown by `task list`, and with no argument approves the task selected in the
+  sidebar; `/result` with no argument renders the selected sample's key findings and report
+  path in the conversation).
 
 The prompt is the assistant: plan → confirm (`Ctrl+Y`) → submit. The sidebar auto-collapses on
 narrow terminals and restores your preference when width returns. `bacmap console` remains a

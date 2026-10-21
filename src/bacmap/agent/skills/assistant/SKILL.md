@@ -21,12 +21,19 @@ metadata:
 
 ## 任务类型的选择
 
-- `analyze`：对**双端测序 reads（FASTQ）**跑标准管线（QC、组装、物种鉴定、分型、耐药/毒力基因筛查、报告）。
-  参数：`{"samples": ["<样本ID>", ...]}`。**这是大多数简单需求的默认路径。**
-  ⚠️ **不接受装配 FASTA（.fna/.fasta）**：管线从 reads 起跑（fastp → shovill），没有
-  "装配输入"模式。拿到 `*.fna` 时：要么请用户补对应原始 reads；要么用 `sandbox_run`
-  在装配上直接调 `gside species` / `gmlst typing mlst` / `gapit screen` 做装配级鉴定与分型，
-  并在回复里说明"这是装配级结果，不走标准管线"。
+- `analyze`：标准管线（QC、组装、物种鉴定、分型、耐药/毒力基因筛查、报告）。
+  **这是大多数简单需求的默认路径**。两种参数形态（v1.4.33/38）：
+  - `{"samples": ["<样本ID>", ...]}`——样本已登记于 samples.tsv 时；
+  - `{"fasta_dir": "<组装 FASTA 目录>", "species": "<可选>"}`——**装配基因组直入**：
+    任务会自动扫描、（species 省略时）逐株 gside 识别物种、登记 samples.tsv 并跑
+    标准管线。用户给出 `*.fna/.fasta` 目录且要标准分析时**直接规划此形态**，
+    不要问 reads、不要退到 mine。识别失败的文件会被跳过并在任务消息中列明。
+  - `{"fastq_dir": "<reads 目录>", "species": "<可选>"}`——**原始 reads 直入**：
+    自动识别 `*_R1/_R2`（或 `*_1/_2`）配对并登记。reads 无法装配前定种：species
+    省略时登记 UNK（管线内 gside 会鉴定真实物种，但物种特异步骤如血清型/DEC
+    不会路由——用户需要这些时请同时给 species）。
+  reads（FASTQ）样本经 samples.tsv 的 R1/R2 列登记，走 fastp→shovill；装配 FASTA
+  经 assembly 列登记，跳过 QC/组装直接进下游——两条入口汇入同一套下游规则与门。
 - `curate`：构建/更新本地流行特征库。参数：`{"scope": {...}}`（如 `{"pathogen":"Salmonella"}`）。
 - `mine`：**深度数据挖掘**——对已有结果做二次分析：统计/比率、菌株间或与历史比较、聚类、
   可视化。当常规流程无法直接给出答案、需要**自行编写代码、绘图**或**多步骤迭代**时选它。
@@ -36,10 +43,18 @@ metadata:
 
 ## 深度挖掘（mine）与 `sandbox_run`
 
-- **用户给定的外部数据路径**不能直接读：先规划一个 `mine` 任务，把路径放进
-  `input_paths`（零拷贝登记 + SHA256），任务会把数据只读挂载进沙箱；随后用
-  `bio_inspect_dataset` 查看已登记的 `dataset_id`，把它传给 `sandbox_run` 的
-  `datasets`，或让 `mine` 脚本按工作区 `context.json` 里的挂载点读取。
+- **外部数据路径分两类处理（v1.4.33 起，先判断再选路）**：
+  - **组装 FASTA（.fna/.fasta/.fa）且用户要标准分析**（物种鉴定/分型/耐药/毒力/报告）
+    → 走封闭 `analyze`，**不要规划成 mine**。引导用户一键登记并提交：
+    `bacmap task submit --type analyze --fasta-dir <目录> --species <码或名>`；
+    样本已在 samples.tsv（assembly 列）登记时，可直接规划 `analyze` 并传
+    `{"samples": [...]}`。判断口径：目录里主要是基因组 FASTA、用户问的是"分析/
+    鉴定/分型"这类标准诉求。
+  - **其余情况**——任意格式数据、要自由统计/绘图/多步迭代、或标准流程给不了的
+    答案 → `mine`：把路径放进 `input_paths`（零拷贝登记 + SHA256），任务会把数据
+    只读挂载进沙箱；随后用 `bio_inspect_dataset` 查看已登记的 `dataset_id`，把它
+    传给 `sandbox_run` 的 `datasets`，或让 `mine` 脚本按工作区 `context.json` 里
+    的挂载点读取。
 - **优先用 `sandbox_run`**：需要自行计算/绘图时，写一段 Python 脚本交给 `sandbox_run`
   执行——脚本从工作区 `context.json` 读取数据位置，**字段结构照抄，别猜**：
 

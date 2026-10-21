@@ -26,8 +26,10 @@ rule qc_fastp:
         r1 = _r1_in,
         r2 = _r2_in
     output:
-        r1_clean = temp(str(WORKDIR) + "/{sample}/qc/{sample}_clean_R1.fastq.gz"),
-        r2_clean = temp(str(WORKDIR) + "/{sample}/qc/{sample}_clean_R2.fastq.gz"),
+        # v1.4.39：不再标 temp()——并发/失败重试交叉时 Snakemake 会清掉临时产物，
+        # 导致 shovill "Can't read R1"（用户实测踩坑）；磁盘换可靠性。
+        r1_clean = str(WORKDIR) + "/{sample}/qc/{sample}_clean_R1.fastq.gz",
+        r2_clean = str(WORKDIR) + "/{sample}/qc/{sample}_clean_R2.fastq.gz",
         json = str(WORKDIR) + "/{sample}/qc/{sample}_fastp.json",
         html = str(WORKDIR) + "/{sample}/qc/{sample}_fastp.html"
     threads: config["threads"]

@@ -208,13 +208,66 @@ def _run_task_show(args: argparse.Namespace) -> None:
         c.print(f"  message: {_safe(st.message)}")
 
 
+def _register_fasta_dir(fasta_dir: Path, species: str, home: Path) -> list[str]:
+    """扫描目录内的组装 FASTA 并登记 samples.tsv（assembly 列）；返回样本 ID 列表。
+
+    ``species`` 为空时逐株 gside 自动识别（v1.4.38）；逻辑与引擎 ``fasta_dir``
+    步骤同源（``workflow.samples_registry``）。打印登记报告供即时反馈。
+    """
+    from bacmap.workflow.samples_registry import register_fastas
+
+    try:
+        report = register_fastas(home, fasta_dir, species)
+    except FileNotFoundError as exc:
+        raise SystemExit(str(exc)) from exc
+    c = _console()
+    c.print(
+        f"FASTA 登记：{len(report['samples'])} 株（新增 {report['added']}，"
+        f"复用 {report['reused']}）→ {report['samples_tsv']}"
+    )
+    for sid, code in report["detected"].items():
+        c.print(f"  自动识别 {sid} → {code}")
+    for s in report["skipped"]:
+        c.print(f"[#d29922]  跳过 {s['file']}：{s['reason']}[/]")
+    return report["samples"]
+
+
+def _register_fastq_dir(fastq_dir: Path, species: str, home: Path) -> list[str]:
+    """reads 目录登记（R1/R2 配对识别）；与引擎 ``fastq_dir`` 步骤同源。"""
+    from bacmap.workflow.samples_registry import register_fastqs_dir
+
+    try:
+        report = register_fastqs_dir(home, fastq_dir, species)
+    except FileNotFoundError as exc:
+        raise SystemExit(str(exc)) from exc
+    c = _console()
+    c.print(
+        f"reads 登记：{len(report['samples'])} 株（新增 {report['added']}，"
+        f"复用 {report['reused']}）→ {report['samples_tsv']}"
+    )
+    for s in report["skipped"]:
+        c.print(f"[#d29922]  跳过 {s['file']}：{s['reason']}[/]")
+    return report["samples"]
+
+
 def _run_task_submit(args: argparse.Namespace) -> None:
     from bacmap.tasks.spec import TaskType
 
     if args.type not in ("analyze", "curate"):
         raise SystemExit("task submit 仅支持 analyze|curate（mine/write 属开放路径）")
     params: dict[str, Any] = {}
-    if args.samples:
+    if args.fasta_dir or args.fastq_dir:
+        if args.samples or (args.fasta_dir and args.fastq_dir):
+            raise SystemExit("--fasta-dir/--fastq-dir 与 --samples 互斥，目录参数二选一")
+        if args.fasta_dir:
+            params["samples"] = _register_fasta_dir(
+                Path(args.fasta_dir).expanduser(), args.species or "", Path(args.home)
+            )
+        else:
+            params["samples"] = _register_fastq_dir(
+                Path(args.fastq_dir).expanduser(), args.species or "", Path(args.home)
+            )
+    elif args.samples:
         params["samples"] = [s.strip() for s in args.samples.split(",") if s.strip()]
     if args.scope:
         try:
@@ -509,6 +562,13 @@ def build_parser() -> argparse.ArgumentParser:
     t_show.set_defaults(func=_run_task_show)
 
     t_sub = task_sub.add_parser("submit", help="提交 analyze/curate 任务")
+    t_sub.add_argument(
+        "--fasta-dir", help="组装 FASTA 目录：递归扫描 .fna/.fasta/.fa 登记后提交 analyze"
+    )
+    t_sub.add_argument(
+        "--fastq-dir", help="reads 目录：识别 *_R1/_R2 配对登记后提交 analyze"
+    )
+    t_sub.add_argument("--species", help="样本物种（码或名称；省略时 FASTA 逐株自动识别）")
     t_sub.add_argument("--type", choices=["analyze", "curate"], required=True)
     t_sub.add_argument("--samples", default="", help="样本 ID，逗号分隔（analyze）")
     t_sub.add_argument(
