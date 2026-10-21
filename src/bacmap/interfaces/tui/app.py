@@ -103,13 +103,22 @@ Screen { background: $background; }
 # 思考/活动指示的 spinner 帧（opencode 式 braille throbber）
 _SPIN_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
+
+def _default_signature() -> str:
+    """签批默认签名：单工作站形态取系统用户名（挖掘门 signed_by 证据）。"""
+    import getpass
+
+    with contextlib.suppress(OSError):
+        return getpass.getuser()
+    return "tui-operator"
+
 _HELP = (
     "[b #3fb950]bacmap 会话助手[/]\n"
     "  输入自然语言分析需求；助手会查询样本、规划任务，写操作需确认后提交。\n"
-    "  斜杠命令：/help /new /clear /tasks /samples /search <kw> /model "
-    "/analyze <样本> /curate [scope] /quit\n"
+    "  斜杠命令：/help /new /clear /tasks /samples /search <kw> /result <样本> /model "
+    "/approve <ID> [签名] /analyze <样本> /curate [scope] /quit\n"
     "  Leader（Ctrl+G）：n 新会话 · i 输入框 · l 任务 · s 样本 · "
-    "m 模型 · t 主题 · h 帮助 · q 退出\n"
+    "m 模型 · t 主题 · a 签批选中任务 · h 帮助 · q 退出\n"
     "  其它：Enter 发送 · Shift/Alt+Enter 换行 · Esc 中断 · Ctrl+Y 确认计划 · "
     "Ctrl+F 跟随开关 · Ctrl+T 展开/收起最近思考 · Ctrl+B 侧栏 · Ctrl+R 刷新 · "
     "Ctrl+L 清屏 · Ctrl+P 命令面板"
@@ -143,6 +152,7 @@ class BacmapTUI(App[None]):
         "m": "action_model_info",
         "t": "action_toggle_theme",
         "h": "action_help",
+        "a": "action_approve_task",
         "q": "_leader_quit",
     }
 
@@ -151,6 +161,7 @@ class BacmapTUI(App[None]):
         self.engine = engine
         self._session: Any = None
         self._pending_plan: Any = None
+        self._pending_approval: dict[str, str] | None = None  # 待签批任务（Leader a）
         self._chat_task: Any = None  # 在途会话 asyncio.Task（Esc 可取消）
         self._leader = False
         self._focus_before_leader: Any = None
@@ -448,6 +459,7 @@ class BacmapTUI(App[None]):
         if self._leader:
             self._end_leader()
             return
+        self._pending_approval = None
         if self._pending_plan is not None:
             self._pending_plan = None
             self._set_hint("")
@@ -460,7 +472,7 @@ class BacmapTUI(App[None]):
         self._leader = True
         self._set_hint(
             "[b #d29922]Leader[/] 已激活：n 新会话 · l 任务 · s 样本 · "
-            "i 输入 · m 模型 · t 主题 · h 帮助 · q 退出"
+            "i 输入 · m 模型 · t 主题 · a 签批 · h 帮助 · q 退出"
         )
 
     def _end_leader(self) -> None:
@@ -492,12 +504,19 @@ class BacmapTUI(App[None]):
     def action_new_session(self) -> None:
         self._session = None
         self._pending_plan = None
+        self._pending_approval = None
         self._reply_seq += 1  # 丢弃旧会话迟到的回复
         self._cancel_chat()
         self.action_clear_conversation()
         self._chat_append("[#8b949e]已开始新会话[/]")
 
     def action_confirm_plan(self) -> None:
+        if self._pending_plan is None and self._pending_approval is not None:
+            # 待签批与待确认计划共用 Ctrl+Y（先到先得；立即清除防连按重复执行）。
+            approval, self._pending_approval = self._pending_approval, None
+            self._set_hint("")
+            self._do_approve(approval)
+            return
         plan = self._pending_plan
         if plan is None:
             self._chat_append("[#8b949e]当前没有待确认的计划[/]")
@@ -506,6 +525,52 @@ class BacmapTUI(App[None]):
         self._pending_plan = None
         self._set_hint("")
         self._do_confirm_plan(plan)
+
+    # -- 任务签批（awaiting_approval）-----------------------------------------
+
+    def action_approve_task(self) -> None:
+        """签批任务表中选中的任务（Leader a）：Ctrl+Y 确认，Esc 取消。"""
+        table = self.query_one("#tasks-table", DataTable)
+        key = self._selected_key(table)
+        if key is None:
+            self._set_hint("先选中任务：Leader l 聚焦任务表，↑↓ 选择，再 Leader a")
+            return
+        state = self._task_states.get(key, "")
+        if state != "awaiting_approval":
+            self._set_hint(
+                f"任务 {key[:12]} 状态为 {state or '未知'}：仅 awaiting_approval 可签批"
+            )
+            return
+        sig = _default_signature()
+        self._pending_approval = {"task_id": key, "signature": sig}
+        self._set_hint(f"签批 {key[:12]} · 签名 {sig}：Ctrl+Y 确认 · Esc 取消")
+
+    @work(thread=True, exclusive=False)
+    def _do_approve(self, approval: dict[str, str]) -> None:
+        from datetime import UTC, datetime
+
+        from bacmap.tasks.spec import Approval
+
+        raw, sig = approval["task_id"], approval["signature"]
+        try:
+            tid = self.engine.resolve_task_id(raw)
+            self.engine.approve(
+                tid,
+                Approval(
+                    approver=sig,
+                    decision="approve",
+                    signature=sig,
+                    comment="TUI 签批",
+                    at=datetime.now(UTC),
+                ),
+            )
+            msg = f"[green]已签批 ✓ {str(tid)[:12]}（{sig}）[/green]"
+        except Exception as exc:
+            msg = (
+                f"[#f85149]签批失败 {raw[:12]}：{_esc(type(exc).__name__)}: {_esc(str(exc))}[/]"
+            )
+        self.call_from_thread(self._chat_append, msg)
+        self.call_from_thread(self.refresh_tasks)
 
     # -- leader 和弦拦截 ----------------------------------------------------
 
@@ -560,10 +625,75 @@ class BacmapTUI(App[None]):
             self.action_model_info()
         elif cmd == "search":
             self._slash_search(arg)
+        elif cmd == "result":
+            self._slash_result(arg)
+        elif cmd == "approve":
+            self._slash_approve(arg)
         elif cmd in ("analyze", "curate"):
             self._slash_submit(cmd, arg)
         else:
             self._chat_append(f"[#f85149]未知命令：/{cmd}（输入 /help）[/]")
+
+    def _slash_result(self, arg: str) -> None:
+        """``/result [样本ID]``——渲染已完成样本的关键结果；无参时取样本表选中项。"""
+        sample = arg.strip()
+        if not sample:
+            table = self.query_one("#samples-table", DataTable)
+            sample = self._selected_key(table) or ""
+        if not sample:
+            self._set_hint("用法：/result <样本ID>（或在样本表选中一行后直接 /result）")
+            return
+        self._result_worker(sample)
+
+    @work(thread=True, exclusive=False)
+    def _result_worker(self, sample: str) -> None:
+        import json
+        from pathlib import Path
+
+        from bacmap.interfaces.views import report_path, sample_digest
+
+        sj = Path(self.engine.home) / "results" / sample / "report" / f"{sample}_summary.json"
+        if not sj.is_file():
+            self.call_from_thread(
+                self._chat_append, f"[#f85149]样本 {sample} 无结果（未完成或不存在）[/]"
+            )
+            return
+        try:
+            summary = json.loads(sj.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            self.call_from_thread(
+                self._chat_append, f"[#f85149]读取失败 {sample}：{_esc(str(exc))}[/]"
+            )
+            return
+        d = sample_digest(summary)
+        vpa = summary.get("steps", {}).get("vpa_virulence", {}) or {}
+        marks = (
+            "  |  VPA 标记: "
+            + "".join(k + ("⁺" if vpa.get(k) else "⁻") for k in ("tlh", "tdh", "trh"))
+            if vpa
+            else ""
+        )
+        amr = "、".join(sorted(d["card_genes"])[:8]) or "无"
+        sero = f"   血清型: {_esc(str(d['serovar']))}" if d.get("serovar") else ""
+        lines = [
+            f"[b #79c0ff]结果 · {d['sample_id']}[/]",
+            f"  物种: {_esc(str(d['verdict']))}   MLST: {_esc(str(d['st']))}{sero}",
+            f"  耐药(CARD {d['n_card']}): {amr}",
+            f"  毒力: vfdb {d['n_vfdb']}  |  质粒: {d['n_plasmid']}{marks}",
+            f"  报告: [underline]{_esc(str(report_path(self.engine, sample)))}[/underline]",
+        ]
+        self.call_from_thread(self._chat_append, "\n".join(lines))
+
+    def _slash_approve(self, arg: str) -> None:
+        """``/approve [任务ID短前缀] [签名]``——无参时签批任务表选中项。"""
+        parts = arg.split()
+        if not parts:
+            self.action_approve_task()
+            return
+        raw = parts[0]
+        sig = parts[1] if len(parts) > 1 else _default_signature()
+        self._pending_approval = {"task_id": raw, "signature": sig}
+        self._set_hint(f"签批 {raw[:12]} · 签名 {sig}：Ctrl+Y 确认 · Esc 取消")
 
     @work(thread=True, exclusive=False)
     def _slash_search(self, query: str) -> None:

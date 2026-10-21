@@ -379,6 +379,132 @@ class TestInlineThinkingStream:
         asyncio.run(_run())
 
 
+class TestTuiApprove:
+    """TUI 任务签批（v1.4.34）：awaiting_approval 任务可经 Leader a + Ctrl+Y 签批。"""
+
+    def _seed_awaiting(self, app) -> None:
+        from textual.widgets import DataTable
+
+        table = app.query_one("#tasks-table", DataTable)
+        table.clear()
+        table.add_row("t-awaiting", "awaiting_approval", "mine", key="task-abc123def456")
+        app._task_states["task-abc123def456"] = "awaiting_approval"
+        table.move_cursor(row=0)
+
+    def test_leader_a_ctrl_y_approves_selected(self, engine, monkeypatch):
+        calls: list = []
+        monkeypatch.setattr(
+            engine,
+            "approve",
+            lambda tid, ap: calls.append((str(tid), ap.approver, ap.decision, ap.signature)),
+        )
+        monkeypatch.setattr(
+            engine, "resolve_task_id", lambda raw: type("T", (str,), {})(raw)
+        )
+
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                self._seed_awaiting(app)
+                await pilot.press("ctrl+g")
+                await pilot.press("a")
+                await pilot.pause()
+                assert app._pending_approval is not None
+                assert app._pending_approval["task_id"] == "task-abc123def456"
+                app.query_one("#tasks-table", DataTable).focus()  # ctrl+y 不被 Input 吞
+                await pilot.press("ctrl+y")
+                await asyncio.sleep(0.3)
+                await pilot.pause()
+                assert calls and calls[0][0] == "task-abc123def456"
+                assert calls[0][2] == "approve"
+                assert calls[0][1] == calls[0][3]  # approver = signature（默认签名）
+
+        asyncio.run(_run())
+
+    def test_leader_a_without_selection_hints(self, engine):
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                from textual.widgets import DataTable
+
+                app.query_one("#tasks-table", DataTable).clear()
+                await pilot.press("ctrl+g")
+                await pilot.press("a")
+                await pilot.pause()
+                assert app._pending_approval is None  # 无选中：不进入待签批
+
+        asyncio.run(_run())
+
+    def test_escape_cancels_pending_approval(self, engine, monkeypatch):
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                app._pending_approval = {"task_id": "x", "signature": "mark"}
+                await pilot.press("escape")
+                await pilot.pause()
+                assert app._pending_approval is None
+
+        asyncio.run(_run())
+
+    def test_slash_approve_uses_prefix_and_signature(self, engine, monkeypatch):
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                inp = app.query_one("#prompt", Input)
+                inp.value = "/approve 93d8fd57 张三"
+                inp.focus()
+                await pilot.press("enter")
+                await pilot.pause()
+                assert app._pending_approval == {"task_id": "93d8fd57", "signature": "张三"}
+
+        asyncio.run(_run())
+
+
+class TestSlashResult:
+    """/result：在会话区渲染已完成样本的关键结果（v1.4.37）。"""
+
+    def test_result_renders_digest_and_report_path(self, engine):
+        async def _run():
+            app = BacmapTUI(engine)
+            captured: list[str] = []
+            async with app.run_test(size=(140, 40)) as pilot:
+                app._chat_append = lambda m: captured.append(m)
+                await pilot.pause()
+                inp = app.query_one("#prompt", Input)
+                inp.value = "/result SAM-001"
+                inp.focus()
+                await pilot.press("enter")
+                await asyncio.sleep(0.4)
+                await pilot.pause()
+                joined = "".join(captured)
+                assert "结果 · SAM-001" in joined
+                assert "Salmonella" in joined
+                assert "SAM-001_report.html" in joined  # 报告路径给出
+
+        asyncio.run(_run())
+
+    def test_result_unknown_sample_says_so(self, engine):
+        async def _run():
+            app = BacmapTUI(engine)
+            captured: list[str] = []
+            async with app.run_test(size=(140, 40)) as pilot:
+                app._chat_append = lambda m: captured.append(m)
+                await pilot.pause()
+                inp = app.query_one("#prompt", Input)
+                inp.value = "/result NOPE-404"
+                inp.focus()
+                await pilot.press("enter")
+                await asyncio.sleep(0.3)
+                await pilot.pause()
+                assert any("无结果" in c for c in captured)
+
+        asyncio.run(_run())
+
+
 class TestSkillGuidelines:
     """tui-design 技能要点：不可信文本转义、跟随模式、响应式折叠。"""
 
