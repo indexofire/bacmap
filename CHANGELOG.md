@@ -5,6 +5,28 @@
 
 ## [未发布]
 
+### 冻结文档 v1.8.5：自然语言排障
+- `bacmap_task_status` 在云端 Profile 返回脱敏 `failure`（类别/建议/修复命令）；
+  `failure_diagnostics` 增补 `sandbox_unavailable`。
+- 教程新增“出问题时，先跟它说”一节（中英）。
+- 测试基线：1559 → 1562。
+
+### 冻结文档 v1.8.4：自然语言数据管理 + 教程智能体优先
+- 新增 MCP `bacmap_record_data`（local-trusted）：智能体可经任务层录入元数据/化验/知识库。
+- 教程重写为智能体优先（中英），CLI 退到兜底小节。
+- 测试基线：1556 → 1559。
+
+### 冻结文档 v1.8.3：curate 代表运行（I3）
+- 同一 isolate 多个 dataset 只纳入一次：默认最新分析，可显式指定；
+  `representative_runs` / `superseded` 记录选择与依据。
+- `scope.strains` 可用 isolate 或 dataset；元数据按 isolate 查找。
+- 测试基线：1552 → 1556。
+
+### 冻结文档 v1.8.2：I3 第一片（isolate 注册表）
+- 新增 `isolates` 表与 `bacmap isolate ls|show`；登记自动同步 isolate，
+  `EVO-001-P037` 自动解析 lineage/passage。
+- 测试基线：1545 → 1552。
+
 ## [0.1.2] - 2026-10-26
 
 ### 冻结文档 v1.8.1：run 级结果目录（P2 方案 A）

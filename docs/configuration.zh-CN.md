@@ -124,7 +124,8 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha2
 - **同名规则**：登记一个已存在的 dataset id 时，**只有内容哈希一致才幂等复用**；
   内容不同的同名文件会直接报错（`dataset_id collision: ...`，给出两边路径与改名建议），
   绝不会静默分析旧文件。`checksum` 由登记代码维护；手工加行可留空。
-- 传代实验：每一代用独立 isolate（`EVO-001-P000` … `EVO-001-P100`，后续可用 `lineage_id`
+- isolate 会自动登记（`bacmap isolate ls|show`）；`EVO-001-P037` 解析为 lineage `EVO-001`、passage 37。
+  传代实验：每一代用独立 isolate（`EVO-001-P000` … `EVO-001-P100`，后续可用 `lineage_id`
   关联），其下再挂一到多个数据集。
 - 工作流重部署时 samples.tsv 与 `.snakemake/` 续跑状态自动保留
 

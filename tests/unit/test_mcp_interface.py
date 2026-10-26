@@ -469,3 +469,81 @@ class TestCapabilitiesTool:
 
     def test_available_in_read_only_mode(self):
         assert "bacmap_capabilities" in _list_tool_names(build_server())
+
+
+class TestRecordDataTool:
+    """自然语言数据管理（v1.8.4）：D4 Profile 下智能体可提交 record 任务。"""
+
+    @pytest.fixture
+    def engine(self, tmp_path: Path, monkeypatch):
+        from bacmap.tasks.engine import task_engine
+
+        monkeypatch.setattr(task_engine.DBOS, "start_workflow", lambda wf, p: None)
+        e = eng.DbosTaskEngine(tmp_path)
+        yield e
+        eng.shutdown_dbos()
+
+    def test_hidden_on_cloud_profile(self, engine):
+        assert "bacmap_record_data" not in _list_tool_names(build_server(engine))
+
+    def test_trusted_profile_submits_metadata(self, engine):
+        server = build_server(engine, TRUSTED)
+        out = _call(
+            server,
+            "bacmap_record_data",
+            {"record": {"kind": "metadata", "strain_id": "S1",
+                        "fields": {"province": "Guangdong"}}},
+        )
+        assert out["kind"] == "metadata" and out["task_id"]
+        row = engine.list_tasks(1)[0]
+        assert row["task_type"] == "record" and row["submitted_by"].startswith("mcp-")
+
+    def test_invalid_record_rejected(self, engine):
+        out = _call(
+            build_server(engine, TRUSTED),
+            "bacmap_record_data",
+            {"record": {"kind": "metadata", "fields": {"nope": 1}}},
+        )
+        assert out["code"] == "validation_error"
+
+
+class TestRedactedFailure:
+    """v1.8.5：云端 Profile 不回传任务消息原文，但给出脱敏故障类别与处置建议。"""
+
+    def test_cloud_gets_failure_kind_not_message(self, tmp_path: Path, monkeypatch):
+        from bacmap.tasks.engine import task_engine
+        from bacmap.tasks.spec import TaskState, TaskType
+
+        monkeypatch.setattr(task_engine.DBOS, "start_workflow", lambda wf, p: None)
+        engine = eng.DbosTaskEngine(tmp_path)
+        try:
+            tid = engine.submit(TaskType.ANALYZE, {"samples": ["SAM-1"]}, "x")
+            engine._update_state(
+                tid,
+                TaskState.FAILED,
+                "snakemake 退出码 1：no apptainer/podman on PATH（sample SAM-1 at /home/x）",
+            )
+            out = _call(build_server(engine), "bacmap_task_status", {"task_id": tid})
+            assert out["message"] == "" and out["message_withheld"] is True
+            assert out["failure"]["kind"] == "sandbox_unavailable"
+            assert "SAM-1" not in json.dumps(out["failure"], ensure_ascii=False)
+            trusted = _call(
+                build_server(engine, TRUSTED), "bacmap_task_status", {"task_id": tid}
+            )
+            assert "SAM-1" in trusted["message"]
+        finally:
+            eng.shutdown_dbos()
+
+    def test_success_has_no_failure_block(self, tmp_path: Path, monkeypatch):
+        from bacmap.tasks.engine import task_engine
+        from bacmap.tasks.spec import TaskState, TaskType
+
+        monkeypatch.setattr(task_engine.DBOS, "start_workflow", lambda wf, p: None)
+        engine = eng.DbosTaskEngine(tmp_path)
+        try:
+            tid = engine.submit(TaskType.ANALYZE, {"samples": ["SAM-1"]}, "x")
+            engine._update_state(tid, TaskState.SUCCEEDED)
+            out = _call(build_server(engine), "bacmap_task_status", {"task_id": tid})
+            assert out["failure"] is None
+        finally:
+            eng.shutdown_dbos()

@@ -49,6 +49,13 @@ class Diagnosis:
 
 _PATTERNS: list[tuple[str, re.Pattern[str], str, str, list[str]]] = [
     (
+        "sandbox_unavailable",
+        re.compile(r"no apptainer|no podman|沙箱(?:启动)?失败|sandbox unavailable", re.I),
+        "找不到可用的沙箱后端（Apptainer/Podman）",
+        "安装 Apptainer 或 Podman 后重试；直通模式仅用于受控开发",
+        ["pixi global install podman"],
+    ),
+    (
         "lock",
         re.compile(r"Directory cannot be locked|Error locking directory|lock.*exist", re.I),
         "Snakemake 工作目录被锁定，可能由前一次中断的运行留下",

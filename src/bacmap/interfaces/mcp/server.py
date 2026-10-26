@@ -98,6 +98,7 @@ def build_server(engine: Any = None, profile: ProfileSpec = DEFAULT_PROFILE) -> 
     if engine is not None:
         _register_task_tools(server, engine, profile)
         _register_task_control_tools(server, engine, profile)
+        _register_record_tool(server, engine, profile)
         _register_plan_tools(server, engine, profile.actor)
 
     _register_capabilities(server, profile)
@@ -209,11 +210,14 @@ def _register_task_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -
             st = engine.status(task_id)
         except KeyError as exc:
             return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        original_message = str(st.message or "")
         data = st.model_dump(mode="json")
         if not profile.allows(DataClass.D2):
-            # 任务消息可能含样本 ID、宿主路径等单株信息（D2）：低于 D2 的 Profile 不回传。
+            # 任务消息可能含样本 ID、宿主路径等单株信息（D2）：低于 D2 的 Profile 不回传原文，
+            # 但给出脱敏的故障类别与处置建议，让智能体能协助排查（v1.8.5）。
             data["message"] = ""
             data["message_withheld"] = True
+            data["failure"] = _redacted_failure(original_message)
         return json.dumps(data, ensure_ascii=False)
 
 
@@ -316,6 +320,61 @@ def _register_capabilities(server: MCPServer, profile: ProfileSpec) -> None:
                 # 因此 bacmap 继续用显式句柄，语义对齐该扩展以便日后迁移。
                 "tasks_extension": "unsupported_by_sdk",
             },
+            ensure_ascii=False,
+        )
+
+
+def _redacted_failure(message: str) -> dict[str, Any] | None:
+    """任务失败消息 → 脱敏故障类别/建议（不含样本 ID、路径原文）。"""
+    if not message:
+        return None
+    from bacmap.core.analysis.failure_diagnostics import diagnose
+
+    d = diagnose(message)
+    return {
+        "kind": d.error_type,
+        "suggested_fix": d.suggested_fix,
+        "recovery_commands": d.recovery_commands,
+    }
+
+
+def _register_record_tool(server: MCPServer, engine: Any, profile: ProfileSpec) -> None:
+    """数据管理（v1.8.4）：D4 Profile 下允许智能体经任务层录入元数据/化验/知识库。"""
+    if not profile.allows(DataClass.D4):
+        return
+
+    from bacmap.tasks.records import parse_record
+    from bacmap.tasks.spec import TaskType
+
+    @server.tool(
+        name="bacmap_record_data",
+        description=(
+            "Record data through the task layer (audited). record.kind is one of: metadata "
+            "(strain_id, sample_id, fields), lab_result (strain_id, category, test_name, result, "
+            "optional unit/method/interpretation/standard/tested_date/tested_by/lab/notes), "
+            "knowledge_import (title, authors, year, source, identifier, content, entry_kind), "
+            "knowledge_approve (entry_id). Knowledge entries are staged until approved."
+        ),
+    )
+    def record_data(record: dict[str, Any]) -> str:
+        payload = dict(record)
+        payload.setdefault("kind", "")
+        try:
+            parse_record(payload)
+        except ValueError as exc:
+            return json.dumps(
+                {"code": "validation_error", "error": str(exc)}, ensure_ascii=False
+            )
+        try:
+            tid = engine.submit(
+                TaskType.RECORD, payload, f"{profile.actor} (record_data)"
+            )
+        except ValueError as exc:
+            return json.dumps(
+                {"code": "validation_error", "error": str(exc)}, ensure_ascii=False
+            )
+        return json.dumps(
+            {"task_id": tid, "kind": payload["kind"], "state": "running"},
             ensure_ascii=False,
         )
 

@@ -58,11 +58,13 @@ STRAIN_INDEX_DDL = (
 
 def data_migrations() -> tuple[Migration, ...]:
     """data/bacmap.sqlite 的清单：菌株元数据与检验结果共用同一文件。"""
+    from bacmap.store.isolates import ISOLATES_DDL
     from bacmap.store.lab_results import DDL_STATEMENTS as LAB_DDL
     from bacmap.store.strain_metadata import DDL_STATEMENTS as META_DDL
 
     return (
         Migration(1, "baseline: strain metadata, lab results", (*META_DDL, *LAB_DDL)),
+        Migration(2, "isolates: biological entity + lineage", (ISOLATES_DDL,)),
     )
 
 

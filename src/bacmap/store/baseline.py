@@ -107,6 +107,26 @@ def strain_checks(summary: dict[str, Any], meta: dict[str, Any]) -> dict[str, bo
     }
 
 
+def _isolate_map(home: Path) -> dict[str, str]:
+    """samples.tsv v3：dataset → isolate（表缺失/旧版时回落 dataset 自身）。"""
+    tsv = home / "workflows" / "bacmap" / "config" / "samples.tsv"
+    if not tsv.is_file():
+        return {}
+    lines = tsv.read_text(encoding="utf-8").splitlines()
+    if not lines:
+        return {}
+    header = lines[0].split("\t")
+    if "isolate" not in header:
+        return {}
+    idx, iso = header.index("sample"), header.index("isolate")
+    out: dict[str, str] = {}
+    for ln in lines[1:]:
+        parts = ln.split("\t")
+        if len(parts) > max(idx, iso) and parts[idx]:
+            out[parts[idx]] = parts[iso] or parts[idx]
+    return out
+
+
 def build_candidate(
     home: Path,
     scope: dict[str, Any] | None = None,
@@ -117,18 +137,28 @@ def build_candidate(
 
     home = Path(home)
     scope = scope or {}
-    meta_svc = StrainMetadataService(metadata_db or home / "data" / "metadata.sqlite")
+    data_dir = home / "data"
+    meta_path = metadata_db or (
+        data_dir / "bacmap.sqlite"
+        if (data_dir / "bacmap.sqlite").is_file()
+        else data_dir / "metadata.sqlite"
+    )
+    meta_svc = StrainMetadataService(meta_path)
+    isolate_of = _isolate_map(home)
 
-    strains: list[dict[str, Any]] = []
+    groups: dict[str, list[dict[str, Any]]] = {}
     excluded: list[dict[str, str]] = []
     # 样本 ID 任意（samples.tsv 与 MCP 白名单 [A-Za-z0-9._-]+ 均不限于 SAM-*）；
     # 与 bio_list_samples / Web 的 results 扫描口径一致（*/report/*_summary.json）。
     for sdir in sorted((home / "results").glob("*/report/*_summary.json")):
         strain_id = sdir.parent.parent.name
-        if scope.get("strains") and strain_id not in scope["strains"]:
+        isolate = isolate_of.get(strain_id, strain_id)
+        if scope.get("strains") and not (
+            strain_id in scope["strains"] or isolate in scope["strains"]
+        ):
             continue
         summary = json.loads(sdir.read_text(encoding="utf-8"))
-        meta_obj = meta_svc.get(strain_id)
+        meta_obj = meta_svc.get(isolate) or meta_svc.get(strain_id)
         meta = meta_obj.to_dict() if meta_obj else {}
 
         species = _summary_species(summary)
@@ -163,19 +193,56 @@ def build_candidate(
             if meta.get(f):
                 features[f] = meta[f]
 
-        strains.append(
+        groups.setdefault(isolate, []).append(
             {
                 "strain_id": strain_id,
+                "isolate_id": isolate,
                 "summary_path": str(sdir.relative_to(home)),
                 "features": features,
+                "_mtime": sdir.stat().st_mtime,
             }
         )
+
+    explicit = scope.get("representative_dataset") or {}
+    strains: list[dict[str, Any]] = []
+    representative_runs: dict[str, dict[str, Any]] = {}
+    superseded: list[dict[str, str]] = []
+    for isolate, entries in sorted(groups.items()):
+        wanted = explicit.get(isolate)
+        if wanted:
+            chosen = [e for e in entries if e["strain_id"] == wanted]
+            if not chosen:
+                excluded.append(
+                    {
+                        "strain_id": wanted,
+                        "isolate_id": isolate,
+                        "reason": "representative_dataset_missing",
+                    }
+                )
+                continue
+            pick, reason = chosen[0], "explicit"
+        else:
+            pick = max(entries, key=lambda e: (e["_mtime"], e["strain_id"]))
+            reason = "latest"
+        for e in entries:
+            if e is not pick:
+                superseded.append(
+                    {"isolate_id": isolate, "dataset_id": e["strain_id"], "reason": reason}
+                )
+        representative_runs[isolate] = {
+            "dataset_id": pick["strain_id"],
+            "summary_path": pick["summary_path"],
+            "reason": reason,
+        }
+        strains.append({k: v for k, v in pick.items() if k != "_mtime"})
 
     return {
         "home": str(home),
         "scope": scope,
         "strains": strains,
         "excluded": excluded,
+        "representative_runs": representative_runs,
+        "superseded": superseded,
         "built_at": datetime.now(UTC).isoformat(),
     }
 

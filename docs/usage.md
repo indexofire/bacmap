@@ -148,8 +148,10 @@ not file paths, not natural language:
   `$BACMAP_HOME/workflows/bacmap/config/samples.tsv` (registration wins; see §7 and the
   configuration guide §5).
 
-**scope** (for `curate`, optional) is a JSON object scoping which samples enter the local
-epidemiological baseline: `{"pathogen": "Salmonella"}` filters by species substring;
+**scope** (for `curate`, optional) selects which isolates enter the local epidemiological baseline.
+One isolate contributes once even when it has several datasets: the newest analysis is chosen by
+default, or pick one explicitly with `{"representative_dataset": {"<isolate>": "<dataset>"}}`
+(the candidate records the choice in `representative_runs` and lists the rest in `superseded`).: `{"pathogen": "Salmonella"}` filters by species substring;
 `{"strains": ["SAM-001", "SAM-002"]}` by explicit list; empty includes every qualifying
 sample (strains failing per-strain checks are recorded as excluded). `analyze` ignores it.
 

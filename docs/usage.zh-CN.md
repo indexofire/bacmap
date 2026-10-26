@@ -126,7 +126,10 @@ MCP 客户端永远看不到它们。
 - 样本 ID 从哪来：`gs/<ID>/<ID>_R{1,2}.fastq.gz` 约定布局，或登记
   `$BACMAP_HOME/workflows/bacmap/config/samples.tsv`（登记优先，见 §7 端到端示例与配置指南 §5）。
 
-**「scope」**（curate 任务用，可选）是一个 JSON 对象，圈定纳入本地流行特征库的样本范围：
+**「scope」**（curate 任务用，可选）是一个 JSON 对象，圈定纳入本地流行特征库的 isolate 范围。
+同一 isolate 有多个 dataset 时只纳入一次：默认选最新分析，也可用
+`{"representative_dataset": {"<isolate>": "<dataset>"}}` 显式指定（候选清单在
+`representative_runs` 记录选择，在 `superseded` 列出未选中的 dataset）。
 `{"pathogen": "Salmonella"}` 按病原子串筛选；`{"strains": ["SAM-001", "SAM-002"]}` 按清单筛选；
 留空默认纳入全部合格样本（逐株纳入检查不通过的记入排除清单）。analyze 任务忽略此字段。
 

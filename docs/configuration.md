@@ -133,7 +133,8 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha2
   suggestion to rename (`dataset_id collision: ...`), so an analysis can never silently run on
   the older file. `checksum` is maintained by the registration code; leave it empty if you add
   rows by hand.
-- For passage experiments, give each passage its own isolate (`EVO-001-P000` … `EVO-001-P100`,
+- Isolates are registered automatically (`bacmap isolate ls|show`); `EVO-001-P037` is parsed as
+  lineage `EVO-001`, passage 37. For passage experiments, give each passage its own isolate (`EVO-001-P000` … `EVO-001-P100`,
   optionally linked by a future `lineage_id`) and one or more datasets underneath it.
 - When a workflow is redeployed, samples.tsv and the `.snakemake/` checkpoint-resume state are preserved automatically
 

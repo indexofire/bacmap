@@ -203,6 +203,22 @@ def _guard_collision(
             )
 
 
+def _ensure_isolates(home: Path, rows: list[list[str]], header: list[str]) -> None:
+    """把 samples.tsv 中的 isolate 同步进 isolates 表（幂等；失败不阻断登记）。"""
+    if "isolate" not in header:
+        return
+    from bacmap.store.isolates import IsolateService
+
+    idx = header.index("isolate")
+    try:
+        with IsolateService(home / "data" / "bacmap.sqlite") as svc:
+            for row in rows:
+                if len(row) > idx and row[idx]:
+                    svc.ensure(row[idx])
+    except (OSError, ValueError):  # 注册表不可写不应让数据登记失败（登记本身已完成）
+        pass
+
+
 def register_fastas(
     home: Path, fasta_dir: Path, species: str = ""
 ) -> dict[str, Any]:
@@ -251,6 +267,7 @@ def register_fastas(
         added += 1
 
     _save_table(tsv, header, rows)
+    _ensure_isolates(home, rows, header)
     return {
         "samples": samples,
         "added": added,
@@ -308,6 +325,7 @@ def register_fastqs_dir(
         added += 1
 
     _save_table(tsv, header, rows)
+    _ensure_isolates(home, rows, header)
     return {
         "samples": samples,
         "added": added,

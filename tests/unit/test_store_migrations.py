@@ -189,7 +189,10 @@ class TestDataDbVersioned:
                 " VALUES ('S1','S1','x','x')"
             )
         assert strain_metadata.StrainMetadataService(db).get("S1") is not None
-        assert schema_version(db) == 1 and (tmp_path / "bacmap.sqlite.bak-v0").is_file()
+        from bacmap.store.schema import data_migrations
+
+        assert schema_version(db) == len(data_migrations()) == 2
+        assert (tmp_path / "bacmap.sqlite.bak-v0").is_file()
 
 
 class TestGomHoldsStrainIndex:
