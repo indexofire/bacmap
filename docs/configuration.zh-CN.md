@@ -105,9 +105,9 @@ cloud_max_data_class = "D1"            # 见 §3，不可通过配置放宽超�
 analyze 全流程任务要求样本已注册。编辑 `$BACMAP_HOME/workflows/bacmap/config/samples.tsv`：
 
 ```tsv
-sample	species	R1	R2	assembly
-SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz	
-ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta
+sample	species	R1	R2	assembly	isolate	platform	checksum
+SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>
+ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha256>
 ```
 
 - 列：`sample`（ID）、`species`（预期物种）、`R1`/`R2`（FASTQ 路径，相对 workflows 目录）、
@@ -117,6 +117,15 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta
   或 gside 标签/显示名（`Salmonella`、`V_parahaemolyticus`、`E. coli`）；registry 归一为码。
   新登记**推荐用码**（gside marker 规则覆盖的 40 条物种均已注册）。
 - 测序数据建议按 `gs/<样本>/<样本>_R{1,2}.fastq.gz` 约定布局
+- **一株多测（v1.8）**：每个数据集命名为 `<isolate>__<platform>[__<日期>]`
+  （如 `HZCPE-01__ilm__20261012`、`HZCPE-01__ont__20261020`）。`sample` 列是**数据集** ID，
+  `isolate` 列把同一株的多个数据集串起来，`platform` 记录测序平台。
+  目录登记会从文件名自动解析这三项；也可以手工在表里改 `isolate`/`platform`。
+- **同名规则**：登记一个已存在的 dataset id 时，**只有内容哈希一致才幂等复用**；
+  内容不同的同名文件会直接报错（`dataset_id collision: ...`，给出两边路径与改名建议），
+  绝不会静默分析旧文件。`checksum` 由登记代码维护；手工加行可留空。
+- 传代实验：每一代用独立 isolate（`EVO-001-P000` … `EVO-001-P100`，后续可用 `lineage_id`
+  关联），其下再挂一到多个数据集。
 - 工作流重部署时 samples.tsv 与 `.snakemake/` 续跑状态自动保留
 
 ## 6. 智能体客户端（MCP）侧配置

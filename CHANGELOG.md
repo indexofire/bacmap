@@ -5,6 +5,15 @@
 
 ## [未发布]
 
+## [0.1.1] - 2026-10-26
+
+### 冻结文档 v1.8.0：身份模型 I1（登记冲突修复）
+- **修复**：同名不同内容的样本不再被静默复用——按内容 SHA256 判定，哈希不同立即报错；同内容仍幂等。
+- **新增**：`samples.tsv` v3（`isolate`/`platform`/`checksum`，v2 自动升级）；
+  命名约定 `<isolate>__<platform>[__<date>]`，支持一株多测。
+- **裁定记录**：传代=每代一个 isolate + lineage；P2 落地后旧目录立即删除；P1 存储优化暂缓。
+- **测试基线**：1529 → 1537。
+
 ### 冻结文档 v1.7.1：证据可见性
 - 新增 `bacmap run ls|show|compare`、`bacmap gom ls|show`；`/api/v1/runs`、`/runs/{id}`、
   `/runs/{id}/compare`、`/gom/objects`；Web **运行** 与 **GOM** 页面（含来源比较）。

@@ -38,8 +38,12 @@ class TestRegisterFastaDir:
         samples = _register_fasta_dir(tmp_path / "data", "VPA", home)
         assert samples == ["a", "b"]  # 排序稳定；gz/txt 不收
         rows = _tsv(home).read_text().splitlines()
-        assert rows[0].split("\t") == ["sample", "species", "R1", "R2", "assembly"]
-        assert any(r.startswith("b\tVPA\t\t\t") and r.endswith("b.FASTA") for r in rows)
+        header = rows[0].split("\t")
+        assert header[:5] == ["sample", "species", "R1", "R2", "assembly"]
+        assert {"isolate", "platform", "checksum"} <= set(header)
+        records = [dict(zip(header, r.split("\t"), strict=False)) for r in rows[1:]]
+        b = next(r for r in records if r["sample"] == "b")
+        assert b["species"] == "VPA" and b["assembly"].endswith("b.FASTA")
 
     def test_idempotent_reuses_registered_ids(self, tmp_path: Path):
         _seed(tmp_path / "data")
@@ -60,8 +64,11 @@ class TestRegisterFastaDir:
         (tmp_path / "data" / "new.fna").write_text(">c\nACGT\n")
         samples = _register_fasta_dir(tmp_path / "data", "VPA", home)
         lines = tsv.read_text().splitlines()
-        assert lines[0].split("\t")[-1] == "assembly"
-        assert lines[1] == "OLD\tSalmonella\tp\tq"  # 旧行原样保留
+        header = lines[0].split("\t")
+        assert "assembly" in header and "checksum" in header
+        old = dict(zip(header, lines[1].split("\t"), strict=False))
+        assert old["sample"] == "OLD" and old["species"] == "Salmonella"
+        assert old["isolate"] == "OLD"  # v2 → v3 升级时 isolate 取原 sample
         assert samples == ["new"]
 
     def test_no_fasta_fails_fast(self, tmp_path: Path):

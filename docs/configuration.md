@@ -108,9 +108,9 @@ Requests over the limit are intercepted by the LlmGateway **before they are sent
 The full analyze task requires samples to be registered. Edit `$BACMAP_HOME/workflows/bacmap/config/samples.tsv`:
 
 ```tsv
-sample	species	R1	R2	assembly
-SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz	
-ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta
+sample	species	R1	R2	assembly	isolate	platform	checksum
+SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>
+ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha256>
 ```
 
 - Columns: `sample` (ID), `species` (expected species), `R1`/`R2` (FASTQ paths, relative to
@@ -122,6 +122,19 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta
   `E. coli`). The registry resolves either form to the code — codes are preferred for new
   registrations (the 40 pathogens gside's marker rules cover are all registered).
 - Sequencing data should follow the `gs/<sample>/<sample>_R{1,2}.fastq.gz` conventional layout
+- **One strain, many sequencing runs (v1.8)**: name each dataset
+  `<isolate>__<platform>[__<date>]` (for example `HZCPE-01__ilm__20261012` and
+  `HZCPE-01__ont__20261020`). The `sample` column is the *dataset* id; the `isolate` column ties
+  datasets of the same biological strain together, and `platform` records how it was sequenced.
+  Directory registration derives all three from the file name; an explicit `isolate`/`platform`
+  can be edited in the table.
+- **Collision rule**: registering a dataset id that already exists is idempotent **only when the
+  content hash matches**. A different file with the same id is rejected with both paths and a
+  suggestion to rename (`dataset_id collision: ...`), so an analysis can never silently run on
+  the older file. `checksum` is maintained by the registration code; leave it empty if you add
+  rows by hand.
+- For passage experiments, give each passage its own isolate (`EVO-001-P000` … `EVO-001-P100`,
+  optionally linked by a future `lineage_id`) and one or more datasets underneath it.
 - When a workflow is redeployed, samples.tsv and the `.snakemake/` checkpoint-resume state are preserved automatically
 
 ## 6. Agent client (MCP) side configuration

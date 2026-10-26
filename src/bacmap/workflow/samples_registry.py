@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -20,10 +21,40 @@ from typing import Any
 from bacmap.core.species_codes import species_code
 
 _FASTA_EXTS = {".fna", ".fasta", ".fa"}
-_HEADER = ["sample", "species", "R1", "R2", "assembly"]
+# `sample` 列语义 = dataset_id（历史列名保留，避免改 10 个 .smk 规则）；
+# isolate/platform 为 v1.8 身份模型列；checksum 用于同名冲突检测。
+_HEADER = ["sample", "species", "R1", "R2", "assembly", "isolate", "platform", "checksum"]
+_IDENTITY_COLUMNS = ("isolate", "platform", "checksum")
 
 _READ_STEMS = (".fastq.gz", ".fq.gz", ".fastq.bz2", ".fq.bz2", ".fastq", ".fq")
 _MATE_PAT = re.compile(r"^(?P<prefix>.+?)[_.]?(?P<mate>R?[12])(_001)?$", re.IGNORECASE)
+
+
+def parse_dataset_name(stem: str) -> tuple[str, str, str]:
+    """文件名 → (dataset_id, isolate_id, platform)。
+
+    约定 ``<isolate>__<platform>[__<date>]``；不含 ``__`` 时前两者都取 stem、platform=unknown。
+    例：``HZCPE-01__ilm__20261012`` → (...,``HZCPE-01``,``ilm``)。
+    """
+    parts = [p for p in stem.split("__")]
+    if len(parts) >= 2 and parts[0]:
+        return stem, parts[0], parts[1] or "unknown"
+    return stem, stem, "unknown"
+
+
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(8 * 1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _checksum(paths: list[Path]) -> str:
+    h = hashlib.sha256()
+    for p in sorted(paths):
+        h.update(f"{p.name}\0{_sha256_file(p)}\n".encode())
+    return h.hexdigest()
 
 
 def _strip_read_ext(name: str) -> str:
@@ -105,42 +136,99 @@ def detect_species(fasta: Path, timeout: int = 120) -> str:
     return species_code(name) or ""
 
 
-def _load_table(home: Path) -> tuple[Path, list[str], list[str]]:
-    """读 samples.tsv → (路径, 表头列, 数据行)；缺失/损坏时给默认表头与空行。"""
+def _load_table(home: Path) -> tuple[Path, list[str], list[list[str]]]:
+    """读 samples.tsv → (路径, 表头, 行列表)；缺失/损坏给默认表头。
+
+    v2（5 列）自动升级为 v3（8 列）：isolate 取原 sample、platform=unknown、checksum 空。
+    """
     tsv = home / "workflows" / "bacmap" / "config" / "samples.tsv"
-    lines = tsv.read_text(encoding="utf-8").splitlines() if tsv.is_file() else []
-    header = lines[0].split("\t") if lines and lines[0].split("\t")[0] == "sample" else []
-    rows = [ln for ln in lines[1:] if ln.strip()] if header else []
+    raw = tsv.read_text(encoding="utf-8").splitlines() if tsv.is_file() else []
+    header = raw[0].split("\t") if raw and raw[0].split("\t")[0] == "sample" else []
+    body = [ln.split("\t") for ln in raw[1:] if ln.strip()] if header else []
     if not header:
         header = list(_HEADER)
-    if header[-1] != "assembly":
-        header = [*header[:4], "assembly"] if len(header) >= 4 else [*header, "assembly"]
+    if "assembly" not in header:  # v1.x 四列表升级
+        header.append("assembly")
+    for col in _IDENTITY_COLUMNS:
+        if col not in header:
+            header.append(col)
+    rows: list[list[str]] = []
+    for parts in body:
+        record = dict(zip(header, parts, strict=False))
+        record.setdefault("isolate", record.get("sample", ""))
+        record.setdefault("platform", "unknown")
+        record.setdefault("checksum", "")
+        rows.append([str(record.get(col, "")) for col in header])
     return tsv, header, rows
 
 
-def _save_table(tsv: Path, header: list[str], rows: list[str]) -> None:
+def _save_table(tsv: Path, header: list[str], rows: list[list[str]]) -> None:
     tsv.parent.mkdir(parents=True, exist_ok=True)
-    tsv.write_text("\t".join(header) + "\n" + "\n".join(rows) + "\n", encoding="utf-8")
+    body = "\n".join("\t".join(row) for row in rows)
+    tsv.write_text("\t".join(header) + "\n" + (body + "\n" if body else ""), encoding="utf-8")
+
+
+def _existing(rows: list[list[str]], header: list[str], dataset_id: str) -> list[str] | None:
+    idx = header.index("sample")
+    for row in rows:
+        if row[idx] == dataset_id:
+            return row
+    return None
+
+
+def _guard_collision(
+    existing: list[str],
+    header: list[str],
+    *,
+    dataset_id: str,
+    checksum: str,
+    new_path: str,
+) -> None:
+    record = dict(zip(header, existing, strict=False))
+    old_sum = record.get("checksum", "")
+    if old_sum and checksum and old_sum != checksum:
+        old_path = record.get("assembly") or record.get("R1")
+        raise ValueError(
+            f"dataset id collision: {dataset_id!r} already registered with different content"
+            f" (existing path: {old_path}; new path: {new_path}). "
+            "Rename the file or use a distinct dataset id, e.g. "
+            f"{dataset_id}__<platform>__<yyyymmdd>."
+        )
+    if not old_sum:
+        old_path = record.get("assembly") or record.get("R1")
+        if old_path and old_path != new_path:
+            raise ValueError(
+                f"dataset id collision: {dataset_id!r} is registered to {old_path}, "
+                f"but this run points at {new_path}. Rename the file or use a distinct dataset id."
+            )
 
 
 def register_fastas(
     home: Path, fasta_dir: Path, species: str = ""
 ) -> dict[str, Any]:
     """组装 FASTA 目录登记（assembly 列）。species 省略时逐株 gside 自动识别；
-    识别失败的文件跳过并在 ``skipped`` 中列明原因。"""
+    识别失败的文件跳过并在 ``skipped`` 中列明原因。
+
+    同名冲突策略（v1.8）：同一 dataset id 仅当内容哈希一致时幂等复用；
+    路径或内容不同立即报错，绝不静默分析旧文件。
+    """
     files = scan_fasta_dir(fasta_dir)
     if not files:
         raise FileNotFoundError(f"目录内未找到组装 FASTA（.fna/.fasta/.fa）：{fasta_dir}")
     tsv, header, rows = _load_table(home)
-    known = {r.split("\t", 1)[0] for r in rows}
 
     samples: list[str] = []
     detected: dict[str, str] = {}
     skipped: list[dict[str, str]] = []
     added = 0
     for fa in files:
-        sid = fa.stem
-        if sid in known:
+        sid, isolate, platform = parse_dataset_name(fa.stem)
+        sum_ = _checksum([fa])
+        row = _existing(rows, header, sid)
+        if row is not None:
+            _guard_collision(
+                row, header, dataset_id=sid, checksum=sum_, new_path=str(fa.resolve())
+            )
             samples.append(sid)
             continue
         code = species or detect_species(fa)
@@ -148,8 +236,17 @@ def register_fastas(
             skipped.append({"file": str(fa), "reason": "物种未识别（gside Unknown/失败）"})
             continue
         detected[sid] = code
-        rows.append(f"{sid}\t{code}\t\t\t{fa.resolve()}")
-        known.add(sid)
+        record = {
+            "sample": sid,
+            "species": code,
+            "R1": "",
+            "R2": "",
+            "assembly": str(fa.resolve()),
+            "isolate": isolate,
+            "platform": platform,
+            "checksum": sum_,
+        }
+        rows.append([record.get(col, "") for col in header])
         samples.append(sid)
         added += 1
 
@@ -167,29 +264,46 @@ def register_fastas(
 def register_fastqs_dir(
     home: Path, fastq_dir: Path, species: str = ""
 ) -> dict[str, Any]:
-    """reads 目录登记（R1/R2 列）。无法装配前识别物种：species 省略时登记 ``UNK``。"""
+    """reads 目录登记（R1/R2 列）。无法装配前识别物种：species 省略时登记 ``UNK``。
+
+    同名冲突策略同 ``register_fastas``：按 R1+R2 内容哈希判断。
+    """
     pairs = scan_fastq_pairs(fastq_dir)
     if not pairs:
         raise FileNotFoundError(
             f"目录内未识别到 FASTQ 配对（*_R1/_R2 或 *_1/_2）：{fastq_dir}"
         )
     tsv, header, rows = _load_table(home)
-    known = {r.split("\t", 1)[0] for r in rows}
 
     samples: list[str] = []
     skipped: list[dict[str, str]] = []
     added = 0
     for r1, r2 in pairs:
         m = _MATE_PAT.match(_strip_read_ext(r1.name))
-        sid = m.group("prefix") if m else r1.stem
-        if sid in known:
-            samples.append(sid)
-            continue
+        stem = m.group("prefix") if m else r1.stem
+        sid, isolate, platform = parse_dataset_name(stem)
         if r2 is None:
             skipped.append({"file": str(r1), "reason": "单端 reads（管线需双端配对）"})
             continue
-        rows.append(f"{sid}\t{species or 'UNK'}\t{r1.resolve()}\t{r2.resolve()}\t")
-        known.add(sid)
+        sum_ = _checksum([r1, r2])
+        row = _existing(rows, header, sid)
+        if row is not None:
+            _guard_collision(
+                row, header, dataset_id=sid, checksum=sum_, new_path=str(r1.resolve())
+            )
+            samples.append(sid)
+            continue
+        record = {
+            "sample": sid,
+            "species": species or "UNK",
+            "R1": str(r1.resolve()),
+            "R2": str(r2.resolve()),
+            "assembly": "",
+            "isolate": isolate,
+            "platform": platform,
+            "checksum": sum_,
+        }
+        rows.append([record.get(col, "") for col in header])
         samples.append(sid)
         added += 1
 
