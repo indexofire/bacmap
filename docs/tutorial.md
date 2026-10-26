@@ -106,16 +106,39 @@ The tool call appears as `mcp__bacmap__bacmap_create_plan`, returning:
 
 Hermes will phrase it as "the plan is ready; confirm it in bacmap" — **it cannot confirm**, by design.
 
-### 3.4 You confirm on the trusted surface
+### 3.4 You confirm without leaving the chat
 
-In another terminal:
+The plan carries a `confirm_url`; opening it lands on the Web plan page (already logged in), where
+you read the full parameters and click confirm:
 
-```bash
-bacmap plan show 9a3f2c1b7d4e4f60        # full parameters and input-directory fingerprints
-bacmap plan confirm 9a3f2c1b7d4e4f60 --version 1 --hash c1d2e3f4a5b6
+```
+http://127.0.0.1:8800/plans/9a3f2c1b7d4e4f60?version=1
 ```
 
-Or open the Web **Plans** page and click confirm. The result is `state=submitted` plus task IDs.
+Three ways to confirm, easiest first:
+
+1. **Web link** (default): click, confirm, return to Hermes;
+2. **Local dialog** (workstation with a GUI): tell Hermes "confirm with a local dialog"; it calls
+   `bacmap_confirm_plan_locally` and you click approve in the system dialog (stdio sessions only);
+3. **Pre-authorisation** (admin option): with `[plans.auto_confirm]` in `config.toml`, analyze-only
+   plans within the sample limit are confirmed automatically (`actor=policy:auto-confirm`);
+   mine/write/releases still require a human.
+
+Asking for the local dialog sounds like this:
+
+> **You**: "Pop up the confirmation dialog on this machine."
+>
+> **Agent**: (calls `bacmap_confirm_plan_locally`) "Dialog opened for plan v1, hash c1d2e3f4a5b6."
+
+Click **Confirm and submit** and it returns `state=submitted` plus task IDs; cancelling leaves the plan
+pending and hands you the Web link as a fallback. The tool is only available when Hermes is connected as
+a local (stdio) process.
+
+The terminal command remains as a fallback:
+
+```bash
+bacmap plan confirm 9a3f2c1b7d4e4f60 --version 1 --hash c1d2e3f4a5b6
+```
 
 ### 3.5 Back in Hermes: follow the run
 
@@ -280,6 +303,7 @@ They are the fallback, not an "expert-only" tier.
 - "Add metadata for this isolate: 12 Oct 2026, Shenzhen, food, seafood."
 - "Draft this week's surveillance brief; use approved papers only."
 - "Which CARD version did that earlier run use?"
+- "Pop up the local confirmation dialog for this plan."
 - "Which tasks are waiting for my approval?"
 - "Back up results and raw data to /backup."
 

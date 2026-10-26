@@ -5,6 +5,12 @@
 
 ## [未发布]
 
+### 冻结文档 v1.9.0：计划确认三通道
+- 计划返回 `confirm_url`；新增本地弹窗确认（stdio，`local-dialog`）；
+  `[plans.auto_confirm]` 低风险预授权（默认关，仅 analyze）。
+- 教程 §3.4 与配置文档同步。
+- 测试基线：1562 → 1568。
+
 ### 冻结文档 v1.8.5：自然语言排障
 - `bacmap_task_status` 在云端 Profile 返回脱敏 `failure`（类别/建议/修复命令）；
   `failure_diagnostics` 增补 `sandbox_unavailable`。

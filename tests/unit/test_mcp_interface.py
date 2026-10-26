@@ -274,7 +274,9 @@ class TestPlanTools:
     def test_plan_tools_exposed_but_no_confirm(self, server):
         names = _list_tool_names(server)
         assert {"bacmap_create_plan", "bacmap_revise_plan", "bacmap_get_plan"} <= names
-        assert not any("confirm" in n or "approve" in n for n in names)
+        # 本地弹窗工具是"人点击"通道（v1.9.0），不是模型确认；不允许存在普通确认工具。
+        assert "bacmap_confirm_plan_locally" in names
+        assert not any("approve" in n or n == "bacmap_confirm_plan" for n in names)
 
     def test_plan_tools_absent_in_read_only(self):
         names = _list_tool_names(build_server())
@@ -547,3 +549,108 @@ class TestRedactedFailure:
             assert out["failure"] is None
         finally:
             eng.shutdown_dbos()
+
+
+class TestConfirmationChannels:
+    """v1.9.0：确认链接（A）、本地弹窗（B）、低风险预授权（C）。"""
+
+    @pytest.fixture
+    def engine(self, tmp_path: Path, monkeypatch):
+        from bacmap.tasks.engine import task_engine
+
+        monkeypatch.setattr(task_engine.DBOS, "start_workflow", lambda wf, p: None)
+        e = eng.DbosTaskEngine(tmp_path)
+        yield e
+        eng.shutdown_dbos()
+
+    def _create(self, server):
+        return _call(
+            server,
+            "bacmap_create_plan",
+            {"tasks": [{"task_type": "analyze", "samples": ["S1"]}]},
+        )
+
+    def test_confirm_url_in_plan(self, engine, monkeypatch):
+        monkeypatch.setenv("BACMAP_WEB_URL", "http://10.0.0.5:9000/")
+        out = self._create(build_server(engine))
+        assert out["confirm_url"] == (
+            f"http://10.0.0.5:9000/plans/{out['plan_id']}?version=1"
+        )
+
+    def test_local_dialog_confirms(self, engine, monkeypatch):
+        import bacmap.interfaces.mcp.confirm as confirm
+
+        monkeypatch.setattr(confirm, "ask_local_confirmation", lambda prompt, timeout=120: True)
+        stdio = ProfileSpec(
+            profile=McpProfile.LOCAL_TRUSTED,
+            max_data_class=DataClass.D4,
+            actor="mcp-stdio:local-trusted:test",
+        )
+        server = build_server(engine, stdio)
+        plan = self._create(server)
+        out = _call(
+            server, "bacmap_confirm_plan_locally",
+            {"plan_id": plan["plan_id"], "version": 1},
+        )
+        assert out["state"] == "submitted"
+        row = engine.list_tasks(1)[0]
+        assert row["submitted_by"].startswith("local-dialog")
+
+    def test_local_dialog_cancel_leaves_plan(self, engine, monkeypatch):
+        import bacmap.interfaces.mcp.confirm as confirm
+
+        monkeypatch.setattr(confirm, "ask_local_confirmation", lambda prompt, timeout=120: False)
+        stdio = ProfileSpec(
+            profile=McpProfile.LOCAL_TRUSTED,
+            max_data_class=DataClass.D4,
+            actor="mcp-stdio:local-trusted:test",
+        )
+        server = build_server(engine, stdio)
+        plan = self._create(server)
+        out = _call(
+            server, "bacmap_confirm_plan_locally",
+            {"plan_id": plan["plan_id"], "version": 1},
+        )
+        assert out["code"] == "conflict"
+        assert engine.list_tasks(1) == []
+
+    def test_local_dialog_only_for_stdio(self, engine, monkeypatch):
+        import bacmap.interfaces.mcp.confirm as confirm
+
+        monkeypatch.setattr(confirm, "ask_local_confirmation", lambda prompt, timeout=120: True)
+        http_profile = ProfileSpec(
+            profile=McpProfile.CLOUD, max_data_class=DataClass.D1, actor="mcp-http:cloud"
+        )
+        server = build_server(engine, http_profile)
+        plan = self._create(server)
+        out = _call(
+            server, "bacmap_confirm_plan_locally",
+            {"plan_id": plan["plan_id"], "version": 1},
+        )
+        assert out["code"] == "forbidden"
+
+    def test_auto_confirm_policy(self, engine, tmp_path: Path):
+        (tmp_path / "config.toml").write_text(
+            "[plans.auto_confirm]\nenabled = true\nmax_samples = 5\n"
+        )
+        server = build_server(engine)
+        out = self._create(server)
+        assert out["state"] == "submitted"
+        row = engine.list_tasks(1)[0]
+        assert row["submitted_by"].startswith("policy:auto-confirm")
+
+    def test_auto_confirm_skips_mine_and_large_plans(self, engine, tmp_path: Path):
+        (tmp_path / "config.toml").write_text(
+            "[plans.auto_confirm]\nenabled = true\nmax_samples = 1\n"
+        )
+        server = build_server(engine)
+        mine = _call(
+            server, "bacmap_create_plan",
+            {"tasks": [{"task_type": "mine", "objective": "x", "script": "print(1)"}]},
+        )
+        assert mine["state"] == "awaiting_confirmation"
+        big = _call(
+            server, "bacmap_create_plan",
+            {"tasks": [{"task_type": "analyze", "samples": ["S1", "S2"]}]},
+        )
+        assert big["state"] == "awaiting_confirmation"

@@ -136,6 +136,21 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha2
 旧扁平目录用 `bacmap results migrate [--dry-run]` 迁移（搬入 `runs/legacy-<sample>/` 后替换为链接）。
 不要手工创建真实的 `results/<sample>` 目录——重链会拒绝覆盖并提示先迁移。
 
+### 计划确认（v1.9.0）
+
+计划只在可信界面确认，绝不由模型确认：
+
+- **Web 链接**：计划返回 `confirm_url`，由 `BACMAP_WEB_URL` 决定（默认 `http://127.0.0.1:8800`）；
+- **本地弹窗**：`bacmap_confirm_plan_locally` 为 stdio 会话弹出系统对话框（zenity/kdialog），
+  点击即确认，审计记为 `actor=local-dialog`；
+- **预授权**（可选，管理员）：低风险计划自动确认：
+
+```toml
+[plans.auto_confirm]
+enabled = true          # 默认 false
+max_samples = 20        # 仅 analyze、无脚本；mine/write/curate 不适用
+```
+
 ## 6. 智能体客户端（MCP）侧配置
 
 由**客户端**登记 bacmap：

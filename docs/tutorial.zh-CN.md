@@ -103,16 +103,37 @@ Hermes 会先调用 `bacmap_capabilities` 看能力，再尝试建计划。如�
 
 Hermes 通常会转述成："计划已创建，需要你在 bacmap 中确认。"——**它确认不了**，这是设计。
 
-### 3.4 你来确认（在可信界面）
+### 3.4 你来确认（不用离开对话）
 
-另开一个终端：
+计划的返回里带一个 `confirm_url`，点开就是 Web 的计划页（已登录），看完整参数后点“确认并提交”：
 
-```bash
-bacmap plan show 9a3f2c1b7d4e4f60        # 看完整参数与输入目录指纹
-bacmap plan confirm 9a3f2c1b7d4e4f60 --version 1 --hash c1d2e3f4a5b6
+```
+http://127.0.0.1:8800/plans/9a3f2c1b7d4e4f60?version=1
 ```
 
-或者打开 Web 的 **计划** 页面点确认。确认后返回 `state=submitted` 与 task_ids。
+三种确认方式，按方便程度选：
+
+1. **Web 链接**（默认）：点开 → 确认 → 回到 Hermes 继续；
+2. **本地弹窗**（工作站有图形界面时）：对 Hermes 说“在本机弹窗确认”，它调用
+   `bacmap_confirm_plan_locally`，系统对话框里点“确认”；只有 stdio 会话可用；
+3. **预授权**（管理员可选）：`config.toml` 里开启 `[plans.auto_confirm]` 后，
+   仅含 analyze、样本数不超限的计划自动确认（`actor=policy:auto-confirm`），
+   mine/write/发布仍需人工。
+
+本地弹窗的对话可以这样说：
+
+> **你**：在本机弹窗让我确认这个计划。
+>
+> **智能体**：（调用 `bacmap_confirm_plan_locally`）已弹出确认框，显示计划 v1 与哈希 c1d2e3f4a5b6。
+
+弹窗里点“确认并提交”后，它会返回 `state=submitted` 与 task_ids；点取消则计划保持待确认，
+并给你 Web 链接兜底。注意：这个工具只在 Hermes 以本地进程（stdio）接入时可用。
+
+终端命令仍可用（兜底）：
+
+```bash
+bacmap plan confirm 9a3f2c1b7d4e4f60 --version 1 --hash c1d2e3f4a5b6
+```
 
 ### 3.5 回到 Hermes 追问进度
 
@@ -264,6 +285,7 @@ Hermes 会调用 `bacmap_task_result`（云端 Profile 只返回门结论计数�
 - "这株的元数据补一下：2026-10-12，深圳，食品，海鲜。"
 - "帮我起草这周的监测简报，引用只用已审核文献。"
 - "上次那个分析用的 CARD 是哪个版本？"
+- "在本机弹窗确认这个计划。"
 - "哪些任务在等我审批？"
 - "把结果和原始数据备份到 /backup。"
 

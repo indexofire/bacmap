@@ -227,6 +227,7 @@ def _register_plan_tools(server: MCPServer, engine: Any, actor: str) -> None:
 
     from bacmap.application.errors import ApplicationError
     from bacmap.application.plans import PlanRecord, PlanService
+    from bacmap.interfaces.mcp import confirm as confirm_helpers
     from bacmap.tasks.params import PlannableTask
 
     service = PlanService(engine, Path(engine.db))
@@ -234,6 +235,7 @@ def _register_plan_tools(server: MCPServer, engine: Any, actor: str) -> None:
     def _out(rec: PlanRecord) -> str:
         data = rec.model_dump(mode="json")
         if rec.state.value == "awaiting_confirmation":
+            data["confirm_url"] = confirm_helpers.confirm_url(rec.plan_id, rec.version)
             data["next_step"] = (
                 "Ask the user to review and confirm this exact version in bacmap itself: "
                 f"`bacmap plan confirm {rec.plan_id} --version {rec.version} "
@@ -257,8 +259,15 @@ def _register_plan_tools(server: MCPServer, engine: Any, actor: str) -> None:
         ),
     )
     def create_plan(tasks: list[PlannableTask], rationale: str = "") -> str:
+        from pathlib import Path
+
         try:
-            return _out(service.create(tasks, rationale, actor))
+            rec = service.create(tasks, rationale, actor)
+            if confirm_helpers.auto_confirm_allows(Path(engine.home), rec.tasks):
+                rec = service.confirm(
+                    rec.plan_id, rec.version, rec.plan_hash, confirm_helpers.AUTO_ACTOR
+                )
+            return _out(rec)
         except ApplicationError as exc:
             return _err(exc)
 
@@ -274,6 +283,8 @@ def _register_plan_tools(server: MCPServer, engine: Any, actor: str) -> None:
             return _out(service.revise(plan_id, tasks, rationale, actor))
         except ApplicationError as exc:
             return _err(exc)
+
+    _register_local_confirm(server, service, actor)
 
     @server.tool(
         name="bacmap_get_plan",
@@ -336,6 +347,57 @@ def _redacted_failure(message: str) -> dict[str, Any] | None:
         "suggested_fix": d.suggested_fix,
         "recovery_commands": d.recovery_commands,
     }
+
+
+def _register_local_confirm(server: MCPServer, service: Any, actor: str) -> None:
+    """B：本地系统弹窗确认（仅 stdio；人的点击即确认事实，审计 actor=local-dialog）。"""
+    from bacmap.application.errors import ApplicationError
+    from bacmap.interfaces.mcp import confirm as confirm_helpers
+
+    def _err(exc: ApplicationError) -> str:
+        return json.dumps(exc.to_dict(), ensure_ascii=False)
+
+    @server.tool(
+        name="bacmap_confirm_plan_locally",
+        description=(
+            "Open a local confirmation dialog on the bacmap workstation (stdio sessions only) "
+            "showing the plan id, version, hash and task summary. Only the human's click confirms; "
+            "if no dialog is available the reply contains the Web confirm_url instead."
+        ),
+    )
+    def confirm_plan_locally(plan_id: str, version: int) -> str:
+        if not actor.startswith("mcp-stdio"):
+            return json.dumps(
+                {"code": "forbidden", "error": "local confirmation is only available over stdio"},
+                ensure_ascii=False,
+            )
+        try:
+            rec = service.get(plan_id, version)
+        except ApplicationError as exc:
+            return _err(exc)
+        prompt = (
+            f"计划 {rec.plan_id} v{rec.version}\n"
+            f"hash {rec.short_hash}\n"
+            f"任务：{', '.join(t.task_type for t in rec.tasks)}\n\n确认并提交？"
+        )
+        if confirm_helpers.ask_local_confirmation(prompt) is True:
+            try:
+                return json.dumps(
+                    service.confirm(
+                        plan_id, version, rec.plan_hash, confirm_helpers.DIALOG_ACTOR
+                    ).model_dump(mode="json"),
+                    ensure_ascii=False,
+                )
+            except ApplicationError as exc:
+                return _err(exc)
+        return json.dumps(
+            {
+                "code": "conflict",
+                "error": "cancelled or no local dialog available",
+                "confirm_url": confirm_helpers.confirm_url(plan_id, version),
+            },
+            ensure_ascii=False,
+        )
 
 
 def _register_record_tool(server: MCPServer, engine: Any, profile: ProfileSpec) -> None:

@@ -1,6 +1,6 @@
 [English](architecture-frozen-v1.en.md) | **简体中文（权威）**
 
-# BacMAP Standalone 框架设计（冻结版 v1.8.5）
+# BacMAP Standalone 框架设计（冻结版 v1.9.0）
 
 - **日期**：2026-10-09（v1.1–v1.4.7 同日修订，见第 10 节）
 - **状态**：冻结（Frozen）。第 8 节的验证项全部通过后，转为"已确认"
@@ -774,3 +774,4 @@ bacmap/
 | v1.8.3 | 2026-10-26 | **I3 第二片：curate 按 isolate 选代表运行**。`build_candidate` 先按 `isolate` 分组（来自 `samples.tsv` v3，缺失时回落 dataset），同一 isolate 的多个 dataset 只纳入一次：默认取**最新分析**（summary mtime，稳定 tie-break），或用 scope `{"representative_dataset": {"<isolate>": "<dataset>"}}` 显式指定；结果写入 `representative_runs`（dataset、summary、reason）与 `superseded`（未选中的 dataset 及原因），显式指定不存在时记入 `excluded`（`representative_dataset_missing`）。`scope.strains` 同时接受 dataset 与 isolate；元数据按 isolate 查找（回退 dataset），并修正默认元数据库为 `data/bacmap.sqlite`。测试基线 1552 → 1556 | 用户裁定（继续 curate 代表运行）+ 实施验证 |
 | v1.8.4 | 2026-10-26 | **面向普通用户：自然语言数据管理 + 教程重定位**。①新增 MCP `bacmap_record_data`（仅 `local-trusted`，D4 Profile）：智能体可经任务层提交元数据/化验/知识库导入与审核（复用 `record` 任务与校验），云 Profile 不暴露；这让“把菌株信息告诉智能体”成为真实路径。②教程整体重写为**智能体优先**（中英各约 180 行）：以自然语言对话贯穿安装、首次分析、追问、数据管理、挖掘、报告与边界；CLI 仅在“兜底工具”一节出现并链接参考文档，回应“普通用户不想记生信命令”的定位。测试基线 1556 → 1559 | 用户反馈（教程应发挥 LLM/智能体，减少 CLI 篇幅）+ 实施验证 |
 | v1.8.5 | 2026-10-26 | **自然语言排障**：①MCP `bacmap_task_status` 在低于 D2 的 Profile 下不再只返回空白消息——新增**脱敏 `failure` 块**（故障类别/建议/修复命令，不含样本 ID 或路径原文），让云端智能体也能协助诊断；`failure_diagnostics` 增补 `sandbox_unavailable` 模式（Apptainer/Podman 缺失）。②教程（中英）新增“出问题时，先跟它说”一节：失败任务、沙箱缺失、路径错误、dataset 冲突、确认冲突、数据分级拦截、卡住与日志查看的对话式处置，并明确“智能体诊断/提议，不越权执行或签字”。测试基线 1559 → 1562 | 用户反馈（使用中的问题也应用自然语言交给 LLM）+ 实施验证 |
+| v1.9.0 | 2026-10-26 | **计划确认的三种便捷通道（A→B→C，用户裁定）**，解决"在 Hermes 提计划、却要切终端确认"的体验问题。A：计划返回带 `confirm_url`（`BACMAP_WEB_URL`，默认 `http://127.0.0.1:8800`）→ 点开 Web 计划页确认；B：新增 MCP `bacmap_confirm_plan_locally`（仅 stdio）在本机弹系统对话框（zenity/kdialog），**人的点击**即确认事实，审计 `actor=local-dialog`；无图形环境时回退返回 `confirm_url`。C：新增 `[plans.auto_confirm]`（默认关闭）：仅 analyze、无脚本、样本数 ≤ `max_samples` 的低风险计划可自动确认，审计 `actor=policy:auto-confirm`；mine/write/curate 永不自动确认。共同不变量：绑定 `(plan_id, version, plan_hash)`、一次性、修订即失效、模型无法自证确认。教程 §3.4 改为"不用离开对话"，配置文档新增确认策略说明。测试基线 1562 → 1568 | 用户裁定（A/B/C 顺序实现）+ 实施验证 |

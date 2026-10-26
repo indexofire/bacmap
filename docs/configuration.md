@@ -147,6 +147,22 @@ flat directories with `bacmap results migrate [--dry-run]` (moves them into `run
 and replaces them with a link). Do not create a real `results/<sample>` directory by hand — relinking
 will refuse to overwrite it.
 
+### Plan confirmation (v1.9.0)
+
+Plans are confirmed on a trusted surface, never by the model:
+
+- **Web link**: plan replies include `confirm_url`, derived from `BACMAP_WEB_URL`
+  (default `http://127.0.0.1:8800`);
+- **Local dialog**: `bacmap_confirm_plan_locally` opens a system dialog (zenity/kdialog) for stdio
+  sessions; the click is the human confirmation, recorded as `actor=local-dialog`;
+- **Pre-authorisation** (optional, admin): allow automatic confirmation of low-risk plans:
+
+```toml
+[plans.auto_confirm]
+enabled = true          # default false
+max_samples = 20        # analyze only, no scripts, no mine/write/curate
+```
+
 ## 6. Agent client (MCP) side configuration
 
 The **client** registers bacmap:

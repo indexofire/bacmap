@@ -298,7 +298,9 @@ Once connected, agents can call (under `local-trusted`; `cloud` shows the D0–D
 |---|---|---|
 | Capabilities | `bacmap_capabilities` | Version, profile and data-class ceiling, plannable task types, long-task mechanism — call it first |
 | Read/compute (22) | `bio_fastq_qc` `bio_align` `bio_blast` `bio_samtools` `bio_variant` `bio_gene_scan` `bio_seq_stats` `bio_compare_runs` … | Return results synchronously; accept any local path |
-| Plans (v1.5.1) | `bacmap_create_plan` `bacmap_revise_plan` `bacmap_get_plan` | **Recommended write path**: the agent proposes typed analyze/curate tasks; nothing runs until a person confirms the exact version in bacmap |
+| Plans (v1.5.1) | `bacmap_create_plan` `bacmap_revise_plan` `bacmap_get_plan` | **Recommended write path**: the agent proposes typed tasks; nothing runs until a person confirms the exact version. Replies include `confirm_url` |
+| Plan confirmation (v1.9.0) | `bacmap_confirm_plan_locally` | Opens a **local** dialog (stdio only); the human click is the confirmation (`actor=local-dialog`). Cloud/HTTP sessions get `forbidden` |
+| Data records (v1.8.4) | `bacmap_record_data` | Metadata / lab / knowledge through `record` tasks; only shown on `local-trusted` (D4) |
 | Task submission | `bacmap_submit_task` | Compatibility entry (direct submission); analyze/curate tasks run asynchronously |
 | Task queries | `bacmap_task_status` `bacmap_task_result` | Status (under `cloud` the message is withheld); result summary with run ID and gate verdicts (counts only under `cloud`) |
 | Task control | `bacmap_task_cancel` | Cancel a running task this client submitted, directly or through its own plan |

@@ -272,7 +272,9 @@ bacmap mcp --transport http --host 127.0.0.1 --port 8765
 |---|---|---|
 | 能力协商 | `bacmap_capabilities` | 版本、Profile 与数据级别上限、可计划任务类型、长任务机制——建议先调用 |
 | 读/算（22） | `bio_fastq_qc` `bio_align` `bio_blast` `bio_samtools` `bio_variant` `bio_gene_scan` `bio_seq_stats` `bio_compare_runs` … | 同步返回结果，可吃任意本地路径 |
-| 计划（v1.5.1） | `bacmap_create_plan` `bacmap_revise_plan` `bacmap_get_plan` | **推荐的写入路径**：智能体提出类型化的 analyze/curate 任务；在 bacmap 中由人确认该确切版本前不执行 |
+| 计划（v1.5.1） | `bacmap_create_plan` `bacmap_revise_plan` `bacmap_get_plan` | **推荐的写入路径**：智能体提出类型化任务；在 bacmap 中由人确认该确切版本前不执行。返回带 `confirm_url` |
+| 计划确认（v1.9.0） | `bacmap_confirm_plan_locally` | 弹**本机**确认对话框（仅 stdio）；人的点击即确认（`actor=local-dialog`）。云端/HTTP 会话返回 forbidden |
+| 数据记录（v1.8.4） | `bacmap_record_data` | 经 `record` 任务录入元数据/化验/知识库；仅 `local-trusted`（D4）可见 |
 | 任务提交 | `bacmap_submit_task` | 兼容入口（直接提交）；analyze/curate 任务异步执行 |
 | 任务查询 | `bacmap_task_status` `bacmap_task_result` | 状态（`cloud` 下不回传消息）；结果摘要含运行 ID 与门结论（`cloud` 下只给计数） |
 | 任务控制 | `bacmap_task_cancel` | 取消本客户端直接提交或经其自建计划提交、仍在运行的任务 |
