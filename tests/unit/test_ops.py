@@ -91,3 +91,18 @@ class TestEventPrune:
         cli.main(["events", "prune", "--home", str(tmp_path), "--days", "0", "--json"])
         assert json.loads(capsys.readouterr().out)["pruned"] == 1
         assert log.list() == []
+
+
+class TestResultsMigrate:
+    def test_dry_run_and_migrate(self, tmp_path, capsys, monkeypatch):
+        import bacmap.interfaces.cli.main as cli
+
+        flat = tmp_path / "results" / "OLD" / "report"
+        flat.mkdir(parents=True)
+        (flat / "OLD_summary.json").write_text("{}")
+        cli.main(["results", "migrate", "--home", str(tmp_path), "--dry-run"])
+        assert "OLD" in capsys.readouterr().out
+        assert (tmp_path / "results" / "OLD").is_dir()
+        cli.main(["results", "migrate", "--home", str(tmp_path)])
+        assert (tmp_path / "results" / "OLD").is_symlink()
+        assert (tmp_path / "results" / "runs" / "legacy-OLD" / "OLD").is_dir()

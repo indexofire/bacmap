@@ -208,6 +208,18 @@ def events_prune(args: argparse.Namespace) -> None:
         print(f"已清理 {pruned} 条早于 {args.days} 天的事件")
 
 
+def results_migrate(args: argparse.Namespace) -> None:
+    from bacmap.store.results_layout import flat_result_samples, migrate_flat_results
+
+    home = Path(args.home)
+    pending = flat_result_samples(home)
+    if args.dry_run:
+        print(f"待迁移 {len(pending)} 个扁平样本目录：{', '.join(pending) or '无'}")
+        return
+    moved = migrate_flat_results(home)
+    print(f"已迁移 {moved} 个扁平样本目录到 results/runs/legacy-*/ 并替换为最新运行链接")
+
+
 def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     d = sub.add_parser("doctor", help="只读体检（目录/库/沙箱/LLM/磁盘/外部工具）")
     add_home(d)
@@ -225,6 +237,13 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     r.add_argument("--from", dest="from_zip", required=True, help="备份 zip 路径")
     r.add_argument("--force", action="store_true", help="允许恢复到非空目录（不删除现有文件）")
     r.set_defaults(func=restore)
+
+    res = sub.add_parser("results", help="结果目录维护（P2：run 级布局）")
+    rs = res.add_subparsers(dest="results_command", required=True)
+    rm = rs.add_parser("migrate", help="旧扁平 results/<sample> 迁入 runs/ 并替换为链接")
+    add_home(rm)
+    rm.add_argument("--dry-run", action="store_true", help="只列出待迁移目录")
+    rm.set_defaults(func=results_migrate)
 
     e = sub.add_parser("events", help="领域事件维护")
     es = e.add_subparsers(dest="events_command", required=True)

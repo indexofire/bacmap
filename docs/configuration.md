@@ -137,6 +137,15 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha2
   optionally linked by a future `lineage_id`) and one or more datasets underneath it.
 - When a workflow is redeployed, samples.tsv and the `.snakemake/` checkpoint-resume state are preserved automatically
 
+### Result directory layout (v1.8.1)
+
+Physical results live under `$BACMAP_HOME/results/runs/<task_id>/<sample>/`; each execution keeps
+its own directory and is never overwritten. `results/<sample>`, `results/snp` and `results/cgmlst`
+are relative symlinks to the latest run, so existing paths and scripts keep working. Migrate legacy
+flat directories with `bacmap results migrate [--dry-run]` (moves them into `runs/legacy-<sample>/`
+and replaces them with a link). Do not create a real `results/<sample>` directory by hand — relinking
+will refuse to overwrite it.
+
 ## 6. Agent client (MCP) side configuration
 
 The **client** registers bacmap:

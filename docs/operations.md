@@ -68,7 +68,20 @@ bacmap events prune --days 0       # delete everything (rarely appropriate)
 Decide the retention period with your institution's audit policy. Gate evaluations, run records and
 approvals in their own tables are **not** touched by this command.
 
-## 5. Schema migrations
+## 5. Result directory migration (v1.8.1)
+
+Results are written to `results/runs/<task_id>/<sample>/`; flat paths are links to the latest run.
+
+```bash
+bacmap results migrate --dry-run     # list legacy flat directories
+bacmap results migrate               # move into runs/legacy-<sample>/ and link
+```
+
+Run this once after upgrading. It never deletes data: everything moves into a run directory, and the
+old path becomes a link. If a real directory exists at `results/<sample>` later, relinking refuses
+instead of overwriting it.
+
+## 6. Schema migrations
 
 - Every database has a numbered migration list and a `PRAGMA user_version`; see
   `bacmap/store/migrations.py` and the per-file lists (`tasks`, `runs`, `baseline`, `gom`, `data`,

@@ -60,19 +60,31 @@ def _run_snakemake(params: dict[str, Any]) -> Any:
         logger.warning(
             "engine home %s 与规范部署目录 %s 不一致（BACMAP_HOME 未对齐？）", home, deployed
         )
+    from bacmap.store.results_layout import link_run_results, run_results_dir
+
+    task_id = str(params.get("task_id", ""))
+    run_dir = run_results_dir(home, task_id) if task_id else home / "results"
+    run_dir.mkdir(parents=True, exist_ok=True)
     runner = WorkflowRunner(
         deployed_dir=deployed, timeout=params.get("timeout", 12 * 3600)
     )
     targets = [
-        str(home / "results" / s / "report" / f"{s}_summary.json") for s in params["samples"]
+        str(run_dir / s / "report" / f"{s}_summary.json") for s in params["samples"]
     ]
     # 同一部署目录有 Snakemake 目录锁：并发 analyze（TUI+CLI 同时提交是合法用户行为）
     # 会撞 LockException——退避重试而非直接失败（v1.4.39）。
     import time as _time
 
+    overrides = {"workdir": f"results/runs/{task_id}"} if task_id else None
     for attempt in range(4):
-        result = runner.run(targets=targets, cores=params.get("cores", 8))
-        if result.returncode == 0 or "LockException" not in (result.stderr or ""):
+        result = runner.run(
+            targets=targets, cores=params.get("cores", 8), config_overrides=overrides
+        )
+        if result.returncode == 0:
+            # 物理结果在 runs/<task_id>/，扁平路径只做"最新运行"别名（P2 方案 A）。
+            link_run_results(home, task_id, params["samples"])
+            return result
+        if "LockException" not in (result.stderr or ""):
             return result
         wait_s = 45 * (attempt + 1)
         logger.warning(

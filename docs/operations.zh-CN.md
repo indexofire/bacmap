@@ -63,7 +63,19 @@ bacmap events prune --days 0       # 全部删除（通常不建议）
 
 保留期按本单位审计政策决定。门评估、运行记录与审批在各自的表里，**不受**该命令影响。
 
-## 5. schema 迁移
+## 5. 结果目录迁移（v1.8.1）
+
+结果写入 `results/runs/<task_id>/<sample>/`；扁平路径是指向最新运行的链接。
+
+```bash
+bacmap results migrate --dry-run     # 列出旧扁平目录
+bacmap results migrate               # 搬入 runs/legacy-<sample>/ 并建立链接
+```
+
+升级后执行一次。不会删除数据：全部搬入运行目录，旧路径变成链接。若之后又出现真实的
+`results/<sample>` 目录，重链会拒绝而不是覆盖。
+
+## 6. schema 迁移
 
 - 每个库都有编号迁移清单与 `PRAGMA user_version`；见 `bacmap/store/migrations.py` 与各按文件清单
   （`tasks`、`runs`、`baseline`、`gom`、`data`、`knowledge`）。

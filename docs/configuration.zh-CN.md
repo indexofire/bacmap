@@ -128,6 +128,13 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha2
   关联），其下再挂一到多个数据集。
 - 工作流重部署时 samples.tsv 与 `.snakemake/` 续跑状态自动保留
 
+### 结果目录布局（v1.8.1）
+
+物理结果在 `$BACMAP_HOME/results/runs/<task_id>/<sample>/`；每次执行独立目录、永不覆盖。
+`results/<sample>`、`results/snp`、`results/cgmlst` 是指向最新运行的相对符号链接，旧路径与脚本照常可用。
+旧扁平目录用 `bacmap results migrate [--dry-run]` 迁移（搬入 `runs/legacy-<sample>/` 后替换为链接）。
+不要手工创建真实的 `results/<sample>` 目录——重链会拒绝覆盖并提示先迁移。
+
 ## 6. 智能体客户端（MCP）侧配置
 
 由**客户端**登记 bacmap：

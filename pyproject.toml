@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bacmap"
-version = "0.1.1"
+version = "0.1.2"
 description = "Local pathogen genome analysis system with built-in agent layer (architecture-frozen-v1 ADR-01..20)"
 requires-python = ">=3.12,<3.14"
 authors = [

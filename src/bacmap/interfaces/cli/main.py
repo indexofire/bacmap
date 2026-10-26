@@ -365,7 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(
         dest="command",
         required=True,
-        metavar="{mcp,web,tui,console,overview,task,plan,record,run,gom,doctor,backup,restore,events,sample,search}",
+        metavar="{mcp,web,tui,console,overview,task,plan,record,run,gom,doctor,backup,restore,results,events,sample,search}",
     )
 
     p_mcp = sub.add_parser("mcp", help="启动 MCP 服务器（stdio 或 Streamable HTTP）")
