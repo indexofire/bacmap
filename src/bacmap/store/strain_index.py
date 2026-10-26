@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from bacmap.core.utils import parse_mlst
+from bacmap.store.schema import STRAIN_INDEX_DDL
 
 
 @dataclass
@@ -57,14 +58,18 @@ _DDL = [
     """CREATE INDEX IF NOT EXISTS idx_ag_strain ON strain_amr_genes(strain_id)""",
 ]
 
+DDL_STATEMENTS = STRAIN_INDEX_DDL
+
 
 class StrainGenotypeIndex:
     def __init__(self, db_path: str | Path) -> None:
         self._conn: sqlite3.Connection = sqlite3.connect(str(db_path))
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
-        for ddl in _DDL:
-            self._conn.execute(ddl)
+        from bacmap.store.genome_object_service import ensure_gom_schema
+
+        # 索引与 GOM 同库（gom.sqlite）：按文件清单迁移，索引是 GOM 的迁移 2。
+        ensure_gom_schema(db_path)
         self._conn.commit()
 
     def upsert(

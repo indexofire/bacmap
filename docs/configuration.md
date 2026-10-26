@@ -126,7 +126,7 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta
 
 ## 6. Agent client (MCP) side configuration
 
-bacmap itself needs no configuration for MCP; it is the **client** that registers bacmap:
+The **client** registers bacmap:
 
 ```yaml
 # 例：~/.hermes/config.yaml
@@ -135,6 +135,21 @@ mcp_servers:
     command: /path/to/pixi/envs/default/bin/bacmap
     args: ["mcp"]            # 加 --read-only 则只暴露查询工具
 ```
+
+On the bacmap side there is one setting (v1.5, ADR-12/16). MCP servers run under the `cloud`
+profile by default and expose only tools whose output is at or below
+`[llm.data_policy].cloud_max_data_class`. To let a harness that uses a **local or LAN model** see
+D3/D4 tools, the administrator opts in explicitly and launches with `--profile local-trusted`:
+
+```toml
+# $BACMAP_HOME/config.toml
+[mcp]
+allow_local_trusted = true   # must be the boolean true; otherwise --profile local-trusted refuses to start
+```
+
+Upgrading from v1.4: existing Hermes/Codex/OpenCode setups that relied on the D2–D4 tools
+(`bio_get_result`, `bio_query_metadata`, sequence tools, …) must add this setting and the
+`--profile local-trusted` argument.
 
 See the [usage guide](usage.md) for details.
 

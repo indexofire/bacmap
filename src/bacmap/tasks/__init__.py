@@ -9,6 +9,7 @@
 from bacmap.tasks.spec import (
     APPROVALS_DDL,
     TASKS_DDL,
+    TASKS_MIGRATIONS,
     Approval,
     TaskEngine,
     TaskId,
@@ -20,6 +21,7 @@ from bacmap.tasks.spec import (
 __all__ = [
     "APPROVALS_DDL",
     "TASKS_DDL",
+    "TASKS_MIGRATIONS",
     "Approval",
     "TaskEngine",
     "TaskId",

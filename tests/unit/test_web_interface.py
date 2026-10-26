@@ -227,53 +227,16 @@ class TestWebAuth:
         assert c.get("/").status_code == 200
 
 
-class TestAssistantPage:
-    """Web 助手：LLM 规划 → 确认 → 提交（会话经 build_session/execute_plan，测试注入）。"""
+class TestAssistantRemoved:
+    """v1.6（ADR-21）：Web 内置助手页移除；计划确认留在 /plans。"""
 
-    def test_plan_then_confirm_executes(self, client, monkeypatch):
-        import re
-
-        from bacmap.agent.session import AgentReply, AnalysisPlan, PlannedTask
-        from bacmap.interfaces import assistant as A
-
-        class _FakeSession:
-            def respond(self, text):
-                return AgentReply(
-                    message="规划完成",
-                    plan=AnalysisPlan(
-                        reply="规划完成",
-                        tasks=[PlannedTask(task_type="analyze", params={"samples": ["SAM-001"]})],
-                    ),
-                )
-
-        monkeypatch.setattr(
-            A, "build_session", lambda engine, submitted_by="assistant": _FakeSession()
-        )
-        executed: list = []
-        monkeypatch.setattr(
-            A,
-            "execute_plan",
-            lambda engine, plan, submitted_by="assistant", confirmed=False: (
-                executed.append((plan, confirmed)),
-                [{"task_type": "analyze", "task_id": "t1", "ok": True}],
-            )[1],
-        )
-
+    def test_assistant_routes_gone(self, client):
         c, _ = client
-        assert c.get("/assistant").status_code == 200
-        r = c.post("/assistant", data={"sid": "", "text": "跑 SAM-001"})
-        assert r.status_code == 200 and "规划完成" in r.text
-        sid = re.search(r'name="sid" value="([0-9a-f]+)"', r.text).group(1)
-        r2 = c.post("/assistant/execute", data={"sid": sid})
-        assert "t1" in r2.text
-        assert executed
-        # Web 确认按钮路径必须以 confirmed=True 调用（requires_confirmation 强制点）。
-        assert executed[0][1] is True
-
-    def test_execute_without_plan_400(self, client):
-        c, _ = client
-        assert c.post("/assistant/execute", data={"sid": "nope"}).status_code == 400
-
+        assert c.get("/assistant").status_code == 404
+        assert c.post("/assistant", data={"sid": "", "text": "x"}).status_code == 404
+        assert c.post("/assistant/execute", data={"sid": "nope"}).status_code == 404
+        assert "/assistant" not in c.get("/").text
+        assert 'href="/plans"' in c.get("/").text
 
 class TestWebCookieAuth:
     """v1.4.15：浏览器 cookie 会话 + CSRF（BACMAP_WEB_AUTH=cookie）。"""
@@ -408,45 +371,6 @@ class TestWebHardening:
         assert "sandbox" in r.headers.get("content-security-policy", "")
         r2 = c.get("/samples/SAM-001/report?download=1")
         assert "attachment" in r2.headers.get("content-disposition", "")
-
-    def test_assistant_empty_prompt_400(self, client):
-        c, _ = client
-        assert c.post("/assistant", data={"sid": "", "text": "   "}).status_code == 400
-
-    def test_assistant_prompt_too_long_413(self, client):
-        c, _ = client
-        r = c.post("/assistant", data={"sid": "", "text": "x" * 9000})
-        assert r.status_code == 413
-
-    def test_assistant_session_lru_cap(self, client, monkeypatch):
-        import re
-
-        from bacmap.agent.session import AgentReply, AnalysisPlan
-        from bacmap.interfaces import assistant as interface_assistant
-        from bacmap.interfaces.web import app as web_app
-
-        class _Fake:
-            def respond(self, text):
-                return AgentReply(message="ok", plan=AnalysisPlan(reply="ok", tasks=[]))
-
-        monkeypatch.setattr(
-            interface_assistant,
-            "build_session",
-            lambda engine, submitted_by="assistant": _Fake(),
-        )
-        c, _ = client
-
-        def _ask(sid: str, text: str) -> str:
-            r = c.post("/assistant", data={"sid": sid, "text": text})
-            assert r.status_code == 200
-            return re.search(r'name="sid" value="([0-9a-f]+)"', r.text).group(1)
-
-        first = _ask("", "init")
-        for i in range(web_app._MAX_ASSISTANT_SESSIONS):
-            _ask("", f"t{i}")
-        # 首个会话已被 LRU 淘汰 → 再次用它开会话会返回新 sid。
-        again = _ask(first, "reuse")
-        assert again != first
 
 
 class TestWebBearerLogin:

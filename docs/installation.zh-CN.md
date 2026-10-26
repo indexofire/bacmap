@@ -75,7 +75,7 @@ CheckM2 / GTDB-Tk 等大型数据库通过环境变量指向（见配置指南�
 
 智能体层默认使用 Strata（`http://127.0.0.1:8080/v1`，OpenAI 兼容）。也可改用任意
 第三方 OpenAI 兼容 API（GLM、DeepSeek、Kimi、vLLM 等），或完全不配 LLM（确定性降级，
-任务表单/CLI/MCP 全部可用，仅对话助手不可用）。
+任务表单/CLI/MCP 全部可用，仅依赖 LLM 的解读与任务内智能体降级）。
 
 ### 5.1 外部 API 接入（以 GLM 为例，完整步骤）
 
@@ -124,7 +124,7 @@ source ~/.bashrc
 **④ 验证**：
 
 ```bash
-bacmap ask "你好，你能做什么"    # 正常回复即接通（CLI 流式输出）
+bacmap overview                  # 端点状态；确定性功能与端点无关
 bacmap tui                       # 顶部标题显示「LLM · glm [cloud] … 已连接」
 ```
 
@@ -132,11 +132,11 @@ bacmap tui                       # 顶部标题显示「LLM · glm [cloud] … �
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| `payload D4 exceeds cloud limit …`（DataClassViolationError） | 数据分级拦截：该用途载荷级别超过云端上限 | 对话助手在云端自动裁剪工具带（v1.4.30）后不应再出现；若出现请确认 bacmap 为当前版本 |
+| `payload D4 exceeds cloud limit …`（DataClassViolationError） | 数据分级拦截：该用途载荷级别超过云端上限 | 云端 MCP 实例与任务内智能体都会自动裁剪工具带；若仍出现请确认 bacmap 为当前版本 |
 | HTTP 401「令牌已过期或验证不正确」 | 密钥未传进进程（export 在别的 shell），或密钥与端点类型不匹配 | 同 shell `echo $GLM_API_KEY` 自查；按 §5.1③ 对照端点 |
 | HTTP 429 code 1113「余额不足或无可用资源包」 | 账户无该模型额度 | 控制台充值/换用免费模型（如 `glm-4-flash`），或换用有订阅的密钥 |
 | 模型不存在（code 1211） | 模型名不在你的订阅范围 | 改 `model` 为实际开通的模型名 |
-| `内置助手暂不可用（agent run failed …）` | 以上任意原因重试耗尽后的统一降级提示 | 运行 `bacmap ask "你好" 2>&1`，WARNING 行会打印每次尝试的**真实失败原因** |
+| `LLM 不可用 / degraded（agent run failed …）` | 以上任意原因重试耗尽后的统一降级提示 | 用 `bacmap overview` 看端点状态；任务级失败的原因写在任务消息里 |
 
 ## 6. 沙箱运行时（mine 任务与外部数据读取的前提）
 

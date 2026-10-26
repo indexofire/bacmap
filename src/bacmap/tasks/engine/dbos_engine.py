@@ -153,8 +153,15 @@ def _memory_arbiter() -> Any:
     )
 
 
+def _progress(params: dict[str, Any], step: str) -> None:
+    from bacmap.tasks.engine._progress import record_step
+
+    record_step(Path(params["home"]), str(params.get("task_id", "")), step)
+
+
 @DBOS.step()
 def _step_run(params: dict[str, Any]) -> dict[str, Any]:
+    _progress(params, "pipeline")
     try:
         with _memory_arbiter().heavy_step():
             proc = _run_snakemake(params)
@@ -172,6 +179,7 @@ def _step_run(params: dict[str, Any]) -> dict[str, Any]:
 def _step_create_run(params: dict[str, Any]) -> dict[str, Any]:
     from bacmap.store import runs
 
+    _progress(params, "run_record")
     home = Path(params["home"])
     run = runs.create_run(
         workflow="bacmap",
@@ -188,6 +196,7 @@ def _step_create_run(params: dict[str, Any]) -> dict[str, Any]:
 def _step_finish_run(run_id: str, params: dict[str, Any]) -> None:
     from bacmap.store import runs
 
+    _progress(params, "ingest_and_gates")
     home = Path(params["home"])
     runs.finalize_run(run_id, home / "runs.sqlite", home / "runs")
 
@@ -453,8 +462,10 @@ def _ensure_task_object(home: Path, task_id: str) -> str:
 def _step_gate_audit(home_s: str, task_id: str, gate_result: dict[str, Any]) -> None:
     """把无样本锚点的门评估写入 GOM 任务对象（§4.2/ADR-07）。"""
     from bacmap.store.genome_object_service import record_gate_event
+    from bacmap.tasks.engine._progress import record_step
 
     home = Path(home_s)
+    record_step(home, task_id, "gate")
     object_id = _ensure_task_object(home, task_id)
     record_gate_event(home / "gom.sqlite", object_id, gate_result)
 
@@ -471,6 +482,7 @@ def _step_register_inputs(params: dict[str, Any]) -> dict[str, Any]:
     登记是写操作，经由任务引擎执行（助手可直接规划这些参数）。"""
     from bacmap.workflow.samples_registry import register_fastas, register_fastqs_dir
 
+    _progress(params, "register_inputs")
     home = Path(params["home"])
     species = str(params.get("species") or "")
     if params.get("fasta_dir"):
@@ -574,6 +586,7 @@ def _step_mine_run(params: dict[str, Any]) -> dict[str, Any]:
     from bacmap.agent.sandbox.access import allowed_roots, build_access
     from bacmap.store.datasets import DatasetRegistry
 
+    _progress(params, "sandbox")
     home = Path(params["home"])
     workspace = home / "workspaces" / params["task_id"]
     workspace.mkdir(parents=True, exist_ok=True)
@@ -705,6 +718,7 @@ def _step_write_draft(params: dict[str, Any]) -> dict[str, Any]:
     known_citations 缺省时从本地文献知识库装载已人审条目标识符
     （store.knowledge，引用门后端；ADR-07/V11⑥）。
     """
+    _progress(params, "draft")
     known = params.get("known_citations")
     if known is None:
         from bacmap.store.knowledge import KnowledgeStore
@@ -754,6 +768,7 @@ def _step_curate_build(params: dict[str, Any]) -> dict[str, Any]:
     from bacmap.store import baseline
     from bacmap.tasks import gates
 
+    _progress(params, "curate_build")
     home = Path(params["home"])
     manifest = baseline.build_candidate(home, params.get("scope"))
     gate = gates.evaluate_baseline_release(manifest)
@@ -780,3 +795,105 @@ def curate_workflow(params: dict[str, Any]) -> dict[str, Any]:
 # DbosTaskEngine 延迟 re-export（task_engine 反向引用本模块的 workflow，
 # 顶部互相导入会循环；底部导入时双方均已定义完毕）。
 from bacmap.tasks.engine.task_engine import DbosTaskEngine  # noqa: E402,F401
+
+# ---------------------------------------------------------------------------
+# record 工作流（v1.7：元数据 / 化验 / 知识库——写操作仍只经任务层）
+# ---------------------------------------------------------------------------
+
+
+@DBOS.step()
+def _step_record(params: dict[str, Any]) -> dict[str, Any]:
+    """把一条记录写入对应 store；知识库导入只入暂存，审核另起一条记录任务。"""
+    from bacmap.tasks.records import (
+        KnowledgeApprove,
+        KnowledgeImport,
+        LabResultRecord,
+        MetadataRecord,
+        parse_record,
+    )
+
+    _progress(params, "record")
+    home = Path(params["home"])
+    record = parse_record(params)
+    actor = str(params.get("submitted_by") or "record")
+
+    if isinstance(record, MetadataRecord):
+        from bacmap.store.strain_metadata import StrainMetadataService
+
+        data = dict(record.fields)
+        data["sample_id"] = record.sample_id or record.strain_id
+        StrainMetadataService(home / "data" / "bacmap.sqlite").upsert(record.strain_id, data)
+        return {
+            "status": "SUCCEEDED",
+            "kind": record.kind,
+            "strain_id": record.strain_id,
+            "message": f"recorded metadata for {record.strain_id}",
+        }
+
+    if isinstance(record, LabResultRecord):
+        from bacmap.store.lab_results import LabResultService
+
+        payload = record.model_dump(exclude={"kind"})
+        strain_id = payload.pop("strain_id")
+        category = payload.pop("category")
+        test_name = payload.pop("test_name")
+        result_value = payload.pop("result")
+        row = LabResultService(home / "data" / "bacmap.sqlite").add(
+            strain_id, category, test_name, result_value, **payload
+        )
+        return {
+            "status": "SUCCEEDED",
+            "kind": record.kind,
+            "lab_result_id": row.id,
+            "message": f"recorded lab result for {strain_id}",
+        }
+
+    if isinstance(record, KnowledgeImport):
+        from bacmap.store.knowledge import KnowledgeStore
+
+        payload = record.model_dump(exclude={"kind"})
+        payload["kind"] = payload.pop("entry_kind", "literature")
+        entry_id = KnowledgeStore(home / "data" / "knowledge.sqlite").import_candidate(
+            payload, imported_by=actor, task_id=str(params.get("task_id") or "")
+        )
+        return {
+            "status": "SUCCEEDED",
+            "kind": record.kind,
+            "entry_id": entry_id,
+            "staged": True,
+            "message": f"staged knowledge entry {entry_id} (awaiting approval)",
+        }
+
+    # KNOWLEDGE_APPROVE：人审后才成为引用门认可来源
+    from bacmap.store.knowledge import KnowledgeStore
+
+    store = KnowledgeStore(home / "data" / "knowledge.sqlite")
+    if not isinstance(record, KnowledgeApprove):  # pragma: no cover — 判别联合已保证
+        return {"status": "FAILED", "kind": record.kind, "message": "unexpected record kind"}
+    try:
+        store.approve(record.entry_id, approver=actor)
+    except KeyError:
+        return {
+            "status": "FAILED",
+            "kind": record.kind,
+            "message": f"no knowledge entry {record.entry_id}",
+        }
+    return {
+        "status": "SUCCEEDED",
+        "kind": record.kind,
+        "entry_id": record.entry_id,
+        "approved_by": actor,
+        "message": f"approved knowledge entry {record.entry_id}",
+    }
+
+
+@DBOS.workflow()
+def record_workflow(params: dict[str, Any]) -> dict[str, Any]:
+    try:
+        out = _step_record(params)
+    except Exception as exc:  # 记录失败原因进任务消息，而不是只剩裸 workflow ERROR
+        logger.exception("record step failed")
+        return {"status": "FAILED", "message": f"{type(exc).__name__}: {exc}"}
+    if out.get("status") != "SUCCEEDED":
+        return {**out, "status": "FAILED"}
+    return out

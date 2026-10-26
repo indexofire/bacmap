@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}计划 · bacmap{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1 class="pagehead__title">分析计划</h1>
+  <p class="pagehead__sub">外部智能体（Hermes / Pi / DSH 等）经 MCP 创建的计划在此审阅；只有在这里或 CLI 确认后才会执行。</p>
+</div>
+<section class="card card--table" aria-labelledby="plans-title">
+  <div class="card__head">
+    <h2 class="card__title" id="plans-title">最近计划</h2>
+    <span class="card__count">{{ plans|length }} 条</span>
+  </div>
+  {% if plans %}
+  <table class="tasktable">
+    <thead>
+      <tr><th scope="col">计划 ID</th><th scope="col">版本</th><th scope="col">状态</th><th scope="col">任务</th><th scope="col">创建者</th><th scope="col">更新时间</th></tr>
+    </thead>
+    <tbody>
+    {% for p in plans %}
+      <tr>
+        <td data-label="计划 ID"><a class="tasklink" href="/plans/{{ p.plan_id }}">{{ p.plan_id }}</a></td>
+        <td data-label="版本">v{{ p.version }}</td>
+        <td data-label="状态"><code>{{ p.state.value }}</code></td>
+        <td data-label="任务">{% for t in p.tasks %}<span class="typetag">{{ t.task_type }}</span> {% endfor %}</td>
+        <td data-label="创建者">{{ p.created_by }}</td>
+        <td data-label="更新时间"><span class="mono-dim">{{ p.updated_at[:16].replace("T", " ") }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty">
+    <h3 class="empty__title">暂无计划</h3>
+    <p class="empty__hint">智能体调用 bacmap_create_plan 后，计划会出现在这里等待确认。</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

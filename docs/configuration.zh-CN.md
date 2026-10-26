@@ -121,7 +121,7 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta
 
 ## 6. 智能体客户端（MCP）侧配置
 
-bacmap 本身无需为 MCP 做配置；是**客户端**登记 bacmap：
+由**客户端**登记 bacmap：
 
 ```yaml
 # 例：~/.hermes/config.yaml
@@ -130,6 +130,19 @@ mcp_servers:
     command: /path/to/pixi/envs/default/bin/bacmap
     args: ["mcp"]            # 加 --read-only 则只暴露查询工具
 ```
+
+bacmap 侧只有一项设置（v1.5，ADR-12/16）。MCP 服务默认运行在 `cloud` Profile，只暴露输出级别
+不超过 `[llm.data_policy].cloud_max_data_class` 的工具。若 Harness 使用**本地或内网模型**、需要看到
+D3/D4 工具，由管理员显式开启并以 `--profile local-trusted` 启动：
+
+```toml
+# $BACMAP_HOME/config.toml
+[mcp]
+allow_local_trusted = true   # 必须是布尔 true；否则 --profile local-trusted 拒绝启动
+```
+
+从 v1.4 升级：原先依赖 D2–D4 工具（`bio_get_result`、`bio_query_metadata`、序列工具等）的
+Hermes/Codex/OpenCode 配置，需要补上该设置与 `--profile local-trusted` 参数。
 
 详见[使用指南](usage.zh-CN.md)。
 

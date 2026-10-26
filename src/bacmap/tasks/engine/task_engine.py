@@ -19,17 +19,19 @@ from typing import Any
 from dbos import DBOS, SetWorkflowID
 from pydantic import BaseModel
 
+from bacmap.store.migrations import migrate
 from bacmap.tasks.engine._outcomes import _APPROVE_FINALIZERS, _map_workflow_outcome
 from bacmap.tasks.engine._runtime import init_dbos
+from bacmap.tasks.events import EventLog, EventType
 from bacmap.tasks.spec import (
-    APPROVALS_DDL,
-    TASKS_DDL,
+    TASKS_MIGRATIONS,
     Approval,
     TaskId,
     TaskState,
     TaskStatus,
     TaskType,
 )
+from bacmap.tools.spec import DataClass
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +43,8 @@ class DbosTaskEngine:
         self.home = Path(home)
         self.db = self.home / "tasks.sqlite"
         self.home.mkdir(parents=True, exist_ok=True)
-        with self._conn() as conn:
-            conn.execute(TASKS_DDL)
-            conn.execute(APPROVALS_DDL)
+        migrate(self.db, TASKS_MIGRATIONS)
+        self.events = EventLog(self.db)
         init_dbos(self.home / "dbos.sqlite")
 
     def _conn(self) -> sqlite3.Connection:
@@ -52,8 +53,15 @@ class DbosTaskEngine:
         return conn
 
     def submit(
-        self, task_type: TaskType, params: BaseModel | dict[str, Any], submitted_by: str
+        self,
+        task_type: TaskType,
+        params: BaseModel | dict[str, Any],
+        submitted_by: str,
+        *,
+        task_id: TaskId | None = None,
     ) -> TaskId:
+        """提交任务。``task_id`` 显式给定时提交是幂等的：同 ID 已存在即直接返回
+        （计划确认以确定性 ID 提交，重复确认/崩溃后重试不会产生第二个任务）。"""
         # 延迟导入 + 模块属性访问：workflow 函数解析发生在调用期，测试对
         # dbos_engine 模块的 monkeypatch 仍然生效，且无顶层循环导入。
         import bacmap.tasks.engine.dbos_engine as _wf
@@ -63,6 +71,7 @@ class DbosTaskEngine:
             TaskType.CURATE: _wf.curate_workflow,
             TaskType.MINE: _wf.mine_workflow,
             TaskType.WRITE: _wf.write_workflow,
+            TaskType.RECORD: _wf.record_workflow,
         }
         if task_type not in workflows:
             raise NotImplementedError(f"unsupported task type: {task_type}")
@@ -70,6 +79,12 @@ class DbosTaskEngine:
         p.setdefault("home", str(self.home))
         p.setdefault("cores", 8)
         p.setdefault("submitted_by", submitted_by)
+
+        if task_type == TaskType.RECORD:
+            # 记录类参数在提交入口即校验（记录类型判别 + 字段白名单）。
+            from bacmap.tasks.records import parse_record
+
+            parse_record(p)
 
         # analyze 必须有样本输入：samples 列表或目录直入（fasta_dir/fastq_dir，
         # 工作流首步自动登记，v1.4.38/39）——否则工作流会以 KeyError 落成静默 FAILED。
@@ -89,36 +104,51 @@ class DbosTaskEngine:
             if bad:
                 raise ValueError(f"invalid sample id(s): {bad!r}")
 
-        task_id = uuid.uuid4().hex
-        p["task_id"] = task_id
+        if task_id is None:
+            new_id = uuid.uuid4().hex
+        else:
+            if not (len(task_id) == 32 and all(c in "0123456789abcdef" for c in task_id)):
+                raise ValueError(f"task_id must be 32 lowercase hex chars: {task_id!r}")
+            new_id = str(task_id)
+        p["task_id"] = new_id
         now = datetime.now(UTC).isoformat()
 
         # 先落任务行（可见性）：workflow_id 用确定性的 SetWorkflowID(task_id)，
         # 因此可在启动前就写死映射；启动失败回滚为 FAILED，不留孤儿工作流。
         with self._conn() as conn:
-            conn.execute(
-                "INSERT INTO tasks (task_id, task_type, state, params_json, submitted_by,"
-                " created_at, updated_at, workflow_id, current_step)"
+            inserted = conn.execute(
+                "INSERT OR IGNORE INTO tasks (task_id, task_type, state, params_json,"
+                " submitted_by, created_at, updated_at, workflow_id, current_step)"
                 " VALUES (?,?,?,?,?,?,?,?,?)",
                 (
-                    task_id,
+                    new_id,
                     task_type.value,
                     "running",
                     json.dumps(p, ensure_ascii=False),
                     submitted_by,
                     now,
                     now,
-                    task_id,
+                    new_id,
                     task_type.value,
                 ),
-            )
+            ).rowcount
+        if not inserted:
+            # 显式 ID 已存在：幂等返回，不重复启动工作流（uuid4 碰撞不在考虑范围）。
+            logger.info("submit: task %s already exists; idempotent return", new_id)
+            return TaskId(new_id)
+        self.events.append(
+            EventType.TASK_SUBMITTED,
+            task_id=new_id,
+            actor=submitted_by,
+            payload={"task_type": task_type.value},
+        )
         try:
-            with SetWorkflowID(task_id):
+            with SetWorkflowID(new_id):
                 DBOS.start_workflow(workflows[task_type], p)
         except Exception:
-            self._update_state(TaskId(task_id), TaskState.FAILED, "workflow start failed")
+            self._update_state(TaskId(new_id), TaskState.FAILED, "workflow start failed")
             raise
-        return TaskId(task_id)
+        return TaskId(new_id)
 
     def status(self, task_id: TaskId) -> TaskStatus:
         with self._conn() as conn:
@@ -154,6 +184,38 @@ class DbosTaskEngine:
             task_id=task_id, state=state, current_step=row["current_step"], message=message
         )
 
+    def get_task(self, task_id: TaskId) -> dict[str, Any]:
+        """任务行（含提交者）；不存在抛 KeyError。读取前对账该任务状态。"""
+        self.status(task_id)
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT task_id, task_type, state, submitted_by, created_at, updated_at,"
+                " current_step, message FROM tasks WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+        return dict(row)
+
+    def workflow_result(self, task_id: TaskId) -> dict[str, Any] | None:
+        """工作流已结束时的返回值（门评估、run_id 等）；未结束或不可得返回 None。"""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT workflow_id FROM tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"no such task: {task_id}")
+        if not row["workflow_id"]:
+            return None
+        try:
+            handle: Any = DBOS.retrieve_workflow(row["workflow_id"])
+            raw_status = handle.get_status()
+        except Exception:  # 工作流不可检索（已清理/未注册）：如实返回"不可得"
+            logger.warning("retrieve_workflow failed for %s", row["workflow_id"], exc_info=True)
+            return None
+        if str(getattr(raw_status, "status", raw_status)).upper() != "SUCCESS":
+            return None
+        result = handle.get_result()
+        return result if isinstance(result, dict) else None
+
     def resolve_task_id(self, prefix: str) -> TaskId:
         """短前缀 → 完整任务 ID（git 短 SHA 式）：精确命中优先，唯一前缀放行，
         多义报错。``task ls``（12 位）/TUI（10 位）显示的都是截断 ID——直接
@@ -186,7 +248,20 @@ class DbosTaskEngine:
                 " WHERE task_id = ? AND state = ?",
                 (new_state, message, now, task_id, "running"),
             )
-            return cur.rowcount > 0
+            changed = cur.rowcount > 0
+        if changed:
+            self._emit_state(task_id, new_state, message)
+        return changed
+
+    def _emit_state(self, task_id: TaskId, state: str, message: str | None) -> None:
+        # 消息可能含样本 ID 等单株信息：按 D2 标注，供对外接口按级别过滤。
+        self.events.append(
+            EventType.TASK_STATE,
+            task_id=task_id,
+            actor="engine",
+            payload={"state": state, "message": message or ""},
+            data_class=DataClass.D2,
+        )
 
     def cancel(self, task_id: TaskId) -> None:
         with self._conn() as conn:
@@ -229,6 +304,12 @@ class DbosTaskEngine:
                 " VALUES (?,?,?,?,?,?)",
                 (task_id, approval.approver, decision, approval.signature, approval.comment, now),
             )
+        self.events.append(
+            EventType.TASK_APPROVAL,
+            task_id=task_id,
+            actor=approval.approver,
+            payload={"decision": str(decision)},
+        )
         if decision != "approve":
             self._update_state(task_id, TaskState.FAILED, f"rejected by {approval.approver}")
             return
@@ -285,3 +366,4 @@ class DbosTaskEngine:
                 " WHERE task_id = ?",
                 (state.value, now, message, task_id),
             )
+        self._emit_state(task_id, state.value, message)

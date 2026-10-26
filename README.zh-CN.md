@@ -14,11 +14,11 @@
 - **Snakemake 9 管线**：QC → 组装 → 分型 → AMR/毒力 → 报告；
 - **智能体层**：本地 LLM（Strata / OpenAI 兼容端点）意图分类 + 解读撰写，全链路数据分级门控；
 - **外部工具分工**（ADR-20）：物种鉴定归 [gside](https://github.com/indexofire/gside)、基因筛查/血清型归 gapit、MLST/cgMLST/MST 归 gmlst——bacmap 只做编排与判定；
-- **接入方式**：MCP（v1.4.8 裁定；默认 stdio，另支持带 Bearer 鉴权的 Streamable HTTP，ADR-12），Hermes / Claude / Codex 等客户端均可接入。
+- **接入方式**：MCP（v1.4.8 裁定；默认 stdio，另支持带 Bearer 鉴权的 Streamable HTTP，ADR-12），Hermes / Claude / Codex 等客户端均可接入。v1.5 起对话交互推荐在外部 Harness（Hermes、Pi、DeepSeek Harness）的原生界面中进行，计划确认与审批仍在 bacmap 的 CLI/Web 完成（ADR-21）。MCP 实例按数据级别 **Profile** 运行：默认 `cloud`（仅 D0–D1 工具），`local-trusted`（至 D4）须显式开启。
 
 ## 快速开始
 
-详细文档：[安装指南](docs/installation.zh-CN.md) · [配置指南](docs/configuration.zh-CN.md) · [使用指南](docs/usage.zh-CN.md)
+详细文档：[实战教程](docs/tutorial.zh-CN.md) · [安装指南](docs/installation.zh-CN.md) · [配置指南](docs/configuration.zh-CN.md) · [使用指南](docs/usage.zh-CN.md) · [运维指南](docs/operations.zh-CN.md) · [智能体 Harness](docs/harnesses.zh-CN.md)
 
 ```bash
 pixi install          # 安装运行时环境（含生信工具链）
@@ -28,14 +28,16 @@ bacmap --help         # 统一命令行入口
 
 | 命令 | 说明 |
 |---|---|
-| `bacmap ask "<需求>" [--yes]` | **LLM 驱动**：理解需求、调用只读工具、给出计划、确认后提交 |
-| `bacmap chat` | 多轮对话式分析助手（同一会话） |
-| `bacmap tui [--home H]` | 会话优先 TUI（Textual）：助手对话、侧栏（任务/样本）、leader 和弦（`Ctrl+X`）、斜杠命令 |
+| `bacmap tui [--home H]` | 任务台（Textual）：任务/样本侧栏、操作日志、命令输入、leader 和弦（`Ctrl+G`）、签批 |
 | `bacmap console [--home H]` | 交互式菜单（rich），面向偏好引导式操作的用户 |
 | `bacmap overview [--json]` | 系统概览（端点 / 数据策略 / 版本 / 路径 / 沙箱） |
 | `bacmap task ls\|show\|submit\|approve\|cancel` | 任务查询与写操作（显式、无 LLM 路径） |
+| `bacmap plan ls\|show\|confirm\|reject` | 审阅并确认智能体经 MCP 提出的分析计划（v1.5.1；Web 见 `/plans`） |
+| `bacmap record metadata\|lab\|knowledge-import\|knowledge-approve` | 经任务层录入元数据/化验/知识库（v1.7；Web 见 `/records`） |
+| `bacmap run ls\|show\|compare` · `bacmap gom ls\|show` | 证据链：运行记录与 GOM 对象（v1.7.1；Web 见 `/runs`、`/gom`） |
+| `bacmap doctor` · `bacmap backup` · `bacmap restore` · `bacmap events prune` | 体检、备份/恢复、事件保留（v1.7.2；见运维指南） |
 | `bacmap sample ls\|show` / `bacmap search` | 样本浏览与检索 |
-| `bacmap mcp [--read-only] [--home H]` | 启动 MCP 服务器：stdio（默认）或带 Bearer 鉴权的 Streamable HTTP（ADR-12；23 个工具） |
+| `bacmap mcp [--read-only] [--profile cloud\|local-trusted] [--home H]` | 启动 MCP 服务器：stdio（默认）或带 Bearer 鉴权的 Streamable HTTP（ADR-12）。最多 22 个读/算工具外加任务工具，按 Profile 裁剪（默认 `cloud`） |
 | `bacmap web [--host 127.0.0.1] [--port 8800]` | 启动 Web 控制台（任务 / 助手 / 样本 / 检索 / 报告） |
 | `bacmap --version` | 版本号 |
 

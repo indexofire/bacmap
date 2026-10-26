@@ -11,8 +11,20 @@ from pathlib import Path
 import pytest
 
 import bacmap.tasks.engine.dbos_engine as eng
-from bacmap.interfaces.mcp.server import build_server
+from bacmap.interfaces.mcp.profiles import (
+    McpProfile,
+    ProfileNotAllowedError,
+    ProfileSpec,
+    resolve_profile,
+)
+from bacmap.interfaces.mcp.server import DEFAULT_PROFILE, build_server, exposed_specs
 from bacmap.tasks.spec import TaskState
+from bacmap.tools import registry as tool_registry
+from bacmap.tools.spec import DataClass
+
+TRUSTED = ProfileSpec(
+    profile=McpProfile.LOCAL_TRUSTED, max_data_class=DataClass.D4, actor="mcp-test-trusted"
+)
 
 WRITE_TOOLS = {"bio_analyze_pathogen", "bio_add_metadata", "bio_add_lab_result"}
 
@@ -42,7 +54,7 @@ class TestToolExposure:
         assert not (names & WRITE_TOOLS), "V11④ 违规：write 工具出现在 MCP 暴露面"
 
     def test_read_compute_tools_exposed(self):
-        names = _list_tool_names(build_server())
+        names = _list_tool_names(build_server(profile=TRUSTED))
         for expected in ("bio_seq_stats", "bio_get_result", "bio_search_samples", "bio_gene_scan"):
             assert expected in names
 
@@ -52,7 +64,7 @@ class TestToolExposure:
         assert "bacmap_task_status" not in names
 
     def test_input_schema_generated_from_legacy(self):
-        server = build_server()
+        server = build_server(profile=TRUSTED)
         tools = {t.name: t for t in asyncio.run(server.list_tools())}
         schema = tools["bio_seq_stats"].input_schema
         props = schema.get("properties", {})
@@ -67,7 +79,7 @@ class TestReadToolRoundtrip:
     def test_bio_seq_stats(self, tmp_path: Path):
         fa = tmp_path / "x.fa"
         fa.write_text(">c1\nACGTACGTAC\n>c2\nGGGG\n", encoding="utf-8")
-        server = build_server()
+        server = build_server(profile=TRUSTED)
         out = _call(server, "bio_seq_stats", {"params": {"file": str(fa)}})
         assert "error" not in out, out
         dumped = json.dumps(out)
@@ -75,7 +87,7 @@ class TestReadToolRoundtrip:
         assert ok, out
 
     def test_missing_required_param_raises_validation(self):
-        server = build_server()
+        server = build_server(profile=TRUSTED)
         with pytest.raises(Exception, match="Field required"):
             asyncio.run(server.call_tool("bio_seq_stats", {"params": {}}))
 
@@ -110,7 +122,8 @@ class TestTaskToolsRoundtrip:
         monkeypatch.setattr(eng, "_generate_report_for", lambda s: {"sample_id": s})
         monkeypatch.setattr(eng, "_memory_arbiter", _noop_arbiter)
         engine = eng.DbosTaskEngine(tmp_path)
-        srv = build_server(engine)
+        srv = build_server(engine, TRUSTED)
+        srv.engine_for_test = engine
         yield srv
         eng.shutdown_dbos()
 
@@ -118,10 +131,13 @@ class TestTaskToolsRoundtrip:
         out = _call(
             server,
             "bacmap_submit_task",
-            {"task_type": "analyze", "samples": ["SAM-001"], "submitted_by": "mcp-test"},
+            {"task_type": "analyze", "samples": ["SAM-001"]},
         )
         assert "task_id" in out, out
         tid = out["task_id"]
+        # 提交者身份由服务端 Profile 决定（v1.5 审计链），不来自客户端参数
+        rows = {t["task_id"]: t for t in server.engine_for_test.list_tasks(10)}
+        assert rows[tid]["submitted_by"] == "mcp-test-trusted"
 
         deadline = time.time() + 30
         state = None
@@ -166,3 +182,290 @@ class TestTaskToolsRoundtrip:
     def test_unknown_task_status_error(self, server):
         out = _call(server, "bacmap_task_status", {"task_id": "no-such"})
         assert "error" in out
+
+
+class TestProfileDataClassFiltering:
+    """v1.5（ADR-16）：MCP 默认 cloud Profile，按 output_data_class 裁剪工具带。"""
+
+    def test_default_profile_hides_d2_and_above(self):
+        names = _list_tool_names(build_server())
+        for spec in tool_registry.list_specs():
+            if spec.output_data_class > DataClass.D1:
+                assert spec.name not in names, spec.name
+        assert "bio_query_metadata" not in names  # D4
+        assert "bio_seq_stats" not in names  # D3
+        assert "bio_get_result" not in names  # D2
+
+    def test_default_profile_keeps_low_class_read_tools(self):
+        names = _list_tool_names(build_server())
+        assert "bio_list_reference_genomes" in names  # D0
+        # 注册表工具按 Profile 裁剪；能力协商工具始终可用（不涉及数据）
+        assert names == {s.name for s in exposed_specs(DEFAULT_PROFILE)} | {"bacmap_capabilities"}
+
+    def test_hidden_tool_call_rejected(self, tmp_path: Path):
+        fa = tmp_path / "x.fa"
+        fa.write_text(">c\nACGT\n", encoding="utf-8")
+        with pytest.raises(Exception, match=r"(?i)unknown tool|not found"):
+            asyncio.run(build_server().call_tool("bio_seq_stats", {"params": {"file": str(fa)}}))
+
+    def test_trusted_profile_exposes_d4_but_never_write(self):
+        names = _list_tool_names(build_server(profile=TRUSTED))
+        assert "bio_query_metadata" in names
+        assert not (names & WRITE_TOOLS)
+
+    def test_resolve_cloud_follows_data_policy(self, tmp_path: Path):
+        (tmp_path / "config.toml").write_text(
+            "[llm.endpoints.api]\nkind='openai_compatible'\nlocation='cloud'\n"
+            "base_url='https://example.invalid/v1'\nmodel='m'\ntier='T2'\n"
+            "[llm.data_policy]\ncloud_max_data_class='D2'\n",
+            encoding="utf-8",
+        )
+        spec = resolve_profile("cloud", tmp_path, "stdio")
+        assert spec.max_data_class == DataClass.D2
+        assert spec.actor.startswith("mcp-stdio:cloud:")
+
+    def test_resolve_cloud_default_is_d1(self, tmp_path: Path):
+        spec = resolve_profile("cloud", tmp_path, "http")
+        assert spec.max_data_class == DataClass.D1
+        assert spec.actor == "mcp-http:cloud"
+
+    def test_local_trusted_requires_admin_opt_in(self, tmp_path: Path):
+        with pytest.raises(ProfileNotAllowedError, match="allow_local_trusted"):
+            resolve_profile("local-trusted", tmp_path, "stdio")
+        (tmp_path / "config.toml").write_text(
+            "[mcp]\nallow_local_trusted = 'yes'\n", encoding="utf-8"
+        )
+        with pytest.raises(ProfileNotAllowedError):  # 必须是布尔 true，不接受真值字符串
+            resolve_profile("local-trusted", tmp_path, "stdio")
+        (tmp_path / "config.toml").write_text(
+            "[mcp]\nallow_local_trusted = true\n", encoding="utf-8"
+        )
+        assert resolve_profile("local-trusted", tmp_path, "stdio").max_data_class == DataClass.D4
+
+    def test_unknown_profile_rejected(self, tmp_path: Path):
+        with pytest.raises(ValueError):
+            resolve_profile("root", tmp_path, "stdio")
+
+    def test_launch_refuses_disabled_profile(self, tmp_path: Path):
+        from bacmap.interfaces.mcp.launch import serve
+
+        def _no_engine(home: Path):
+            raise AssertionError("engine must not be built when profile is refused")
+
+        with pytest.raises(SystemExit, match="allow_local_trusted"):
+            serve(
+                home=tmp_path, profile_name="local-trusted", read_only=False,
+                transport="stdio", host="127.0.0.1", port=0, uds="",
+                token_env="X", engine_factory=_no_engine,
+            )
+
+
+class TestPlanTools:
+    """v1.5.1（ADR-21）：Harness 只能创建/修订/查询计划，确认不在 MCP。"""
+
+    @pytest.fixture
+    def server(self, tmp_path: Path):
+        engine = eng.DbosTaskEngine(tmp_path)
+        srv = build_server(engine)  # 默认 cloud Profile 也可建计划
+        srv.engine_for_test = engine
+        yield srv
+        eng.shutdown_dbos()
+
+    def test_plan_tools_exposed_but_no_confirm(self, server):
+        names = _list_tool_names(server)
+        assert {"bacmap_create_plan", "bacmap_revise_plan", "bacmap_get_plan"} <= names
+        assert not any("confirm" in n or "approve" in n for n in names)
+
+    def test_plan_tools_absent_in_read_only(self):
+        names = _list_tool_names(build_server())
+        assert "bacmap_create_plan" not in names
+
+    def test_create_revise_get_roundtrip(self, server):
+        out = _call(
+            server,
+            "bacmap_create_plan",
+            {"tasks": [{"task_type": "analyze", "samples": ["SAM-001"]}], "rationale": "r"},
+        )
+        assert out["state"] == "awaiting_confirmation" and out["version"] == 1
+        assert out["created_by"].startswith("mcp-stdio:cloud:")
+        assert "bacmap plan confirm" in out["next_step"]
+        assert server.engine_for_test.list_tasks(10) == []  # 未确认，不执行
+
+        rev = _call(
+            server,
+            "bacmap_revise_plan",
+            {"plan_id": out["plan_id"], "tasks": [{"task_type": "curate"}]},
+        )
+        assert rev["version"] == 2
+        got = _call(server, "bacmap_get_plan", {"plan_id": out["plan_id"], "version": 1})
+        assert got["state"] == "superseded"
+
+    def test_invalid_tasks_rejected(self, server):
+        with pytest.raises(Exception, match=r"(?i)bogus|task_type|discriminator|tag"):
+            asyncio.run(
+                server.call_tool("bacmap_create_plan", {"tasks": [{"task_type": "bogus"}]})
+            )
+
+    def test_open_path_plan_is_accepted(self, server):
+        out = _call(
+            server,
+            "bacmap_create_plan",
+            {
+                "tasks": [
+                    {
+                        "task_type": "mine",
+                        "objective": "按 ST 统计",
+                        "script": "print(1)",
+                        "input_paths": [],
+                    }
+                ],
+                "rationale": "open path",
+            },
+        )
+        assert out["state"] == "awaiting_confirmation" and out["version"] == 1
+        out = _call(server, "bacmap_get_plan", {"plan_id": "nope"})
+        assert out["code"] == "not_found"
+
+
+class TestSkillResources:
+    """v1.5.2（ADR-12/21）：角色说明书以 skill:// 资源发布，带内容摘要（版本可追溯）。"""
+
+    def test_listed_with_digest(self):
+        import hashlib
+
+        from bacmap.agent import roledef
+
+        res = {str(r.uri): r for r in asyncio.run(build_server().list_resources())}
+        uri = "skill://bacmap/analyst/SKILL.md"
+        assert uri in res and res[uri].mime_type == "text/markdown"
+        raw = roledef.skill_markdown("analyst")
+        assert res[uri].meta["sha256"] == hashlib.sha256(raw.encode()).hexdigest()
+
+    def test_read_returns_skill(self):
+        from bacmap.agent import roledef
+
+        contents = asyncio.run(build_server().read_resource("skill://bacmap/analyst/SKILL.md"))
+        text = "".join(getattr(c, "content", "") or getattr(c, "text", "") for c in contents)
+        assert text == roledef.skill_markdown("analyst")
+
+
+class TestTaskControlTools:
+    """v1.5.2：取消只限本主体的任务；结果按 Profile 数据级别裁剪；cloud 不回传任务消息。"""
+
+    @pytest.fixture
+    def engine(self, tmp_path: Path, monkeypatch):
+        from bacmap.tasks.engine import task_engine
+
+        monkeypatch.setattr(task_engine.DBOS, "start_workflow", lambda wf, p: None)
+        monkeypatch.setattr(task_engine.DBOS, "cancel_workflow", lambda wid: None)
+        e = eng.DbosTaskEngine(tmp_path)
+        yield e
+        eng.shutdown_dbos()
+
+    def test_cancel_own_task(self, engine):
+        server = build_server(engine, TRUSTED)
+        tid = _call(server, "bacmap_submit_task", {"task_type": "analyze", "samples": ["S1"]})[
+            "task_id"
+        ]
+        out = _call(server, "bacmap_task_cancel", {"task_id": tid})
+        assert out["state"] == "cancelled"
+        again = _call(server, "bacmap_task_cancel", {"task_id": tid})
+        assert again["code"] == "conflict"
+
+    def test_cannot_cancel_foreign_task(self, engine):
+        from bacmap.tasks.spec import TaskType
+
+        tid = engine.submit(TaskType.ANALYZE, {"samples": ["S1"]}, "cli:someone")
+        out = _call(build_server(engine, TRUSTED), "bacmap_task_cancel", {"task_id": tid})
+        assert out["code"] == "forbidden"
+        assert engine.status(tid).state.value == "running"
+        assert _call(build_server(engine, TRUSTED), "bacmap_task_cancel", {"task_id": "x"})[
+            "code"
+        ] == "not_found"
+
+    def test_can_cancel_task_of_own_plan(self, engine):
+        server = build_server(engine, TRUSTED)
+        plan = _call(
+            server,
+            "bacmap_create_plan",
+            {"tasks": [{"task_type": "analyze", "samples": ["S1"]}]},
+        )
+        from bacmap.application.plans import PlanService
+
+        done = PlanService(engine, engine.db).confirm(
+            plan["plan_id"], 1, plan["plan_hash"], "cli:ann"
+        )
+        out = _call(server, "bacmap_task_cancel", {"task_id": done.task_ids[0]})
+        assert out["state"] == "cancelled"
+
+    def test_cloud_status_withholds_message(self, engine):
+        from bacmap.tasks.spec import TaskState, TaskType
+
+        tid = engine.submit(TaskType.ANALYZE, {"samples": ["S1"]}, "x")
+        engine._update_state(tid, TaskState.FAILED, "snakemake failed on S1 at /home/x")
+        cloud = _call(build_server(engine), "bacmap_task_status", {"task_id": tid})
+        assert cloud["state"] == "failed" and cloud["message"] == ""
+        assert cloud["message_withheld"] is True
+        trusted = _call(build_server(engine, TRUSTED), "bacmap_task_status", {"task_id": tid})
+        assert "S1" in trusted["message"]
+
+
+class TestTaskResultTool:
+    @pytest.fixture
+    def engine(self, tmp_path: Path, monkeypatch):
+        rep = tmp_path / "results" / "SAM-001" / "report"
+        rep.mkdir(parents=True)
+        (rep / "SAM-001_summary.json").write_text(json.dumps(_sal_summary()), encoding="utf-8")
+        monkeypatch.setattr(eng, "_run_snakemake", lambda params: _Proc())
+        monkeypatch.setattr(eng, "_step_create_run", lambda params: {"run_id": "mcp-run-9"})
+        monkeypatch.setattr(eng, "_step_finish_run", lambda run_id, params: None)
+        monkeypatch.setattr(eng, "_generate_report_for", lambda s: {"sample_id": s})
+        monkeypatch.setattr(eng, "_memory_arbiter", _noop_arbiter)
+        e = eng.DbosTaskEngine(tmp_path)
+        yield e
+        eng.shutdown_dbos()
+
+    def _finished(self, engine):
+        from bacmap.tasks.spec import TaskType
+
+        tid = engine.submit(TaskType.ANALYZE, {"samples": ["SAM-001"]}, "x")
+        deadline = time.time() + 30
+        while time.time() < deadline and engine.status(tid).state.value == "running":
+            time.sleep(0.2)
+        return tid
+
+    def test_trusted_gets_per_sample_verdicts(self, engine):
+        tid = self._finished(engine)
+        out = _call(build_server(engine, TRUSTED), "bacmap_task_result", {"task_id": tid})
+        assert out["run_id"] == "mcp-run-9"
+        assert set(out["gates"]) == {"SAM-001"}
+        assert "/" not in json.dumps(out["gates"])
+
+    def test_cloud_gets_counts_only(self, engine):
+        tid = self._finished(engine)
+        out = _call(build_server(engine), "bacmap_task_result", {"task_id": tid})
+        assert "gates" not in out and sum(out["gate_counts"].values()) == 1
+        assert "SAM-001" not in json.dumps(out)
+
+    def test_unfinished_or_unknown(self, engine):
+        out = _call(build_server(engine, TRUSTED), "bacmap_task_result", {"task_id": "nope"})
+        assert out["code"] == "not_found"
+
+
+class TestCapabilitiesTool:
+    """v1.6.1：`bacmap_capabilities` 让客户端在调用前了解 Profile、可计划任务与 Tasks 扩展状态。"""
+
+    def test_reports_profile_and_extension_status(self):
+        out = _call(build_server(), "bacmap_capabilities", {})
+        assert out["profile"] == "cloud" and out["max_data_class"] == "D1"
+        assert out["plannable_task_types"] == ["analyze", "curate", "mine", "write"]
+        assert out["tasks_extension"] == "unsupported_by_sdk"
+        assert "bacmap_create_plan" in out["recommended_write_path"]
+        assert out["bacmap_version"]
+
+    def test_trusted_profile_reports_d4(self):
+        out = _call(build_server(profile=TRUSTED), "bacmap_capabilities", {})
+        assert out["profile"] == "local-trusted" and out["max_data_class"] == "D4"
+
+    def test_available_in_read_only_mode(self):
+        assert "bacmap_capabilities" in _list_tool_names(build_server())

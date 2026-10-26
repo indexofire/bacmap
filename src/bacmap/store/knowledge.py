@@ -13,7 +13,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-_DDL = """
+from bacmap.store.schema import ensure_knowledge_schema
+
+# schema 的唯一来源（迁移按文件汇总，见 store/schema.py）
+LEGACY_DDL = """
+
 CREATE TABLE IF NOT EXISTS knowledge_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     kind TEXT NOT NULL DEFAULT 'literature',
@@ -48,6 +52,43 @@ CREATE TRIGGER IF NOT EXISTS knowledge_fts_au AFTER UPDATE ON knowledge_entries 
 END;
 """
 
+# 触发器含分号但各自是单条语句：迁移逐条 execute（executescript 会提前提交事务）
+DDL_STATEMENTS = (
+    """CREATE TABLE IF NOT EXISTS knowledge_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL DEFAULT 'literature',
+        title TEXT NOT NULL,
+        authors TEXT,
+        year INTEGER,
+        source TEXT,
+        identifier TEXT,
+        content TEXT,
+        imported_by TEXT,
+        imported_at TEXT NOT NULL,
+        approved_by TEXT,
+        task_id TEXT
+    )""",
+    """CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
+        title, authors, content, identifier,
+        content='knowledge_entries', content_rowid='id'
+    )""",
+    """CREATE TRIGGER IF NOT EXISTS knowledge_fts_ai AFTER INSERT ON knowledge_entries BEGIN
+        INSERT INTO knowledge_fts(rowid, title, authors, content, identifier)
+        VALUES (new.id, new.title, new.authors, new.content, new.identifier);
+    END""",
+    """CREATE TRIGGER IF NOT EXISTS knowledge_fts_ad AFTER DELETE ON knowledge_entries BEGIN
+        INSERT INTO knowledge_fts(knowledge_fts, rowid, title, authors, content, identifier)
+        VALUES ('delete', old.id, old.title, old.authors, old.content, old.identifier);
+    END""",
+    """CREATE TRIGGER IF NOT EXISTS knowledge_fts_au AFTER UPDATE ON knowledge_entries BEGIN
+        INSERT INTO knowledge_fts(knowledge_fts, rowid, title, authors, content, identifier)
+        VALUES ('delete', old.id, old.title, old.authors, old.content, old.identifier);
+        INSERT INTO knowledge_fts(rowid, title, authors, content, identifier)
+        VALUES (new.id, new.title, new.authors, new.content, new.identifier);
+    END""",
+)
+
+
 _FTS_TOKEN_RE = re.compile(r"[\w\u4e00-\u9fff]+")
 _PMID_NORM_RE = re.compile(r"(?i)^pmid[:\s]*(\d{6,9})$")
 
@@ -63,8 +104,7 @@ class KnowledgeStore:
     def __init__(self, db_path: Path) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self.db = db_path
-        with self._conn() as conn:
-            conn.executescript(_DDL)
+        ensure_knowledge_schema(db_path)
 
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db)

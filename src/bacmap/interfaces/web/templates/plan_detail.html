@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}计划 {{ plan.plan_id }} · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="面包屑">
+  <a class="crumbs__link" href="/plans">计划列表</a>
+  <span class="crumbs__sep" aria-hidden="true">/</span>
+  <span class="crumbs__here">{{ plan.plan_id }} v{{ plan.version }}</span>
+</nav>
+<header class="detailhead">
+  <h1 class="detailhead__title">计划 v{{ plan.version }}</h1>
+  <p class="detailhead__id mono">{{ plan.plan_id }} · hash {{ plan.short_hash }}</p>
+</header>
+{% if error %}<p class="card__lead" role="alert"><strong>{{ error }}</strong></p>{% endif %}
+<section class="card status-card" aria-labelledby="plan-title">
+  <div class="card__head">
+    <h2 class="card__title" id="plan-title">完整参数</h2>
+    <code>{{ plan.state.value }}</code>
+  </div>
+  <dl class="statuslist">
+    <div class="statuslist__row"><dt>创建者</dt><dd>{{ plan.created_by }}</dd></div>
+    <div class="statuslist__row"><dt>理由</dt><dd>{{ plan.rationale or '—' }}</dd></div>
+    {% for t in task_json %}
+    <div class="statuslist__row"><dt>任务 {{ loop.index0 }}</dt><dd><code>{{ t }}</code></dd></div>
+    {% endfor %}
+    {% for path, fp in plan.inputs.items() %}
+    <div class="statuslist__row"><dt>输入目录</dt><dd><code>{{ path }}</code> <span class="mono-dim">{{ fp[:32] }}…</span></dd></div>
+    {% endfor %}
+    {% if plan.confirmed_by %}<div class="statuslist__row"><dt>确认人</dt><dd>{{ plan.confirmed_by }} · {{ plan.confirmed_at[:16].replace("T", " ") }}</dd></div>{% endif %}
+    {% if plan.message %}<div class="statuslist__row"><dt>消息</dt><dd>{{ plan.message }}</dd></div>{% endif %}
+    {% for tid in plan.task_ids %}
+    <div class="statuslist__row"><dt>任务</dt><dd><a class="tasklink" href="/tasks/{{ tid }}">{{ tid }}</a></dd></div>
+    {% endfor %}
+  </dl>
+</section>
+{% if plan.state.value == 'awaiting_confirmation' %}
+<section class="card approval-card" aria-labelledby="confirm-title">
+  <div class="card__head"><h2 class="card__title" id="confirm-title">确认并提交</h2></div>
+  <p class="card__lead">确认只对上面这一版本（hash {{ plan.short_hash }}）生效；计划被修订后需重新确认。</p>
+  <form class="form" method="post" action="/plans/{{ plan.plan_id }}/confirm">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="version" value="{{ plan.version }}">
+    <input type="hidden" name="plan_hash" value="{{ plan.plan_hash }}">
+    <div class="field">
+      <label class="field__label" for="c-confirmer">确认人</label>
+      <input class="field__control" id="c-confirmer" name="confirmer" type="text" required autocomplete="off">
+    </div>
+    <div class="form__actions"><button class="btn btn--primary" type="submit">确认并提交</button></div>
+  </form>
+  <form class="form" method="post" action="/plans/{{ plan.plan_id }}/reject">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="version" value="{{ plan.version }}">
+    <div class="field">
+      <label class="field__label" for="c-reason">拒绝理由</label>
+      <input class="field__control" id="c-reason" name="reason" type="text" required autocomplete="off">
+    </div>
+    <div class="form__actions"><button class="btn" type="submit">拒绝</button></div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

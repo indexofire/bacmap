@@ -1527,8 +1527,8 @@ packages:
   requires_python: '>=3.10'
 - pypi: ./
   name: bacmap
-  version: 1.4.39
-  sha256: 717e3c110bdb05bc411c9b8ad84ce00fe2011567501fc2c47bc017507d02a6db
+  version: 0.1.0
+  sha256: 4c4d4552f3abd0dd84812f569cc6ceba405ab41d693a32c07a5fc0409bcfb3b9
   requires_dist:
   - biopython>=1.83
   - pydantic>=2.0

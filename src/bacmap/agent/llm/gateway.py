@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import logging
 import os
@@ -28,19 +27,6 @@ MAX_RETRIES = 2  # 首次 + 2 次重试（ADR-08）
 
 _TIER_RANK = {"T0": 0, "T1": 1, "T2": 2}
 
-# JSON 字符串简单转义表（_extract_reply_prefix 用；\uXXXX 单独按位解码）
-_SIMPLE_ESCAPES = {
-    "n": "\n",
-    "t": "\t",
-    "r": "\r",
-    '"': '"',
-    "\\": "\\",
-    "/": "/",
-    "b": "\b",
-    "f": "\f",
-}
-
-
 def _tier_rank(tier: str) -> int:
     return _TIER_RANK.get(str(tier).upper(), 2)
 
@@ -55,44 +41,6 @@ def _build_role_instructions(role: str | None) -> str | None:
 
 class DataClassViolationError(RuntimeError):
     """payload 数据级别超过端点（cloud）允许上限——拒绝发送。"""
-
-
-def _extract_reply_prefix(args: str) -> tuple[bool, str]:
-    """从（可能不完整的）输出工具 JSON 参数中提取 ``reply`` 字段的可显示前缀。
-
-    Tool Output 模式下最终回复是工具调用参数 JSON；部分服务商会增量流式下发参数，
-    这里做容错的增量解析：找到 ``"reply"`` 键的字符串值起点后，逐字符解码直到
-    未转义的引号（值结束）。返回 (是否找到键, 已可安全显示的前缀)。
-    仅用于展示层流式；最终结果仍由 pydantic-ai 完整校验。
-    """
-    import re
-
-    mkey = re.search(r'"reply"\s*:\s*"', args)
-    if mkey is None:
-        return False, ""
-    i = mkey.end()
-    out: list[str] = []
-    while i < len(args):
-        ch = args[i]
-        if ch == "\\":
-            if i + 1 >= len(args):
-                break  # 转义符被截断：等下一个增量
-            nxt = args[i + 1]
-            if nxt == "u":
-                hex4 = args[i + 2 : i + 6]
-                if len(hex4) < 4 or any(c not in "0123456789abcdefABCDEF" for c in hex4):
-                    break  # \u 序列不完整：等下一个增量
-                out.append(chr(int(hex4, 16)))
-                i += 6
-                continue
-            out.append(_SIMPLE_ESCAPES.get(nxt, f"\\{nxt}"))
-            i += 2
-            continue
-        if ch == '"':
-            break  # 值结束
-        out.append(ch)
-        i += 1
-    return True, "".join(out)
 
 
 class LlmUnavailableError(RuntimeError):
@@ -129,39 +77,8 @@ def _default_agent_factory(
     )
 
 
-def _default_tool_agent_factory(
-    endpoint: LlmEndpoint,
-    output_type: type[BaseModel],
-    instructions: str | None,
-    tools: list[Any],
-) -> Any:
-    """带工具的智能体工厂（ADR-08：结构化输出 + 工具经 Tool Output 模式）。
-
-    Strata 不能在同一请求混用 response_format 与 tools，故走 Tool Output。
-    """
-    from pydantic_ai import Agent
-    from pydantic_ai.models.openai import OpenAIChatModel
-    from pydantic_ai.providers.openai import OpenAIProvider
-
-    api_key = "local"
-    if endpoint.api_key_env:
-        api_key = os.environ.get(endpoint.api_key_env, "missing")
-    model = OpenAIChatModel(
-        endpoint.model,
-        provider=OpenAIProvider(base_url=endpoint.base_url, api_key=api_key),
-    )
-    return Agent(
-        model,
-        output_type=output_type,
-        tools=list(tools),
-        retries=MAX_RETRIES,
-        instructions=instructions,
-        model_settings=_model_settings(endpoint),
-    )
-
-
 class LlmGateway:
-    """结构化输出与带工具智能体的统一入口（agent_factory/tool_agent_factory 可注入，测试用）。
+    """结构化输出的统一入口（agent_factory 可注入，测试用）。
 
     role 参数（ADR-10 三文件体系）：给定角色时经 roledef.build_system_prompt
     组装 system instructions 注入该角色的临时智能体实例（缓存按角色隔离）。
@@ -173,19 +90,14 @@ class LlmGateway:
         agent_factory: Callable[
             [LlmEndpoint, type[BaseModel], str | None], Any
         ] | None = None,
-        tool_agent_factory: Callable[
-            [LlmEndpoint, type[BaseModel], str | None, list[Any]], Any
-        ] | None = None,
     ) -> None:
         self._config = config
         self._factory = agent_factory or _default_agent_factory
-        self._tool_factory = tool_agent_factory or _default_tool_agent_factory
         self._sems: dict[str, threading.Semaphore] = {
             name: threading.Semaphore(max(ep.max_concurrency, 1))
             for name, ep in config.endpoints.items()
         }
         self._agents: dict[tuple[str, ...], Any] = {}
-        self._asems: dict[str, Any] = {}  # asyncio.Semaphore 按端点，首次异步调用时创建
         self._lock = threading.Lock()
 
     def _agent_for(
@@ -205,27 +117,6 @@ class LlmGateway:
         with self._lock:
             if key not in self._agents:
                 self._agents[key] = self._factory(endpoint, output_type, instructions)
-            return self._agents[key]
-
-    def _tool_agent_for(
-        self,
-        endpoint: LlmEndpoint,
-        output_type: type[BaseModel],
-        role: str | None,
-        instructions: str | None,
-        tools: list[Any],
-    ) -> Any:
-        tool_names = ",".join(sorted(getattr(t, "name", str(t)) for t in tools))
-        key = (
-            endpoint.name,
-            f"{output_type.__module__}.{output_type.__qualname__}",
-            role or "",
-            hashlib.sha256((instructions or "").encode("utf-8")).hexdigest()[:12],
-            hashlib.sha256(tool_names.encode("utf-8")).hexdigest()[:12],
-        )
-        with self._lock:
-            if key not in self._agents:
-                self._agents[key] = self._tool_factory(endpoint, output_type, instructions, tools)
             return self._agents[key]
 
     def _resolve_checked(
@@ -302,248 +193,6 @@ class LlmGateway:
                 last_exc = exc
                 logger.warning(
                     "structured attempt %d/%d failed on %s: %s",
-                    attempt + 1,
-                    MAX_RETRIES + 1,
-                    endpoint.name,
-                    exc,
-                )
-        raise LlmUnavailableError(
-            f"structured output failed after {MAX_RETRIES + 1} attempts on {endpoint.name}"
-        ) from last_exc
-
-    def run_agent(
-        self,
-        purpose: str,
-        prompt: str,
-        output_type: type[BaseModel],
-        tools: list[Any],
-        data_class: DataClass = DataClass.D0,
-        role: str | None = None,
-        message_history: list[Any] | None = None,
-    ) -> Any:
-        """带工具的智能体单步运行（多步循环由调用方/agent loop 驱动）。
-
-        返回 pydantic-ai 的 ``AgentRunResult``（``.output`` 为结构化结果，
-        ``.all_messages()`` 为含工具调用的完整消息序列，供多轮续接）。
-        """
-        endpoint, instructions = self._resolve_checked(purpose, data_class, role)
-        agent = self._tool_agent_for(endpoint, output_type, role, instructions, tools)
-        sem = self._sems.get(endpoint.name)
-        last_exc: Exception | None = None
-        for attempt in range(MAX_RETRIES + 1):
-            try:
-                if sem is not None:
-                    with sem:
-                        return agent.run_sync(prompt, message_history=message_history)
-                return agent.run_sync(prompt, message_history=message_history)
-            except Exception as exc:
-                last_exc = exc
-                logger.warning(
-                    "agent attempt %d/%d failed on %s: %s",
-                    attempt + 1,
-                    MAX_RETRIES + 1,
-                    endpoint.name,
-                    exc,
-                )
-        raise LlmUnavailableError(
-            f"agent run failed after {MAX_RETRIES + 1} attempts on {endpoint.name}"
-        ) from last_exc
-
-    def _asem_for(self, endpoint: LlmEndpoint) -> Any:
-        """按端点的 max_concurrency 创建 asyncio 信号量（首次异步调用时绑定事件循环）。"""
-        import asyncio
-
-        if endpoint.name not in self._asems:
-            self._asems[endpoint.name] = asyncio.Semaphore(max(endpoint.max_concurrency, 1))
-        return self._asems[endpoint.name]
-
-    async def run_agent_async(
-        self,
-        purpose: str,
-        prompt: str,
-        output_type: type[BaseModel],
-        tools: list[Any],
-        data_class: DataClass = DataClass.D0,
-        role: str | None = None,
-        message_history: list[Any] | None = None,
-    ) -> Any:
-        """``run_agent`` 的异步版：可被 asyncio 取消（中断在途请求）。"""
-        endpoint, instructions = self._resolve_checked(purpose, data_class, role)
-        agent = self._tool_agent_for(endpoint, output_type, role, instructions, tools)
-        sem = self._asem_for(endpoint)
-        last_exc: Exception | None = None
-        for attempt in range(MAX_RETRIES + 1):
-            try:
-                async with sem:
-                    return await agent.run(prompt, message_history=message_history)
-            except Exception as exc:
-                last_exc = exc
-                logger.warning(
-                    "agent(async) attempt %d/%d failed on %s: %s",
-                    attempt + 1,
-                    MAX_RETRIES + 1,
-                    endpoint.name,
-                    exc,
-                )
-        raise LlmUnavailableError(
-            f"agent run failed after {MAX_RETRIES + 1} attempts on {endpoint.name}"
-        ) from last_exc
-
-    async def run_agent_events_async(
-        self,
-        *,
-        purpose: str,
-        prompt: str,
-        output_type: type[BaseModel],
-        tools: list[Any] | None = None,
-        data_class: DataClass = DataClass.D0,
-        role: str | None = None,
-        message_history: list[Any] | None = None,
-        on_event: Callable[[str, str], Any] | None = None,
-    ) -> Any:
-        """``run_agent_async`` 的事件流版本（v1.4.31 展示层流式）。
-
-        经 pydantic-ai ``agent.iter()`` 逐节点迭代，把过程以 ``(kind, payload)``
-        事件回调给调用方（回调可为 async）：
-
-        - ``thinking_delta``：模型思考增量（GLM 等原生 reasoning 流）
-        - ``text_delta``：模型正文文本增量（Tool Output 模式下少见）
-        - ``reply_delta``：最终回复 ``reply`` 字段的增量（输出工具参数流式下发时）
-        - ``tool_call`` / ``tool_result``：工具调用开始/结束（工具名）
-        - ``retry``：本轮失败即将重试
-
-        结果契约与 ``run_agent_async`` 一致（AgentRunResult）；重试耗尽抛
-        ``LlmUnavailableError``。事件仅作展示，不影响校验语义。
-        """
-
-        async def _emit(kind: str, payload: str) -> None:
-            if on_event is not None:
-                r = on_event(kind, payload)
-                if r is not None and hasattr(r, "__await__"):
-                    await r
-
-        endpoint, instructions = self._resolve_checked(purpose, data_class, role)
-        agent = (
-            self._tool_agent_for(endpoint, output_type, role, instructions, tools or [])
-            if tools is not None
-            else self._agent_for(endpoint, output_type, role, instructions)
-        )
-        sem = self._asem_for(endpoint)
-        last_exc: Exception | None = None
-        for attempt in range(MAX_RETRIES + 1):
-            try:
-                async with sem:
-                    return await self._stream_agent_once(
-                        agent, prompt, message_history, _emit
-                    )
-            except Exception as exc:
-                last_exc = exc
-                logger.warning(
-                    "agent(stream) attempt %d/%d failed on %s: %s",
-                    attempt + 1,
-                    MAX_RETRIES + 1,
-                    endpoint.name,
-                    exc,
-                )
-                with contextlib.suppress(Exception):  # 展示回调不得影响主流程
-                    await _emit("retry", str(attempt + 1))
-        raise LlmUnavailableError(
-            f"agent run failed after {MAX_RETRIES + 1} attempts on {endpoint.name}"
-        ) from last_exc
-
-    async def _stream_agent_once(
-        self,
-        agent: Any,
-        prompt: str,
-        message_history: list[Any] | None,
-        _emit: Callable[[str, str], Any],
-    ) -> Any:
-        """单次流式迭代：产出事件并返回 AgentRunResult（展示层，无校验职责）。"""
-        from pydantic_ai import Agent
-        from pydantic_ai import messages as m
-
-        args_acc: dict[int, str] = {}
-        reply_shown = 0
-
-        async with agent.iter(prompt, message_history=message_history) as run:
-            async for node in run:
-                if Agent.is_model_request_node(node):
-                    stream: Any
-                    async with node.stream(run.ctx) as stream:
-                        async for ev in stream:
-                            reply_shown = await self._drain_model_event(
-                                ev, _emit, args_acc, reply_shown
-                            )
-                elif Agent.is_call_tools_node(node):
-                    async with node.stream(run.ctx) as stream:
-                        async for ev in stream:
-                            if isinstance(ev, m.FunctionToolCallEvent):
-                                await _emit(
-                                    "tool_call", getattr(ev.part, "tool_name", "") or ""
-                                )
-                            elif isinstance(ev, m.FunctionToolResultEvent):
-                                await _emit(
-                                    "tool_result", getattr(ev.part, "tool_name", "") or ""
-                                )
-            return run.result
-
-    @staticmethod
-    async def _drain_model_event(
-        ev: Any,
-        _emit: Callable[[str, str], Any],
-        args_acc: dict[int, str],
-        reply_shown: int,
-    ) -> int:
-        """处理模型响应流的单个事件；返回新的 reply 已展示长度。
-
-        思考/文本增量直接下发；工具参数增量累积后尝试提取 ``reply`` 前缀，
-        新增长部分作为 ``reply_delta`` 下发（仅展示，最终校验在 pydantic-ai）。
-        """
-        from pydantic_ai import messages as m
-
-        if isinstance(ev, m.PartDeltaEvent):
-            d = ev.delta
-            if isinstance(d, m.ThinkingPartDelta):
-                if d.content_delta:
-                    await _emit("thinking_delta", d.content_delta)
-            elif isinstance(d, m.TextPartDelta) and d.content_delta:
-                await _emit("text_delta", d.content_delta)
-            elif isinstance(d, m.ToolCallPartDelta) and isinstance(d.args_delta, str):
-                args_acc[ev.index] = args_acc.get(ev.index, "") + d.args_delta
-        elif isinstance(ev, m.PartStartEvent):
-            args = getattr(ev.part, "args", None)
-            if isinstance(args, str):
-                args_acc[ev.index] = args_acc.get(ev.index, "") + args
-        idx = getattr(ev, "index", None)
-        if idx is not None and idx in args_acc:
-            found, prefix = _extract_reply_prefix(args_acc[idx])
-            if found and len(prefix) > reply_shown:
-                await _emit("reply_delta", prefix[reply_shown:])
-                reply_shown = len(prefix)
-        return reply_shown
-
-    async def structured_async(
-        self,
-        purpose: str,
-        prompt: str,
-        output_type: type[BaseModel],
-        data_class: DataClass = DataClass.D0,
-        role: str | None = None,
-    ) -> BaseModel:
-        """``structured`` 的异步版。"""
-        endpoint, instructions = self._resolve_checked(purpose, data_class, role)
-        agent = self._agent_for(endpoint, output_type, role, instructions)
-        sem = self._asem_for(endpoint)
-        last_exc: Exception | None = None
-        for attempt in range(MAX_RETRIES + 1):
-            try:
-                async with sem:
-                    result = await agent.run(prompt)
-                return result.output
-            except Exception as exc:
-                last_exc = exc
-                logger.warning(
-                    "structured(async) attempt %d/%d failed on %s: %s",
                     attempt + 1,
                     MAX_RETRIES + 1,
                     endpoint.name,

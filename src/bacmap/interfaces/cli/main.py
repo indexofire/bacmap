@@ -72,24 +72,21 @@ def _safe(value: Any) -> str:
 
 
 def _run_mcp(args: argparse.Namespace) -> None:
-    from bacmap.interfaces.mcp.server import build_server
+    from bacmap.interfaces.mcp.launch import serve
 
-    engine = None if args.read_only else _engine(args.home)
-    server = build_server(engine)
-
-    if args.transport == "stdio":
-        server.run(transport="stdio")
-        return
-
-    from bacmap.interfaces.mcp.http import run_http
-
-    token = os.environ.get(args.token_env, "")
-    if not token:
-        raise SystemExit(
-            f"HTTP 传输需要 Bearer token（ADR-12）：请先设置环境变量 {args.token_env}"
-        )
-    _warn_if_exposed(args.host)
-    run_http(server, token=token, host=args.host, port=args.port, uds=(args.uds or None))
+    if args.transport != "stdio":
+        _warn_if_exposed(args.host)
+    serve(
+        home=Path(args.home),
+        profile_name=args.profile,
+        read_only=args.read_only,
+        transport=args.transport,
+        host=args.host,
+        port=args.port,
+        uds=args.uds,
+        token_env=args.token_env,
+        engine_factory=lambda home: _engine(str(home)),
+    )
 
 
 def _run_web(args: argparse.Namespace) -> None:
@@ -208,48 +205,6 @@ def _run_task_show(args: argparse.Namespace) -> None:
         c.print(f"  message: {_safe(st.message)}")
 
 
-def _register_fasta_dir(fasta_dir: Path, species: str, home: Path) -> list[str]:
-    """扫描目录内的组装 FASTA 并登记 samples.tsv（assembly 列）；返回样本 ID 列表。
-
-    ``species`` 为空时逐株 gside 自动识别（v1.4.38）；逻辑与引擎 ``fasta_dir``
-    步骤同源（``workflow.samples_registry``）。打印登记报告供即时反馈。
-    """
-    from bacmap.workflow.samples_registry import register_fastas
-
-    try:
-        report = register_fastas(home, fasta_dir, species)
-    except FileNotFoundError as exc:
-        raise SystemExit(str(exc)) from exc
-    c = _console()
-    c.print(
-        f"FASTA 登记：{len(report['samples'])} 株（新增 {report['added']}，"
-        f"复用 {report['reused']}）→ {report['samples_tsv']}"
-    )
-    for sid, code in report["detected"].items():
-        c.print(f"  自动识别 {sid} → {code}")
-    for s in report["skipped"]:
-        c.print(f"[#d29922]  跳过 {s['file']}：{s['reason']}[/]")
-    return report["samples"]
-
-
-def _register_fastq_dir(fastq_dir: Path, species: str, home: Path) -> list[str]:
-    """reads 目录登记（R1/R2 配对识别）；与引擎 ``fastq_dir`` 步骤同源。"""
-    from bacmap.workflow.samples_registry import register_fastqs_dir
-
-    try:
-        report = register_fastqs_dir(home, fastq_dir, species)
-    except FileNotFoundError as exc:
-        raise SystemExit(str(exc)) from exc
-    c = _console()
-    c.print(
-        f"reads 登记：{len(report['samples'])} 株（新增 {report['added']}，"
-        f"复用 {report['reused']}）→ {report['samples_tsv']}"
-    )
-    for s in report["skipped"]:
-        c.print(f"[#d29922]  跳过 {s['file']}：{s['reason']}[/]")
-    return report["samples"]
-
-
 def _run_task_submit(args: argparse.Namespace) -> None:
     from bacmap.tasks.spec import TaskType
 
@@ -259,14 +214,15 @@ def _run_task_submit(args: argparse.Namespace) -> None:
     if args.fasta_dir or args.fastq_dir:
         if args.samples or (args.fasta_dir and args.fastq_dir):
             raise SystemExit("--fasta-dir/--fastq-dir 与 --samples 互斥，目录参数二选一")
-        if args.fasta_dir:
-            params["samples"] = _register_fasta_dir(
-                Path(args.fasta_dir).expanduser(), args.species or "", Path(args.home)
-            )
-        else:
-            params["samples"] = _register_fastq_dir(
-                Path(args.fastq_dir).expanduser(), args.species or "", Path(args.home)
-            )
+        # 登记属写操作（samples.tsv）：交由任务引擎首步 _step_register_inputs 执行
+        # （v1.5：写只经任务，ADR-07），CLI 只做只读的存在性预检。
+        key = "fasta_dir" if args.fasta_dir else "fastq_dir"
+        directory = Path(args.fasta_dir or args.fastq_dir).expanduser().resolve()
+        if not directory.is_dir():
+            raise SystemExit(f"目录不存在：{directory}")
+        params[key] = str(directory)
+        if args.species:
+            params["species"] = args.species
     elif args.samples:
         params["samples"] = [s.strip() for s in args.samples.split(",") if s.strip()]
     if args.scope:
@@ -380,110 +336,6 @@ def _run_search(args: argparse.Namespace) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 会话式助手（LLM 规划 → 确认 → 提交）
-# ---------------------------------------------------------------------------
-
-
-def _stream_respond(session: Any, text: str, *, show_thinking: bool = False) -> Any:
-    """CLI 流式版 respond（v1.4.31）：回复增量直接写 stdout，工具活动写 stderr。
-
-    思考流默认不打印（终端噪声）；``show_thinking`` 供需要时开启。
-    """
-    import asyncio
-    import sys
-
-    async def _go() -> Any:
-        async def on_event(kind: str, payload: str) -> None:
-            if kind in ("reply_delta", "text_delta"):
-                sys.stdout.write(payload)
-                sys.stdout.flush()
-            elif kind == "tool_call" and payload:
-                sys.stderr.write(f"\x1b[2m· 调用 {payload}…\x1b[0m\n")
-                sys.stderr.flush()
-            elif kind == "thinking_delta" and show_thinking:
-                sys.stderr.write(f"\x1b[2m{payload}\x1b[0m")
-                sys.stderr.flush()
-
-        return await session.respond_stream(text, on_event)
-
-    return asyncio.run(_go())
-
-
-def _present_and_execute(
-    args: argparse.Namespace,
-    engine: Any,
-    reply: Any,
-    *,
-    message_shown: bool = False,
-) -> None:
-    from rich.markup import escape as _esc
-    from rich.prompt import Confirm
-
-    from bacmap.interfaces.assistant import execute_plan, format_plan
-
-    c = _console()
-    if reply.message and not message_shown:
-        c.print(_esc(reply.message))
-    elif message_shown:
-        c.print()  # 流式输出后补一个换行，与后续内容分隔
-    plan = reply.plan
-    if plan is None or not plan.tasks:
-        return
-    c.print("建议执行的分析计划：")
-    c.print(_esc(format_plan(plan)))
-    if plan.needs_clarification:
-        return
-    if not args.yes and not Confirm.ask("确认提交该计划？", default=False, console=c):
-        c.print("已取消。")
-        return
-    # confirmed=True：交互确认或 --yes 显式跳过（脚本化场景的用户断言）。
-    results = execute_plan(engine, plan, submitted_by=args.by, confirmed=True)
-    for r in results:
-        mark = "✓" if r["ok"] else "✗"
-        c.print(f"{mark} {_safe(r['task_type'])}: {_safe(r.get('task_id') or r.get('error'))}")
-
-
-def _run_ask(args: argparse.Namespace) -> None:
-    from bacmap.interfaces.assistant import build_session
-
-    engine = _engine(args.home)
-    session = build_session(engine)
-    if args.json:
-        reply = session.respond(args.text)
-        _emit_json(
-            {
-                "message": reply.message,
-                "degraded": reply.degraded,
-                "plan": reply.plan.model_dump() if reply.plan else None,
-            }
-        )
-        return
-    reply = _stream_respond(session, args.text)
-    # degraded（无 LLM）时没有增量流出，降级提示仍需完整打印
-    _present_and_execute(args, engine, reply, message_shown=not reply.degraded)
-
-
-def _run_chat(args: argparse.Namespace) -> None:
-    from rich.prompt import Prompt
-
-    from bacmap.interfaces.assistant import build_session
-
-    engine = _engine(args.home)
-    session = build_session(engine)
-    c = _console()
-    c.print("[bold]bacmap 会话助手[/bold]（Ctrl-C 或空行退出）")
-    while True:
-        try:
-            text = Prompt.ask("[cyan]你[/cyan]", console=c)
-        except (EOFError, KeyboardInterrupt):
-            break
-        if not text.strip():
-            break
-        reply = _stream_respond(session, text)
-        _present_and_execute(args, engine, reply, message_shown=not reply.degraded)
-
-
-# ---------------------------------------------------------------------------
 # 参数解析
 # ---------------------------------------------------------------------------
 
@@ -502,8 +354,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="bacmap 本地病原菌基因组分析系统（architecture-frozen-v1）",
         epilog=(
             "界面/模式（启动后接管终端或端口）：mcp · web · tui · console\n"
-            "命令（一次性查询/写操作，均支持 --json）：overview · task · sample · "
-            "search · ask · chat\n"
+            "命令（一次性查询/写操作，均支持 --json）：overview · task · plan · record · "
+            "run · gom · sample · search\n"
             "注：bacmap 本身即命令行界面；web/tui/console 是并列的其他交互形态，"
             "故命令直接挂在顶层（bacmap task list），不再套一层 cli 子命令。"
         ),
@@ -513,12 +365,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(
         dest="command",
         required=True,
-        metavar="{mcp,web,tui,console,overview,task,sample,search,ask,chat}",
+        metavar="{mcp,web,tui,console,overview,task,plan,record,run,gom,doctor,backup,restore,events,sample,search}",
     )
 
     p_mcp = sub.add_parser("mcp", help="启动 MCP 服务器（stdio 或 Streamable HTTP）")
     _add_home(p_mcp)
     p_mcp.add_argument("--read-only", action="store_true", help="只读模式（不暴露任务提交工具）")
+    from bacmap.interfaces.mcp.launch import add_profile_argument
+
+    add_profile_argument(p_mcp)
     p_mcp.add_argument("--transport", choices=["stdio", "http"], default="stdio", help="传输")
     p_mcp.add_argument("--host", default="127.0.0.1", help="HTTP 绑定地址（默认仅本机）")
     p_mcp.add_argument("--port", type=int, default=8765, help="HTTP 端口（默认 8765）")
@@ -593,6 +448,18 @@ def build_parser() -> argparse.ArgumentParser:
     _add_home(t_cancel)
     t_cancel.set_defaults(func=_run_task_cancel)
 
+    from bacmap.interfaces.cli.plans import add_parser as add_plan_parser
+
+    add_plan_parser(sub, _add_home, _add_json)
+
+    from bacmap.interfaces.cli.evidence import add_parser as add_evidence_parser
+    from bacmap.interfaces.cli.ops import add_parser as add_ops_parser
+    from bacmap.interfaces.cli.records import add_parser as add_record_parser
+
+    add_record_parser(sub, _add_home, _add_json)
+    add_evidence_parser(sub, _add_home, _add_json)
+    add_ops_parser(sub, _add_home, _add_json)
+
     p_sample = sub.add_parser("sample", help="样本查询")
     sample_sub = p_sample.add_subparsers(dest="sample_command", required=True)
     s_ls = sample_sub.add_parser("ls", help="列出已完成样本")
@@ -613,20 +480,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_home(p_search)
     _add_json(p_search)
     p_search.set_defaults(func=_run_search)
-
-    p_ask = sub.add_parser("ask", help="自然语言分析请求（LLM 规划 → 确认 → 提交）")
-    p_ask.add_argument("text", help="自然语言分析需求，如：跑 SAM-001 的分析并比较去年暴发株")
-    p_ask.add_argument("--by", default="cli", help="提交者")
-    p_ask.add_argument("--yes", action="store_true", help="跳过交互确认直接提交")
-    _add_home(p_ask)
-    _add_json(p_ask)
-    p_ask.set_defaults(func=_run_ask)
-
-    p_chat = sub.add_parser("chat", help="多轮对话式分析助手")
-    p_chat.add_argument("--by", default="cli", help="提交者")
-    p_chat.add_argument("--yes", action="store_true", help="跳过交互确认直接提交")
-    _add_home(p_chat)
-    p_chat.set_defaults(func=_run_chat)
 
     return parser
 

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}运行 {{ run.run_id[:12] }} · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/runs">运行记录</a><span class="crumbs__sep">/</span><span class="crumbs__here">{{ run.run_id[:16] }}…</span></nav>
+<header class="detailhead"><h1 class="detailhead__title">运行详情</h1><p class="detailhead__id mono">{{ run.run_id }}</p></header>
+<section class="card status-card">
+  <dl class="statuslist">
+    <div class="statuslist__row"><dt>流程</dt><dd>{{ run.workflow }} @ {{ run.workflow_commit[:12] }}{% if run.workflow_dirty %}（dirty）{% endif %}</dd></div>
+    <div class="statuslist__row"><dt>菌株</dt><dd>{{ run.strain_ids|join(", ") }}</dd></div>
+    <div class="statuslist__row"><dt>时间</dt><dd>{{ run.started_at }} → {{ run.finished_at or "运行中" }}</dd></div>
+    <div class="statuslist__row"><dt>参数哈希</dt><dd class="mono-dim">{{ run.config_sha256 }}</dd></div>
+    <div class="statuslist__row"><dt>环境锁</dt><dd class="mono-dim">{{ run.env_lock_sha256 or "-" }}</dd></div>
+    <div class="statuslist__row"><dt>特征库版本</dt><dd>{{ run.baseline_version or "-" }}</dd></div>
+  </dl>
+</section>
+<section class="card">
+  <div class="card__head"><h2 class="card__title">工具与数据库版本</h2></div>
+  <pre class="mono-dim">{{ tool_versions }}</pre>
+  <pre class="mono-dim">{{ ref_databases }}</pre>
+</section>
+<section class="card">
+  <div class="card__head"><h2 class="card__title">与另一次运行比较</h2></div>
+  <form class="form" method="get" action="/runs/{{ run.run_id }}">
+    <div class="field"><label class="field__label" for="c-other">另一 run_id</label>
+      <input class="field__control" id="c-other" name="other" required></div>
+    <div class="form__actions"><button class="btn" type="submit">比较来源</button></div>
+  </form>
+  {% if compare %}
+  <p class="card__lead">{{ "来源相同" if compare.same_provenance else "来源不同" }}；变化类别：{{ compare.changed_categories|join(", ") or "无" }}</p>
+  {% for d in compare.diffs %}<div class="mono-dim">[{{ d.category }}] {{ d.field }}: {{ d.a }} → {{ d.b }}</div>{% endfor %}
+  {% endif %}
+</section>
+<section class="card">
+  <div class="card__head"><h2 class="card__title">参数全文</h2></div>
+  <pre class="mono-dim">{{ resolved_config }}</pre>
+</section>
+{% endblock %}

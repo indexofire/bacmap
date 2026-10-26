@@ -5,6 +5,96 @@
 
 ## [未发布]
 
+### 冻结文档 v1.7.1：证据可见性
+- 新增 `bacmap run ls|show|compare`、`bacmap gom ls|show`；`/api/v1/runs`、`/runs/{id}`、
+  `/runs/{id}/compare`、`/gom/objects`；Web **运行** 与 **GOM** 页面（含来源比较）。
+
+### 冻结文档 v1.7.2：开放路径入计划 + 运维命令 + 文档站
+- **计划**：`mine`/`write` 成为可计划类型（脚本/成稿全文进入哈希并在确认页展示；
+  `mine` 输入路径建计划时记录指纹）；MCP 与能力协商同步。
+- **运维**：`bacmap doctor` / `backup` / `restore` / `events prune`；SQLite 一致快照备份、
+  zip-slip 防护与恢复后完整性检查。
+- **文档**：新增双语 `docs/operations*.md`，更新 mkdocs 导航、README 索引与 usage 章节；
+  实战教程补充"第 9 章 溯源（GOM + 公共近缘基因组）"与"第 10 章 数据挖掘（可签字代码示例）"。
+- **测试基线**：1510 → 1529。
+
+### 冻结文档 v1.7.0：数据记录入口（新增 `record` 任务）
+- **新增**：CLI `bacmap record metadata|lab|knowledge-import|knowledge-approve` 与 Web `/records`
+  （元数据/化验/知识库三个表单 + 审核）。所有写入经任务层（ADR-07），留任务与事件审计。
+- **任务类型**：新增第五类 `record`（ADR-06 修订）；不进计划、不经 MCP（D4 写）。
+  `knowledge_import` 只入暂存，`knowledge_approve` 后引用门才认可。
+- **修复**：`StrainMetadataService`/`LabResultService` 先连接后建目录导致的
+  `unable to open database file`（父目录不存在时）。
+- **测试基线**：1489 → 1510。
+
+### 冻结文档 v1.6.1：v1.7 四项
+- **清理**：删除仅内置助手使用的死代码——`agent/intent.py`、`agent/sandbox/tool.py`、
+  `agent/llm/tools.py`、gateway 的 `run_agent*`/流式与工具智能体（550→203 行）、CLI `_stream_respond`。
+- **新增**：MCP `bacmap_capabilities`（版本、Profile/数据级别、可计划任务、推荐写入路径、
+  `tasks_extension: unsupported_by_sdk`）。
+- **MCP Tasks**：Python SDK 2.3.0 仍未实现官方扩展，继续用显式任务句柄（语义待迁移）。
+- **Harness**：Hermes 0.17.0+52045 全链路通过；需 `CMAKE_POLICY_VERSION_MINIMUM=3.5` 与
+  `hermes auth add zai`（隔离运行时不读环境变量）。
+- **ACP**：按记录暂不实现（与 ADR-21 冲突、无具体消费者）；SDK 0.12.1 可用但不加依赖。
+- **测试基线**：1500 → 1489（净删除死代码测试 + 新增能力/移除断言）。
+
+### 冻结文档 v1.6.0：移除内置会话助手（ADR-21 落地）
+- **破坏性变更**：CLI `ask`/`chat`、Web `/assistant`、TUI 对话与计划确认全部移除。
+  对话请用外部 Harness（Hermes / Pi / DSH）经 MCP；计划在 `bacmap plan` 或 Web `/plans` 确认。
+- **TUI 重写为任务台**：任务/样本侧栏、操作日志、命令输入、leader 和弦、签批两步确认、
+  失败回显、`/result` `/search` `/analyze` `/curate` 保留；输入框只接受斜杠命令。
+  顺带修复 Input 吞掉 leader 可打印键的真实缺陷（新增回归测试）。
+- **删除**：`agent/session.py`、`interfaces/assistant.py`、assistant 角色与说明书；
+  MCP prompts 由 7 个角色变为 6 个。任务内智能体（解读、sandbox 工具）保留。
+- **迁移**：`data/bacmap.sqlite`（元数据 + 检验）、`data/knowledge.sqlite`（知识库 + FTS）
+  纳入按文件迁移；菌株基因型索引确认与 GOM 同库，作为 `gom.sqlite` 迁移 2。
+- **文档**：usage / installation / README 双语同步；`docs/harnesses*.md` 更新实测版本
+  （Pi 1.4.0、Hermes 0.17.0+52045、DSH 0.2.1-rc.2）。
+- **测试基线**：1546 → 1500（功能删除导致的合法调整，见冻结文档 v1.6.0 记录）。
+
+### 冻结文档 v1.5.2：事件、API、MCP 任务控制
+
+> 本节及以下 v1.5.x 标题均为**架构文档修订版本**，不是程序版本；程序版本仍为 0.1.0（早期开发）。
+
+- **新增 · 领域事件日志**：`tasks.sqlite` 迁移 3 新增 `events` 表；计划与任务关键转换写事件；
+  任务 `current_step` 现随管线步骤更新（此前提交后不变）。
+- **新增 · `/api/v1`**：capabilities、tasks（含 cancel）、plans（含 confirm/reject）、events（轮询 + SSE，
+  `Last-Event-ID` 续传）、samples（游标分页）。cookie 模式状态变更须 `X-CSRF-Token`。
+- **新增 · MCP**：`bacmap_task_cancel`（仅本客户端任务）、`bacmap_task_result`（运行 ID + 门结论，
+  cloud 下只给计数）、`skill://bacmap/<role>/SKILL.md` 资源（带 sha256）。
+- **变更 · cloud Profile**：`bacmap_task_status` 不再回传任务消息（`message_withheld: true`）。
+- **变更 · 废弃提示**：CLI `ask`/`chat`（stderr）、TUI 帮助、Web `/assistant` 显示 ADR-21 迁移提示；
+  内置助手移除推迟到 v1.6（三个 Harness 完成真实对话联调后）。
+- **工程**：`runs.sqlite`、`baseline.sqlite`、`gom.sqlite`（按文件清单）纳入编号迁移；`bacmap.__version__` 取安装元数据（与 `pyproject.toml` 同源，程序版本保持 0.1.0）。
+- **文档**：新增 `docs/harnesses.md`（Hermes / Pi / DSH 接入、按系统账户隔离、实测记录，双语）。
+
+### 冻结文档 v1.5.1：版本化计划闭环
+- **新增 · 计划工具（MCP）**：`bacmap_create_plan` / `bacmap_revise_plan` / `bacmap_get_plan`——
+  外部 Harness 只能建/改/查计划，MCP 不提供确认工具。
+- **新增 · 可信确认面**：CLI `bacmap plan ls|show|confirm|reject`；Web `/plans`（列表、完整参数、
+  确认/拒绝，cookie 模式带 CSRF）。确认绑定 `(plan_id, version, plan_hash)`，修订使旧版本失效，
+  输入目录变化即冲突，重复/并发确认只提交一次（确定性 task_id）。
+- **新增 · 类型化任务参数**（`tasks/params.py`）与应用服务层 `bacmap.application`；
+  `tasks.sqlite` 迁移 2 新增 `plans` 表；`TaskEngine.submit` 新增可选 `task_id`（显式 ID 幂等）。
+- **工程**：import-linter 增至 5 条契约（应用层不得导入接口层/智能体层）。
+
+### 冻结文档 v1.5.0：M0 安全基线，新增 ADR-21“交互智能体外置”
+- **破坏性变更 · MCP 数据级别 Profile**：每个 MCP 实例绑定 Profile。默认 `cloud` 只暴露输出级别
+  ≤ `[llm.data_policy].cloud_max_data_class`（默认 D1）的工具；`local-trusted`（至 D4）须在
+  `config.toml` 设 `[mcp] allow_local_trusted = true` 并以 `bacmap mcp --profile local-trusted` 启动，
+  未开启即拒绝启动。此前 D3/D4 工具对任意 MCP 客户端可见可调（ADR-16 缺口）。
+- **破坏性变更 · 提交者身份服务端认定**：`bacmap_submit_task` 删除 `submitted_by` 参数，
+  提交者记为 `mcp-stdio:<profile>:<OS 账户>` / `mcp-http:<profile>`。
+- **修复 · CLI 任务层外写**：`task submit --fasta-dir/--fastq-dir` 不再自行写 `samples.tsv`，
+  目录参数交给任务引擎登记（ADR-07）；目录不存在时 CLI 立即报错。
+- **工程 · ADR-02 契约化**：import-linter 增至 4 条契约（LLM 库 / DBOS / MCP SDK 边界），修复
+  `agent/session.py`、`agent/sandbox/tool.py` 直接导入 pydantic-ai 的违例（经 `agent/llm/tools.py`）；
+  新增 AST 边界测试覆盖 `mcp.client` 与命名空间包 `workflow`。
+- **工程 · schema 迁移机制**（ADR-13）：新增 `store/migrations.py`（`PRAGMA user_version`、单事务、
+  迁移前备份、拒绝降级），`tasks.sqlite` 纳管为版本 1。
+- **方向 · ADR-21**：对话交互外置给 Hermes / Pi / DSH；内置会话助手（TUI 对话、Web `/assistant`、
+  `ask`/`chat`）进入废弃期；确认与审批留在 bacmap CLI/Web。
+
 ### 安全（2026-10 代码质量评估整改）
 - **沙箱 shell 白名单结构性绕过修复**（`agent/sandbox/tool.py`）：①命令分段正则补上**换行符**——此前
   `ls\nrm -rf …` 因首段白名单整段放行；②禁用清单新增**隐藏执行语法**（命令替换 `$(...)`、反引号、

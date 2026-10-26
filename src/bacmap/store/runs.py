@@ -22,6 +22,8 @@ from uuid import uuid4
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from bacmap.store.migrations import Migration, migrate
+
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS analysis_runs (
     run_id          TEXT PRIMARY KEY,
@@ -46,6 +48,9 @@ CREATE TABLE IF NOT EXISTS analysis_runs (
     manifest_sha256 TEXT NOT NULL DEFAULT ''
 )
 """
+
+# runs.sqlite 的 schema 迁移（ADR-13，v1.5.2）；只追加。
+RUNS_MIGRATIONS: tuple[Migration, ...] = (Migration(1, "baseline: analysis_runs", (_SCHEMA_SQL,)),)
 
 
 class RefDatabase(BaseModel):
@@ -228,9 +233,10 @@ def create_run(
         run.env_lock_sha256 = file_sha256(lock)
     run.manifest_sha256 = compute_manifest_sha256(run)
 
-    conn = sqlite3.connect(db_path or (BACMAP_HOME / "runs.sqlite"))
+    target = Path(db_path or (BACMAP_HOME / "runs.sqlite"))
+    migrate(target, RUNS_MIGRATIONS)
+    conn = sqlite3.connect(target)
     with conn:
-        conn.execute(_SCHEMA_SQL)
         conn.execute(
             "INSERT INTO analysis_runs (run_id, task_id, strain_ids, workflow, workflow_commit,"
             " workflow_dirty, started_at, resolved_config, config_sha256, ref_databases,"
@@ -265,11 +271,33 @@ def finish_run(run: AnalysisRun, db_path: Path | None = None) -> None:
     conn.close()
 
 
-def read_run(run_id: str, db_path: Path) -> AnalysisRun | None:
-    """从 analysis_runs 表读回一条运行记录（用于封存 manifest，ADR-18）。"""
+def list_runs(db_path: Path, limit: int = 50) -> list[dict[str, Any]]:
+    """最近运行记录（证据可见性，v1.7.1）：按开始时间倒序的摘要行。"""
+    migrate(Path(db_path), RUNS_MIGRATIONS)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    conn.execute(_SCHEMA_SQL)
+    try:
+        rows = conn.execute(
+            "SELECT run_id, task_id, strain_ids, workflow, workflow_commit, started_at,"
+            " finished_at, baseline_version FROM analysis_runs"
+            " ORDER BY started_at DESC LIMIT ?",
+            (max(1, min(limit, 500)),),
+        ).fetchall()
+    finally:
+        conn.close()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        item["strain_ids"] = json.loads(item.get("strain_ids") or "[]")
+        out.append(item)
+    return out
+
+
+def read_run(run_id: str, db_path: Path) -> AnalysisRun | None:
+    """从 analysis_runs 表读回一条运行记录（用于封存 manifest，ADR-18）。"""
+    migrate(Path(db_path), RUNS_MIGRATIONS)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
     row = conn.execute("SELECT * FROM analysis_runs WHERE run_id = ?", (run_id,)).fetchone()
     conn.close()
     if row is None:

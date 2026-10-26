@@ -81,7 +81,7 @@ Large databases such as CheckM2 / GTDB-Tk are located through environment variab
 The agent layer uses Strata by default (`http://127.0.0.1:8080/v1`, OpenAI-compatible).
 You can also switch to any third-party OpenAI-compatible API (GLM, DeepSeek, Kimi, vLLM, …),
 or configure no LLM at all (deterministic degradation — the task form / CLI / MCP keep
-working; only the conversational assistant is unavailable).
+working; only LLM-backed interpretation and in-task agents degrade).
 
 ### 5.1 External API setup (GLM example, step by step)
 
@@ -97,7 +97,7 @@ tier = "T2"
 supports_tools_with_schema = true      # the chat assistant needs function calling
 
 [llm.routing]
-intent_classifier = "glm"              # conversational assistant
+intent_classifier = "glm"              # in-task agents / interpretation
 interpretation = "glm"                 # analysis interpretation
 
 [llm.data_policy]
@@ -130,7 +130,7 @@ A valid key pointed at the wrong endpoint still fails (see §5.2).
 **④ Verify**:
 
 ```bash
-bacmap ask "hi, what can you do"    # a normal reply means connected (CLI streams)
+bacmap overview                     # endpoint list; deterministic functions work regardless
 bacmap tui                          # header shows "LLM · glm [cloud] … 已连接/connected"
 ```
 
@@ -138,11 +138,11 @@ bacmap tui                          # header shows "LLM · glm [cloud] … 已�
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `payload D4 exceeds cloud limit …` (DataClassViolationError) | Data-class block: payload level above the cloud cap | The cloud assistant trims its tool belt automatically (v1.4.30) and should not hit this; if it does, check the bacmap version |
+| `payload D4 exceeds cloud limit …` (DataClassViolationError) | Data-class block: payload level above the cloud cap | Cloud MCP instances and in-task agents trim their tool belt automatically; if you still see this, check the bacmap version |
 | HTTP 401 "token expired or incorrect" | Key not visible to the process (exported in another shell), or key/endpoint mismatch | `echo $GLM_API_KEY` in the same shell; match the endpoint per §5.1③ |
 | HTTP 429 code 1113 "insufficient balance / no resource pack" | Account has no quota for that model | Recharge, switch to a free model (e.g. `glm-4-flash`), or use a subscribed key |
 | Model not found (code 1211) | Model name outside your subscription | Set `model` to one you actually have |
-| `内置助手暂不可用 (agent run failed …)` | Unified degrade notice after retries of any of the above | Run `bacmap ask "hi" 2>&1` — the WARNING lines print the real per-attempt failure |
+| `LLM 不可用 / degraded (agent run failed …)` | Unified degrade notice after retries of any of the above | Check the endpoint with `bacmap overview`; task-level failures carry the real reason in the task message |
 
 ## 6. Sandbox runtime (prerequisite for mine tasks and external-data access)
 

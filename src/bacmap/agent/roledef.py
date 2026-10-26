@@ -73,12 +73,17 @@ def load_principles() -> str:
     return _PRINCIPLES_PATH.read_text(encoding="utf-8")
 
 
-def load_skill(role: str) -> str:
-    """SKILL.md 正文（剥掉 YAML frontmatter）。"""
+def skill_markdown(role: str) -> str:
+    """SKILL.md 原文（含 frontmatter；agentskills.io 格式，供 MCP skill:// 资源分发）。"""
     path = _SKILLS_DIR / role / "SKILL.md"
     if not path.is_file():
         raise FileNotFoundError(f"SKILL.md not found for role {role!r}: {path}")
-    text = path.read_text(encoding="utf-8")
+    return path.read_text(encoding="utf-8")
+
+
+def load_skill(role: str) -> str:
+    """SKILL.md 正文（剥掉 YAML frontmatter）。"""
+    text = skill_markdown(role)
     if text.startswith("---"):
         parts = text.split("---", 2)
         if len(parts) == 3:

@@ -1,4 +1,8 @@
-"""``task submit --fasta-dir`` 的登记逻辑（v1.4.36）：扫描/幂等/表头自愈。"""
+"""目录直入登记逻辑（v1.4.36）：扫描/幂等/表头自愈。
+
+v1.5：登记属写操作，已从 CLI 移至任务引擎首步（``_step_register_inputs``），
+两者同源于 ``workflow.samples_registry``——本文件直接覆盖该共享实现，
+并锁定 CLI ``task submit --fasta-dir`` 只把目录参数交给引擎、不自行写 samples.tsv。"""
 
 from __future__ import annotations
 
@@ -7,7 +11,11 @@ from pathlib import Path
 
 import pytest
 
-from bacmap.interfaces.cli.main import _register_fasta_dir
+from bacmap.workflow.samples_registry import register_fastas
+
+
+def _register_fasta_dir(fasta_dir: Path, species: str, home: Path) -> list[str]:
+    return list(register_fastas(home, fasta_dir, species)["samples"])
 
 
 def _seed(d: Path) -> None:
@@ -58,7 +66,7 @@ class TestRegisterFastaDir:
 
     def test_no_fasta_fails_fast(self, tmp_path: Path):
         (tmp_path / "empty").mkdir()
-        with pytest.raises(SystemExit, match="未找到组装 FASTA"):
+        with pytest.raises(FileNotFoundError, match="未找到组装 FASTA"):
             _register_fasta_dir(tmp_path / "empty", "VPA", tmp_path / "home")
 
 
@@ -165,3 +173,39 @@ class TestDetectSpecies:
         (tmp_path / "data" / "s1.fna").write_text(">c\nACGT\n")
         report = sr.register_fastas(tmp_path / "home", tmp_path / "data", "")
         assert report["samples"] == ["s1"] and report["detected"]["s1"] == "SAL"
+
+
+class TestCliSubmitDelegatesRegistration:
+    """v1.5（ADR-07 写只经任务）：CLI 不再自行登记，目录参数原样交给引擎。"""
+
+    def _run(self, monkeypatch, tmp_path: Path, argv: list[str]) -> dict:
+        import bacmap.interfaces.cli.main as cli
+
+        captured: dict = {}
+
+        class _Engine:
+            def submit(self, task_type, params, submitted_by):
+                captured.update(type=task_type.value, params=params, by=submitted_by)
+                return "t" * 32
+
+        monkeypatch.setattr(cli, "_engine", lambda home: _Engine())
+        cli.main(["task", "submit", "--type", "analyze", "--home", str(tmp_path / "home"), *argv])
+        return captured
+
+    def test_fasta_dir_passed_to_engine_without_writing_tsv(self, monkeypatch, tmp_path: Path):
+        _seed(tmp_path / "data")
+        got = self._run(monkeypatch, tmp_path, ["--fasta-dir", str(tmp_path / "data")])
+        assert got["params"]["fasta_dir"] == str((tmp_path / "data").resolve())
+        assert "samples" not in got["params"]
+        assert not _tsv(tmp_path / "home").exists()
+
+    def test_fastq_dir_with_species(self, monkeypatch, tmp_path: Path):
+        (tmp_path / "reads").mkdir()
+        got = self._run(
+            monkeypatch, tmp_path, ["--fastq-dir", str(tmp_path / "reads"), "--species", "SAL"]
+        )
+        assert got["params"] == {"fastq_dir": str((tmp_path / "reads").resolve()), "species": "SAL"}
+
+    def test_missing_dir_fails_fast(self, monkeypatch, tmp_path: Path):
+        with pytest.raises(SystemExit, match="目录不存在"):
+            self._run(monkeypatch, tmp_path, ["--fasta-dir", str(tmp_path / "nope")])

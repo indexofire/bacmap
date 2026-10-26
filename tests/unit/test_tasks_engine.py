@@ -101,7 +101,9 @@ class TestDbosTaskEngine:
         tid = engine.submit(TaskType.ANALYZE, {"samples": ["SAM-001"]}, "tester")
         st = _wait(engine, tid)
         assert st.state == TaskState.SUCCEEDED
-        assert st.current_step == "analyze"
+        # v1.5.2：current_step 随 DBOS 步骤推进（此前提交后永远停在任务类型名）；
+        # 本夹具替换了运行记录步骤，最后真实执行的带进度步骤是管线本身。
+        assert st.current_step == "pipeline"
 
     def test_cancel_terminal_task_is_rejected(self, engine):
         """终态任务不得被 cancel 改写（回归：曾无条件置 CANCELLED）。"""

@@ -18,6 +18,7 @@ from typing import Any
 from bacmap.core.analysis.species_canon import UNKNOWN as SPECIES_UNKNOWN
 from bacmap.core.analysis.species_canon import canonical_from_verdict
 from bacmap.core.utils import parse_mlst
+from bacmap.store.migrations import Migration, migrate
 
 CANDIDATES_DDL = """
 CREATE TABLE IF NOT EXISTS baseline_candidates (
@@ -196,7 +197,14 @@ def compute_stats(candidate: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# baseline.sqlite 的 schema 迁移（ADR-13，v1.5.2）；只追加。
+BASELINE_MIGRATIONS: tuple[Migration, ...] = (
+    Migration(1, "baseline: candidates + releases", (CANDIDATES_DDL, RELEASES_DDL)),
+)
+
+
 def _conn(db_path: Path) -> sqlite3.Connection:
+    migrate(Path(db_path), BASELINE_MIGRATIONS)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
@@ -204,7 +212,6 @@ def _conn(db_path: Path) -> sqlite3.Connection:
 
 def save_candidate(db_path: Path, task_id: str, manifest: dict, gate: dict) -> None:
     with _conn(db_path) as conn:
-        conn.execute(CANDIDATES_DDL)
         manifest_json = json.dumps(manifest, ensure_ascii=False)
         gate_json = json.dumps(gate, ensure_ascii=False)
         conn.execute(
@@ -216,7 +223,6 @@ def save_candidate(db_path: Path, task_id: str, manifest: dict, gate: dict) -> N
 
 def load_candidate(db_path: Path, task_id: str) -> dict | None:
     with _conn(db_path) as conn:
-        conn.execute(CANDIDATES_DDL)
         row = conn.execute(
             "SELECT manifest_json, gate_json FROM baseline_candidates WHERE task_id = ?",
             (task_id,),
@@ -230,7 +236,6 @@ def publish(db_path: Path, manifest: dict, created_by: str, signature: str) -> i
     """写入新发布版本（INSERT-ONLY）。返回版本号。父版本记入 parent_version（ADR-19）。"""
     stats = compute_stats(manifest)
     with _conn(db_path) as conn:
-        conn.execute(RELEASES_DDL)
         prev = conn.execute(
             "SELECT MAX(version) AS v FROM baseline_releases"
         ).fetchone()
@@ -255,7 +260,6 @@ def publish(db_path: Path, manifest: dict, created_by: str, signature: str) -> i
 
 def get_release(db_path: Path, version: int) -> dict | None:
     with _conn(db_path) as conn:
-        conn.execute(RELEASES_DDL)
         row = conn.execute(
             "SELECT * FROM baseline_releases WHERE version = ?", (version,)
         ).fetchone()
@@ -264,7 +268,6 @@ def get_release(db_path: Path, version: int) -> dict | None:
 
 def list_releases(db_path: Path) -> list[dict]:
     with _conn(db_path) as conn:
-        conn.execute(RELEASES_DDL)
         return [
             dict(r)
             for r in conn.execute(

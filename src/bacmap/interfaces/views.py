@@ -117,19 +117,186 @@ def sample_digest(summary: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def endpoint_status(engine: Any) -> str:
+    """一行 LLM 端点状态（名称/位置/模型 + 连通性），供 TUI/CLI 显示。
+
+    连通性用 ``GET <base_url>/models`` 轻量探测（3s 超时），失败按未连接报告；
+    无端点时明确说明"确定性路径仍可用"（C3）。
+    """
+    import httpx
+
+    from bacmap.agent.llm.endpoints import load_llm_config
+
+    cfg = load_llm_config(Path(engine.home) / "config.toml")
+    endpoint = cfg.resolve("intent_classifier")
+    if endpoint is None:
+        enabled = [e for e in cfg.endpoints.values() if e.enabled]
+        endpoint = enabled[0] if enabled else None
+    if endpoint is None:
+        return "无可用 LLM 端点（确定性路径仍可用）"
+    try:
+        resp = httpx.get(endpoint.base_url.rstrip("/") + "/models", timeout=3.0)
+        conn = "已连接" if resp.status_code < 500 else f"异常 HTTP {resp.status_code}"
+    except Exception as exc:  # 连接失败/超时：如实报告
+        conn = f"未连接（{type(exc).__name__}）"
+    return f"{endpoint.name} [{endpoint.location}] {endpoint.model} · {conn}"
+
+
+def list_runs(home: Path | str, limit: int = 50) -> list[dict[str, Any]]:
+    """运行记录列表（ADR-18 证据链的只读入口）。"""
+    from bacmap.store import runs as runs_store
+
+    db = Path(home) / "runs.sqlite"
+    if not db.is_file():
+        return []
+    return runs_store.list_runs(db, limit)
+
+
+def run_detail(home: Path | str, run_id: str) -> dict[str, Any] | None:
+    """单条运行记录全文（含参数、工具/数据库版本、输入哈希、种子）。"""
+    from bacmap.store import runs as runs_store
+
+    db = Path(home) / "runs.sqlite"
+    if not db.is_file():
+        return None
+    run = runs_store.read_run(run_id, db)
+    return run.model_dump(mode="json") if run is not None else None
+
+
+def compare_run_records(home: Path | str, run_a: str, run_b: str) -> dict[str, Any] | None:
+    """两次运行的来源逐字段比较（ADR-18）；任一不存在返回 None。"""
+    from bacmap.store import runs as runs_store
+
+    db = Path(home) / "runs.sqlite"
+    if not db.is_file():
+        return None
+    a = runs_store.read_run(run_a, db)
+    b = runs_store.read_run(run_b, db)
+    if a is None or b is None:
+        return None
+    return runs_store.compare_runs(a, b)
+
+
+def list_gom_objects(
+    home: Path | str, object_type: str | None = None, limit: int = 100
+) -> list[dict[str, Any]]:
+    """GOM 最新版本对象（只读摘要：类型/版本/菌株/时间 + 载荷键名）。"""
+    from bacmap.store.genome_object_service import GenomeObjectService, ObjectType
+
+    db = Path(home) / "gom.sqlite"
+    if not db.is_file():
+        return []
+    if object_type:
+        try:
+            types = [ObjectType(object_type)]
+        except ValueError:
+            return []
+    else:
+        types = list(ObjectType)
+    svc = GenomeObjectService(db)
+    try:
+        out: list[dict[str, Any]] = []
+        for t in types:
+            for go in svc.list_by_type(t, limit=limit):
+                out.append(
+                    {
+                        "object_id": go.object_id,
+                        "object_type": str(getattr(go.object_type, "value", go.object_type)),
+                        "version": go.version,
+                        "organism": go.organism,
+                        "strain_id": go.strain_id,
+                        "created_at": go.created_at.isoformat(),
+                        "created_by": go.created_by,
+                        "payload_keys": sorted(str(k) for k in go.payload),
+                    }
+                )
+    finally:
+        svc.close()
+    out.sort(key=lambda o: str(o["created_at"]), reverse=True)
+    return out[: max(1, min(limit, 500))]
+
+
+def gom_object(
+    home: Path | str, object_id: str, version: int | None = None
+) -> dict[str, Any] | None:
+    """GOM 对象全文（指定版本或最新版本）。"""
+    from bacmap.store.genome_object_service import GenomeObjectService
+
+    db = Path(home) / "gom.sqlite"
+    if not db.is_file():
+        return None
+    svc = GenomeObjectService(db)
+    try:
+        try:
+            latest = svc.get_latest_version(object_id)
+            go = svc.read(object_id, version if version is not None else latest)
+        except Exception:  # 对象/版本不存在 → 统一 None（接口层映射 404）
+            return None
+    finally:
+        svc.close()
+    return {
+        "object_id": go.object_id,
+        "object_type": str(getattr(go.object_type, "value", go.object_type)),
+        "version": go.version,
+        "schema_version": go.schema_version,
+        "created_at": go.created_at.isoformat(),
+        "created_by": go.created_by,
+        "organism": go.organism,
+        "strain_id": go.strain_id,
+        "pipeline_version": go.pipeline_version,
+        "payload": go.payload,
+    }
+
+
+def _read_summary(path: Path) -> dict[str, Any] | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    data["_sample_id"] = path.parent.parent.name
+    return data
+
+
 def load_summaries(engine: DbosTaskEngine) -> list[dict[str, Any]]:
     """已完成样本的 summary 扫描（基于 engine.home）。"""
     results = Path(engine.home) / "results"
     out: list[dict[str, Any]] = []
     for sj in sorted(results.glob("*/report/*_summary.json")):
-        try:
-            data = json.loads(sj.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        if isinstance(data, dict):
-            data["_sample_id"] = sj.parent.parent.name
+        data = _read_summary(sj)
+        if data is not None:
             out.append(data)
     return out
+
+
+def sample_page(
+    home: Path, cursor: str | None, limit: int
+) -> tuple[list[dict[str, Any]], str | None]:
+    """按样本 ID 排序的游标分页：只列目录项，仅解析本页 summary（v1.5.2）。"""
+    results = Path(home) / "results"
+    # 只收与样本目录同名的 summary（与 report_path 口径一致）
+    paths = sorted(
+        (
+            p
+            for p in results.glob("*/report/*_summary.json")
+            if p.name == f"{p.parent.parent.name}_summary.json"
+        ),
+        key=lambda p: p.parent.parent.name,
+    )
+    if cursor:
+        paths = [p for p in paths if p.parent.parent.name > cursor]
+    page: list[dict[str, Any]] = []
+    has_more = False
+    for sj in paths:
+        if len(page) == limit:
+            has_more = True
+            break
+        data = _read_summary(sj)
+        if data is not None:
+            page.append(sample_digest(data))
+    next_cursor = str(page[-1]["sample_id"]) if page and has_more else None
+    return page, next_cursor
 
 
 def sample_rows(engine: DbosTaskEngine) -> list[dict[str, Any]]:

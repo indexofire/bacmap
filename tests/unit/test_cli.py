@@ -135,47 +135,16 @@ def test_task_submit_rejects_traversal_sample(tmp_path, monkeypatch):
     eng.shutdown_dbos()
 
 
-def test_ask_help_lists_flags(monkeypatch, capsys):
-    monkeypatch.setattr(sys, "argv", ["bacmap", "ask", "--help"])
-    with pytest.raises(SystemExit) as exc:
-        main()
-    assert exc.value.code == 0
-    assert "--yes" in capsys.readouterr().out
+def test_ask_and_chat_are_gone(tmp_path, monkeypatch, capsys):
+    """v1.6（ADR-21）：内置会话助手移除——ask/chat 不再是命令，且给出迁移指引。"""
+    for cmd in ("ask", "chat"):
+        monkeypatch.setattr(sys, "argv", ["bacmap", cmd, "--help"])
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 2
+        err = capsys.readouterr().err
+        assert "invalid choice" in err or "无效" in err
 
-
-def test_ask_json_shows_plan(tmp_path, monkeypatch):
-    import argparse
-    import json
-
-    from bacmap.agent.session import AgentReply, AnalysisPlan, PlannedTask
-    from bacmap.interfaces import assistant as A
-    from bacmap.interfaces.cli.main import _run_ask
-
-    class _FakeSession:
-        def respond(self, text):
-            return AgentReply(
-                message="规划完成",
-                plan=AnalysisPlan(
-                    reply="规划完成",
-                    tasks=[PlannedTask(task_type="analyze", params={"samples": ["SAM-001"]})],
-                ),
-            )
-
-    monkeypatch.setattr(A, "build_session", lambda engine, submitted_by="assistant": _FakeSession())
-    out: list[str] = []
-    monkeypatch.setattr("builtins.print", lambda *a, **k: out.append(" ".join(map(str, a))))
-    try:
-        _run_ask(
-            argparse.Namespace(
-                home=str(tmp_path), text="跑 SAM-001", json=True, yes=False, by="cli"
-            )
-        )
-        data = json.loads(out[-1])
-        assert data["plan"]["tasks"][0]["task_type"] == "analyze"
-    finally:
-        import bacmap.tasks.engine.dbos_engine as eng
-
-        eng.shutdown_dbos()
 
 
 def test_help_documents_interface_vs_command_taxonomy(monkeypatch, capsys):

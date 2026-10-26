@@ -5,9 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
-from bacmap.agent.intent import IntentResult, IntentTask, classify_intent
 from bacmap.agent.llm.endpoints import (
     DataPolicy,
     LlmConfig,
@@ -21,6 +20,12 @@ from bacmap.agent.llm.gateway import (
     LlmUnavailableError,
 )
 from bacmap.tools.spec import DataClass
+
+
+class _Out(BaseModel):
+    """最小结构化输出模型（原意图分类模型已随内置助手移除）。"""
+
+    tasks: list[str] = []
 
 
 class _FakeResult:
@@ -187,43 +192,43 @@ bogus_field = 1
 
 class TestGateway:
     def test_success_returns_output(self):
-        want = IntentResult(tasks=[IntentTask(task_type="analyze", summary="跑样本")])
+        want = _Out(tasks=["analyze:跑样本"])
         agent = _FakeAgent(output=want)
         gw = LlmGateway(_make_config(), agent_factory=lambda ep, ot, _i=None: agent)
-        out = gw.structured("p", "prompt", IntentResult)
+        out = gw.structured("p", "prompt", _Out)
         assert out is want
         assert agent.calls == 1
 
     def test_cloud_over_limit_refused_without_call(self):
-        agent = _FakeAgent(output=IntentResult())
+        agent = _FakeAgent(output=_Out())
         gw = LlmGateway(
             _make_config(location="cloud", cloud_max=1), agent_factory=lambda ep, ot, _i=None: agent
         )
         with pytest.raises(DataClassViolationError):
-            gw.structured("p", "prompt", IntentResult, data_class=DataClass.D3)
+            gw.structured("p", "prompt", _Out, data_class=DataClass.D3)
         assert agent.calls == 0  # 拒绝发生在发送之前（V9）
 
     def test_cloud_at_limit_allowed(self):
-        want = IntentResult(tasks=[])
+        want = _Out(tasks=[])
         agent = _FakeAgent(output=want)
         gw = LlmGateway(
             _make_config(location="cloud", cloud_max=1), agent_factory=lambda ep, ot, _i=None: agent
         )
-        out = gw.structured("p", "prompt", IntentResult, data_class=DataClass.D1)
+        out = gw.structured("p", "prompt", _Out, data_class=DataClass.D1)
         assert out is want
 
     def test_local_endpoint_accepts_all_classes(self):
-        want = IntentResult(tasks=[])
+        want = _Out(tasks=[])
         agent = _FakeAgent(output=want)
         gw = LlmGateway(_make_config(location="local"), agent_factory=lambda ep, ot, _i=None: agent)
-        out = gw.structured("p", "prompt", IntentResult, data_class=DataClass.D4)
+        out = gw.structured("p", "prompt", _Out, data_class=DataClass.D4)
         assert out is want
 
     def test_retry_then_success(self):
-        want = IntentResult(tasks=[])
+        want = _Out(tasks=[])
         agent = _FakeAgent(output=want, fail_times=1)
         gw = LlmGateway(_make_config(), agent_factory=lambda ep, ot, _i=None: agent)
-        out = gw.structured("p", "prompt", IntentResult)
+        out = gw.structured("p", "prompt", _Out)
         assert out is want
         assert agent.calls == 2
 
@@ -231,54 +236,13 @@ class TestGateway:
         agent = _FakeAgent(output=None, fail_times=99)
         gw = LlmGateway(_make_config(), agent_factory=lambda ep, ot, _i=None: agent)
         with pytest.raises(LlmUnavailableError):
-            gw.structured("p", "prompt", IntentResult)
+            gw.structured("p", "prompt", _Out)
         assert agent.calls == 3  # 首次 + 2 次重试（ADR-08）
 
     def test_no_endpoint_raises_unavailable(self):
         gw = LlmGateway(LlmConfig(), agent_factory=lambda ep, ot, _i=None: None)
         with pytest.raises(LlmUnavailableError, match="no enabled endpoint"):
-            gw.structured("p", "prompt", IntentResult)
-
-
-class TestIntent:
-    def test_classify_returns_tasks(self):
-        want = IntentResult(
-            tasks=[
-                IntentTask(task_type="analyze", summary="跑一遍"),
-                IntentTask(task_type="write", summary="写简报"),
-            ]
-        )
-        gw = LlmGateway(
-            _make_config(), agent_factory=lambda ep, ot, _i=None: _FakeAgent(output=want)
-        )
-        result = classify_intent("把这批沙门菌跑一遍分析，然后写个简报", gw)
-        assert result is not None
-        assert [t.task_type for t in result.tasks] == ["analyze", "write"]
-
-    def test_classify_degrades_to_none(self):
-        gw = LlmGateway(
-            _make_config(),
-            agent_factory=lambda ep, ot, _i=None: _FakeAgent(output=None, fail_times=99),
-        )
-        assert classify_intent("随便什么", gw) is None  # C3：无 LLM 降级
-
-    def test_task_type_closed_set(self):
-        with pytest.raises(ValidationError):
-            IntentTask(task_type="deploy")
-
-    def test_classify_truncates_long_input(self):
-        from bacmap.agent.intent import _MAX_TEXT_LEN
-
-        captured: dict = {}
-
-        class _Rec:
-            def run_sync(self, prompt):
-                captured["prompt"] = prompt
-                return _FakeResult(IntentResult(tasks=[]))
-
-        gw = LlmGateway(_make_config(), agent_factory=lambda ep, ot, _i=None: _Rec())
-        classify_intent("x" * (_MAX_TEXT_LEN + 999), gw)
-        assert captured["prompt"].count("x") == _MAX_TEXT_LEN
+            gw.structured("p", "prompt", _Out)
 
 
 class TestInterpretation:
@@ -394,9 +358,9 @@ class TestTierAndCache:
             },
             routing={"p": "e"},
         )
-        gw = LlmGateway(cfg, agent_factory=lambda ep, ot, i=None: _FakeAgent(output=IntentResult()))
+        gw = LlmGateway(cfg, agent_factory=lambda ep, ot, i=None: _FakeAgent(output=_Out()))
         with pytest.raises(LlmUnavailableError):
-            gw.structured("p", "x", IntentResult, role="miner")  # miner 需 T2
+            gw.structured("p", "x", _Out, role="miner")  # miner 需 T2
 
     def test_role_min_tier_satisfied(self):
         cfg = LlmConfig(
@@ -405,23 +369,23 @@ class TestTierAndCache:
             },
             routing={"p": "e"},
         )
-        agent = _FakeAgent(output=IntentResult())
+        agent = _FakeAgent(output=_Out())
         gw = LlmGateway(cfg, agent_factory=lambda ep, ot, i=None: agent)
-        out = gw.structured("p", "x", IntentResult, role="miner")
-        assert isinstance(out, IntentResult)
+        out = gw.structured("p", "x", _Out, role="miner")
+        assert isinstance(out, _Out)
 
     def test_agent_cache_keyed_by_instructions(self):
         calls: list[str | None] = []
 
         def factory(ep, ot, instructions=None):
             calls.append(instructions)
-            return _FakeAgent(output=IntentResult())
+            return _FakeAgent(output=_Out())
 
         gw = LlmGateway(_make_config(), agent_factory=factory)
         ep = gw._config.endpoints["e"]
-        a = gw._agent_for(ep, IntentResult, None, "instr-A")
-        b = gw._agent_for(ep, IntentResult, None, "instr-B")
-        c = gw._agent_for(ep, IntentResult, None, "instr-A")
+        a = gw._agent_for(ep, _Out, None, "instr-A")
+        b = gw._agent_for(ep, _Out, None, "instr-B")
+        c = gw._agent_for(ep, _Out, None, "instr-A")
         assert a is c and a is not b
         assert calls == ["instr-A", "instr-B"]
 

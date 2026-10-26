@@ -1,5 +1,5 @@
 site_name: bacmap
-site_description: Local pathogen genome analysis system (architecture-frozen v1.4.8)
+site_description: Local pathogen genome analysis system (architecture-frozen v1.5)
 docs_dir: docs
 site_dir: site
 
@@ -15,15 +15,21 @@ nav:
   - Home: index.md
   - Installation: installation.md
   - Configuration: configuration.md
+  - Tutorial: tutorial.md
   - Usage: usage.md
   - Tool Reference: tools.md
+  - Operations: operations.md
+  - Agent Harnesses: harnesses.md
   - Architecture (reference translation): architecture-frozen-v1.en.md
   - 简体中文:
       - 首页: index.zh-CN.md
       - 安装指南: installation.zh-CN.md
       - 配置指南: configuration.zh-CN.md
+      - 实战教程: tutorial.zh-CN.md
       - 使用指南: usage.zh-CN.md
       - 工具参考: tools.zh-CN.md
+      - 运维指南: operations.zh-CN.md
+      - 智能体 Harness: harnesses.zh-CN.md
       - 架构（冻结·权威）: architecture-frozen-v1.md
 
 markdown_extensions:

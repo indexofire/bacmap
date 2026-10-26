@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}GOM {{ obj.object_id[:12] }} · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/gom">GOM</a><span class="crumbs__sep">/</span><span class="crumbs__here">{{ obj.object_id[:18] }}… v{{ obj.version }}</span></nav>
+<header class="detailhead"><h1 class="detailhead__title">对象详情</h1><p class="detailhead__id mono">{{ obj.object_id }} · v{{ obj.version }}</p></header>
+<section class="card status-card">
+  <dl class="statuslist">
+    <div class="statuslist__row"><dt>类型</dt><dd>{{ obj.object_type }}</dd></div>
+    <div class="statuslist__row"><dt>schema</dt><dd>{{ obj.schema_version }}</dd></div>
+    <div class="statuslist__row"><dt>菌株</dt><dd>{{ obj.strain_id or "-" }}</dd></div>
+    <div class="statuslist__row"><dt>创建</dt><dd>{{ obj.created_by }} · {{ obj.created_at }}</dd></div>
+    <div class="statuslist__row"><dt>流程版本</dt><dd>{{ obj.pipeline_version or "-" }}</dd></div>
+  </dl>
+</section>
+<section class="card">
+  <div class="card__head"><h2 class="card__title">载荷</h2></div>
+  <pre class="mono-dim">{{ payload }}</pre>
+</section>
+{% endblock %}

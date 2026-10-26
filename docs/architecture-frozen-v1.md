@@ -1,11 +1,11 @@
 [English](architecture-frozen-v1.en.md) | **简体中文（权威）**
 
-# BacMAP Standalone 框架设计（冻结版 v1.4.39）
+# BacMAP Standalone 框架设计（冻结版 v1.7.2）
 
 - **日期**：2026-10-09（v1.1–v1.4.7 同日修订，见第 10 节）
 - **状态**：冻结（Frozen）。第 8 节的验证项全部通过后，转为"已确认"
 - **依据**：第一轮辩论（`dev/debate-standalone-architecture.md`，本地资料不入库）、第二轮辩论（`dev/debate-round2-harness-vs-delivery.md`）、调研证据（`dev/research-framework-evidence.md`）（下文以"证据 §x"引用）
-- **变更规则**：本文中标为"冻结"的决策，修改必须新增一条 ADR 修订记录（第 10 节），写明原因、证据与迁移成本；标为"可替换"的部分，只要不改接口即可自由替换实现
+- **变更规则**：本文中标为"冻结"的决策，修改必须新增一条 ADR 修订记录（第 10 节），写明原因、证据与迁移成本；标为"可替换"的部分，只要不改接口即可自由替换实现。v1.5 起为大版本，修订记录编号为 v1.5.x
 
 ---
 
@@ -16,9 +16,9 @@
 | 问题 | 回答 |
 |---|---|
 | bacmap 是 Python 实现的 AI 智能体吗？ | 是，但智能体只是其中一层。核心是确定性分析内核（管线、GOM、校验、门）；智能体层（pydantic-ai + 本地模型或 LLM API，按数据分级路由）负责理解用户意图、解读结果、执行开放任务。去掉智能体层，确定性功能照常可用（C3） |
-| 需要 Hermes 等平台吗？ | **不需要。** bacmap 自带 Web 界面、CLI 和内置智能体，直连本地模型服务（默认 Strata）或 LLM API（ADR-08），独立完成全部功能。Hermes 是可选的外部客户端之一（ADR-15） |
+| 需要 Hermes 等平台吗？ | **不需要。** bacmap 自带 Web 界面、CLI 与**任务内**智能体（解读/开放路径），直连本地模型服务（默认 Strata）或 LLM API（ADR-08），独立完成全部功能。（v1.5：日常对话交互推荐经外部 Harness——Hermes / Pi / DSH——的原生界面进行，见 ADR-21；确定性功能与可信确认面仍由 bacmap 自带的 CLI/Web 提供。）Hermes 是可选的外部客户端之一（ADR-15） |
 | 多个专家角色是"多智能体"吗？ | 不是多个智能体自主对话。是**代码编排的多角色**：同一个模型，按任务步骤用不同的角色配置（说明书 + 工具白名单 + 权限）临时创建智能体实例，做完即结束，角色之间只通过 GOM 和任务工作区交换结果（ADR-10） |
-| 智能体层用什么实现？ | pydantic-ai 负责单个智能体内部的"调用模型—执行工具—校验输出"循环；多角色编排、任务状态机、门、请求队列由 bacmap 自己的代码实现（ADR-08、ADR-10） |
+| 智能体层用什么实现？ | pydantic-ai 负责单个智能体内部的"调用模型—执行工具—校验输出"循环；多角色编排、任务状态机、门、请求队列由 bacmap 自己的代码实现（ADR-08、ADR-10）。v1.5 起 pydantic-ai 只承担**任务内**智能体（解读、开放路径）；面向用户的对话由外部 Harness 承担（ADR-21） |
 | 生信分析怎么做？ | 标准分析一律走 Snakemake 工作流（L1，唯一权威来源）；LLM 写的 Python/R 脚本只用于沙箱内的探索性挖掘（L2），其结果不能成为权威事实，可经人工改写验证后晋升为 L1（ADR-11） |
 | 本地流行特征库是什么？ | 不是分析用的参考数据库，而是**本地菌株的流行病学特征集合**：存于 GOM，汇总本地菌株的分型、耐药、cgMLST 谱与时间/地点/来源，用于新分离株的特征比对与地方流行特征挖掘（ADR-19） |
 | 通过 MCP 整合 AI 智能体工具吗？ | **方向相反：bacmap 是 MCP 服务端，不靠 MCP 组装自己。** 内置智能体在进程内直接调用工具注册表；MCP 是对外通道，让 Hermes、Claude、Codex、Cursor、Strata 聊天页等任何 MCP 客户端使用 bacmap 的工具。bacmap 也可以作为 MCP 客户端接入少量可选的外部能力（如 GBrain 知识库），但不依赖它们 |
@@ -107,6 +107,7 @@
   - 只有 `bacmap.tasks.engine` 可以导入 DBOS
   - 只有 `bacmap.workflow` 可以调用 Snakemake
   - MCP **客户端**代码只允许出现在 `bacmap.store.knowledge`（可选外部知识后端，如 GBrain）与 `bacmap.agent.llm`（如需外部工具能力）；`bacmap.interfaces.mcp` 只实现 MCP 服务端（ADR-12）
+  - （v1.5）上述规则以 import-linter 契约强制（LLM 库、DBOS、MCP SDK 三条，均含函数内延迟导入）；import-linter 覆盖不到的部分（外部子包 `mcp.client`、命名空间包 `bacmap.workflow`）由 `tests/unit/test_import_boundaries.py` 补足。后续新增的 `bacmap.application` 层不得导入接口层，其计划与任务服务不得导入 `bacmap.agent`（保 C3）
 - **理由**：把三个第三方依赖（LLM 库、持久化执行库、Snakemake）各自关在一个模块里，日后替换只改一处；保证 C3（去掉 agent 层，系统仍可运行）。
 
 ### ADR-03 配置与路径 —— 冻结
@@ -126,9 +127,10 @@
 
 ### ADR-06 任务状态机 —— 冻结（接口与表）/ 可替换（执行库）
 - **决策**：
-  - 封闭任务类型：`analyze`、`curate`、`mine`、`write`（第 4.3 节；v1.2 将 `build_db` 更名为 `curate`，含义改为本地流行特征库构建，见 ADR-19）；新增类型需修订本 ADR
+  - 封闭任务类型：`analyze`、`curate`、`mine`、`write`、`record`（v1.7 新增）（第 4.3 节；v1.2 将 `build_db` 更名为 `curate`，含义改为本地流行特征库构建，见 ADR-19）；新增类型需修订本 ADR
   - `TaskEngine` 接口的默认实现为 **DBOS Transact**（嵌入式、SQLite 系统库、MIT）
   - `tasks`、`approvals`、`analysis_runs`（ADR-18）、`baseline_releases`（ADR-19）四张表以及 GOM `events` 由 bacmap 自有，是对外可见的唯一状态；DBOS 系统库是内部实现细节，使用独立的 SQLite 文件
+  - （v1.5.1）新增 `plans` 表（版本化分析计划，`tasks.sqlite` 迁移 2）；可计划任务（analyze/curate）的参数由类型化模型 `tasks/params.py` 定义；`TaskEngine.submit` 增加可选关键字参数 `task_id`，显式 ID 提交幂等
 - **理由**：需要崩溃恢复、人工审批等待、长任务（96 株约 8 小时）；DBOS 是唯一同时满足"无服务进程 + SQLite + 人工等待 + 自动恢复"的方案（证据 §4.2）。自写这些的代价被两轮辩论低估。
 - **兜底**：若验证项 V2 不通过，换为 `transitions` + SQLite 手写实现，接口与表不变。
 
@@ -236,8 +238,12 @@ v1.2 起，"能力档位"与"部署位置"是两个独立维度：档位决定�
   - 除 tools 外，把角色说明书（SKILL.md）以 MCP prompts/resources 暴露，使外部助手也能获得领域指引
   - 长任务返回作业句柄，另提供 `job_status`、`job_cancel` 工具；进度通过 `progressToken` 推送；Tasks 扩展等 SDK 支持后再采用
   - MCP 只暴露 `effect=read/compute` 的工具，以及"提交任务"类工具；不暴露直接写入
+  - **Profile（v1.5）**：每个 MCP 服务实例绑定一个 Profile——`cloud`（默认）只暴露 `output_data_class ≤ cloud_max_data_class`（默认 D1，最多 D2）的工具；`local-trusted` 可见至 D4，须管理员在 `config.toml` 中设置 `[mcp] allow_local_trusted = true` 显式开启，否则拒绝启动。Profile 由启动参数决定，客户端不可自我升级；2026-07-28 规范下工具列表不随连接变化，不同 Profile 以不同实例提供（stdio 启动参数 / HTTP 各自端口与 token）；调用层再做一次数据级别校验
+  - **计划工具（v1.5.1）**：`bacmap_create_plan` / `bacmap_revise_plan` / `bacmap_get_plan`——客户端只能建/改/查计划，确认只在 bacmap CLI/Web 完成（ADR-21）；`bacmap_submit_task` 保留为兼容入口
+  - **提交者身份（v1.5）**：由服务端按传输与 Profile 认定（`mcp-stdio:<profile>:<OS 账户>` / `mcp-http:<profile>`），`bacmap_submit_task` 不再接受客户端自填的 `submitted_by`
+  - **2026-07-28 规范适配（v1.5）**：Tasks 已成为官方扩展 `io.modelcontextprotocol/tasks`，但 Python SDK v2 尚未实现——长任务继续以显式句柄工具实现，语义对齐该扩展以便日后迁移；MRTR/elicitation 由客户端（Harness）应答，**不得**作为计划确认或审批证据
 - **安全**：客户端配置中的启动命令写死；所有参数按 JSON Schema 严格校验；日志写 stderr（Logging 已弃用）。
-- **理由**：证据 §7.1–7.3；Hermes 内置 `mcp==2.0.0` 客户端，与服务端同代（证据 §3.5）。
+- **理由**：证据 §7.1–7.3；Hermes 内置 `mcp==2.0.0` 客户端，与服务端同代（证据 §3.5）。v1.5：Hermes、Pi（≥0.99 内置 MCP）、DSH（`dsh-mcp-client`）均可作为客户端，且 Hermes 已支持 2026-07-28 无状态协议（证据 §10.56）。
 
 ### ADR-13 数据层 —— 冻结（GOM）/ 可替换（知识库实现）
 - **决策**：
@@ -246,11 +252,13 @@ v1.2 起，"能力档位"与"部署位置"是两个独立维度：档位决定�
   - 两类"数据库版本"严格区分（v1.2）：**参考数据库**（CARD、VFDB、PlasmidFinder、MLST/cgMLST 方案等，分析的输入）的版本记在运行记录中；**本地流行特征库**（分析结果的汇总）的版本记在 `baseline_releases` 中，凡结论引用了本地特征比对，同时记录所用特征库版本
   - 知识库通过 `KnowledgeStore` 接口访问；v1 实现为 SQLite FTS5（可选 sqlite-vec）；GBrain 可作为可选的 MCP 后端，不作为依赖
   - 结构化分析事实不进入向量库（project.md §8.3）
+  - （v1.5）迁移机制落地：`bacmap.store.migrations`（编号自 1 连续、单个 `BEGIN IMMEDIATE` 事务、迁移前自动备份为 `<db>.bak-v<N>`、失败整体回滚、拒绝打开高于代码版本的库）；`tasks.sqlite` 首先纳管（基线迁移 1 = `tasks` + `approvals`），其余库在后续迁移中依次纳管；v1.5.2 起 `runs.sqlite`、`baseline.sqlite`、`gom.sqlite`（按文件清单）已纳管，`data/*.sqlite` 待定
 - **理由**：GOM 已经过七个版本验证。GBrain 以独立进程经 MCP 接入，Bun 运行时只存在于选择部署 GBrain 的机器上，**不进入 bacmap 运行时**，因此与 ADR-01（运行时不引入 Node/Bun）不冲突；代价是启用该后端的机器需额外维护一个 Bun 服务，故仅为可选项。
 
 ### ADR-14 Web UI —— 可替换
 - **决策**：FastAPI + Jinja2 + htmx + SSE；从只读看板升级为主交互入口（任务提交、对话、审批、签名）；默认只绑定本机，局域网访问需开启鉴权。
 - **理由**：一线用户不使用终端（第二轮）；不引入前端工程（ADR-01）。
+- **v1.5.2 补充**：新增版本化 JSON API `/api/v1`（任务、计划确认/拒绝、事件轮询与 SSE 续传、样本游标分页），与页面共用鉴权；它是可信界面，令牌不得交给外部 Harness（ADR-21）。
 
 ### ADR-15 Hermes 的角色 —— 可替换（v1.1 重写）
 - **定位**：Hermes 是 bacmap 的**可选外部客户端之一**，与 Claude、Codex、Cursor、Strata 聊天页等地位相同。bacmap 不依赖 Hermes 运行，也不把任何核心功能放在 Hermes 里。
@@ -267,6 +275,7 @@ v1.2 起，"能力档位"与"部署位置"是两个独立维度：档位决定�
 - **接入方式**：仅 MCP（Hermes 配置 `mcp_servers` 指向 bacmap，stdio）。v1.4.8 用户裁定取消插件第二渠道：`bacmap.adapters.hermes` 与 `hermes_agent.plugins` entry-point 已删除（V4 实测 ✓ Connected / 22 工具）。
 - **门的机制**（v1.4.8 起单一通道）：MCP 通道由 bacmap 服务端强制（只暴露 read/compute 工具 + 任务提交，ADR-12）。原插件通道的 Hermes 钩子防线（`pre_tool_call`/`transform_llm_output`）随通道取消一并废止。
 - **不做的事**：不用 Hermes 作内置执行器（插件 API 无稳定性承诺，证据 §3.1）；不要求用户安装 Hermes。
+- **v1.5 修订**：Hermes 与 Pi、DSH 并列为一等支持的外部 Harness，承担面向用户的对话交互（ADR-21）；仍只经 MCP 接入，地位"可选"不变——不安装任何 Harness 时 bacmap 的确定性功能与可信确认面完整可用。
 - **理由**：现有 entry-point 声明不生效，插件靠软链接加载（证据 §2.2）；MCP 让 Hermes 与其他助手走同一条路径，维护一份代码。
 
 ### ADR-16 安全红线与数据分级 —— 冻结
@@ -286,6 +295,8 @@ v1.2 起，"能力档位"与"部署位置"是两个独立维度：档位决定�
 - 智能体生成的代码只在沙箱中运行，不联网
 - 所有对外接口默认只绑定本机
 - 数据库发布与报告导出需要人工签名，签名记录写入 `approvals` 与 GOM `events`
+- （v1.5）MCP 客户端背后的模型位置不可验证，**一律按 `cloud` 处理**，除非管理员显式开启 `local-trusted` Profile（ADR-12）
+- （v1.5）MCP 只保护经过 MCP 的数据；外部 Harness 自带 Shell/文件工具，部署时以操作系统账户隔离 `BACMAP_HOME`（ADR-21）
 
 
 ### ADR-17 本地模型资源仲裁 —— 冻结（v1.1 新增）
@@ -294,6 +305,7 @@ v1.2 起，"能力档位"与"部署位置"是两个独立维度：档位决定�
   - `bacmap.agent.llm` 内设单一请求队列，所有 LLM 调用串行发出；每个请求带超时，超时按无 LLM 降级
   - 任务层在启动内存密集的工作流步骤前检查可用内存；不足时调用 Strata `POST /unload` 释放模型，步骤结束后 `POST /load` 重新加载（加载需 1–3 分钟），期间 LLM 请求排队或降级
   - 配置项 `llm.resources.co_located`（见 4.5 示例）：模型与管线是否同机。同机时默认启用仲裁；模型在独立主机上时关闭
+  - （v1.5）外部 Harness 若直连本机 Strata，其请求不经 bacmap 串行队列：同机部署时仲裁 `unload` 期间 Harness 会话不可用；推荐 Harness 使用独立推理主机或云端端点（云端时对应 `cloud` Profile，ADR-21）
 - **理由**：不仲裁时，组装可能因内存不足失败，违反"同一样本重跑结果一致"的要求；把模型视为可抢占资源，保证 C3（确定性功能优先于 LLM）。
 
 ### ADR-18 运行记录与可复现性 —— 冻结（v1.2 新增）
@@ -361,6 +373,19 @@ v1.2 起，"能力档位"与"部署位置"是两个独立维度：档位决定�
 - **与 MCP 的关系**（v1.4 澄清）：bacmap 内部一律以 CLI/进程内方式调用生信工具，不经工具自带的 MCP 服务绕行——这是性能与调用链简单的考虑；gapit 等工具的 MCP 能力是面向**其他智能体客户端**（Strata 聊天页、Claude、Codex 等）的独立使用渠道，与 bacmap 的 CLI 集成并行不悖。两条通道最终落到同一工具与数据库，结果一致性由工具自身保证。bacmap 自己的 MCP server 继续暴露 `bio_*` 语义工具（内部再调这些 CLI）。
 - **信任层**：三者均为 L1 确定性工具；`gside species` 恒以退出码 0 结束、单法错误写入 JSON——适配器必须检查各 method 条目的错误字段，而非只看退出码。
 - **验证**：V10。
+
+### ADR-21 交互智能体外置 —— 冻结（v1.5 新增）
+- **背景**：Hermes、Pi、DeepSeek Harness（DSH）等通用智能体已具备成熟的对话界面（会话持久化、上下文压缩、多模型切换、技能、IM 网关或 Web 界面），且都能经 MCP 使用外部工具（Hermes `mcp_servers`；Pi ≥0.99 内置 MCP；DSH 官方 `@deepseek-ai/dsh-mcp-client`）。bacmap 自建的对话 UX（TUI 流式、思考块、会话历史，v1.4.13/31/32）与其重复且维护成本高（证据 §10.56）。
+- **决策**：
+  - **对话式交互外置**：用户的自然语言交互由外部 Harness 的原生界面承担，经 MCP（ADR-12）使用 bacmap；bacmap 内置的会话助手（`AgentSession`、TUI 对话面板、Web `/assistant`、CLI `ask`/`chat`）进入废弃期；移除条件（v1.5.2 调整）为三个 Harness 完成真实对话联调且计划闭环稳定；v1.5.3 已实测三端通过（Hermes/Pi/DSH 各完成创建计划→人工确认→读回任务），条件达成，按计划在 v1.6 移除；废弃期内只显示迁移提示、不再加功能
+  - **任务内智能体保留**：analyze 解读、curate 建议、mine/write 开放路径智能体仍由 pydantic-ai 在任务层内运行（ADR-08/10/11 不变）——外部 Harness 无法进入沙箱、不受门约束、无法记录 `LlmProvenance`
+  - **可信确认面留在 bacmap**：计划确认、特征库发布签名、挖掘产物签字只在 bacmap 自有界面（Web 审批页 / CLI）完成；Harness 内的工具审批与 MCP elicitation 由客户端或模型应答，不构成确认事实
+  - **结构化界面保留**：CLI（含 `--json`）与 Web 的任务/样本/报告/审批页保留，服务非终端用户（ADR-14）与无 LLM 场景（C3）
+  - **数据红线由操作系统隔离兜底**：Harness 自带 Shell/文件工具，MCP Profile 只保护经 MCP 的数据。推荐部署：bacmap 以独立系统账户运行、`BACMAP_HOME` 仅该账户可读；Harness 以普通用户运行，仅经 Streamable HTTP（回环或 unix socket）+ Profile token 访问 bacmap（ADR-16）
+  - **支持矩阵**：Hermes、Pi（≥0.99）、DSH（rc 阶段固定版本）为 v1.5 一等支持的 Harness，发布前均需真实联调（发现、只读、提交、状态、错误与退出）；Harness 的 Node/Python 运行时由用户自行安装，不进入 bacmap 运行时（与 ADR-13 对 GBrain/Bun 的处理一致，不违反 ADR-01）
+  - **嵌入式 Runtime**（在 bacmap Web 内驱动外部 Harness）不在 v1.5 必交付范围；如需实现，优先 ACP（Agent Client Protocol，Hermes/DSH 原生支持），Pi RPC 为后备
+- **否决**：继续在 bacmap 内维护完整对话 TUI（与 Harness 能力重复）；把确认/审批交给 Harness（不可信）；把任务内智能体交给 Harness（无法受门约束）；为每个 Harness 写核心业务插件（违反 ToolSpec 单一事实来源）。
+- **反转成本**：中——内置会话助手在移除前保持可用；移除后如需恢复，可由 pydantic-ai 重新挂接同一 MCP/应用服务契约。
 
 ---
 
@@ -435,6 +460,7 @@ class TaskType(StrEnum):
     CURATE = "curate"     # 本地流行特征库构建（v1.2，原 build_db）
     MINE = "mine"
     WRITE = "write"
+    RECORD = "record"   # v1.7：元数据/化验/知识库记录（写操作仍只经任务层）
 
 class TaskState(StrEnum):
     PENDING = "pending"
@@ -649,6 +675,8 @@ bacmap/
 | 本地模型资源仲裁与串行队列 | |
 | 数据分级 D0–D4 与安全红线 | |
 | 标准工具链 gside / gmlst / gapit 的职责划分（ADR-20） | 工具自身版本（跟随上游发布） |
+| MCP Profile 数据级别裁剪与服务端认定的提交者身份（ADR-12，v1.5） | 各 Profile 的部署方式（stdio 参数 / HTTP 端口与 token） |
+| 交互智能体外置与可信确认面留在 bacmap（ADR-21，v1.5） | 受支持 Harness 的具体版本与清单 |
 
 ---
 
@@ -731,3 +759,12 @@ bacmap/
 | v1.4.32 | 2026-10-20 | **TUI 思考流内联主显示区（展示层，v1.4.31 事件契约不动）**：v1.4.31 的思考尾窗落在输入框上方的底部面板（尾 240 字符逆向滚动），主会话区只渲染最终回复——与用户要求的 OpenCode 式交互不符。本次：①会话区从 append-only RichLog 重构为组件化消息流（VerticalScroll + 逐消息 Static；`_chat_append` 签名与不可信文本转义纪律不变）；②`thinking_delta` 首个增量起惰性挂载思考消息组件，dim 斜体内联流式（直播窗上限 4000 字符，60ms 节流合并高频增量），回合结束**保留全文可见**（用户裁定：思考内容不得自动消失），新增 `Ctrl+T` 折叠/展开最近一次思考块（Esc 中断/异常路径同样定稿并注明原因）；③回复组件原位流式（`▌` 光标）并以 `reply.message` 权威文本定稿，不再重复追加；④移除底部 `#stream` 面板，spinner/工具活动行保留在提示行；⑤随宿主机安装 podman 暴露 3 处直通（passthrough）类测试的"无后端"环境假设，统一 monkeypatch `_which` 固定直通语义（测试密闭性修复，断言不削弱）。测试基线 1405 → 1408 passed（+3：内联流式定稿/Ctrl+T 折叠展开/中断定稿），ruff/mypy/contracts/docs-build 全绿 | 用户裁定（思考内容须显示在主界面且完成后保留，交互对齐 opencode） |
 | v1.4.33 | 2026-10-20 | **已组装 FASTA（assembly）直入封闭 analyze 路径**：此前封闭流程仅接受 reads 入口（samples.tsv 的 R1/R2 → fastp → shovill），已完成组装的 FASTA 只能走 mine 沙箱探索，无法进入受门与运行记录保护的封闭路径——与"外部数据也要能走标准分析"的需求不符。本次：①samples.tsv 新增可选 `assembly` 列（路径相对 BACMAP_HOME；与 R1/R2 二选一，同时登记时 reads 优先，两者皆缺在 DAG 构建期快速失败）；②`assembly_shovill` 输出改为中间产物 `assembly/shovill/contigs.fa`，新增 `contigs_finalize` 统一 contigs 通道（reads 组装产物或用户 FASTA 汇入同一 `assembly/contigs.fasta`，下游 species/分型/耐药/注释/报告规则零改动）；③`report_inputs` 增加 `has_qc` 门控（assembly 直入样本 `qc_json` 不进 DAG），`collect_summary.py` 对缺失 qc 段容错；④kraken2 预筛目标仅对 reads 样本展开；⑤引擎 `_fastqs` 把 assembly FASTA 纳入 input_files 证据链（C4）。测试基线 1408 → 1414 passed（+6：路由 qc 门控 2 项、FASTA/reads 双入口 DAG dry-run、缺输入快速失败、证据链 1 项），ruff/mypy/contracts/docs-build 全绿 | 用户裁定（给出 FASTA 数据需要 smk 封闭路径而非 mine） |
 | v1.4.39 | 2026-10-21 | **目录直入全自动登记（引擎侧，v1.4.38/39）**：此前 analyze 只接受已登记样本（samples.tsv），目录登记是 CLI 专属的同步动作——助手无法规划、samples.tsv 误删时 Snakefile 直接 pandas 崩溃（用户实测踩坑）。本次：①analyze 参数新增 ``fasta_dir``/``fastq_dir``，工作流首步 ``_step_register_inputs`` 自动登记（写操作经由任务引擎）：FASTA 逐株 ``gside species --mode marker`` 识别物种并落码（解析顶层 ``verdict`` 优先、回退 ``methods.<mode>.species``——修复只读顶层 species 导致的全批 Unknown），reads 识别 ``*_R1/_R2``（含 ``_001``/``_1`` 变体）配对、物种缺省登记 ``UNK``；识别失败文件跳过并在任务消息列明；②登记逻辑收敛到 ``workflow/samples_registry``（CLI/引擎同源），CLI 同步支持 ``--fastq-dir`` 且 ``--species`` 对 FASTA 转为可选；③deploy 自愈扩展：stamp 命中但 samples.tsv 缺失也触发重部署（恢复模板）；④submit 校验放宽为 samples 或目录参数其一。SKILL 同步：助手可直接规划 ``{"fasta_dir"|"fastq_dir"}``，消除"装配 FASTA 不能进管线"的过时教学。真机端到端：8 株 ~/temps 副溶血弧菌无 species 参数全自动（识别 VPA→登记→analyze→门 pass）。测试基线 1429 → 1436 passed（+7：配对识别/UNK/单端跳过/gside 三种 JSON 形态解析/自动登记），ruff/mypy/contracts/docs-build 全绿 | 用户裁定（给目录即全自动：识别→登记→跑标准流程，不再手填 species 或手动登记） |
+| v1.5.0 | 2026-10-25 | **大版本：交互智能体外置 + MCP 数据级别 Profile（M0 安全基线）**。用户裁定：①ADR 版本体系升为 v1.5；②接受 MCP 默认 Profile 收紧（破坏性变更）；③Runtime 协议 ACP 优先、Pi RPC 后备，Web 内嵌 Runtime 降为可选；④DSH 保留为一等支持 Harness；⑤ADR-02 违例修代码。**新增 ADR-21**：对话交互由 Hermes/Pi/DSH 原生界面经 MCP 承担，内置会话助手进入废弃期；任务内 pydantic-ai 智能体、可信确认面、CLI/Web 结构化界面保留；数据红线以操作系统账户隔离兜底。**本次落地（M0）**：①**MCP 数据级别裁剪**——此前 MCP 只按 effect 过滤，D3/D4 工具（`bio_query_metadata`、`bio_inspect_dataset`、8 个序列工具等）对任意客户端可见可调（ADR-16 现存缺口）；现每个实例绑定 Profile，默认 `cloud` 只暴露 ≤ `cloud_max_data_class` 的工具（默认 D1），`local-trusted`（≤D4）须 `[mcp] allow_local_trusted = true` 显式开启，未开启即拒绝启动；发现层 + 调用层双重校验；`bacmap mcp`/`python -m bacmap.interfaces.mcp` 新增 `--profile`。②**提交者身份服务端认定**——`bacmap_submit_task` 删除客户端自填的 `submitted_by`，改为 `mcp-stdio:<profile>:<OS 账户>` / `mcp-http:<profile>`。③**CLI 写绕过修复**——`task submit --fasta-dir/--fastq-dir` 不再在任务层外写 `samples.tsv`，目录参数原样交给引擎首步 `_step_register_inputs`（ADR-07 写只经任务），CLI 只做只读存在性预检。④**ADR-02 契约化**——import-linter 由 1 条增至 4 条（LLM 库仅 `agent.llm`、DBOS 仅 `tasks.engine`、MCP SDK 仅 `interfaces.mcp`/`store.knowledge`/`agent.llm`），并修复既有违例（`agent/session.py`、`agent/sandbox/tool.py` 直接导入 pydantic-ai → 经新增 `agent/llm/tools.py::tool_from_schema`）；`mcp.client` 与命名空间包 `workflow` 由 AST 边界测试补足。⑤**ADR-13 迁移机制落地**——`store/migrations.py`，`tasks.sqlite` 纳管为版本 1。**迁移成本**：现有以 stdio 接入 Hermes 等客户端的部署，默认将看不到 D2 及以上工具；本地模型部署需在 config.toml 开启 `local-trusted` 并以 `bacmap mcp --profile local-trusted` 启动。测试基线 1438 → 1461 passed（+23：Profile 裁剪/拒绝启动/身份/CLI 委托/迁移框架/导入边界），ruff/mypy/contracts（4 条）/docs-build 全绿 | 用户裁定（评审意见 §5 五问 + v1.5 交互外置）+ 代码核查（MCP 无数据级别过滤、`submitted_by` 客户端自填、CLI 任务层外写、ADR-02 未契约化且已违例、无迁移机制）+ 外部调研（证据 §10.56） |
+| v1.5.1 | 2026-10-25 | **版本化计划闭环（ADR-21 的执行面）**：外部 Harness 只能经 MCP **创建/修订/查询**计划（`bacmap_create_plan`/`bacmap_revise_plan`/`bacmap_get_plan`），确认只在 bacmap 可信界面完成（CLI `bacmap plan ls/show/confirm/reject`；Web `/plans`），MCP 不提供任何确认/审批工具。①**类型化任务参数**（`tasks/params.py`，ADR-06 补充）：`AnalyzeParams`（samples / fasta_dir / fastq_dir 三选一，样本 ID 白名单，目录须绝对路径，未知字段拒绝）、`CurateParams`（scope = pathogen / strains）；mine/write 不进入计划（与既有 MCP/表单规则一致）。②**plans 表**（`tasks.sqlite` 迁移 2）+ 新增应用服务层 `bacmap.application`（`PlanService`、统一错误 `validation_error/not_found/conflict`）；import-linter 增至 5 条契约（应用层不得导入接口层与智能体层）。③**规范哈希**：`plan_hash` = SHA-256(键排序、紧凑、ASCII 转义的规范 JSON：类型化参数 + 输入目录指纹)；确认须给出 `(plan_id, version, hash≥12 位前缀)`，修订产生新版本并使旧版本 `superseded`——确认 v1 不能执行 v2。④**输入指纹**：目录输入在建计划时记录（相对路径 + 大小 + mtime_ns），确认时复核，变化或缺失即冲突。⑤**确定性 task_id 幂等提交**：`TaskEngine.submit` 新增可选关键字参数 `task_id`（显式 ID 已存在即幂等返回，不重复启动工作流）；计划任务 ID 由 `plan_id/version/序号` 派生，重复确认、双端并发确认、领取后崩溃再确认都只产生同一组任务。⑥`bacmap_submit_task` 保留为兼容入口，描述引导新客户端改用计划。真实冒烟：stdio MCP 客户端（cloud Profile）建计划 → CLI 确认 → `bacmap_get_plan` 取回 task_id → `bacmap_task_status` 可查。测试基线 1461 → 1502 passed（+41：参数/哈希/版本取代/并发确认/输入指纹/引擎幂等/CLI/Web/MCP），ruff/mypy/contracts（5 条）/docs-build 全绿 | ADR-21 与评审意见 §3.4（计划哈希、输入快照、确定性 ID）+ 实施验证 |
+| v1.5.2 | 2026-10-25 | **领域事件、版本化 JSON API、MCP 任务控制与 Harness 实测；计划调整**。①**事件日志**（`tasks/events.py`，`tasks.sqlite` 迁移 3）：追加式 `events` 表，单调 `seq` 为续传游标；计划（created/revised/confirmed/submitted/rejected/failed）与任务（submitted/step/state/approval）关键转换写事件；事件不是真相，断线以查询恢复；任务消息类事件标 D2。②**步骤进度**：`current_step` 此前提交后永不更新，现在既有 DBOS step 函数体内写入（register_inputs/pipeline/run_record/ingest_and_gates/sandbox/draft/curate_build/gate），不新增 step、不改变在途工作流回放序列。③**`/api/v1`**（ADR-14 补充）：capabilities、tasks（含 cancel）、plans（含 confirm/reject）、events（游标轮询 + SSE，`Last-Event-ID` 续传）、samples（游标分页，只解析当页 summary）；与页面共用鉴权，cookie 模式状态变更须 `X-CSRF-Token`；错误统一 `validation_error/not_found/conflict`→400/404/409；API 属可信界面，令牌不得交给 Harness。④**MCP**（ADR-12 补充）：新增 `bacmap_task_cancel`（仅限本主体直接提交或经其自建计划派生的任务）与 `bacmap_task_result`（运行 ID + 门结论；低于 D2 的 Profile 只给计数）；`cloud` 下 `bacmap_task_status` 不回传任务消息（可能含样本 ID/宿主路径）；角色说明书以 `skill://bacmap/<role>/SKILL.md` 资源发布并带 sha256（SDK 2.3 尚无 Skills 扩展，先以标准资源分发）。⑤**迁移纳管**：`runs.sqlite`、`baseline.sqlite` 纳入编号迁移（版本 1）；`gom.sqlite` 由 GOM 与数据集登记两个模块共用，改为**按文件**的统一清单 `GOM_MIGRATIONS`（两模块共用，旧库无损纳管并自动备份）；`data/*.sqlite`（菌株索引/元数据/检验/知识库，文件归属随调用方而变）**顺延**。⑥**Harness 实测**：Hermes 0.21.3（`hermes mcp test`）与 Pi 1.1.0（`pi mcp list`）均连通并发现 9 个工具（Pi 另见 7 个 skill 资源）；DSH 0.2.1-rc.2 配置组合成功、插件启动时拉起 bacmap MCP，模型调用因无凭据未执行；发现 DSH 新增条目须包在 `insert:` 下，已写入新增双语文档 `docs/harnesses*.md`。⑦**计划调整（ADR-21）**：内置会话助手的移除条件由“三端迁移完成”改为“三个 Harness 完成真实对话联调（需模型凭据，非自动化）且计划闭环稳定”，预计 v1.6；废弃期内三端显示迁移提示（CLI `ask/chat` 输出到 stderr，不污染 `--json`），不再新增功能；原计划中把助手执行路径改走 PlanService 的工作取消（将被移除的路径不再投入）。⑧`bacmap.__version__` 改取安装元数据，与 `pyproject.toml` 单一来源。**版本号说明（用户裁定）**：v1.5.x 是本架构文档的修订版本，不是程序版本；程序版本保持 0.1.0（早期开发），此前随文档修订同步改动程序版本号（1.4.x/1.5.x）的做法停止。测试基线 1502 → 1546 passed（+44），ruff/mypy/contracts（5 条）/docs-build 全绿 | 评审意见 §3.4/§3.6/§3.9 + Harness 实测 + 实施验证 |
+| v1.5.3 | 2026-10-25 | **ADR-21 验证条件达成（三端真实对话联调）**：以 `glm-5.3`（Zhipu 编码套餐端点）实测 Hermes 0.21.3、Pi 1.1.0、DSH 0.2.1-rc.2 各完成两轮对话——①调用 `bacmap_create_plan` 并报告 `plan_id/version/state`；②人在 CLI `plan confirm` 确认该确切版本后，调用 `bacmap_get_plan` 与 `bacmap_task_status` 读回 `submitted` 与 task ID。三端全部通过（DSH 需补丁**已有** `llm-pi-ai` 条目，新增第二个 `dsh-llm-pi-ai` 会因 `amazon-bedrock` 重复声明而失败）。结论：ADR-21 的“三个 Harness 完成真实对话联调”条件已满足，内置会话助手**具备移除条件**，按既定计划仍在 v1.6 移除（本版不删代码，避免与 API/事件工作同批发布）。复现脚本 `dev/harness-e2e.sh`（本地、不入库、密钥仅经环境变量）。验证记录见 `docs/harnesses*.md` §5。无代码变更，测试基线 1546 passed 不变 | 用户裁定（用 zhipu 编码套餐凭证）+ 实测 |
+| v1.6.0 | 2026-10-25 | **ADR-21 落地：内置会话助手移除（TUI 改为任务台）**。v1.5.3 已实测三端 Harness 完成真实对话闭环，本版按计划删除内置助手：①删除 `bacmap.agent.session`（AgentSession/AnalysisPlan/PlannedTask/build_read_tools）、`bacmap.interfaces.assistant`（build_session/execute_plan/format_plan）、`agent/skills/assistant/SKILL.md` 与 `agent/roles/assistant.role.yaml`（MCP prompts 由 7 个角色变为 6 个）；②CLI 删除 `ask`/`chat`（`bacmap <cmd>` 现为 `{mcp,web,tui,console,overview,task,plan,sample,search}`）；③Web 删除 `/assistant` 页与模板，导航改为 任务/计划/系统/样本；④**TUI 重写为任务台**：保留状态头、任务/样本侧栏、leader 和弦、签批两步确认、任务失败回显、`/result`、`/search`、`/analyze`、`/curate`；删除对话流、思考流、计划确认、`Ctrl+F`/`Ctrl+T`、`/new`、`/model` 会话语义；输入框只接受斜杠命令，自然语言给出"请用外部 Harness"提示。顺带修复真实缺陷：**Input 会吞掉 leader 和弦的可打印字符**（`a`/`t` 等在输入框聚焦时无效），新增 `_CommandInput` 在 leader 态把按键交回 App，并加回归测试。⑤**任务内智能体保留**（解读、sandbox_run/sandbox_shell 仍由 pydantic-ai 驱动，ADR-08/11 不变）。⑥**ADR-13 按文件迁移补齐**：`data/bacmap.sqlite`（菌株元数据 + 检验结果）、`data/knowledge.sqlite`（知识库 + FTS 触发器）纳入清单；**菌株基因型索引实际与 GOM 同库**（`dbos_engine`/`tools.services` 均在 `gom.sqlite` 上打开），故作为 `GOM_MIGRATIONS` 版本 2 而非 data 库；DDL 单一来源仍在各 store 模块，`store/schema.py` 只做文件级汇总（延迟导入避免环）。⑦证据与文档：`docs/usage*.md` 重写 §2/§3/§4（对话→外部 Harness、计划确认、TUI 任务台）、`docs/installation*.md` 验证步骤改 `bacmap overview`、README 命令表删 `ask/chat`、`docs/harnesses*.md` 更新实测版本；`dev/harness-e2e.sh` 保留为本地复现脚本（不入库）。**测试基线调整**：1546 之后，本版按 ADR-21 删除内置助手相关测试（`test_agent_session.py`、`test_assistant_deprecation.py`、TUI 对话/思考/计划、CLI ask/chat、Web assistant 共约 90 项），新增任务台/移除断言/按文件迁移测试；基线由 1546 调整为 **1500**（**功能删除导致的合法调整，非"删测试求通过"**，已同步 AGENTS.md 规则 7 的说明） | 用户裁定（继续 v1.6）+ v1.5.3 Harness 实测 + 实施验证 |
+| v1.6.1 | 2026-10-25 | **v1.7 四项收尾：助手专属代码清理、能力协商工具、Hermes 新版复验、ACP 决策**。①**清理仅被旧助手使用的死代码**：`interfaces/llm gateway` 删除 `run_agent*`/`structured_async`/工具智能体工厂/流式解析（550→203 行），删除 `agent/intent.py`（意图分类，ADR-21 已判定可去）、`agent/sandbox/tool.py`（`sandbox_run`/`sandbox_shell` 的 pydantic-ai 工具壳——生产不可达；沙箱执行器 `SandboxExecutor` 与访问面 `access.py` 保留，mine 任务仍用它）、`agent/llm/tools.py`、CLI `_stream_respond`；对应测试同步删除，新增"模块/方法已移除"回归断言。②**新增 MCP `bacmap_capabilities`**（read/D0，read-only 模式亦可用）：返回服务版本、Profile 与数据级别上限、可计划任务类型、推荐写入路径、长任务机制，以及 **`tasks_extension: unsupported_by_sdk`**。③**MCP Tasks 扩展状态**：Python SDK 最新仍为 2.3.0，未实现 `io.modelcontextprotocol/tasks`（其 docstring 仅以 `tasks/get` 举例）；bacmap 继续以显式任务句柄实现长任务，语义对齐扩展，SDK 支持后再迁移——结论写入 capabilities 与证据。④**Hermes 0.17.0+52045 复验通过**：需要两个上游变通——首次启动设 `CMAKE_POLICY_VERSION_MINIMUM=3.5`（python-olm 3.2.16 的 cmake 下限），以及 `hermes auth add zai` 写入其隔离运行时自己的凭据库（环境变量不再生效）；已写入 `docs/harnesses*.md`。⑤**ACP 嵌入式 Runtime 决策（可选，暂不实现）**：ACP 是"编辑器驱动智能体"的对话协议，实现它需要重新引入对话面与工具层，与 ADR-21（对话外置）及本版刚清理的死代码方向相反；且当前无具体消费者（编辑器可经 MCP 直接接 bacmap）。记录 ACP Python SDK 0.12.1 可用、不加入依赖；出现具体编辑器/远程需求时再以"薄适配 `agent.llm` + 应用服务、不重建 TUI/Web 对话"为前提立项。测试基线 1500 → 1489（净删除死代码测试，新增能力协商/移除断言，理由同 v1.6.0） | 用户裁定（继续 v1.7 四项）+ 实施验证 + Hermes 实测 |
+| v1.7.0 | 2026-10-26 | **P0 数据入口：新增第五类任务 `record`（ADR-06 修订）**。背景：元数据/化验结果/文献知识库此前只有注册表 write 工具或 store 方法，CLI/Web/MCP 都没有入口——`curate` 要求元数据完整、`write` 的引用门要求已审核条目，两条主线实际卡在数据入口（v1.6 移除助手后更明显）。按 ADR-07「写操作只经任务层」，新增 `RECORD` 闭集类型（`tasks/records.py`）：①`metadata`（字段白名单 = store 已知列，额外键拒绝）；②`lab_result`；③`knowledge_import`（只入暂存，`approved_by` 为空）；④`knowledge_approve`（人审后引用门才认可）。参数在**提交入口**用判别联合校验；引擎 `submit` 拒绝非法载荷；工作流单步写入对应 store，异常转成 `FAILED` + 可读消息（不再只剩裸 `workflow ERROR`）。入口：CLI `bacmap record metadata|lab|knowledge-import|knowledge-approve`，Web `/records`（三个表单 + 审核，cookie 模式带 CSRF）。record 任务**不进计划**（`PlanService` 仍只收 analyze/curate），**不经 MCP 暴露**（D4 写，ADR-16）。顺带修复 `StrainMetadataService`/`LabResultService` 先连接后建目录的顺序缺陷（父目录不存在时 `unable to open database file`）。测试基线 1489 → 1510（+21：模型/工作流/CLI/Web），四绿全过 | 用户裁定（按 P0 数据入口顺序）+ 实施验证 |
+| v1.7.1 | 2026-10-26 | **证据可见性（P0 第二项）**：运行记录与 GOM 此前只有内部工具能读。新增只读入口：①CLI `bacmap run ls|show|compare`、`bacmap gom ls|show`；②`/api/v1/runs`、`/runs/{id}`、`/runs/{id}/compare?other=`、`/gom/objects`、`/gom/objects/{id}?version=`；③Web **运行**（列表/详情/来源比较表单）与 **GOM**（最新版本列表 + 载荷查看）页面。运行比较直接复用 ADR-18 的 `compare_runs`（参数/数据库/工具/输入/工作流逐字段归因），不新造判定。GOM 列表只给载荷键名，全文在详情页（避免一次渲染大对象）。测试基线 1510 → 1517 | 用户裁定（按 P0 顺序）+ 实施验证 |
+| v1.7.2 | 2026-10-26 | **开放路径入计划 + 运维命令 + 文档站补全**。①**计划类型扩到四类**：`PlannableTask` 增加 `mine`（objective、script ≤20k、绝对 input_paths、sandbox_image、input_data_class D2–D4）与 `write`（objective、draft ≤40k、known_citations）；`MineParams.script`/`WriteParams.draft` **全文进入计划哈希**，确认页展示全文——所见即所执行；`mine` 的输入文件/目录在建计划时记录指纹（文件取大小+mtime，目录递归），确认时复核，变化即冲突。MCP `bacmap_create_plan` 相应接受四类（描述已更新），`bacmap_capabilities.plannable_task_types` 同步。安全语义不变：执行仍在无网络沙箱内，产物过挖掘门 + 签字；record 类仍不可计划、不经 MCP。②**运维命令**：`bacmap doctor`（目录可写/库版本/沙箱后端/LLM/磁盘/外部工具，fail→退出码 1）、`bacmap backup --out [--with-results]`（配置 + 全部 SQLite 用 backup API 取一致快照 + 运行清单，zip）、`bacmap restore --from [--force]`（拒绝非空目录、zip-slip 防护、逐库 integrity_check）、`bacmap events prune --days N`（事件保留期）；`EventLog.prune` 实现。③**文档站补全**：新增双语文档 `docs/operations*.md`（体检/备份/恢复/迁移/升级清单/运行隔离），mkdocs 导航与 README 文档索引更新，usage 增补"运行记录与 GOM""开放路径计划""运维"入口。测试基线 1517 → 1529 | 用户裁定（继续 P1 并提升文档到可发布）+ 实施验证 |

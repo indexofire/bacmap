@@ -1,16 +1,16 @@
-"""MCP 入口：``python -m bacmap.interfaces.mcp [--transport stdio|http]``。
+"""MCP 入口：``python -m bacmap.interfaces.mcp [--transport stdio|http] [--profile ...]``。
 
 stdio 为默认（本机客户端）；http 走 Streamable HTTP + Bearer 鉴权（ADR-12）。
+Profile 默认 ``cloud``（v1.5，ADR-16）。
 """
 
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 
 from bacmap.config import BACMAP_HOME
-from bacmap.interfaces.mcp.server import build_server
+from bacmap.interfaces.mcp.launch import add_profile_argument, serve
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 
 
@@ -22,6 +22,7 @@ def main() -> None:
         action="store_true",
         help="只读模式：不暴露任务提交工具（纯查询）",
     )
+    add_profile_argument(parser)
     parser.add_argument(
         "--transport", choices=["stdio", "http"], default="stdio", help="传输（默认 stdio）"
     )
@@ -32,22 +33,17 @@ def main() -> None:
         "--token-env", default="BACMAP_MCP_TOKEN", help="Bearer token 的环境变量名"
     )
     args = parser.parse_args()
-
-    engine = None if args.read_only else DbosTaskEngine(Path(args.home))
-    server = build_server(engine)
-
-    if args.transport == "stdio":
-        server.run(transport="stdio")
-        return
-
-    from bacmap.interfaces.mcp.http import run_http
-
-    token = os.environ.get(args.token_env, "")
-    if not token:
-        raise SystemExit(
-            f"HTTP 传输需要 Bearer token（ADR-12）：请先设置环境变量 {args.token_env}"
-        )
-    run_http(server, token=token, host=args.host, port=args.port, uds=(args.uds or None))
+    serve(
+        home=Path(args.home),
+        profile_name=args.profile,
+        read_only=args.read_only,
+        transport=args.transport,
+        host=args.host,
+        port=args.port,
+        uds=args.uds,
+        token_env=args.token_env,
+        engine_factory=DbosTaskEngine,
+    )
 
 
 if __name__ == "__main__":

@@ -12,7 +12,6 @@ from __future__ import annotations
 import hmac
 import json
 import secrets
-import threading
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -79,8 +78,6 @@ class _Templates(Jinja2Templates):
 
 _TEMPLATES = _Templates(directory=str(Path(__file__).parent / "templates"))
 
-_MAX_ASSISTANT_SESSIONS = 32  # 会话上限（LRU 淘汰；防无界增长/内存泄漏）
-_MAX_PROMPT_LEN = 8000  # 单轮需求文本上限（防超大表单/提示词）
 
 
 def _consteq(a: str, b: str) -> bool:
@@ -325,90 +322,231 @@ def _build_task_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
         return RedirectResponse(f"/tasks/{task_id}", status_code=303)
 
 
-def _build_assistant_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
-    """会话式助手（LLM 规划 → 确认 → 提交）；会话表带锁的 LRU。"""
-    _agent_sessions: dict[str, dict[str, Any]] = {}
-    # 同步路由跑线程池：会话表的 LRU 淘汰/写入须持锁（并发下不超上限、不竞态）。
-    _agent_sessions_lock = threading.Lock()
+def _build_record_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
+    """数据记录页（v1.7）：元数据 / 化验 / 知识库——写操作只经任务层（record 任务）。"""
+    from bacmap.tasks.spec import TaskType
 
-    @app.get("/assistant", response_class=HTMLResponse)
-    def assistant_page(request: Request) -> HTMLResponse:
-        return _TEMPLATES.TemplateResponse(
-            request, "assistant.html", {"sid": "", "reply": None, "text": "", "results": None}
-        )
+    @app.get("/records", response_class=HTMLResponse)
+    def records_page(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(request, "records.html", {})
 
-    def _new_session(sid: str) -> None:
-        from bacmap.interfaces.assistant import build_session
+    def _fields_from_text(raw: str) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for line in raw.replace(",", "\n").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if "=" not in line:
+                raise HTTPException(400, f"字段行需要 k=v 形式：{line!r}")
+            key, _, value = line.partition("=")
+            if not key.strip():
+                raise HTTPException(400, f"字段键为空：{line!r}")
+            out[key.strip()] = value.strip()
+        return out
 
-        with _agent_sessions_lock:
-            # LRU 上限：超限淘汰最旧会话（其 LLM 历史随之释放）。
-            if len(_agent_sessions) >= _MAX_ASSISTANT_SESSIONS:
-                oldest = min(_agent_sessions, key=lambda k: _agent_sessions[k]["at"])
-                _agent_sessions.pop(oldest, None)
-            _agent_sessions[sid] = {
-                "session": build_session(engine),
-                "plan": None,
-                "at": datetime.now(UTC),
+    @app.post("/records/{kind}")
+    def submit_record(
+        request: Request,
+        kind: str,
+        strain_id: str = Form(""),
+        sample_id: str = Form(""),
+        fields: str = Form(""),
+        category: str = Form(""),
+        test_name: str = Form(""),
+        result: str = Form(""),
+        unit: str = Form(""),
+        title: str = Form(""),
+        identifier: str = Form(""),
+        content: str = Form(""),
+        entry_id: str = Form(""),
+        csrf: str = Form(""),
+    ) -> RedirectResponse:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        params: dict[str, Any] = {}
+        if kind == "metadata":
+            params = {
+                "kind": "metadata",
+                "strain_id": strain_id.strip(),
+                "sample_id": (sample_id.strip() or strain_id.strip()),
+                "fields": _fields_from_text(fields),
             }
+        elif kind == "lab":
+            params = {
+                "kind": "lab_result",
+                "strain_id": strain_id.strip(),
+                "category": category.strip(),
+                "test_name": test_name.strip(),
+                "result": result.strip(),
+                "unit": unit.strip(),
+            }
+        elif kind == "knowledge-import":
+            params = {
+                "kind": "knowledge_import",
+                "title": title.strip(),
+                "identifier": identifier.strip(),
+                "content": content.strip(),
+            }
+        elif kind == "knowledge-approve":
+            try:
+                params = {"kind": "knowledge_approve", "entry_id": int(entry_id)}
+            except ValueError as exc:
+                raise HTTPException(400, "entry_id 必须是整数") from exc
+        else:
+            raise HTTPException(404, "未知的记录类型")
+        try:
+            tid = engine.submit(TaskType.RECORD, params, "web")
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return RedirectResponse(f"/tasks/{tid}", status_code=303)
 
-    @app.post("/assistant", response_class=HTMLResponse)
-    def assistant_ask(
-        request: Request, text: str = Form(...), sid: str = Form(""), csrf: str = Form("")
-    ) -> HTMLResponse:
-        from uuid import uuid4
 
-        if not verify_csrf(request, csrf):
-            raise HTTPException(403, "CSRF 校验失败")
-        prompt = text.strip()
-        if not prompt:
-            raise HTTPException(400, "需求不能为空")
-        if len(prompt) > _MAX_PROMPT_LEN:
-            raise HTTPException(413, f"需求过长（上限 {_MAX_PROMPT_LEN} 字符）")
+def _build_evidence_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
+    """运行记录与 GOM 的只读页面（v1.7.1，ADR-18/13）。"""
+    import json as _json
 
-        if not sid or sid not in _agent_sessions:
-            sid = uuid4().hex
-            _new_session(sid)
-        entry = _agent_sessions[sid]
-        with _agent_sessions_lock:
-            entry["at"] = datetime.now(UTC)
-        reply = entry["session"].respond(prompt)
-        with _agent_sessions_lock:
-            entry["plan"] = reply.plan
+    from bacmap.interfaces.views import (
+        compare_run_records,
+        gom_object,
+        list_gom_objects,
+        list_runs,
+        run_detail,
+    )
+
+    @app.get("/runs", response_class=HTMLResponse)
+    def runs_page(request: Request) -> HTMLResponse:
         return _TEMPLATES.TemplateResponse(
-            request,
-            "assistant.html",
-            {"sid": sid, "reply": reply, "text": "", "results": None},
+            request, "runs.html", {"runs": list_runs(engine.home, 50)}
         )
 
-    @app.post("/assistant/execute", response_class=HTMLResponse)
-    def assistant_execute(
-        request: Request, sid: str = Form(...), csrf: str = Form("")
-    ) -> HTMLResponse:
-        from bacmap.interfaces.assistant import execute_plan
-
-        if not verify_csrf(request, csrf):
-            raise HTTPException(403, "CSRF 校验失败")
-        entry = _agent_sessions.get(sid)
-        # 原子取出并清空计划：双击/并发提交第二个请求会看到空计划而拒绝，
-        # 不会重复执行同一计划（重复提交重复任务）。
-        with _agent_sessions_lock:
-            plan = entry.pop("plan", None) if entry else None
-            if entry is not None:
-                entry["at"] = datetime.now(UTC)
-        if plan is None or not plan.tasks:
-            raise HTTPException(400, "没有待执行的计划")
-        # confirmed=True：本路由的唯一入口是用户在看到完整计划（含参数）后
-        # 点击"确认并提交计划"按钮——即人工确认的事实断言。
-        results = execute_plan(engine, plan, submitted_by="web", confirmed=True)
+    @app.get("/runs/{run_id}", response_class=HTMLResponse)
+    def run_page(request: Request, run_id: str, other: str | None = None) -> Any:
+        run = run_detail(engine.home, run_id)
+        if run is None:
+            raise HTTPException(404, "运行记录不存在")
+        compare = compare_run_records(engine.home, run_id, other) if other else None
         return _TEMPLATES.TemplateResponse(
             request,
-            "assistant.html",
-            {"sid": sid, "reply": None, "text": "", "results": results},
+            "run_detail.html",
+            {
+                "run": run,
+                "compare": compare,
+                "tool_versions": _json.dumps(
+                    run.get("tool_versions", {}), ensure_ascii=False, indent=2
+                ),
+                "ref_databases": _json.dumps(
+                    run.get("ref_databases", []), ensure_ascii=False, indent=2
+                ),
+                "resolved_config": _json.dumps(
+                    run.get("resolved_config", {}), ensure_ascii=False, indent=2
+                ),
+            },
         )
+
+    @app.get("/gom", response_class=HTMLResponse)
+    def gom_page(request: Request, type: str | None = None) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "gom.html",
+            {"objects": list_gom_objects(engine.home, type, 100), "type": type or ""},
+        )
+
+    @app.get("/gom/{object_id}", response_class=HTMLResponse)
+    def gom_detail_page(request: Request, object_id: str, version: int | None = None) -> Any:
+        obj = gom_object(engine.home, object_id, version)
+        if obj is None:
+            raise HTTPException(404, "GOM 对象不存在")
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "gom_detail.html",
+            {
+                "obj": obj,
+                "payload": _json.dumps(obj["payload"], ensure_ascii=False, indent=2),
+            },
+        )
+
+
+def _build_plan_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
+    """计划审阅与确认（v1.5.1，ADR-21 可信确认面）：外部 Harness 建计划，人在此确认。"""
+    from bacmap.application.errors import ApplicationError, NotFound
+    from bacmap.application.plans import PlanRecord, PlanService
+
+    service = PlanService(engine, engine.db)
+
+    def _render(request: Request, plan: PlanRecord, error: str = "", status: int = 200) -> Any:
+        task_json = [
+            json.dumps(t.model_dump(mode="json", exclude_none=True), ensure_ascii=False)
+            for t in plan.tasks
+        ]
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "plan_detail.html",
+            {"plan": plan, "task_json": task_json, "error": error},
+            status_code=status,
+        )
+
+    def _get_or_404(plan_id: str, version: int | None = None) -> PlanRecord:
+        try:
+            return service.get(plan_id, version)
+        except NotFound as exc:
+            raise HTTPException(404, "计划不存在") from exc
+
+    @app.get("/plans", response_class=HTMLResponse)
+    def plans(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(
+            request, "plans.html", {"plans": service.list_plans(50)}
+        )
+
+    @app.get("/plans/{plan_id}", response_class=HTMLResponse)
+    def plan_detail(request: Request, plan_id: str, version: int | None = None) -> Any:
+        return _render(request, _get_or_404(plan_id, version))
+
+    @app.post("/plans/{plan_id}/confirm")
+    def confirm_plan(
+        request: Request,
+        plan_id: str,
+        version: int = Form(...),
+        plan_hash: str = Form(...),
+        confirmer: str = Form(...),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        who = confirmer.strip()[:64]
+        if not who:
+            raise HTTPException(400, "需要确认人")
+        try:
+            service.confirm(plan_id, version, plan_hash, f"web:{who}")
+        except NotFound as exc:
+            raise HTTPException(404, "计划不存在") from exc
+        except ApplicationError as exc:
+            return _render(request, _get_or_404(plan_id, version), exc.message, 409)
+        return RedirectResponse(f"/plans/{plan_id}?version={version}", status_code=303)
+
+    @app.post("/plans/{plan_id}/reject")
+    def reject_plan(
+        request: Request,
+        plan_id: str,
+        version: int = Form(...),
+        reason: str = Form(...),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        try:
+            service.reject(plan_id, version, reason.strip()[:500], "web")
+        except NotFound as exc:
+            raise HTTPException(404, "计划不存在") from exc
+        except ApplicationError as exc:
+            return _render(request, _get_or_404(plan_id, version), exc.message, 409)
+        return RedirectResponse(f"/plans/{plan_id}?version={version}", status_code=303)
 
 
 def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI:
-    """组装 Web 应用：中间件/静态 + 四组路由（auth/sample/task/assistant）。"""
+    """组装 Web 应用：中间件/静态 + 六组页面路由 + /api/v1。
+
+    页面组：auth / sample / task / plan / record / evidence（运行记录与 GOM）。
+    """
     app = FastAPI(title="bacmap", docs_url=None, redoc_url=None)
     cfg = WebAuthConfig.from_env(auth_token)
     app.state.web_auth = cfg
@@ -423,5 +561,11 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
     _build_auth_routes(app, cfg)
     _build_sample_routes(app, engine)
     _build_task_routes(app, engine)
-    _build_assistant_routes(app, engine)
+    _build_plan_routes(app, engine)
+    _build_record_routes(app, engine)
+    _build_evidence_routes(app, engine)
+
+    from bacmap.interfaces.web.api import build_api_routes
+
+    build_api_routes(app, engine)
     return app

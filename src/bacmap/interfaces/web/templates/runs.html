@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}运行记录 · bacmap{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1 class="pagehead__title">运行记录</h1>
+  <p class="pagehead__sub">每次执行都有一条不可修改的运行记录（ADR-18）：参数、工具与数据库版本、输入哈希、种子。点开可对照两次运行。</p>
+</div>
+<section class="card card--table">
+  <div class="card__head"><h2 class="card__title">最近运行</h2><span class="card__count">{{ runs|length }} 条</span></div>
+  {% if runs %}
+  <table class="tasktable">
+    <thead><tr><th>run_id</th><th>workflow</th><th>菌株</th><th>开始</th><th>特征库版本</th></tr></thead>
+    <tbody>
+    {% for r in runs %}
+      <tr>
+        <td><a class="tasklink" href="/runs/{{ r.run_id }}">{{ r.run_id[:16] }}…</a></td>
+        <td>{{ r.workflow }}</td>
+        <td>{{ r.strain_ids|join(", ") }}</td>
+        <td><span class="mono-dim">{{ r.started_at[:19] }}</span></td>
+        <td>{{ r.baseline_version or "-" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<div class="empty"><h3 class="empty__title">暂无运行记录</h3><p class="empty__hint">提交一次 analyze 任务后会出现。</p></div>{% endif %}
+</section>
+{% endblock %}

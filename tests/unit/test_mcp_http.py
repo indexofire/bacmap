@@ -108,6 +108,8 @@ class TestStreamableHttpEndpoint:
                 headers={**_ACCEPT, **auth, "mcp-session-id": sid},
             )
         assert r.status_code == 200
-        assert "bio_seq_stats" in r.text
+        # 默认 cloud Profile（v1.5，ADR-16）：D0 工具可见，D3 序列工具不出
+        assert "bio_list_reference_genomes" in r.text
+        assert "bio_seq_stats" not in r.text
         # 只读/计算工具暴露；write 工具不暴露（V11④）
         assert "bio_add_metadata" not in r.text

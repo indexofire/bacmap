@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}记录 · bacmap{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1 class="pagehead__title">数据记录</h1>
+  <p class="pagehead__sub">元数据、化验结果与文献知识库都经任务层写入（可审计、可追溯）；知识库条目入暂存后需审核才会被引用门认可。</p>
+</div>
+<div class="layout-index">
+  <section class="card card--form" aria-labelledby="meta-title">
+    <div class="card__head"><h2 class="card__title" id="meta-title">菌株元数据</h2></div>
+    <form class="form" method="post" action="/records/metadata">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="field"><label class="field__label" for="m-strain">strain_id</label>
+        <input class="field__control" id="m-strain" name="strain_id" required></div>
+      <div class="field"><label class="field__label" for="m-sample">sample_id <span class="field__optional">默认同 strain_id</span></label>
+        <input class="field__control" id="m-sample" name="sample_id"></div>
+      <div class="field"><label class="field__label" for="m-fields">字段（每行 k=v）</label>
+        <textarea class="field__control" id="m-fields" name="fields" rows="5" placeholder="province=Guangdong&#10;sample_source=food&#10;isolation_date=2026-01-15"></textarea></div>
+      <div class="form__actions"><button class="btn btn--primary" type="submit">提交记录</button></div>
+    </form>
+  </section>
+  <section class="card card--form" aria-labelledby="lab-title">
+    <div class="card__head"><h2 class="card__title" id="lab-title">化验结果</h2></div>
+    <form class="form" method="post" action="/records/lab">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="field"><label class="field__label" for="l-strain">strain_id</label>
+        <input class="field__control" id="l-strain" name="strain_id" required></div>
+      <div class="field"><label class="field__label" for="l-cat">category</label>
+        <input class="field__control" id="l-cat" name="category" required placeholder="mic"></div>
+      <div class="field"><label class="field__label" for="l-test">test_name</label>
+        <input class="field__control" id="l-test" name="test_name" required placeholder="meropenem"></div>
+      <div class="field"><label class="field__label" for="l-result">result</label>
+        <input class="field__control" id="l-result" name="result" required placeholder="0.25"></div>
+      <div class="field"><label class="field__label" for="l-unit">unit</label>
+        <input class="field__control" id="l-unit" name="unit" placeholder="mg/L"></div>
+      <div class="form__actions"><button class="btn btn--primary" type="submit">提交记录</button></div>
+    </form>
+  </section>
+  <section class="card card--form" aria-labelledby="kn-title">
+    <div class="card__head"><h2 class="card__title" id="kn-title">文献知识库</h2></div>
+    <form class="form" method="post" action="/records/knowledge-import">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="field"><label class="field__label" for="k-title">title</label>
+        <input class="field__control" id="k-title" name="title" required></div>
+      <div class="field"><label class="field__label" for="k-id">identifier</label>
+        <input class="field__control" id="k-id" name="identifier" placeholder="PMID:12345678"></div>
+      <div class="field"><label class="field__label" for="k-content">content</label>
+        <textarea class="field__control" id="k-content" name="content" rows="3"></textarea></div>
+      <div class="form__actions"><button class="btn btn--primary" type="submit">入暂存</button></div>
+    </form>
+    <form class="form" method="post" action="/records/knowledge-approve">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="field"><label class="field__label" for="k-entry">审核条目 ID</label>
+        <input class="field__control" id="k-entry" name="entry_id" type="number" min="1" required></div>
+      <div class="form__actions"><button class="btn" type="submit">审核通过</button></div>
+    </form>
+  </section>
+</div>
+{% endblock %}

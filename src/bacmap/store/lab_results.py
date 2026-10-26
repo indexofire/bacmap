@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from bacmap.store.schema import ensure_data_schema
+
 _SCHEMA_SQL = [
     """CREATE TABLE IF NOT EXISTS lab_results (
         id               TEXT PRIMARY KEY,
@@ -30,6 +32,8 @@ _SCHEMA_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_lab_strain_cat ON lab_results(strain_id, category)",
     "CREATE INDEX IF NOT EXISTS idx_lab_category ON lab_results(category)",
 ]
+
+DDL_STATEMENTS = _SCHEMA_SQL
 
 
 @dataclass
@@ -57,11 +61,10 @@ class LabResult:
 class LabResultService:
     def __init__(self, db_path: Path | str) -> None:
         self.db_path = Path(db_path)
+        ensure_data_schema(self.db_path)  # 先建表/建目录，再连接（父目录可能尚不存在）
         self._conn = sqlite3.connect(str(self.db_path), isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode = WAL")
-        for ddl in _SCHEMA_SQL:
-            self._conn.execute(ddl)
 
     def _row_to_result(self, row: sqlite3.Row) -> LabResult:
         d = dict(row)

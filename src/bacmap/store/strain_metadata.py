@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from bacmap.store.schema import ensure_data_schema
+
 _SCHEMA_SQL = [
     """CREATE TABLE IF NOT EXISTS strain_metadata (
         strain_id       TEXT PRIMARY KEY,
@@ -44,6 +46,37 @@ _SCHEMA_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_meta_outbreak ON strain_metadata(outbreak_id)",
     "CREATE INDEX IF NOT EXISTS idx_meta_isolation_date ON strain_metadata(isolation_date)",
     "CREATE INDEX IF NOT EXISTS idx_meta_province ON strain_metadata(province)",
+]
+
+DDL_STATEMENTS = _SCHEMA_SQL
+
+METADATA_FIELDS = [
+    "submitting_lab",
+    "sample_id",
+    "submit_date",
+    "receiver",
+    "patient_id",
+    "patient_name",
+    "patient_age",
+    "patient_gender",
+    "patient_phone",
+    "isolation_date",
+    "province",
+    "city",
+    "district",
+    "facility",
+    "sample_source",
+    "sample_type",
+    "food_category",
+    "food_name",
+    "collection_date",
+    "symptoms",
+    "onset_date",
+    "diagnosis",
+    "outcome",
+    "hospital",
+    "outbreak_id",
+    "cluster_note",
 ]
 
 _CORE_COLUMNS = [
@@ -121,11 +154,10 @@ class StrainMeta:
 class StrainMetadataService:
     def __init__(self, db_path: Path | str) -> None:
         self.db_path = Path(db_path)
+        ensure_data_schema(self.db_path)  # 先建表/建目录，再连接（父目录可能尚不存在）
         self._conn = sqlite3.connect(str(self.db_path), isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode = WAL")
-        for ddl in _SCHEMA_SQL:
-            self._conn.execute(ddl)
 
     def _split_core_extra(self, data: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         core: dict[str, Any] = {}

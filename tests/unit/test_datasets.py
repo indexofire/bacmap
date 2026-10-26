@@ -274,39 +274,3 @@ class TestMineInputPaths:
             assert reg.list_all() == []
 
 
-class TestSandboxRunDatasets:
-    def test_passthrough_reads_registered_dataset(self, tmp_path, data_dir, monkeypatch):
-        monkeypatch.setenv("BACMAP_ALLOW_UNSANDBOXED", "1")
-        monkeypatch.setattr("bacmap.agent.sandbox._which", lambda b: None)  # 密闭：强制直通
-        from bacmap import config
-        from bacmap.agent.sandbox.tool import run_script
-
-        gom_db = tmp_path / "gom.sqlite"
-        results = tmp_path / "results"
-        results.mkdir()
-        with DatasetRegistry(gom_db) as reg:
-            ds = reg.register(data_dir, registered_by="t")
-        monkeypatch.setattr(config, "GOM_DB", gom_db)
-        monkeypatch.setattr(config, "RESULTS_DIR", results)
-
-        script = (
-            "import json, pathlib\n"
-            "ctx = json.load(open('context.json'))\n"
-            "p = pathlib.Path(ctx['datasets']['" + ds.dataset_id + "']) / 'a.txt'\n"
-            "print(p.read_text())\n"
-        )
-        out = json.loads(run_script(tmp_path / "ws", script, "read", [ds.dataset_id]))
-        assert out["returncode"] == 0, out
-        assert "alpha" in out["stdout"]
-        assert out["datasets"][ds.dataset_id] == ds.resolved_path
-
-    def test_unknown_dataset_id_is_explicit_error(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("BACMAP_ALLOW_UNSANDBOXED", "1")
-        from bacmap import config
-        from bacmap.agent.sandbox.tool import run_script
-
-        gom_db = tmp_path / "gom.sqlite"
-        DatasetRegistry(gom_db).close()
-        monkeypatch.setattr(config, "GOM_DB", gom_db)
-        out = json.loads(run_script(tmp_path / "ws", "print(1)", "x", ["ds-nope"]))
-        assert "error" in out and "未知 dataset_id" in out["error"]

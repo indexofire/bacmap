@@ -86,7 +86,10 @@ class DatasetRegistry:
     """数据集登记表（存 GOM 库，与 GOM 同库便于只读工具读取）。"""
 
     def __init__(self, db_path: Path | str) -> None:
+        from bacmap.store.genome_object_service import ensure_gom_schema
+
         self.db_path = Path(db_path)
+        ensure_gom_schema(db_path)  # 与 GOM 共用 gom.sqlite 的按文件迁移清单
         self._conn = sqlite3.connect(str(self.db_path), isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode = WAL")

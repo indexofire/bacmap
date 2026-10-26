@@ -3,14 +3,14 @@
 # Usage guide
 
 bacmap has three entry points: the **CLI** (operations), the **web task console** (humans), and **MCP** (AI agents).
+Conversation happens in the native UI of an external agent harness (Hermes / Pi / DSH) over MCP —
+see the [agent harness guide](harnesses.md); from v1.6 the built-in assistant has been removed (ADR-21).
 
 ## 1. CLI
 
 ```bash
 bacmap --version
-bacmap ask "跑 SAM-001 的分析并和去年暴发株比较"   # LLM 规划 → 确认 → 提交
-bacmap chat                                        # 多轮对话式分析助手
-bacmap tui [--home H]                              # 全屏 TUI（Textual）
+bacmap tui [--home H]                              # full-screen task console (Textual)
 bacmap console [--home H]                          # 交互式菜单
 bacmap overview [--json]                           # 系统概览
 bacmap task list|show|submit|approve|cancel         # 任务查询与写操作（显式、无 LLM；list alias ls）
@@ -23,91 +23,49 @@ bacmap task submit --type analyze --fastq-dir <dir> [--species <code|name>]
                                                    # reads directory entry: auto-detect *_R1/_R2 pairs;
                                                    # species omitted → UNK (identified in-pipeline; no
                                                    # species-specific typing routes)
+bacmap plan ls|show|confirm|reject                 # review/confirm agent-proposed plans (v1.5.1)
+bacmap record metadata|lab|knowledge-import|knowledge-approve
+                                                   # data entry through the task layer (v1.7)
 bacmap sample ls|show                              # 样本浏览
 bacmap search --query <kw>                          # 样本检索
-bacmap web [--host 127.0.0.1] [--port 8800]        # Web 控制台（含助手）
-bacmap mcp [--read-only] [--home H]                # MCP 服务器（stdio/HTTP）
+bacmap web [--host 127.0.0.1] [--port 8800]        # Web console (tasks / plans / samples)
+bacmap mcp [--read-only] [--profile cloud|local-trusted] [--home H]
+                                                   # MCP server (stdio/HTTP); default profile cloud
 ```
 
 Query subcommands accept `--json`. Writes always go through the same gates as Web/MCP.
+Day-two operations (`doctor`, `backup`, `restore`, event retention) are covered in the
+[operations guide](operations.md).
 
 Top-level commands fall into two kinds: **interfaces/modes** (`mcp`, `web`, `tui`, `console`)
 that take over a terminal or bind a port, and **commands** (`overview`, `task`, `sample`,
-`search`, `ask`, `chat`) that perform one query or write and exit. `bacmap` itself *is* the
+`search`) that perform one query or write and exit. `bacmap` itself *is* the
 CLI, so commands stay at the top level (`bacmap task list`) rather than nested under a `cli`
 subcommand; `web`/`tui`/`console` are sibling interaction modes.
 
-## 2. LLM-driven assistant (CLI ask/chat, TUI Chat, Web /assistant)
+## 2. Talking to bacmap: external agents and plans
 
-The built-in assistant turns a natural-language analysis need into an executable plan.
-It is the shared **agent session** (`agent/session.py`) used by all three interfaces
-(ADR-10 planner + ADR-11 open path):
-
-1. **Understand + look around**: the LLM may call read tools (`bio_list_samples`,
-   `bio_get_result`, `bio_search_samples`, `bio_query_metadata`, `bio_review_flags`,
-   `bio_compare_runs`) to ground itself.
-2. **Plan & execute**: it returns a structured plan of closed task types — `analyze` (standard
-   Snakemake pipeline) or `curate` for most requests; `mine` for deep mining where it writes a
-   Python script to run in the sandbox (multiple sequential `mine` tasks for multi-step work);
-   `write` for documents. During planning it can also call **`sandbox_run`** to execute a script
-   (no network) and read back stdout/artifacts — so it can iterate on statistics and **render
-   charts (PNG/CSV)** before proposing a `mine` task that goes through the mining gate.
-3. **Clarify**: when the request is ambiguous it asks instead of guessing.
-4. **Confirm (risk-tiered)**: reads/analysis-of-existing-results run inside planning;
-   **writes are only submitted after confirmation** (`bacmap ask` prompts, add `--yes` to
-   skip; TUI: `Ctrl+Y` or the button; Web: the confirm button).
-5. **Degrade (C3)**: if the LLM endpoint is unavailable, the assistant says so and you fall
-   back to the explicit subcommands / task form — the deterministic path always works.
-
-**Streaming output & thinking indicator (v1.4.31; v1.4.32 thinking inline in the main
-view)**: TUI chat and CLI `ask`/`chat` consume an event stream — model thinking deltas
-(native reasoning streams such as GLM's) stream **inline in the conversation view** (dim
-italic; the full text **stays visible** when the turn ends, `Ctrl+T` collapses/expands the
-most recent one), the reply types out in place and is finalized with
-the authoritative text, and tool calls appear as an activity line (e.g.
-`⠋ 调用 bio_list_samples…`); `Esc` cancels the in-flight request. Web `/assistant`
-remains a full-page round trip for now. The structured-plan contract is unchanged (ADR-10
-planner; streaming is presentation-only — the final result is still fully validated by
-pydantic-ai).
-
-**Assistant on a cloud endpoint (v1.4.30)**: when the assistant routes to a `cloud` endpoint
-(GLM, DeepSeek, …), its tool belt is trimmed against `cloud_max_data_class` — the D4
-metadata/lab-result queries (`bio_query_metadata`, …) and the D3 dataset inspector
-(`bio_inspect_dataset`) stay out of the session, sandbox tools (`sandbox_run`/`sandbox_shell`)
-are excluded entirely, and the session data class is ≤D2; local/lan endpoints keep the full
-belt. For full sample-query and planning capability on cloud, the administrator relaxes
-`cloud_max_data_class` to `"D2"` (the maximum, configuration doc §3). The ADR-16 red line is
-unchanged: D3/D4 data never reaches a cloud endpoint under any configuration.
-
-Example:
+There is no built-in chat any more (ADR-21). Talk to bacmap from Hermes, Pi or DSH (or any MCP
+client); the agent proposes a **plan**, and you confirm that exact version in bacmap:
 
 ```bash
-$ bacmap ask "把本地沙门菌按 ST 统计并画图"
-bacmap › 建议先统计再绘图。
-建议执行的分析计划：
-  1. mine —— 按 ST 聚合本地沙门菌并输出统计 CSV
-  2. mine —— 由统计 CSV 绘制 ST 分布图
-确认提交该计划？ [y/N]
+bacmap plan ls                       # latest version of each plan
+bacmap plan show <plan_id>           # full parameters, hash, input fingerprints
+bacmap plan confirm <plan_id> --hash <first 12 chars>
+bacmap plan reject <plan_id> --version 1 --reason "wrong sample"
 ```
 
-### Giving the assistant a data path
+The Web console offers the same under **Plans** (`/plans`). See the
+[agent harness guide](harnesses.md) for client configuration, and §5 for the MCP tools.
 
-The assistant cannot read arbitrary host paths — by design (ADR-11: raw data is D3 and never
-enters LLM context), not a fault. The single entry point for external data is the `mine`
-task's `input_paths` parameter. **Just give the path in conversation**:
+### Giving a mine task a data path
 
-```bash
-$ bacmap ask "读取 /data/2026批次/st_list.csv，按 ST 统计样本数并画柱状图"
-bacmap › 收到。/data/... is an external path; a mine task is required:
-       zero-copy registration (SHA256) → read-only mount into the sandbox → stats inside.
-建议执行的分析计划：
-  1. mine —— register the CSV as an input dataset; group by ST, emit st_counts.csv + st_counts.png
-确认提交该计划？ [y/N]
-```
-
-After confirmation the task runs: **register → read-only mount → script in sandbox →
-artifacts in the workspace → mining gate awaits your signature**. The script locates data
-via the workspace `context.json` `datasets` mapping (`id → path` — an **object, not an array**).
+Agents cannot read arbitrary host paths — by design (ADR-11: raw data is D3 and never enters LLM
+context). External data enters only through the `mine` task's `input_paths` parameter. Ask the
+agent for a `mine` plan, confirm it, and the task runs: **zero-copy registration (SHA256) →
+read-only mount into the sandbox → script runs → artifacts land in the workspace → mining gate
+waits for your signature**. The script finds data through the workspace `context.json`
+`datasets` mapping (`id → path` — an **object, not an array**).
 
 Rules for `input_paths` (`store/datasets.py`):
 
@@ -123,51 +81,46 @@ Rules for `input_paths` (`store/datasets.py`):
 
 **Execution prerequisite**: a sandbox backend (Apptainer or Podman — installation guide §6).
 Without one the task fails with "沙箱不可用 / sandbox unavailable"; installing `podman` fixes
-it with zero further configuration. The cloud GLM assistant can *plan* mine tasks, but cannot
-inspect registered datasets (D3 tools are trimmed on cloud) or iterate scripts in-session —
-for a "look at the data, then adjust the script" workflow, configure a local/lan endpoint.
+it with zero further configuration.
 
 Besides `sandbox_run` (a Python script), a restricted **`sandbox_shell`** runs a single shell
 command inside the same sandbox — only read/analysis commands (`ls`, `cat`, `grep`, `zcat`,
 `samtools`, `seqkit`, `python`, …) are allowed; anything else is refused and should become a
 signed `mine` task. It only runs with a real container backend (passthrough is refused by
-default) and every invocation is written to `$BACMAP_HOME/audits/sandbox_shell.jsonl`.
+default) and every invocation is recorded in `$BACMAP_HOME/audits/sandbox_shell.jsonl`. These
+two tools belong to the **in-task** agents; MCP clients never get them.
 
 ## 3. TUI and interactive console
 
-`bacmap tui` starts a chat-first Textual workspace (inspired by opencode's TUI and the hermes
-agent REPL): a **status header** (LLM endpoint), a collapsible **sidebar** (Tasks / Samples),
-the **conversation**, a **plan hint**, and the **prompt**, with a **footer** of key hints.
+`bacmap tui` starts a **task console**: a status header (LLM endpoint), a collapsible sidebar
+(Tasks / Samples), an operation log, and a command input, with a footer of key hints. It is a
+read/dashboard surface plus a few explicit operations — there is no chat.
 
-- **Direct keys**: `Enter` send · `Shift/Alt+Enter` newline · `Esc` interrupt / ignore the
-  pending plan · `Ctrl+C` quit · `Ctrl+B` toggle sidebar · `Ctrl+R` refresh · `Ctrl+L` clear
-  conversation · `Ctrl+F` toggle follow (stop auto-scroll while reading back) · `Ctrl+P`
-  command palette · `Ctrl+Y` confirm the pending plan / approval. The input box is
-  **focused on start**, so you can type immediately.
-- **Leader `Ctrl+G`** chords: `n` new session · `i` focus input · `l` tasks · `s` samples ·
-  `m` model/endpoint · `t` theme · `a` **approve the selected `awaiting_approval` task**
-  (the hint bar shows the task and signature; `Ctrl+Y` confirms, `Esc` cancels; the
+- **Direct keys**: `Enter` run command · `Esc` cancel pending approval / focus input · `Ctrl+C`
+  quit · `Ctrl+B` toggle sidebar · `Ctrl+R` refresh · `Ctrl+L` clear log · `Ctrl+Y` confirm a
+  pending signature. The input box is **focused on start**.
+- **Leader `Ctrl+G`** chords (work even while the input is focused): `i` focus input · `l` tasks ·
+  `s` samples · `m` model/endpoint · `t` theme · `a` **approve the selected `awaiting_approval`
+  task** (the hint bar shows the task and signature; `Ctrl+Y` confirms, `Esc` cancels; the
   signature defaults to the system username) · `h` help · `q` quit.
-- **Failure echo**: when a submitted task ends `failed`/`cancelled`, the conversation gets one
-  line — `任务 <id> failed（<step>）：<reason>` — so you need not watch the sidebar.
-- **Slash commands** in the prompt: `/help /new /clear /tasks /samples /search <kw> /model`
-  `/result <sample>` `/approve <ID> [signature]` `/analyze <样本> /curate [scope] /quit`
-  (the `/analyze` and `/curate` commands are the explicit no-LLM path; `/approve` accepts the
-  short ID prefix shown by `task list`, and with no argument approves the task selected in the
-  sidebar; `/result` with no argument renders the selected sample's key findings and report
-  path in the conversation).
+- **Failure echo**: when a submitted task ends `failed`/`cancelled`, the log gets one line —
+  `任务 <id> failed（<step>）：<reason>` — so you need not watch the sidebar.
+- **Slash commands**: `/help /clear /tasks /samples /search <kw> /model /result <sample>`
+  `/approve <ID> [signature]` `/analyze <sample> /curate [scope] /quit` (`/analyze` and
+  `/curate` are the explicit no-LLM path; `/approve` accepts the short ID prefix shown by
+  `task list` and with no argument approves the selected task; `/result` renders the selected
+  sample's key findings and report path).
 
-The prompt is the assistant: plan → confirm (`Ctrl+Y`) → submit. The sidebar auto-collapses on
-narrow terminals and restores your preference when width returns. `bacmap console` remains a
-numbered menu for users who prefer prompts over subcommands.
+The sidebar auto-collapses on narrow terminals and restores your preference when width returns.
+Natural language goes to an external harness (ADR-21); `bacmap console` remains a numbered menu
+for users who prefer prompts over subcommands.
 
-## 4. Web console (tasks / assistant / samples / search)
+## 4. Web console (tasks / plans / samples / search)
 
 Run `bacmap web`, then open `http://127.0.0.1:8800` in a browser:
 
-1. **Assistant** (`/assistant`): describe the need in natural language; the page shows the
-   assistant's reply and the proposed plan, with a button to confirm and submit (multi-turn
-   session kept server-side).
+1. **Plans** (`/plans`): plans proposed by agents over MCP, with their full parameters, hash and
+   input fingerprints; confirm or reject here (same as `bacmap plan`).
 2. **Submit a task** (Tasks page): the explicit form (task type + sample list / scope JSON).
 3. **Monitor**: six state badges (queued / running / pending approval / completed / failed
    / canceled); the detail page refreshes every 2 seconds.
@@ -201,9 +154,48 @@ epidemiological baseline: `{"pathogen": "Salmonella"}` filters by species substr
 sample (strains failing per-strain checks are recorded as excluded). `analyze` ignores it.
 
 **mine/write never go through the form**: they are open paths (script/draft parameters) and
-are submitted only via the conversational assistant (after confirmation) or the Python API —
-the web form, CLI `task submit`, and MCP deliberately decline them, to prevent forged
-requests and script injection.
+are submitted only through a plan confirmed by a person (ask an external harness for it) or the
+Python API — the web form, CLI `task submit`, and MCP deliberately decline them, to prevent
+forged requests and script injection.
+
+### Data entry: metadata, lab results, knowledge (v1.7)
+
+Three kinds of input are **not** registry tools you call directly — they go through the task layer
+so every write is auditable. Use the **记录 / Records** page (`/records`) or the CLI:
+
+```bash
+bacmap record metadata --strain-id S1 --field province=Guangdong --field sample_source=food
+bacmap record lab --strain-id S1 --category mic --test-name meropenem --result 0.25 --unit mg/L
+bacmap record knowledge-import --title "Paper" --identifier PMID:12345678
+bacmap record knowledge-approve 7        # the citation gate only honours approved entries
+```
+
+Each command submits a `record` task; `bacmap task show <id>` reports the outcome. Knowledge
+entries land in a staging area (`approved_by` empty) until a `knowledge-approve` task runs.
+Record tasks are not plannable and are never exposed over MCP (D4 writes).
+
+### JSON API `/api/v1` (v1.5.2)
+
+The Web server also exposes a versioned JSON API under the same authentication. It is a **trusted
+surface**: whoever holds the Web token is the operator, so never hand that token to a harness.
+
+| Method and path | Purpose |
+|---|---|
+| `GET /api/v1/capabilities` | API version, bacmap version, plannable task types, features |
+| `GET /api/v1/tasks` · `GET /api/v1/tasks/{id}` · `POST /api/v1/tasks/{id}/cancel` | Tasks |
+| `GET /api/v1/plans` · `GET /api/v1/plans/{id}?version=` | Plans |
+| `POST /api/v1/plans/{id}/confirm` `{"version", "plan_hash", "confirmer"}` · `POST /api/v1/plans/{id}/reject` `{"version", "reason"}` | Confirm or reject a plan |
+| `GET /api/v1/events?after=&task_id=&plan_id=` | Domain events after a cursor (`last_seq`) |
+| `GET /api/v1/events/stream` | Server-Sent Events; resumes from `Last-Event-ID` |
+| `GET /api/v1/samples?cursor=&limit=` | Sample list with cursor pagination (only the requested page is parsed) |
+| `GET /api/v1/runs` · `GET /api/v1/runs/{id}` · `GET /api/v1/runs/{id}/compare?other=` | Run records and provenance comparison (v1.7.1) |
+| `GET /api/v1/gom/objects?type=&limit=` · `GET /api/v1/gom/objects/{id}?version=` | GOM objects, latest version by default (v1.7.1) |
+
+Errors use `{"code": "validation_error" | "not_found" | "conflict", "error": "..."}` with HTTP
+400/404/409. In cookie mode, state-changing requests need an `X-CSRF-Token` header equal to the
+`bacmap_csrf` cookie. Events record plan and task transitions (created, confirmed, submitted, step,
+state, approval); they are not the source of truth, so after a disconnect a client should re-read
+the task or plan.
 
 ### Remote access: SSH tunnel (the recommended way)
 
@@ -234,7 +226,33 @@ ssh -L 8800:127.0.0.1:8800 user@10.0.0.5
 
 ## 5. MCP agent access
 
-Any client that supports MCP stdio can connect (Hermes / Codex / OpenCode / OpenClaw / Claude, and more). Sample client configurations:
+From v1.5 the recommended way to *talk* to bacmap is through the native UI of an external agent harness — **Hermes, Pi (≥0.99) or DeepSeek Harness (DSH)** — connected over MCP (frozen ADR-21). bacmap keeps the CLI and Web console for deterministic work and for **confirmations and approvals**, which never happen inside the harness. Any other client that speaks MCP (Codex / OpenCode / OpenClaw / Claude, and more) works the same way. Sample client configurations:
+
+```yaml
+# Hermes (~/.hermes/config.yaml)
+mcp_servers:
+  bacmap:
+    command: /path/to/.pixi/envs/default/bin/bacmap
+    args: ["mcp"]                       # add "--profile", "local-trusted" for local models
+```
+
+```json
+// Pi (~/.pi/agent/mcp.json, Pi ≥ 0.99)
+{ "mcpServers": { "bacmap": {
+  "command": "/path/to/.pixi/envs/default/bin/bacmap", "args": ["mcp"] } } }
+```
+
+```yaml
+# DSH ($DSH_HOME/cordis.patch.yml; a new entry must be wrapped in insert:)
+- insert:
+  - id: mcp-bacmap
+    name: '@deepseek-ai/dsh-mcp-client'
+    config:
+      serverName: bacmap
+      transport: stdio
+      command: /path/to/.pixi/envs/default/bin/bacmap
+      args: ['mcp']
+```
 
 ```json
 // OpenCode（opencode.json）
@@ -259,21 +277,83 @@ bacmap mcp --transport http --host 127.0.0.1 --port 8765
 
 Point the client at `http://127.0.0.1:8765/mcp` with header `Authorization: Bearer $BACMAP_MCP_TOKEN`. The HTTP transport refuses to start when no token is set.
 
-Once connected, agents can call **23 tools**:
+### Profiles: what a client can see (v1.5)
+
+Each MCP server instance is bound to one **profile**, chosen at launch. The client cannot change it, because the model behind an MCP client may be a cloud model that bacmap cannot verify (ADR-16).
+
+| Profile | Tools visible | How to enable |
+|---|---|---|
+| `cloud` (default) | read/compute tools whose output data class is ≤ `[llm.data_policy].cloud_max_data_class` (D1 by default, at most D2). Out of the box this means `bio_list_reference_genomes` and `bio_diagnose`, plus the task tools | nothing to do |
+| `local-trusted` | all read/compute tools up to D4 (sequences, metadata, lab results) | the administrator sets `[mcp] allow_local_trusted = true` in `config.toml`, then launches `bacmap mcp --profile local-trusted`. Without the setting the server refuses to start |
+
+Use `local-trusted` only when the harness talks to a **local or LAN model**. Hidden tools are rejected again at call time. To serve two profiles at once over HTTP, run two instances on different ports with different tokens.
+
+Task submissions are recorded under a server-determined identity (`mcp-stdio:<profile>:<OS user>` or `mcp-http:<profile>`); `bacmap_submit_task` no longer accepts a `submitted_by` argument.
+
+Once connected, agents can call (under `local-trusted`; `cloud` shows the D0–D1/D2 subset):
 
 | Category | Tools | Notes |
 |---|---|---|
-| Single-step compute (21) | `bio_fastq_qc` `bio_align` `bio_blast` `bio_samtools` `bio_variant` `bio_gene_scan` `bio_seq_stats` `bio_compare_runs` … | Return results synchronously; accept any local path |
-| Task submission | `bacmap_submit_task` | **The sole write entry point**; analyze/curate tasks run asynchronously |
-| Task queries | `bacmap_task_status` | Poll status and gate messages |
+| Capabilities | `bacmap_capabilities` | Version, profile and data-class ceiling, plannable task types, long-task mechanism — call it first |
+| Read/compute (22) | `bio_fastq_qc` `bio_align` `bio_blast` `bio_samtools` `bio_variant` `bio_gene_scan` `bio_seq_stats` `bio_compare_runs` … | Return results synchronously; accept any local path |
+| Plans (v1.5.1) | `bacmap_create_plan` `bacmap_revise_plan` `bacmap_get_plan` | **Recommended write path**: the agent proposes typed analyze/curate tasks; nothing runs until a person confirms the exact version in bacmap |
+| Task submission | `bacmap_submit_task` | Compatibility entry (direct submission); analyze/curate tasks run asynchronously |
+| Task queries | `bacmap_task_status` `bacmap_task_result` | Status (under `cloud` the message is withheld); result summary with run ID and gate verdicts (counts only under `cloud`) |
+| Task control | `bacmap_task_cancel` | Cancel a running task this client submitted, directly or through its own plan |
 
-Agents can also fetch domain guidance via MCP prompts: each delivered role (analyst / curator / miner / literature / writer / epidemiologist) exposes its instructions as a `bacmap_role_<name>` prompt (global principles + permission boundary + SKILL guidance).
+Agents can also fetch domain guidance via MCP prompts: each delivered role (analyst / curator / miner / literature / writer / epidemiologist) exposes its instructions as a `bacmap_role_<name>` prompt (global principles + permission boundary + SKILL guidance). The raw `SKILL.md` files are also published as resources `skill://bacmap/<role>/SKILL.md`, each with a `sha256` digest in its metadata. Per-harness setup is in the [agent harness guide](harnesses.md).
 
 Security model (identical for every client):
 
 - The MCP channel has **no direct writes**: store writes happen only through task submission and the six gates;
 - For untrusted clients, connect `bacmap mcp --read-only` first (query tools only);
+- MCP only protects data that flows through MCP. Harnesses bring their own shell and file tools, so run bacmap under a dedicated system account whose `BACMAP_HOME` the harness user cannot read, and connect the harness over HTTP with a token (ADR-21);
+- Confirm plans and sign approvals in the bacmap Web console or CLI, not in the harness chat;
 - Connectivity troubleshooting: `hermes mcp test bacmap`.
+
+### Plans: propose in the harness, confirm in bacmap (v1.5.1)
+
+1. The agent calls `bacmap_create_plan` with typed tasks, for example
+   `{"task_type": "analyze", "fasta_dir": "/data/run42", "species": "VPA"}`. Plannable types:
+   `analyze` (exactly one of `samples` / `fasta_dir` / `fastq_dir`), `curate` (`scope` =
+   `pathogen`/`strains`), **`mine`** (`objective`, `script`, optional absolute `input_paths`,
+   `sandbox_image`) and **`write`** (`objective`, `draft`). The reply carries `plan_id`, `version`
+   and `plan_hash`.
+2. The person reviews and confirms **that exact version** in bacmap:
+
+   ```bash
+   bacmap plan ls                                   # latest version of each plan
+   bacmap plan show <plan_id>                       # full parameters, hash, input fingerprints
+   bacmap plan confirm <plan_id> --version 1 --hash <first 12 chars>
+   bacmap plan confirm <plan_id>                    # or: show the plan, then confirm interactively
+   bacmap plan reject <plan_id> --version 1 --reason "wrong sample"
+   ```
+
+   The Web console offers the same under **计划 / Plans** (`/plans`), with CSRF protection in cookie mode.
+3. The agent polls `bacmap_get_plan` for `task_ids`, then `bacmap_task_status`.
+
+Guarantees: a revision (`bacmap_revise_plan`) creates a new version and the old one can no longer be
+confirmed; if an input directory (or a `mine` input file) changes between creation and confirmation,
+confirmation fails with a conflict; confirming twice (or from CLI and Web at the same time) submits
+the tasks only once.
+
+Open-path plans (`mine` / `write`) are shown **in full** at confirmation — the sandbox script or the
+draft text is part of the plan hash, so what you read is what runs. `mine` executes with no network
+inside the sandbox and its artefacts still go through the mining gate and your signature.
+
+### Runs and GOM: the evidence trail (v1.7.1)
+
+```bash
+bacmap run ls                                  # recent run records
+bacmap run show <run_id>                       # parameters, tool/db versions, input hashes, seeds
+bacmap run compare <run_a> <run_b>             # attribute differences to params/db/tool/input
+bacmap gom ls --type analysis                  # latest version of each GOM object
+bacmap gom show <object_id> [--version N]      # full object payload
+```
+
+The Web console mirrors this at **Runs** and **GOM**, with a compare form on the run page. Every
+analyze run writes one immutable record (ADR-18); GOM objects are immutable too — new results create
+new versions rather than overwriting.
 
 A typical exchange with an agent:
 
@@ -345,17 +425,17 @@ The pipeline keeps running on these fields and emits placeholder values. Once th
 |---|---|
 | "非法样本 ID" rejected | The ID contains characters outside `A-Za-z0-9._-`, or you separated IDs with a **full-width comma** — use ASCII `,` or newlines |
 | Not sure what the sample-list field takes | **Registered sample IDs** (the name used in samples.tsv / the `gs/` layout), not paths; see §4 task form details |
-| Want to submit mine from the form | Form/CLI/MCP deliberately accept only analyze/curate; mine goes through the conversational assistant (confirmed) or the Python API |
+| Want to submit mine from the form | Form/CLI/MCP deliberately accept only analyze/curate; ask an external harness for a mine plan (confirmed), or use the Python API |
 
-**Assistant & LLM** (setup tutorial and full table: installation guide §5)
+**LLM endpoints & agents** (setup tutorial and full table: installation guide §5)
 
 | Symptom | Cause / fix |
 |---|---|
-| `payload D4 exceeds cloud limit` | Data-class block (ADR-16); since v1.4.30 the cloud assistant trims its belt automatically — if you see this, upgrade first |
+| `payload D4 exceeds cloud limit` | Data-class block (ADR-16); in-task agents and cloud MCP instances trim their tool belt automatically — if you see this, upgrade first |
 | 401 / 429 (1113) / model-not-found | Key not injected, key/endpoint mismatch (GLM standard vs coding endpoint), or no quota for the model — installation guide §5.2 |
-| "内置助手暂不可用" | The unified degrade notice; run `bacmap ask "hi" 2>&1` — the WARNING lines show the real per-attempt failure |
-| No streaming in chat | Streaming is in the TUI and CLI `ask`/`chat` (v1.4.31); Web `/assistant` is still a full-page round trip |
-| Assistant says it cannot read a path "for security" | By design: external data goes through mine registration (§2); if the task then says "sandbox unavailable", install podman (installation guide §6) |
+| "LLM 不可用 / degraded" | The unified degrade notice; check the endpoint with `bacmap overview` (deterministic functions keep working, C3) |
+| Want streaming conversation | Conversation lives in the harness (ADR-21); bacmap only streams domain events via `/api/v1/events/stream` |
+| The agent says it cannot read a path "for security" | By design: external data goes through mine registration (§2); if the task then says "sandbox unavailable", install podman (installation guide §6) |
 | mine task fails with a bare "workflow ERROR" | Older builds collapsed environmental failures into that generic message; the task message now names the cause and remedy (e.g. "沙箱启动失败: no apptainer/podman on PATH → install podman") — upgrade and resubmit |
 
 **Samples & data**

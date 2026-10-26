@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}GOM · bacmap{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <h1 class="pagehead__title">GOM 对象</h1>
+  <p class="pagehead__sub">基因组对象是不可变事实（ADR-13）：每次分析产生新版本，旧版本永久保留。这里是最新版本的只读视图。</p>
+</div>
+<section class="card card--table">
+  <div class="card__head"><h2 class="card__title">最新版本对象</h2><span class="card__count">{{ objects|length }} 条</span></div>
+  <form class="form" method="get" action="/gom">
+    <div class="field"><label class="field__label" for="g-type">类型</label>
+      <input class="field__control" id="g-type" name="type" value="{{ type or '' }}" placeholder="analysis / sample / report / task"></div>
+    <div class="form__actions"><button class="btn" type="submit">筛选</button></div>
+  </form>
+  {% if objects %}
+  <table class="tasktable">
+    <thead><tr><th>object_id</th><th>类型</th><th>版本</th><th>菌株</th><th>载荷键</th><th>时间</th></tr></thead>
+    <tbody>
+    {% for o in objects %}
+      <tr>
+        <td><a class="tasklink" href="/gom/{{ o.object_id }}?version={{ o.version }}">{{ o.object_id[:18] }}…</a></td>
+        <td>{{ o.object_type }}</td><td>v{{ o.version }}</td>
+        <td>{{ o.strain_id or "-" }}</td>
+        <td><span class="mono-dim">{{ o.payload_keys|join(", ") }}</span></td>
+        <td><span class="mono-dim">{{ o.created_at[:19] }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<div class="empty"><h3 class="empty__title">暂无对象</h3><p class="empty__hint">完成一次分析后，样本与分析对象会出现在这里。</p></div>{% endif %}
+</section>
+{% endblock %}

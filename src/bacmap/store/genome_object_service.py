@@ -25,6 +25,10 @@ from pathlib import Path
 from typing import Any, Literal, get_args
 from uuid import uuid4
 
+from bacmap.store.datasets import _SCHEMA as _DATASETS_SCHEMA
+from bacmap.store.migrations import Migration, migrate
+from bacmap.store.schema import STRAIN_INDEX_DDL
+
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.]+)?$")
 
 _logger = logging.getLogger(__name__)
@@ -280,6 +284,25 @@ _SCHEMA_SQL = [
     "CREATE INDEX IF NOT EXISTS idx_fa_object ON file_artifacts(object_id, version)",
 ]
 
+# gom.sqlite 的按文件迁移清单（ADR-13，v1.5.2）：GOM 对象/事件/产物与数据集登记共用该文件，
+# 因此两个模块都以同一份清单迁移。只追加。
+GOM_MIGRATIONS: tuple[Migration, ...] = (
+    Migration(
+        1,
+        "baseline: genome objects, events, artifacts, datasets",
+        (*_SCHEMA_SQL, *_DATASETS_SCHEMA),
+    ),
+    # 菌株基因型索引与 GOM 同库（dbos_engine / tools.services 均在此文件上打开它）
+    Migration(2, "strain genotype index", STRAIN_INDEX_DDL),
+)
+
+
+def ensure_gom_schema(db_path: Path | str) -> None:
+    """迁移 gom.sqlite；``:memory:`` 无文件可版本化，直接建表（仅测试/临时用途）。"""
+    if str(db_path) == ":memory:":
+        return
+    migrate(Path(db_path), GOM_MIGRATIONS)
+
 
 class GenomeObjectService:
     """Genome Object 的 CRUD + 版本管理 + 事件 + 文件产物。
@@ -291,6 +314,7 @@ class GenomeObjectService:
         import sqlite3
 
         self.db_path = db_path
+        ensure_gom_schema(db_path)
         self._conn = sqlite3.connect(
             str(db_path),
             isolation_level=None,  # autocommit; we manage txns manually

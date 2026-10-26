@@ -24,7 +24,8 @@ concurrency:
 jobs:
   deploy:
     # 私有仓库（Free 计划）无 Pages 服务：跳过而非失败；转公开后自动生效。
-    if: github.repository.visibility == 'public'
+    # 注意：github.repository 是 "owner/repo" 字符串，用 github.event.repository.private 判断。
+    if: github.event.repository.private == false
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -41,6 +42,8 @@ jobs:
         run: pixi run -e dev docs-build
 
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true   # 首次运行时自动启用 Pages（build_type=workflow）
 
       - uses: actions/upload-pages-artifact@v3
         with:

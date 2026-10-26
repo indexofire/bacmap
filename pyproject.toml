@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bacmap"
-version = "1.4.39"
+version = "0.1.0"
 description = "Local pathogen genome analysis system with built-in agent layer (architecture-frozen-v1 ADR-01..20)"
 requires-python = ">=3.12,<3.14"
 authors = [
@@ -105,6 +105,7 @@ disallow_untyped_defs = true
 # ADR-02：依赖方向契约。core/store/tools 不得导入 agent/tasks/interfaces/workflow。
 [tool.importlinter]
 root_packages = ["bacmap"]
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "Domain layers never import upper layers"
@@ -116,7 +117,76 @@ source_modules = [
 ]
 forbidden_modules = [
     "bacmap.agent",
+    "bacmap.application",
     "bacmap.tasks",
     "bacmap.interfaces",
     "bacmap.workflow",
 ]
+
+# v1.5 应用服务层：不得依赖接口层，也不得依赖智能体层（C3：无 LLM 时计划闭环可用）。
+[[tool.importlinter.contracts]]
+name = "Application layer stays below interfaces and independent of agent"
+type = "forbidden"
+source_modules = ["bacmap.application"]
+forbidden_modules = ["bacmap.interfaces", "bacmap.agent"]
+
+# ADR-02（v1.5 契约化）：只有 bacmap.agent.llm 可以直接导入 LLM 库。
+# allow_indirect_imports：经 agent.llm 封装的间接依赖是被允许的设计本身。
+# bacmap.workflow 为命名空间包（无 __init__，grimp 不可见），不列入源模块。
+[[tool.importlinter.contracts]]
+name = "Only bacmap.agent.llm imports LLM libraries"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "bacmap.application",
+    "bacmap.config",
+    "bacmap.core",
+    "bacmap.store",
+    "bacmap.tools",
+    "bacmap.tasks",
+    "bacmap.interfaces",
+    "bacmap.agent.interpret",
+    "bacmap.agent.roledef",
+]
+forbidden_modules = ["pydantic_ai", "openai"]
+
+# ADR-02：只有 bacmap.tasks.engine 可以导入 DBOS。
+[[tool.importlinter.contracts]]
+name = "Only bacmap.tasks.engine imports DBOS"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "bacmap.application",
+    "bacmap.config",
+    "bacmap.core",
+    "bacmap.store",
+    "bacmap.tools",
+    "bacmap.agent",
+    "bacmap.interfaces",
+    "bacmap.tasks.spec",
+    "bacmap.tasks.gates",
+]
+forbidden_modules = ["dbos"]
+
+# ADR-02/ADR-12：MCP 只作服务端对外（仅 bacmap.interfaces.mcp 导入 mcp 服务端 SDK）；
+# MCP 客户端代码仅允许出现在 bacmap.store.knowledge 与 bacmap.agent.llm。
+# import-linter 不支持外部子包（mcp.client），"interfaces.mcp 不得导入 mcp.client"
+# 与命名空间包 bacmap.workflow 由 tests/unit/test_import_boundaries.py 补足。
+[[tool.importlinter.contracts]]
+name = "MCP SDK only in interfaces.mcp, store.knowledge and agent.llm"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = [
+    "bacmap.application",
+    "bacmap.config",
+    "bacmap.core",
+    "bacmap.tools",
+    "bacmap.tasks",
+    "bacmap.interfaces.views",
+    "bacmap.interfaces.cli",
+    "bacmap.interfaces.tui",
+    "bacmap.interfaces.web",
+    "bacmap.agent.interpret",
+    "bacmap.agent.roledef",
+]
+forbidden_modules = ["mcp"]

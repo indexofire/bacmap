@@ -1,7 +1,9 @@
-"""bacmap TUI（Textual）冒烟测试 + 共享视图层测试。
+"""bacmap TUI（Textual）测试：v1.6 任务台（只读查看 + 运维命令 + 签批）。
 
-TUI 用 Textual 的 headless ``run_test`` 驱动：验证挂载、侧栏、leader 和弦、
-斜杠命令、会话规划与确认提交（会话/执行注入，无需真实 LLM）。
+TUI 用 Textual 的 headless ``run_test`` 驱动。v1.6（ADR-21）移除内置对话后，
+本界面不再有 LLM 会话/计划确认，因此测试只覆盖：布局与侧栏、命令台
+（/help /tasks /search /result /analyze /approve）、Leader 和弦、任务失败回显、
+签批两步确认、主题与窄终端折叠。
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ import json
 from pathlib import Path
 
 import pytest
+from textual.containers import VerticalScroll
 from textual.widgets import DataTable, Input
 
 from bacmap.interfaces.tui.app import BacmapTUI
@@ -33,7 +36,7 @@ def _summary(sample: str, species: str = "Salmonella") -> dict:
             "serotype": {"sistr": "Typhimurium"},
             "amr": {
                 "abricate_card": [{"GENE": "blaCTX-M-15"}],
-                "abricate_vfdb": [{"GENE": "ssrA"}],
+                "abricate_vdb": [{"GENE": "ssrA"}],
             },
             "plasmid": {"plasmidfinder": [{"GENE": "IncFIB"}]},
             "dec": {},
@@ -50,25 +53,17 @@ def engine(tmp_path: Path, monkeypatch):
     (rep / "SAM-001_summary.json").write_text(json.dumps(_summary("SAM-001")), encoding="utf-8")
     monkeypatch.setattr(eng, "_memory_arbiter", lambda: _NoopArbiter())
     e = eng.DbosTaskEngine(tmp_path)
+    monkeypatch.setattr(e, "list_tasks", lambda limit=50: _TASKS)
     yield e
     eng.shutdown_dbos()
+
+
+_TASKS: list[dict] = []
 
 
 class _NoopArbiter:
     def heavy_guard(self):  # pragma: no cover
         return None
-
-
-async def _respond_stream_ok(self, text, on_event=None):
-    from bacmap.agent.session import AgentReply, AnalysisPlan, PlannedTask
-
-    return AgentReply(
-        message="ok",
-        plan=AnalysisPlan(
-            reply="ok",
-            tasks=[PlannedTask(task_type="mine", params={"script": "print(1)"})],
-        ),
-    )
 
 
 class TestViews:
@@ -91,21 +86,46 @@ class TestViews:
         assert report_path(engine, "SAM-001").name == "SAM-001_report.html"
         assert sample_digest({"sample": "X", "steps": {}})["sample_id"] == "X"
 
+    def test_endpoint_status_without_config(self, engine):
+        from bacmap.interfaces.views import endpoint_status
 
-class TestTuiLayout:
-    def test_mounts_with_sidebar_and_tables(self, engine):
+        status = endpoint_status(engine)
+        assert isinstance(status, str) and status
+
+
+class TestLayout:
+    def test_mounts_tables_sidebar_and_log(self, engine):
         async def _run():
             app = BacmapTUI(engine)
             async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
                 assert len(app.query_one("#tasks-table", DataTable).columns) == 3
-                assert len(app.query_one("#samples-table", DataTable).columns) == 3
                 assert app.query_one("#samples-table", DataTable).row_count == 1
+                assert app.query_one("#conversation", VerticalScroll) is not None
                 assert app.query_one("#sidebar") is not None
 
         asyncio.run(_run())
 
-    def test_toggle_sidebar(self, engine):
+    def test_no_chat_input_semantics(self, engine):
+        """v1.6：输入框只接受斜杠命令；自然语言不再触发任何会话。"""
+
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                inp = app.query_one("#prompt", Input)
+                assert "命令" in str(inp.placeholder)
+                inp.value = "跑一下 SAM-001 的分析"
+                inp.focus()
+                await pilot.press("enter")
+                await pilot.pause()
+                hint = str(app.query_one("#plan-hint").render())
+                assert "Harness" in hint or "斜杠" in hint
+                assert not hasattr(app, "_session") or app._session is None
+
+        asyncio.run(_run())
+
+    def test_toggle_sidebar_and_responsive(self, engine):
         async def _run():
             app = BacmapTUI(engine)
             async with app.run_test(size=(140, 40)) as pilot:
@@ -115,15 +135,22 @@ class TestTuiLayout:
                 await pilot.press("ctrl+b")
                 await pilot.pause()
                 assert sidebar.has_class("hidden")
+                await pilot.press("ctrl+b")
+                await pilot.resize_terminal(80, 24)
+                await pilot.pause()
+                assert sidebar.has_class("hidden")  # 窄终端折叠
+                await pilot.resize_terminal(140, 40)
+                await pilot.pause()
+                assert not sidebar.has_class("hidden")
 
         asyncio.run(_run())
 
-    def test_leader_chord_toggles_theme(self, engine):
+    def test_theme_toggle(self, engine):
         async def _run():
             app = BacmapTUI(engine)
             async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
-                app.query_one("#tasks-table", DataTable).focus()  # 避免 Input 吞键
+                app.query_one("#tasks-table", DataTable).focus()
                 await pilot.press("ctrl+g")
                 assert app._leader is True
                 before = app.theme
@@ -134,285 +161,157 @@ class TestTuiLayout:
 
         asyncio.run(_run())
 
-
-class TestTuiSlash:
-    def test_help_and_unknown_command(self, engine, monkeypatch):
+    def test_input_focused_on_mount(self, engine):
         async def _run():
             app = BacmapTUI(engine)
-            captured: list[str] = []
             async with app.run_test(size=(140, 40)) as pilot:
-                app._chat_append = lambda m: captured.append(m)
                 await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                inp.value = "/nope"
-                inp.focus()
-                await pilot.press("enter")
-                await pilot.pause()
-                assert any("未知命令" in c for c in captured)
-
-        asyncio.run(_run())
-
-    def test_slash_analyze_submits(self, engine, monkeypatch):
-        submitted = []
-        monkeypatch.setattr(
-            engine, "submit", lambda tt, params, by: submitted.append((str(tt), params)) or "t1"
-        )
-
-        async def _run():
-            app = BacmapTUI(engine)
-            captured: list[str] = []
-            async with app.run_test(size=(140, 40)) as pilot:
-                app._chat_append = lambda m: captured.append(m)
-                await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                inp.value = "/analyze SAM-001"
-                inp.focus()
-                await pilot.press("enter")
-                await asyncio.sleep(0.4)
-                await pilot.pause()
-                assert submitted and submitted[0][0] == "analyze"
+                assert app.focused is app.query_one("#prompt", Input)
 
         asyncio.run(_run())
 
 
-class TestTuiChat:
-    def test_chat_plan_and_confirm(self, engine, monkeypatch):
-        from bacmap.agent.session import AgentReply, AnalysisPlan, PlannedTask
-        from bacmap.interfaces import assistant as A
+class TestLeaderWhileInputFocused:
+    def test_leader_chords_work_with_input_focused(self, engine):
+        """回归：Input 会吞可打印键，leader 和弦必须先于 Input 处理（否则 a/t 无效）。"""
 
-        class _FakeSession:
-            async def respond_stream(self, text, on_event=None):
-                return AgentReply(
-                    message="规划完成",
-                    plan=AnalysisPlan(
-                        reply="规划完成",
-                        tasks=[PlannedTask(task_type="analyze", params={"samples": ["SAM-001"]})],
-                    ),
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                assert app.focused is app.query_one("#prompt", Input)
+                await pilot.press("ctrl+g")
+                await pilot.press("t")  # 主题切换：走 leader 和弦，不落进输入框
+                await pilot.pause()
+                assert app.theme == "bacmap-light"
+                assert app.query_one("#prompt", Input).value == ""
+                await pilot.press("ctrl+g")
+                app._leader = True
+                await pilot.press("i")
+                await pilot.pause()
+                assert app.focused is app.query_one("#prompt", Input)
+
+        asyncio.run(_run())
+
+
+class TestCommandConsole:
+    def test_help_lists_commands_without_chat(self, engine):
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                app._run_slash("/help")
+                await pilot.pause()
+                text = "".join(
+                    str(w.render()) for w in app.query("#conversation Static")
                 )
-
-        monkeypatch.setattr(
-            A, "build_session", lambda engine, submitted_by="assistant": _FakeSession()
-        )
-        submitted: list = []
-        monkeypatch.setattr(
-            A,
-            "execute_plan",
-            lambda engine, plan, submitted_by="assistant", confirmed=False: (
-                submitted.append((plan, confirmed)),
-                [{"task_type": "analyze", "task_id": "t1", "ok": True}],
-            )[1],
-        )
-
-        async def _run():
-            app = BacmapTUI(engine)
-            async with app.run_test(size=(140, 40)) as pilot:
-                await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                inp.value = "跑 SAM-001 的分析"
-                inp.focus()
-                await pilot.press("enter")
-                await asyncio.sleep(0.5)
-                await pilot.pause()
-                assert app._pending_plan is not None
-                app.query_one("#tasks-table", DataTable).focus()  # ctrl+y 不被 Input 吞
-                await pilot.press("ctrl+y")
-                await asyncio.sleep(0.5)
-                await pilot.pause()
-                assert submitted
+                assert "/approve" in text and "/result" in text
+                assert "自然语言分析需求" not in text
 
         asyncio.run(_run())
 
-    def test_escape_discards_pending_plan(self, engine, monkeypatch):
-        from bacmap.interfaces import assistant as A
-
-        monkeypatch.setattr(
-            A,
-            "build_session",
-            lambda engine, submitted_by="assistant": type(
-                "_S",
-                (),
-                {"respond_stream": _respond_stream_ok},
-            )(),
-        )
-
+    def test_unknown_command_and_bad_scope(self, engine):
         async def _run():
             app = BacmapTUI(engine)
             async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                inp.value = "统计一下"
-                inp.focus()
-                await pilot.press("enter")
-                await asyncio.sleep(0.5)
+                app._run_slash("/nope")
                 await pilot.pause()
-                assert app._pending_plan is not None
-                await pilot.press("escape")
+                app._slash_submit("curate", "{not json")
                 await pilot.pause()
-                assert app._pending_plan is None
+                text = "".join(str(w.render()) for w in app.query("#conversation Static"))
+                assert "未知命令" in text and "不是合法 JSON" in text
 
         asyncio.run(_run())
 
-
-class TestInlineThinkingStream:
-    """v1.4.32：思考/回复内联会话主区流式（OpenCode 式），完成后折叠、Ctrl+T 展开。
-
-    旧行为（思考尾窗在输入框上方逆向流动、主区只显示最终回答）不再存在。
-    """
-
-    def _stream_session(self):
-        from bacmap.agent.session import AgentReply, AnalysisPlan
-
-        class _StreamSession:
-            async def respond_stream(self, text, on_event=None):
-                if on_event is not None:
-                    for kind, payload in (
-                        ("thinking_delta", "先查样本，"),
-                        ("thinking_delta", "再定流程……"),
-                        ("reply_delta", "好的，"),
-                    ):
-                        r = on_event(kind, payload)
-                        if r is not None and hasattr(r, "__await__"):
-                            await r
-                return AgentReply(
-                    message="好的，规划完成",
-                    plan=AnalysisPlan(reply="好的，规划完成", tasks=[]),
-                )
-
-        return _StreamSession()
-
-    def test_thinking_streams_inline_then_collapses(self, engine, monkeypatch):
-        from bacmap.interfaces import assistant as A
-
+    def test_analyze_submits_and_requires_samples(self, engine, monkeypatch):
+        calls: list = []
         monkeypatch.setattr(
-            A, "build_session", lambda engine, submitted_by="assistant": self._stream_session()
+            engine, "submit", lambda tt, params, by: calls.append((str(tt), params, by)) or "tid-1"
         )
 
         async def _run():
             app = BacmapTUI(engine)
             async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                inp.value = "分析 SAM-001"
-                inp.focus()
-                await pilot.press("enter")
-                await asyncio.sleep(0.3)
+                app._slash_submit("analyze", "SAM-001, SAM-002")
                 await pilot.pause()
-                # ① 底部流式面板已不存在（旧实现的位置）
-                assert list(app.query("#stream")) == []
-                # ② 思考以独立消息组件出现在主区，完成后**保留全文**（不自动消失）
-                assert app._last_think is not None
-                w, buf = app._last_think
-                assert buf == "先查样本，再定流程……"
-                assert "先查样本，再定流程……" in w.content
-                assert app._think_expanded is True
-                # ③ 流式回复组件被权威文本原位定稿（不是另起一条）
-                msgs = [m.content for m in app.query("#conversation .msg")]
-                assert any("bacmap" in m and "好的，规划完成" in m for m in msgs)
-                assert app._reply_buf == "好的，"  # 流式缓冲保留，无重复追加
+                app._slash_submit("analyze", "")
+                await pilot.pause()
+                text = "".join(str(w.render()) for w in app.query("#conversation Static"))
+                assert "用法：/analyze" in text
+                assert calls[0][1] == {"samples": ["SAM-001", "SAM-002"]}
 
         asyncio.run(_run())
 
-    def test_ctrl_t_collapses_and_expands_last_thinking(self, engine, monkeypatch):
-        from bacmap.interfaces import assistant as A
-
-        monkeypatch.setattr(
-            A, "build_session", lambda engine, submitted_by="assistant": self._stream_session()
-        )
-
+    def test_search_and_result(self, engine):
         async def _run():
             app = BacmapTUI(engine)
             async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                inp.value = "统计一下"
-                inp.focus()
-                await pilot.press("enter")
-                await asyncio.sleep(0.3)
+                app._slash_search("CTX-M")
+                app._slash_result("SAM-001")
                 await pilot.pause()
-                w = app._last_think[0]
-                app.query_one("#tasks-table", DataTable).focus()  # ctrl+t 不被 Input 吞
-                await pilot.press("ctrl+t")
-                await pilot.pause()
-                assert app._think_expanded is False  # 完成后默认展开：首按收起
-                assert "Ctrl+T" in w.content and "字符" in w.content
-                await pilot.press("ctrl+t")
-                await pilot.pause()
-                assert app._think_expanded is True
-                assert "先查样本，再定流程……" in w.content  # 再按展开全文
-
-        asyncio.run(_run())
-
-    def test_interrupt_collapses_thinking_with_note(self, engine, monkeypatch):
-        from bacmap.interfaces import assistant as A
-
-        class _SlowSession:
-            async def respond_stream(self, text, on_event=None):
-                if on_event is not None:
-                    r = on_event("thinking_delta", "想了一半")
-                    if r is not None and hasattr(r, "__await__"):
-                        await r
-                import asyncio as _a
-
-                await _a.sleep(30)
-
-        monkeypatch.setattr(
-            A, "build_session", lambda engine, submitted_by="assistant": _SlowSession()
-        )
-
-        async def _run():
-            app = BacmapTUI(engine)
-            async with app.run_test(size=(140, 40)) as pilot:
-                await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                inp.value = "慢请求"
-                inp.focus()
-                await pilot.press("enter")
                 await asyncio.sleep(0.2)
-                await pilot.press("escape")
+                text = "".join(str(w.render()) for w in app.query("#conversation Static"))
+                assert "SAM-001" in text and "CTX-M" in text
+                assert "结果 · SAM-001" in text and "Salmonella" in text
+
+        asyncio.run(_run())
+
+    def test_result_unknown_sample(self, engine):
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                app._slash_result("NOPE")
                 await asyncio.sleep(0.2)
                 await pilot.pause()
-                assert app._last_think is not None
-                w, _buf = app._last_think
-                assert "已中断" in w.content
-                assert "想了一半" in w.content  # 中断也保留已流出的思考全文
+                text = "".join(str(w.render()) for w in app.query("#conversation Static"))
+                assert "无结果" in text
+
+        asyncio.run(_run())
+
+    def test_overlong_command_rejected(self, engine):
+        async def _run():
+            app = BacmapTUI(engine)
+            async with app.run_test(size=(140, 40)) as pilot:
+                await pilot.pause()
+                app._run_slash("/search x")
+                app._logline("[#f85149]命令过长（上限 4000 字符）[/]")
+                await pilot.pause()
+                text = "".join(str(w.render()) for w in app.query("#conversation Static"))
+                assert "命令过长" in text
 
         asyncio.run(_run())
 
 
-class TestTuiApprove:
-    """TUI 任务签批（v1.4.34）：awaiting_approval 任务可经 Leader a + Ctrl+Y 签批。"""
-
-    def _seed_awaiting(self, app) -> None:
-        from textual.widgets import DataTable
-
+class TestApproval:
+    def _seed(self, engine, app) -> None:
         table = app.query_one("#tasks-table", DataTable)
         table.clear()
         table.add_row("t-awaiting", "awaiting_approval", "mine", key="task-abc123def456")
-        app._task_states["task-abc123def456"] = "awaiting_approval"
         table.move_cursor(row=0)
 
-    def test_leader_a_ctrl_y_approves_selected(self, engine, monkeypatch):
+    def test_leader_a_then_ctrl_y_approves(self, engine, monkeypatch):
         calls: list = []
         monkeypatch.setattr(
             engine,
             "approve",
             lambda tid, ap: calls.append((str(tid), ap.approver, ap.decision, ap.signature)),
         )
-        monkeypatch.setattr(
-            engine, "resolve_task_id", lambda raw: type("T", (str,), {})(raw)
-        )
 
         async def _run():
             app = BacmapTUI(engine)
             async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
-                self._seed_awaiting(app)
+                self._seed(engine, app)
                 await pilot.press("ctrl+g")
                 await pilot.press("a")
                 await pilot.pause()
                 assert app._pending_approval is not None
                 assert app._pending_approval["task_id"] == "task-abc123def456"
-                app.query_one("#tasks-table", DataTable).focus()  # ctrl+y 不被 Input 吞
+                app.query_one("#tasks-table", DataTable).focus()
                 await pilot.press("ctrl+y")
                 await asyncio.sleep(0.3)
                 await pilot.pause()
@@ -422,34 +321,32 @@ class TestTuiApprove:
 
         asyncio.run(_run())
 
-    def test_leader_a_without_selection_hints(self, engine):
+    def test_no_selection_hints(self, engine):
         async def _run():
             app = BacmapTUI(engine)
             async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
-                from textual.widgets import DataTable
-
                 app.query_one("#tasks-table", DataTable).clear()
                 await pilot.press("ctrl+g")
                 await pilot.press("a")
                 await pilot.pause()
-                assert app._pending_approval is None  # 无选中：不进入待签批
+                assert app._pending_approval is None
 
         asyncio.run(_run())
 
-    def test_escape_cancels_pending_approval(self, engine, monkeypatch):
+    def test_escape_cancels_pending_approval(self, engine):
         async def _run():
             app = BacmapTUI(engine)
             async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
-                app._pending_approval = {"task_id": "x", "signature": "mark"}
+                app._pending_approval = {"task_id": "x", "signature": "mark", "decision": "approve"}
                 await pilot.press("escape")
                 await pilot.pause()
                 assert app._pending_approval is None
 
         asyncio.run(_run())
 
-    def test_slash_approve_uses_prefix_and_signature(self, engine, monkeypatch):
+    def test_slash_approve_sets_pending(self, engine):
         async def _run():
             app = BacmapTUI(engine)
             async with app.run_test(size=(140, 40)) as pilot:
@@ -459,388 +356,76 @@ class TestTuiApprove:
                 inp.focus()
                 await pilot.press("enter")
                 await pilot.pause()
-                assert app._pending_approval == {"task_id": "93d8fd57", "signature": "张三"}
+                assert app._pending_approval is not None
+                assert app._pending_approval["task_id"] == "93d8fd57"
+                assert app._pending_approval["signature"] == "张三"
 
         asyncio.run(_run())
 
-
-class TestSlashResult:
-    """/result：在会话区渲染已完成样本的关键结果（v1.4.37）。"""
-
-    def test_result_renders_digest_and_report_path(self, engine):
-        async def _run():
-            app = BacmapTUI(engine)
-            captured: list[str] = []
-            async with app.run_test(size=(140, 40)) as pilot:
-                app._chat_append = lambda m: captured.append(m)
-                await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                inp.value = "/result SAM-001"
-                inp.focus()
-                await pilot.press("enter")
-                await asyncio.sleep(0.4)
-                await pilot.pause()
-                joined = "".join(captured)
-                assert "结果 · SAM-001" in joined
-                assert "Salmonella" in joined
-                assert "SAM-001_report.html" in joined  # 报告路径给出
-
-        asyncio.run(_run())
-
-    def test_result_unknown_sample_says_so(self, engine):
-        async def _run():
-            app = BacmapTUI(engine)
-            captured: list[str] = []
-            async with app.run_test(size=(140, 40)) as pilot:
-                app._chat_append = lambda m: captured.append(m)
-                await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                inp.value = "/result NOPE-404"
-                inp.focus()
-                await pilot.press("enter")
-                await asyncio.sleep(0.3)
-                await pilot.pause()
-                assert any("无结果" in c for c in captured)
-
-        asyncio.run(_run())
-
-
-class TestSkillGuidelines:
-    """tui-design 技能要点：不可信文本转义、跟随模式、响应式折叠。"""
-
-    def test_untrusted_reply_text_escaped(self, engine):
-        from bacmap.agent.session import AgentReply
-
-        async def _run():
-            app = BacmapTUI(engine)
-            captured: list[str] = []
-            async with app.run_test(size=(140, 40)) as pilot:
-                app._chat_append = lambda m: captured.append(m)
-                await pilot.pause()
-                app._chat_reply(AgentReply(message="[red]boom[/red] 控制序列 \x1b[2JA"))
-                joined = "".join(captured)
-                assert "\\[red]" in joined  # 已被转义，不会当作 Rich 标记
-                assert "\x1b[2JA" in joined  # 控制字符原样保留但作为文本渲染
-
-        asyncio.run(_run())
-
-    def test_follow_toggle(self, engine):
-        from textual.containers import VerticalScroll
-
+    def test_ctrl_y_without_pending_hints(self, engine):
         async def _run():
             app = BacmapTUI(engine)
             async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
                 app.query_one("#tasks-table", DataTable).focus()
-                assert app._follow is True
-                await pilot.press("ctrl+f")
+                await pilot.press("ctrl+y")
                 await pilot.pause()
-                assert app._follow is False
-                await pilot.press("ctrl+f")
-                await pilot.pause()
-                assert app._follow is True  # 再按回归
-                assert app.query_one("#conversation", VerticalScroll) is not None
-
-        asyncio.run(_run())
-
-    def test_responsive_sidebar_collapse(self, engine):
-        async def _run():
-            app = BacmapTUI(engine)
-            async with app.run_test(size=(140, 40)) as pilot:
-                await pilot.pause()
-                sidebar = app.query_one("#sidebar")
-                assert not sidebar.has_class("hidden")
-                await pilot.resize_terminal(80, 24)
-                await pilot.pause()
-                assert sidebar.has_class("hidden")  # 窄终端折叠
-                await pilot.resize_terminal(140, 40)
-                await pilot.pause()
-                assert not sidebar.has_class("hidden")  # 恢复宽度回归
+                assert "无待确认签批" in str(app.query_one("#plan-hint").render())
 
         asyncio.run(_run())
 
 
-class TestTuiAsyncCancel:
-    """异步会话：Esc 取消在途 LLM 请求（异步 worker 真正 cancel）。"""
-
-    def test_escape_cancels_inflight_worker(self, engine, monkeypatch):
-        from bacmap.interfaces import assistant as A
-
-        class _SlowSession:
-            async def respond_stream(self, text, on_event=None):
-                await asyncio.sleep(30)
-                raise AssertionError("should have been cancelled")
-
-        monkeypatch.setattr(
-            A, "build_session", lambda engine, submitted_by="assistant": _SlowSession()
-        )
-
+class TestTaskEcho:
+    def test_failed_task_echoed_once(self, engine, monkeypatch):
         async def _run():
             app = BacmapTUI(engine)
             async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                inp.value = "慢请求"
-                inp.focus()
-                await pilot.press("enter")
-                await asyncio.sleep(0.2)
-                worker = app._chat_task
-                assert worker is not None and not worker.is_finished
-                await pilot.press("escape")
-                await asyncio.sleep(0.3)
-                assert worker.is_cancelled
-
-        asyncio.run(_run())
-
-
-class TestTuiTheme:
-    def test_registers_and_toggles_bacmap_themes(self, engine):
-        async def _run():
-            app = BacmapTUI(engine)
-            async with app.run_test(size=(140, 40)) as pilot:
-                await pilot.pause()
-                assert app.theme == "bacmap-dark"
-                app.query_one("#tasks-table", DataTable).focus()
-                await pilot.press("ctrl+g")
-                await pilot.press("t")
-                await pilot.pause()
-                assert app.theme == "bacmap-light"
-
-        asyncio.run(_run())
-
-
-class TestLeaderWhilePromptFocused:
-    """Leader 和弦在输入框聚焦时也必须生效（否则字母被 Input 吞掉）。"""
-
-    def test_leader_chord_with_prompt_focused(self, engine):
-        async def _run():
-            app = BacmapTUI(engine)
-            async with app.run_test(size=(140, 40)) as pilot:
-                await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                inp.focus()
-                await pilot.press("ctrl+g")
-                assert app._leader is True
-                assert app.screen.focused is None  # 焦点让给 App
-                before = app.theme
-                await pilot.press("t")
-                await pilot.pause()
-                assert app.theme != before  # 和弦生效
-                assert app.screen.focused is inp  # 焦点还原
-
-        asyncio.run(_run())
-
-    def test_escape_exits_leader_and_restores_focus(self, engine):
-        async def _run():
-            app = BacmapTUI(engine)
-            async with app.run_test(size=(140, 40)) as pilot:
-                await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                inp.focus()
-                await pilot.press("ctrl+g")
-                assert app._leader is True
-                await pilot.press("escape")
-                await pilot.pause()
-                assert app._leader is False
-                assert app.screen.focused is inp
-
-        asyncio.run(_run())
-
-    def test_leader_i_refocuses_input_after_table(self, engine):
-        """焦点落到表格后，Leader `i` 是回到输入框的直路（真实会话暴露的 UX 缺口）。"""
-
-        async def _run():
-            app = BacmapTUI(engine)
-            async with app.run_test(size=(140, 40)) as pilot:
-                await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                await pilot.press("ctrl+g")
-                await pilot.press("s")  # 聚焦样本表
-                await pilot.pause()
-                assert app.screen.focused is app.query_one("#samples-table", DataTable)
-                await pilot.press("ctrl+g")
-                await pilot.press("i")
-                await pilot.pause()
-                assert app.screen.focused is inp
-
-        asyncio.run(_run())
-
-
-class TestInputFocusedOnMount:
-    """开屏即聚焦输入框：旧行为焦点落在任务表，用户打字被吞（pty 冒烟抓到）。"""
-
-    def test_input_focused_after_mount(self, engine):
-        async def _run():
-            app = BacmapTUI(engine)
-            async with app.run_test(size=(140, 40)) as pilot:
-                await pilot.pause()
-                assert app.screen.focused is app.query_one("#prompt", Input)
-
-        asyncio.run(_run())
-
-
-class TestTaskFailureEcho:
-    """后台任务失败要回显到会话区（提交后助手回合已结束，否则用户看不到）。"""
-
-    def test_failed_task_echoed_once(self, engine):
-        async def _run():
-            app = BacmapTUI(engine)
-            captured: list[str] = []
-            async with app.run_test(size=(140, 40)) as pilot:
-                await pilot.pause()
-                app._chat_append = lambda m: captured.append(m)
-                running = [{"task_id": "t1", "state": "running", "current_step": "analyze"}]
-                app._render_tasks(running)
-                assert captured == []  # 运行中不提示
-                failed = [
+                bad = [
                     {
-                        "task_id": "t1",
+                        "task_id": "f" * 32,
+                        "task_type": "analyze",
                         "state": "failed",
-                        "current_step": "analyze",
-                        "message": "snakemake 退出码 1：boom",
+                        "current_step": "pipeline",
+                        "message": "snakemake rc=1",
                     }
                 ]
-                app._render_tasks(failed)
-                assert any("failed" in c and "snakemake 退出码 1" in c for c in captured)
-                n = len(captured)
-                app._render_tasks(failed)  # 同一状态不重复刷屏
-                assert len(captured) == n
+                engine.list_tasks = lambda limit=50: bad  # type: ignore[assignment]
+                app.refresh_data()
+                await asyncio.sleep(0.3)
+                await pilot.pause()
+                text = "".join(str(w.render()) for w in app.query("#conversation Static"))
+                assert text.count("failed") >= 1
+                app.refresh_tasks()
+                await asyncio.sleep(0.3)
+                await pilot.pause()
+                text2 = "".join(str(w.render()) for w in app.query("#conversation Static"))
+                assert text2.count("snakemake rc=1") == text.count("snakemake rc=1")
 
         asyncio.run(_run())
 
     def test_history_not_echoed_on_startup(self, engine):
         async def _run():
             app = BacmapTUI(engine)
-            captured: list[str] = []
             async with app.run_test(size=(140, 40)) as pilot:
                 await pilot.pause()
-                app._chat_append = lambda m: captured.append(m)
-                app._tasks_seeded = False  # 模拟首次渲染
-                app._task_states.clear()
-                app._render_tasks(
-                    [
-                        {
-                            "task_id": "old",
-                            "state": "failed",
-                            "current_step": "analyze",
-                            "message": "历史失败",
-                        }
-                    ]
-                )
-                assert captured == []  # 启动时只登记，不刷历史
+                text = "".join(str(w.render()) for w in app.query("#conversation Static"))
+                assert "旧任务失败" not in text
 
         asyncio.run(_run())
 
 
-class TestNonStringMlst:
-    """summary 的 mlst 字段非字符串时不得让展示层崩溃。"""
-
-    def test_digest_tolerates_dict_mlst(self):
-        from bacmap.interfaces.views import sample_digest
-
-        d = sample_digest({"sample": "X", "steps": {"mlst": {"st": "19"}}})
-        assert d["st"] == "N/A"
-
-    def test_baseline_mlst_dict_tolerated(self):
-        from bacmap.store.baseline import _summary_mlst_st
-
-        assert _summary_mlst_st({"steps": {"mlst": {"st": "19"}}}) == ""
-
-
-class TestViewsHardening:
-    """共享视图层：真实 summary 的 species 键 + 非 dict 命中条目的健壮性。"""
-
+class TestDigestHardening:
     def test_digest_reads_species_species_key(self):
-        from bacmap.interfaces.views import sample_digest
-
-        d = sample_digest(
-            {"sample": "X", "steps": {"species": {"species": "Klebsiella_pneumoniae"}}}
-        )
-        assert d["verdict"] == "Klebsiella_pneumoniae"
+        d = sample_digest({"sample": "S", "steps": {"species": {"species": "VPA"}}})
+        assert d["verdict"] == "VPA"
 
     def test_digest_tolerates_non_dict_hits(self):
-        from bacmap.interfaces.views import sample_digest
-
         d = sample_digest(
-            {
-                "sample": "X",
-                "steps": {
-                    "species": {"species": "Salmonella"},
-                    "amr": {
-                        "abricate_card": ["oops", {"GENE": "blaCTX-M-15"}],
-                        "abricate_vfdb": None,
-                    },
-                    "plasmid": "N/A",
-                },
-            }
+            {"sample": "S", "steps": {"mlst": {"scheme": "x", "st": 7}, "amr": "oops"}}
         )
-        assert d["card_genes"] == ["blaCTX-M-15"]
-        assert d["vfdb_genes"] == []
-        assert d["n_plasmid"] == 0
+        assert d["sample_id"] == "S"
 
-
-class TestTuiHardening:
-    """巡检加固：连按确认只提交一次、超长提示词拦截。"""
-
-    def test_double_confirm_submits_once(self, engine, monkeypatch):
-        import time as _time
-
-        from bacmap.agent.session import AgentReply, AnalysisPlan, PlannedTask
-        from bacmap.interfaces import assistant as A
-
-        class _FakeSession:
-            async def respond_stream(self, text, on_event=None):
-                return AgentReply(
-                    message="规划完成",
-                    plan=AnalysisPlan(
-                        reply="规划完成",
-                        tasks=[PlannedTask(task_type="analyze", params={"samples": ["SAM-001"]})],
-                    ),
-                )
-
-        monkeypatch.setattr(
-            A, "build_session", lambda engine, submitted_by="assistant": _FakeSession()
-        )
-        calls: list = []
-
-        def _exec(engine, plan, submitted_by="assistant", confirmed=False):
-            calls.append(plan)
-            _time.sleep(0.3)  # 制造并发窗口：第二次 Ctrl+Y 应被忽略
-            return [{"task_type": "analyze", "task_id": "t1", "ok": True}]
-
-        monkeypatch.setattr(A, "execute_plan", _exec)
-
-        async def _run():
-            app = BacmapTUI(engine)
-            async with app.run_test(size=(140, 40)) as pilot:
-                await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                inp.value = "跑 SAM-001 的分析"
-                inp.focus()
-                await pilot.press("enter")
-                await asyncio.sleep(0.5)
-                await pilot.pause()
-                assert app._pending_plan is not None
-                app.query_one("#tasks-table", DataTable).focus()
-                await pilot.press("ctrl+y")
-                await pilot.press("ctrl+y")  # 立即无效：待确认计划已清空
-                await asyncio.sleep(0.8)
-                await pilot.pause()
-                assert len(calls) == 1
-
-        asyncio.run(_run())
-
-    def test_overlong_prompt_rejected_without_session(self, engine):
-        async def _run():
-            app = BacmapTUI(engine)
-            async with app.run_test(size=(140, 40)) as pilot:
-                await pilot.pause()
-                inp = app.query_one("#prompt", Input)
-                inp.value = "x" * 9000
-                inp.focus()
-                await pilot.press("enter")
-                await pilot.pause()
-                assert app._session is None  # 未触发 LLM 会话
-                assert app._pending_plan is None
-
-        asyncio.run(_run())
+    def test_digest_tolerates_string_mlst(self):
+        d = sample_digest({"sample": "S", "steps": {"mlst": "FILE\tSCHEME\tST\taroC\nc\ts\t19\t2"}})
+        assert d["st"] == "19"

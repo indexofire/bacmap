@@ -3,14 +3,14 @@
 # 使用指南
 
 bacmap 有三个人口：**CLI**（运维）、**Web 任务台**（人）、**MCP**（AI 智能体）。
+对话在外部智能体 Harness（Hermes / Pi / DSH）的原生界面里进行，经 MCP 接入——见
+[智能体 Harness 指南](harnesses.zh-CN.md)；v1.6 起内置助手已移除（ADR-21）。
 
 ## 1. CLI
 
 ```bash
 bacmap --version
-bacmap ask "跑 SAM-001 的分析并和去年暴发株比较"   # LLM 规划 → 确认 → 提交
-bacmap chat                                        # 多轮对话式分析助手
-bacmap tui [--home H]                              # 全屏 TUI（Textual）
+bacmap tui [--home H]                              # 全屏任务台（Textual）
 bacmap console [--home H]                          # 交互式菜单
 bacmap overview [--json]                           # 系统概览
 bacmap task list|show|submit|approve|cancel         # 任务查询与写操作（显式、无 LLM；list 别名 ls）
@@ -21,77 +21,45 @@ bacmap task submit --type analyze --fasta-dir <目录> [--species <码|名>]
 bacmap task submit --type analyze --fastq-dir <目录> [--species <码|名>]
                                                    # reads 目录直入：自动识别 *_R1/_R2 配对登记；
                                                    # 物种省略登记 UNK（管线内鉴定，血清型等不路由）
+bacmap plan ls|show|confirm|reject                 # 审阅/确认智能体提出的计划（v1.5.1）
+bacmap record metadata|lab|knowledge-import|knowledge-approve
+                                                   # 经任务层录入元数据/化验/知识库（v1.7）
 bacmap sample ls|show                              # 样本浏览
 bacmap search --query <kw>                          # 样本检索
-bacmap web [--host 127.0.0.1] [--port 8800]        # Web 控制台（含助手）
-bacmap mcp [--read-only] [--home H]                # MCP 服务器（stdio/HTTP）
+bacmap web [--host 127.0.0.1] [--port 8800]        # Web 控制台（任务 / 计划 / 样本）
+bacmap mcp [--read-only] [--profile cloud|local-trusted] [--home H]
+                                                   # MCP 服务器（stdio/HTTP），默认 cloud Profile
 ```
 
 查询类子命令支持 `--json`；写操作与 Web/MCP 走同一套门与审批。
+日常运维（体检、备份、恢复、事件保留）见[运维指南](operations.zh-CN.md)。
 
 顶层命令分两类:**界面/模式**(`mcp`、`web`、`tui`、`console`——接管终端或绑定端口)与
 **命令**(`overview`、`task`、`sample`、`search`、`ask`、`chat`——执行一次查询/写操作后退出)。
 `bacmap` 本身**就是**命令行界面,故命令直接挂在顶层(`bacmap task ls`),不再套一层 `cli`
 子命令;`web`/`tui`/`console` 是并列的其他交互形态。
 
-## 2. LLM 驱动的分析助手（CLI ask/chat、TUI 对话页、Web /assistant）
+## 2. 与 bacmap 对话：外部智能体与计划
 
-内置助手把自然语言分析需求转成可执行计划，三端共用同一 **agent 会话**（`agent/session.py`，
-ADR-10 规划型 + ADR-11 开放路径）：
-
-1. **理解 + 查现状**：LLM 可调用只读工具（`bio_list_samples` / `bio_get_result` /
-   `bio_search_samples` / `bio_query_metadata` / `bio_review_flags` / `bio_compare_runs`）。
-2. **规划与执行**：返回封闭任务类型组成的结构化计划——多数请求是 `analyze`（标准 Snakemake 流程）
-   或 `curate`；**深度挖掘**用 `mine`（自行编写 Python 脚本，沙箱执行），复杂挖掘可拆成多个
-   顺序 `mine` 任务；文本产物用 `write`。规划阶段还可调用 **`sandbox_run`** 执行脚本（无网络）
-   并读回 stdout/产物——可反复迭代统计与**绘图（PNG/CSV）**，成熟后再作为 `mine` 任务过挖掘门。
-3. **澄清**：需求含糊时提问，不猜测。
-4. **分级确认**：读类/已有结果的查询在规划阶段直接完成；**写操作仅在确认后提交**
-   （CLI 交互确认，`--yes` 跳过；TUI 按 `Ctrl+Y` 或点按钮；Web 点确认按钮）。
-5. **降级（C3）**：LLM 端点不可用时助手明确告知，回退到显式子命令/任务表单——确定性路径始终可用。
-
-**流式输出与思考指示（v1.4.31；v1.4.32 思考内联主区）**：TUI 对话与 CLI `ask`/`chat` 走
-事件流——模型思考增量（GLM 等原生 reasoning 流）**内联显示在会话主区**（dim 斜体实时滚动，
-回合结束**保留全文**，`Ctrl+T` 折叠/展开最近一次），回复以打字机效果原位流式打出并以权威
-文本定稿，工具调用以活动行提示（如 `⠋ 调用 bio_list_samples…`），`Esc` 取消在途请求。
-Web `/assistant` 暂为整页返回（无流式）。结构化计划契约不变（ADR-10 规划型；流式仅是展示层，
-最终结果仍经 pydantic-ai 完整校验）。
-
-**云端端点下的助手（v1.4.30）**：助手路由到 `cloud` 端点（GLM、DeepSeek 等外部 API）时，
-工具带按 `cloud_max_data_class` 自动裁剪——D4 元数据/检验查询（`bio_query_metadata` 等）与
-D3 数据集查看（`bio_inspect_dataset`）不进会话，沙箱工具（`sandbox_run`/`sandbox_shell`）
-整体排除，会话数据级别 ≤D2；本地/局域网端点则保留全量工具。要在云端获得完整的样本查询与
-规划能力，管理员需把 `cloud_max_data_class` 放宽到 `"D2"`（上限，见配置文档 §3）。
-ADR-16 红线不变：D3/D4 数据任何配置都不会发往云端。
-
-示例：
+内置对话已移除（ADR-21）。在 Hermes、Pi、DSH（或任意 MCP 客户端）里与 bacmap 对话；
+智能体提出**计划**，由你在 bacmap 中确认该确切版本：
 
 ```bash
-$ bacmap ask "把本地沙门菌按 ST 统计并画图"
-bacmap › 建议先统计再绘图。
-建议执行的分析计划：
-  1. mine —— 按 ST 聚合本地沙门菌并输出统计 CSV
-  2. mine —— 由统计 CSV 绘制 ST 分布图
-确认提交该计划？ [y/N]
+bacmap plan ls                       # 各计划的最新版本
+bacmap plan show <plan_id>           # 完整参数、哈希、输入指纹
+bacmap plan confirm <plan_id> --hash <前 12 位>
+bacmap plan reject <plan_id> --version 1 --reason "样本选错"
 ```
 
-### 给助手一份数据路径
+Web 控制台的 **计划**（`/plans`）页面提供同样操作。客户端配置见
+[智能体 Harness 指南](harnesses.zh-CN.md)，MCP 工具面见 §5。
 
-助手读不了任意宿主路径——这是设计（ADR-11：原始数据 D3 不进 LLM 上下文），不是故障。
-外部数据的唯一入口是 `mine` 任务的 `input_paths` 参数。**对话里直接给路径即可**：
+### 给 mine 任务一份数据路径
 
-```bash
-$ bacmap ask "读取 /data/2026批次/st_list.csv，按 ST 统计样本数并画柱状图"
-bacmap › 收到。/data/... 是外部路径，需要先走 mine 任务：
-       零拷贝登记（SHA256）→ 只读挂载进沙箱 → 在沙箱内统计。
-建议执行的分析计划：
-  1. mine —— 登记 csv 为输入数据集；按 ST 分组计数，输出 st_counts.csv + st_counts.png
-确认提交该计划？ [y/N]
-```
-
-确认后任务执行链路：**登记 → 只读挂载 → 沙箱内跑脚本 → 产物落工作区 → 挖掘门等签字**。
-脚本通过工作区 `context.json` 的 `datasets` 映射（`id → 路径`，注意是**对象不是数组**）
-拿到数据位置。
+智能体读不了任意宿主路径——这是设计（ADR-11：原始数据 D3 不进 LLM 上下文）。外部数据只经
+`mine` 任务的 `input_paths` 参数进入：向智能体要一个 `mine` 计划、确认后任务执行——**零拷贝登记
+（SHA256）→ 只读挂载进沙箱 → 跑脚本 → 产物落工作区 → 挖掘门等签字**。脚本通过工作区
+`context.json` 的 `datasets` 映射（`id → 路径`，注意是**对象不是数组**）拿到数据位置。
 
 `input_paths` 的规则（`store/datasets.py`）：
 
@@ -103,44 +71,40 @@ bacmap › 收到。/data/... 是外部路径，需要先走 mine 任务：
 - 该参数**没有全局配置项**，按次随任务传入；表单/CLI/MCP 均不收 mine（见 §4 表单细则）。
 
 **执行前提**：沙箱后端（Apptainer 或 Podman，见安装指南 §6）。缺失时任务失败并提示
-「沙箱不可用」——装 `podman` 即解，无需其它配置。云端 GLM 助手可以**规划** mine 任务，
-但会话内不能查看已登记数据集内容（D3 工具在云端被裁剪）或在会话内迭代脚本——
-需要「看数据再改脚本」的工作流请配本地/局域网端点。
+「沙箱不可用」——装 `podman` 即解，无需其它配置。
 
 除 `sandbox_run`（跑一段 Python）外，另有受限的 **`sandbox_shell`**：在同一沙箱内跑**一条** shell 命令，
 仅放行只读/分析白名单（`ls`、`cat`、`grep`、`zcat`、`samtools`、`seqkit`、`python` 等），
 其余命令会被拒绝并要求改用需签字的 `mine` 任务；仅在真实容器后端下运行（直通默认拒绝），
-每次调用写入 `$BACMAP_HOME/audits/sandbox_shell.jsonl`。
+每次调用写入 `$BACMAP_HOME/audits/sandbox_shell.jsonl`。这两个工具属于**任务内**智能体，
+MCP 客户端永远看不到它们。
 
 ## 3. TUI 与交互菜单
 
-`bacmap tui` 启动**会话优先**的 Textual 工作台（参考 opencode TUI 与 hermes agent REPL）：
-顶部**状态头**（LLM 端点）、可折叠**侧栏**（任务/样本）、**会话区**、**计划提示**、
-**输入框**，底部**按键提示栏**。
+`bacmap tui` 是一个**任务台**：状态头（LLM 端点）、可折叠侧栏（任务 / 样本）、操作日志与命令输入框，
+底部为按键提示。它是查看与少量显式操作的界面——没有对话。
 
-- **直接按键**：`Enter` 发送 · `Shift/Alt+Enter` 换行 · `Esc` 中断/忽略待确认计划 ·
-  `Ctrl+C` 退出 · `Ctrl+B` 侧栏 · `Ctrl+R` 刷新 · `Ctrl+L` 清屏 · `Ctrl+F` 跟随开关
-  （回看时停止自动滚动）· `Ctrl+P` 命令面板 · `Ctrl+Y` 确认计划/待签批。**开屏即聚焦输入框**，
-  可直接输入。
-- **Leader `Ctrl+G` 和弦**：`n` 新会话 · `i` 输入框 · `l` 任务 · `s` 样本 · `m` 模型/端点 · `t` 主题 ·
-  `a` **签批选中的 `awaiting_approval` 任务**（提示栏显示任务与签名，`Ctrl+Y` 确认、`Esc` 取消；
-  签名默认系统用户名）· `h` 帮助 · `q` 退出。
-- **失败回显**：提交的任务进入 `failed`/`cancelled` 时，会话区会追加一行
-  `任务 <id> failed（<step>）：<原因>`（每个任务只报一次），不必盯着侧栏。
-- **斜杠命令**：`/help /new /clear /tasks /samples /search <kw> /result <样本> /model
-  /approve <ID> [签名] /analyze <样本> /curate [scope] /quit`（`/analyze`、`/curate` 为显式
-  无 LLM 路径；`/approve` 的 ID 支持 `task list` 显示的短前缀，无参时签批任务表选中项；
-  `/result` 无参时渲染样本表选中样本的关键结果与报告路径）。
+- **直接按键**：`Enter` 执行命令 · `Esc` 取消待签批 / 聚焦输入框 · `Ctrl+C` 退出 · `Ctrl+B` 侧栏 ·
+  `Ctrl+R` 刷新 · `Ctrl+L` 清屏 · `Ctrl+Y` 确认待签批。输入框开屏即聚焦。
+- **Leader `Ctrl+G`** 和弦（输入框聚焦时同样有效）：`i` 输入框 · `l` 任务 · `s` 样本 · `m` 端点 ·
+  `t` 主题 · `a` **签批选中的 `awaiting_approval` 任务**（提示栏显示任务与签名；`Ctrl+Y` 确认、
+  `Esc` 取消；签名默认取系统用户名）· `h` 帮助 · `q` 退出。
+- **失败回显**：任务结束为 `failed`/`cancelled` 时日志追加一行
+  `任务 <id> failed（<step>）：<原因>`，无需盯着侧栏。
+- **斜杠命令**：`/help /clear /tasks /samples /search <kw> /model /result <样本>`
+  `/approve <ID> [签名]` `/analyze <样本> /curate [scope] /quit`（`/analyze`、`/curate` 是显式的
+  无 LLM 路径；`/approve` 接受 `task list` 显示的短前缀，无参时签批选中行；`/result` 渲染选中样本的
+  关键结果与报告路径）。
 
-输入框即助手：规划 → 确认（`Ctrl+Y`）→ 提交。窄终端下侧栏自动折叠，宽度恢复时还原用户偏好。
-`bacmap console` 仍是编号菜单，面向偏好引导式操作的用户。
+窄终端自动折叠侧栏，宽度恢复时回到你的偏好。自然语言交互请用外部 Harness（ADR-21）；
+`bacmap console` 仍是给偏好提示式操作的用户准备的编号菜单。
 
-## 4. Web 控制台（任务 / 助手 / 样本 / 检索）
+## 4. Web 控制台（任务 / 计划 / 样本 / 检索）
 
 `bacmap web` 后浏览器打开 `http://127.0.0.1:8800`：
 
-1. **助手**（`/assistant`）——用自然语言描述需求，页面显示回复与建议计划，点按钮确认并提交
-   （多轮会话保存在服务端）
+1. **计划**（`/plans`）——智能体经 MCP 提出的计划，显示完整参数、哈希与输入指纹；在此确认或拒绝
+   （等同 `bacmap plan`）
 2. **提交任务**（任务页）——显式表单：任务类型 + 样本列表 / 范围 JSON
 3. **监控**——六态徽章（排队中/运行中/待审批/已完成/已失败/已取消），详情页每 2 秒自动刷新
 4. **查询结果**——**样本**页浏览已完成样本（列表、单株详情含检出基因）。详情页有
@@ -166,8 +130,45 @@ bacmap › 收到。/data/... 是外部路径，需要先走 mine 任务：
 `{"pathogen": "Salmonella"}` 按病原子串筛选；`{"strains": ["SAM-001", "SAM-002"]}` 按清单筛选；
 留空默认纳入全部合格样本（逐株纳入检查不通过的记入排除清单）。analyze 任务忽略此字段。
 
-**mine/write 不走表单**：属开放路径（需脚本/草稿参数），只能经对话助手（确认后提交）
+**mine/write 不走表单**：属开放路径（需脚本/草稿参数），只能经人工确认的计划（向外部 Harness 要）
 或 Python API 提交——Web 表单、CLI `task submit`、MCP 均刻意不收，防伪造请求与脚本注入。
+
+### 数据录入：元数据 / 化验 / 知识库（v1.7）
+
+这三类输入不是可以直接调用的注册表工具——它们经任务层写入，因此每次都有任务与事件审计。
+用 **记录** 页（`/records`）或命令行：
+
+```bash
+bacmap record metadata --strain-id S1 --field province=Guangdong --field sample_source=food
+bacmap record lab --strain-id S1 --category mic --test-name meropenem --result 0.25 --unit mg/L
+bacmap record knowledge-import --title "论文标题" --identifier PMID:12345678
+bacmap record knowledge-approve 7        # 引用门只认已审核条目
+```
+
+每条命令提交一个 `record` 任务，`bacmap task show <id>` 查看结果。知识库条目先入暂存
+（`approved_by` 为空），执行 `knowledge-approve` 后才成为可引用来源。record 任务不进计划，
+也绝不经 MCP 暴露（D4 写）。
+
+### JSON API `/api/v1`（v1.5.2）
+
+Web 服务同时提供版本化 JSON API，与页面共用鉴权。它是**可信界面**：持有 Web 令牌即操作员，
+切勿把该令牌交给 Harness。
+
+| 方法与路径 | 用途 |
+|---|---|
+| `GET /api/v1/capabilities` | API 版本、bacmap 版本、可计划任务类型、功能清单 |
+| `GET /api/v1/tasks` · `GET /api/v1/tasks/{id}` · `POST /api/v1/tasks/{id}/cancel` | 任务 |
+| `GET /api/v1/plans` · `GET /api/v1/plans/{id}?version=` | 计划 |
+| `POST /api/v1/plans/{id}/confirm` `{"version", "plan_hash", "confirmer"}` · `POST /api/v1/plans/{id}/reject` `{"version", "reason"}` | 确认或拒绝计划 |
+| `GET /api/v1/events?after=&task_id=&plan_id=` | 游标之后的领域事件（`last_seq`） |
+| `GET /api/v1/events/stream` | Server-Sent Events，按 `Last-Event-ID` 续传 |
+| `GET /api/v1/samples?cursor=&limit=` | 游标分页的样本列表（只解析请求的那一页） |
+| `GET /api/v1/runs` · `GET /api/v1/runs/{id}` · `GET /api/v1/runs/{id}/compare?other=` | 运行记录与来源比较（v1.7.1） |
+| `GET /api/v1/gom/objects?type=&limit=` · `GET /api/v1/gom/objects/{id}?version=` | GOM 对象，默认最新版本（v1.7.1） |
+
+错误统一为 `{"code": "validation_error" | "not_found" | "conflict", "error": "..."}`，HTTP 400/404/409。
+cookie 模式下的状态变更请求须带 `X-CSRF-Token` 头，值等于 `bacmap_csrf` cookie。事件记录计划与任务的
+转换（创建、确认、提交、步骤、状态、审批）；事件不是真相来源，断线后客户端应重新读取任务或计划。
 
 ### 远程访问：SSH 隧道（推荐方式）
 
@@ -196,8 +197,35 @@ ssh -L 8800:127.0.0.1:8800 user@10.0.0.5
 
 ## 5. MCP 智能体接入
 
-任意支持 MCP stdio 的客户端都能接（Hermes / Codex / OpenCode / OpenClaw / Claude…）。
-客户端配置样例：
+v1.5 起，与 bacmap **对话**的推荐方式是外部智能体 Harness 的原生界面——**Hermes、Pi（≥0.99）或 DeepSeek Harness（DSH）**——经 MCP 接入（冻结 ADR-21）。bacmap 保留 CLI 与 Web 控制台承担确定性操作以及**计划确认与审批**（这两件事不在 Harness 内完成）。其他支持 MCP 的客户端（Codex / OpenCode / OpenClaw / Claude…）同样可接。
+
+```yaml
+# Hermes（~/.hermes/config.yaml）
+mcp_servers:
+  bacmap:
+    command: /path/to/.pixi/envs/default/bin/bacmap
+    args: ["mcp"]                       # 本地模型时追加 "--profile", "local-trusted"
+```
+
+```json
+// Pi（~/.pi/agent/mcp.json，Pi ≥ 0.99）
+{ "mcpServers": { "bacmap": {
+  "command": "/path/to/.pixi/envs/default/bin/bacmap", "args": ["mcp"] } } }
+```
+
+```yaml
+# DSH（$DSH_HOME/cordis.patch.yml；新增条目必须包在 insert: 下）
+- insert:
+  - id: mcp-bacmap
+    name: '@deepseek-ai/dsh-mcp-client'
+    config:
+      serverName: bacmap
+      transport: stdio
+      command: /path/to/.pixi/envs/default/bin/bacmap
+      args: ['mcp']
+```
+
+其他客户端配置样例：
 
 ```json
 // OpenCode（opencode.json）
@@ -222,21 +250,78 @@ bacmap mcp --transport http --host 127.0.0.1 --port 8765
 
 客户端指向 `http://127.0.0.1:8765/mcp`，带请求头 `Authorization: Bearer $BACMAP_MCP_TOKEN`。未设置 token 时 HTTP 传输拒绝启动。
 
-接入后智能体可调 **23 个工具**：
+### Profile：客户端能看到什么（v1.5）
+
+每个 MCP 服务实例在启动时绑定一个 **Profile**，客户端无法更改——MCP 客户端背后可能是 bacmap 无法验证的云端模型（ADR-16）。
+
+| Profile | 可见工具 | 开启方式 |
+|---|---|---|
+| `cloud`（默认） | 输出数据级别 ≤ `[llm.data_policy].cloud_max_data_class`（默认 D1，最多 D2）的读/算工具；开箱即为 `bio_list_reference_genomes`、`bio_diagnose` 与任务工具 | 无需配置 |
+| `local-trusted` | 全部读/算工具，至 D4（序列、元数据、检验结果） | 管理员在 `config.toml` 设置 `[mcp] allow_local_trusted = true`，再以 `bacmap mcp --profile local-trusted` 启动；未设置时拒绝启动 |
+
+只有 Harness 使用**本地或内网模型**时才用 `local-trusted`。被隐藏的工具在调用层也会被再次拒绝。HTTP 下需要同时提供两种 Profile 时，以不同端口、不同 token 各起一个实例。
+
+任务提交者由服务端认定（`mcp-stdio:<profile>:<OS 账户>` 或 `mcp-http:<profile>`）；`bacmap_submit_task` 不再接受 `submitted_by` 参数。
+
+接入后智能体可调（`local-trusted` 下；`cloud` 只见 D0–D1/D2 子集）：
 
 | 类别 | 工具 | 说明 |
 |---|---|---|
-| 单步计算（21） | `bio_fastq_qc` `bio_align` `bio_blast` `bio_samtools` `bio_variant` `bio_gene_scan` `bio_seq_stats` `bio_compare_runs` … | 同步返回结果，可吃任意本地路径 |
-| 任务提交 | `bacmap_submit_task` | **写操作唯一入口**；analyze/curate 任务异步执行 |
-| 任务查询 | `bacmap_task_status` | 轮询状态与门消息 |
+| 能力协商 | `bacmap_capabilities` | 版本、Profile 与数据级别上限、可计划任务类型、长任务机制——建议先调用 |
+| 读/算（22） | `bio_fastq_qc` `bio_align` `bio_blast` `bio_samtools` `bio_variant` `bio_gene_scan` `bio_seq_stats` `bio_compare_runs` … | 同步返回结果，可吃任意本地路径 |
+| 计划（v1.5.1） | `bacmap_create_plan` `bacmap_revise_plan` `bacmap_get_plan` | **推荐的写入路径**：智能体提出类型化的 analyze/curate 任务；在 bacmap 中由人确认该确切版本前不执行 |
+| 任务提交 | `bacmap_submit_task` | 兼容入口（直接提交）；analyze/curate 任务异步执行 |
+| 任务查询 | `bacmap_task_status` `bacmap_task_result` | 状态（`cloud` 下不回传消息）；结果摘要含运行 ID 与门结论（`cloud` 下只给计数） |
+| 任务控制 | `bacmap_task_cancel` | 取消本客户端直接提交或经其自建计划提交、仍在运行的任务 |
 
-智能体还可经 MCP prompts 获取领域说明书：每个已交付角色（analyst / curator / miner / literature / writer / epidemiologist）以 `bacmap_role_<名称>` prompt 暴露其说明书（全局原则 + 权限边界 + SKILL 指导）。
+智能体还可经 MCP prompts 获取领域说明书：每个已交付角色（analyst / curator / miner / literature / writer / epidemiologist）以 `bacmap_role_<名称>` prompt 暴露其说明书（全局原则 + 权限边界 + SKILL 指导）。`SKILL.md` 原文另以资源 `skill://bacmap/<角色>/SKILL.md` 发布，元数据带 `sha256` 摘要。各 Harness 的接入步骤见[智能体 Harness 指南](harnesses.zh-CN.md)。
 
 安全模型（对任何客户端一致）：
 
 - MCP 通道**无直写**——写库只能经任务提交走六道门；
 - 不信任的客户端先接 `bacmap mcp --read-only`（只暴露查询工具）；
+- MCP 只保护经过 MCP 的数据。Harness 自带 Shell 与文件工具，应让 bacmap 以独立系统账户运行、Harness 用户不可读 `BACMAP_HOME`，Harness 经 HTTP + token 接入（ADR-21）；
+- 计划确认与审批签名在 bacmap Web 控制台或 CLI 中完成，不在 Harness 对话里完成；
 - 连通性排查：`hermes mcp test bacmap`。
+
+### 计划：在 Harness 中提出，在 bacmap 中确认（v1.5.1）
+
+1. 智能体调用 `bacmap_create_plan` 提交类型化任务，例如
+   `{"task_type": "analyze", "fasta_dir": "/data/run42", "species": "VPA"}`。可计划类型：
+   `analyze`（`samples`/`fasta_dir`/`fastq_dir` 三选一）、`curate`（`scope` = `pathogen`/`strains`）、
+   **`mine`**（`objective`、`script`、可选绝对路径 `input_paths`、`sandbox_image`）与
+   **`write`**（`objective`、`draft`）。返回 `plan_id`、`version` 与 `plan_hash`。
+2. 人在 bacmap 中审阅并确认**该确切版本**：
+
+   ```bash
+   bacmap plan ls                                   # 各计划的最新版本
+   bacmap plan show <plan_id>                       # 完整参数、哈希、输入指纹
+   bacmap plan confirm <plan_id> --version 1 --hash <前 12 位>
+   bacmap plan confirm <plan_id>                    # 或：先展示计划再交互确认
+   bacmap plan reject <plan_id> --version 1 --reason "样本选错"
+   ```
+
+   Web 控制台的 **计划**（`/plans`）页面提供同样操作（cookie 模式下带 CSRF 防护）。
+3. 智能体轮询 `bacmap_get_plan` 取得 `task_ids`，再用 `bacmap_task_status` 查询。
+
+保证：修订（`bacmap_revise_plan`）产生新版本，旧版本不能再被确认；输入目录（或 `mine` 的输入文件）
+在建计划后发生变化时，确认以冲突失败；重复确认（或 CLI 与 Web 同时确认）只提交一次。
+
+开放路径计划（`mine` / `write`）在确认时**完整展示**——沙箱脚本或成稿全文都进入计划哈希，
+所见即所执行。`mine` 在沙箱内无网络执行，产物仍要过挖掘门与签字。
+
+### 运行记录与 GOM：证据链（v1.7.1）
+
+```bash
+bacmap run ls                                  # 最近运行记录
+bacmap run show <run_id>                       # 参数、工具/数据库版本、输入哈希、种子
+bacmap run compare <run_a> <run_b>             # 把差异归因到参数/数据库/工具/输入
+bacmap gom ls --type analysis                  # 各对象的最新版本
+bacmap gom show <object_id> [--version N]      # 对象全文
+```
+
+Web 控制台对应 **运行** 与 **GOM** 页面，运行详情页可直接比较两次运行。每次 analyze 都写一条不可修改的
+运行记录（ADR-18）；GOM 对象同样不可变——新结果产生新版本，不覆盖旧版本。
 
 在智能体里的典型对话：
 
@@ -268,7 +353,7 @@ bacmap mcp --transport http --host 127.0.0.1 --port 8765
 记录（ADR-18），即兴流程无法封存与复现；② 固定产出才能过确定性校验器与门，自由流程没有
 可预定义的校验规则；③ 生信分析外部化给 gside/gapit/gmlst，编排本身也必须确定性与版本化
 （ADR-20）。**新分析能力的正确路径是开发者行为**：新增 `.smk` 规则 + 适配器 + 测试 →
-版本化部署（树哈希 stamp）→ 进入封闭集合——之后所有 analyze 任务与助手规划自动可用。
+版本化部署（树哈希 stamp）→ 进入封闭集合——之后所有 analyze 任务与外部 Harness 的规划自动可用。
 
 ## 7. 端到端示例（新样本上机 → 报告）
 
@@ -303,17 +388,17 @@ ls ~/.local/share/bacmap/results/SAM-NEW-100/report/
 |---|---|
 | 报「非法样本 ID」 | 样本 ID 含非法字符（只允许 `A-Za-z0-9._-`），或用了**中文全角逗号**分隔——改用半角 `,` 或换行 |
 | 不知道「样本列表」填什么 | 填**已注册的样本 ID**（samples.tsv / `gs/` 布局注册时的名字），不是路径；见 §4 表单细则 |
-| 想在表单提交 mine | 表单/CLI/MCP 刻意只收 analyze/curate；mine 经对话助手确认提交或 Python API |
+| 想在表单提交 mine | 表单/CLI/MCP 刻意只收 analyze/curate；向外部 Harness 要 mine 计划（确认后提交），或用 Python API |
 
-**助手与 LLM**（接入教程与完整排查表见安装指南 §5）
+**LLM 端点与智能体**（接入教程与完整排查表见安装指南 §5）
 
 | 现象 | 原因与处理 |
 |---|---|
-| `payload D4 exceeds cloud limit` | 数据分级拦截（ADR-16）；v1.4.30 起云端助手自动裁剪工具带，不应再出现——出现请先升级版本 |
+| `payload D4 exceeds cloud limit` | 数据分级拦截（ADR-16）；任务内智能体与 `cloud` MCP 实例都会自动裁剪工具带，不应再出现——出现请先升级版本 |
 | 401 / 429(1113) / 模型不存在 | 密钥未注入、密钥与端点不匹配（GLM 通用端点 vs coding 端点）、账户无该模型额度——见安装指南 §5.2 |
-| 「内置助手暂不可用」 | 统一降级提示，真实原因用 `bacmap ask "你好" 2>&1` 看 WARNING 行 |
-| 对话没有流式输出 | 流式在 TUI 与 CLI `ask`/`chat`（v1.4.31）；Web `/assistant` 暂为整页返回 |
-| 助手说「安全问题无法读取」路径数据 | 设计行为：外部数据走 mine 登记（§2「给助手一份数据路径」）；若任务报「沙箱不可用」装 podman（安装指南 §6） |
+| 「LLM 不可用 / degraded」 | 统一降级提示；用 `bacmap overview` 看端点状态（确定性功能照常可用，C3） |
+| 想让对话有流式输出 | 对话在 Harness 里（ADR-21）；bacmap 只经 `/api/v1/events/stream` 推送领域事件 |
+| 智能体说「安全问题无法读取」路径数据 | 设计行为：外部数据走 mine 登记（§2「给 mine 任务一份数据路径」）；若任务报「沙箱不可用」装 podman（安装指南 §6） |
 | mine 任务失败、消息只剩「workflow ERROR」 | 旧版环境级异常被吞成笼统消息；现任务消息会指出原因与方向（如「沙箱启动失败：no apptainer/podman on PATH → 安装 podman」）——升级后重提任务即可 |
 
 **样本与数据**

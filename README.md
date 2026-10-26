@@ -16,11 +16,11 @@ A pathogen genomic epidemiology analysis system for a **single workstation**
 - **Snakemake 9 pipelines**: QC → assembly → typing → AMR/virulence → report;
 - **Agent layer**: a local LLM (Strata / OpenAI-compatible endpoint) handles intent classification and interpretation drafting, with data-classification gating across the entire chain;
 - **External tool division of labor** (ADR-20): species identification belongs to [gside](https://github.com/indexofire/gside), gene screening and serotyping to gapit, MLST/cgMLST/MST to gmlst. bacmap only does orchestration and judgment;
-- **Integration**: MCP only (ruled in v1.4.8, stdio transport). Local clients such as Hermes / Claude / Codex can all connect.
+- **Integration**: MCP only (ruled in v1.4.8; stdio by default, Streamable HTTP with bearer auth). From v1.5, conversation is meant to happen in the native UI of an external harness — Hermes, Pi or DeepSeek Harness — while confirmations and approvals stay in bacmap's CLI/Web (ADR-21). MCP instances run under a data-class **profile**: `cloud` by default (D0–D1 tools only), `local-trusted` (up to D4) by explicit opt-in.
 
 ## Quick start
 
-Detailed documentation: [Installation guide](docs/installation.md) · [Configuration guide](docs/configuration.md) · [Usage guide](docs/usage.md)
+Detailed documentation: [Tutorial](docs/tutorial.md) · [Installation](docs/installation.md) · [Configuration](docs/configuration.md) · [Usage](docs/usage.md) · [Operations](docs/operations.md) · [Agent harnesses](docs/harnesses.md)
 
 ```bash
 pixi install          # 安装运行时环境（含生信工具链）
@@ -30,14 +30,16 @@ bacmap --help         # 统一命令行入口
 
 | Command | Description |
 |---|---|
-| `bacmap ask "<需求>" [--yes]` | **LLM-driven**: understands the request, consults read tools, proposes a plan, confirms, submits |
-| `bacmap chat` | Multi-turn conversational analysis assistant (same agent session) |
-| `bacmap tui [--home H]` | Chat-first TUI (Textual): assistant conversation, sidebar (tasks/samples), leader chords (`Ctrl+X`), slash commands |
+| `bacmap tui [--home H]` | Task console (Textual): tasks/samples sidebar, operation log, command input, leader chords (`Ctrl+G`), approval signing |
 | `bacmap console [--home H]` | Interactive menu (rich) for users who prefer prompts over subcommands |
 | `bacmap overview [--json]` | System overview (endpoints / data policy / versions / paths / sandbox) |
 | `bacmap task ls\|show\|submit\|approve\|cancel` | Task query and write operations (explicit, no-LLM path) |
+| `bacmap plan ls\|show\|confirm\|reject` | Review and confirm analysis plans proposed by agents over MCP (v1.5.1; also at Web `/plans`) |
+| `bacmap record metadata\|lab\|knowledge-import\|knowledge-approve` | Enter metadata, lab results and knowledge entries through the task layer (v1.7; also at Web `/records`) |
+| `bacmap run ls\|show\|compare` · `bacmap gom ls\|show` | Evidence trail: run records and GOM objects (v1.7.1; Web `/runs`, `/gom`) |
+| `bacmap doctor` · `bacmap backup` · `bacmap restore` · `bacmap events prune` | Health check, backup/restore, event retention (v1.7.2; see the operations guide) |
 | `bacmap sample ls\|show` / `bacmap search` | Sample browsing and search |
-| `bacmap mcp [--read-only] [--home H]` | Start the MCP server: stdio (default) or Streamable HTTP with bearer auth (ADR-12; 23 tools) |
+| `bacmap mcp [--read-only] [--profile cloud\|local-trusted] [--home H]` | Start the MCP server: stdio (default) or Streamable HTTP with bearer auth (ADR-12). Up to 22 read/compute tools plus task tools, filtered by profile (default `cloud`) |
 | `bacmap web [--host 127.0.0.1] [--port 8800]` | Start the web console (tasks / assistant / samples / search / reports) |
 
 All query subcommands accept `--json` for scripting. Equivalent module form:
