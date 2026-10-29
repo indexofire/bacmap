@@ -83,6 +83,7 @@ import-linter = ">=2.0"
 [feature.dev.pypi-dependencies]
 mkdocs = ">=1.6"
 mkdocs-material = ">=9.5"
+mkdocs-static-i18n = ">=1.2"
 
 [feature.dev.tasks]
 docs-build = { cmd = "mkdocs build" }

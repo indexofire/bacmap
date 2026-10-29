@@ -1,5 +1,3 @@
-[English](tutorial.md) | **简体中文**
-
 # 不用记命令：让智能体帮你做病原基因组分析
 
 > bacmap 要解决的不是"再造一个生信命令行"，而是两件普通用户最头疼的事：
@@ -29,7 +27,7 @@ pixi install && pixi shell     # 安装 bacmap 本体（唯一需要命令的一
 bacmap doctor                  # 体检：目录、库、沙箱、模型、磁盘
 ```
 
-然后接一个你喜欢的智能体（三选一，配置见[智能体 Harness 指南](harnesses.zh-CN.md)）：
+然后接一个你喜欢的智能体（三选一，配置见[智能体 Harness 指南](harnesses.zh.md)）：
 
 - **Hermes**：适合手机 IM 里查结果、收通知；
 - **Pi**：终端里最顺手的编码/分析助手；
@@ -272,9 +270,9 @@ Hermes 会调用 `bacmap_task_result`（云端 Profile 只返回门结论计数�
 
 ## 10. 什么时候仍然会用命令行 / 网页
 
-- **部署、体检、备份、升级**：`bacmap doctor`、`backup`、`restore`（见[运维指南](operations.zh-CN.md)）；
+- **部署、体检、备份、升级**：`bacmap doctor`、`backup`、`restore`（见[运维指南](operations.zh.md)）；
 - **没有智能体时**：Web 控制台可以完成提交、确认、审批、看报告；
-- **自动化/批处理**：CLI 与 `/api/v1` 更合适（见[使用指南](usage.zh-CN.md)）。
+- **自动化/批处理**：CLI 与 `/api/v1` 更合适（见[使用指南](usage.zh.md)）。
 
 它们不是"高级用户专属"，只是**智能体不可用时的兜底**。
 
@@ -298,4 +296,4 @@ Hermes 会调用 `bacmap_task_result`（云端 Profile 只返回门结论计数�
 >
 > 记不住命令没关系；记住这三件事：**数据在哪、要什么、谁来签字**。
 
-延伸阅读：[使用指南](usage.zh-CN.md) · [智能体 Harness](harnesses.zh-CN.md) · [运维指南](operations.zh-CN.md) · [工具参考](tools.zh-CN.md)
+延伸阅读：[使用指南](usage.zh.md) · [智能体 Harness](harnesses.zh.md) · [运维指南](operations.zh.md) · [工具参考](tools.zh.md)

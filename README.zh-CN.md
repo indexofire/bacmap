@@ -3,7 +3,7 @@
 # bacmap
 
 本地病原菌基因组分析系统（含内置智能体层）——standalone 架构，冻结设计见
-[docs/architecture-frozen-v1.md](docs/architecture-frozen-v1.md)（v1.4.10）。
+[docs/architecture-frozen-v1.zh.md](docs/architecture-frozen-v1.zh.md)（v1.4.10）。
 
 ## 定位
 
@@ -18,7 +18,7 @@
 
 ## 快速开始
 
-详细文档：[实战教程](docs/tutorial.zh-CN.md) · [安装指南](docs/installation.zh-CN.md) · [配置指南](docs/configuration.zh-CN.md) · [使用指南](docs/usage.zh-CN.md) · [运维指南](docs/operations.zh-CN.md) · [智能体 Harness](docs/harnesses.zh-CN.md)
+详细文档：[实战教程](docs/tutorial.zh.md) · [安装指南](docs/installation.zh.md) · [配置指南](docs/configuration.zh.md) · [使用指南](docs/usage.zh.md) · [运维指南](docs/operations.zh.md) · [智能体 Harness](docs/harnesses.zh.md)
 
 ```bash
 pixi install          # 安装运行时环境（含生信工具链）

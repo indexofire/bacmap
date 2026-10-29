@@ -1,5 +1,3 @@
-**English** | [简体中文](configuration.zh-CN.md)
-
 # Configuration guide
 
 All bacmap configuration comes from **environment variables plus one TOML file**. No path is derived from the source tree location (ADR-03).

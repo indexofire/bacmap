@@ -1,10 +1,8 @@
-[English](usage.md) | **简体中文**
-
 # 使用指南
 
 bacmap 有三个人口：**CLI**（运维）、**Web 任务台**（人）、**MCP**（AI 智能体）。
 对话在外部智能体 Harness（Hermes / Pi / DSH）的原生界面里进行，经 MCP 接入——见
-[智能体 Harness 指南](harnesses.zh-CN.md)；v1.6 起内置助手已移除（ADR-21）。
+[智能体 Harness 指南](harnesses.zh.md)；v1.6 起内置助手已移除（ADR-21）。
 
 ## 1. CLI
 
@@ -32,7 +30,7 @@ bacmap mcp [--read-only] [--profile cloud|local-trusted] [--home H]
 ```
 
 查询类子命令支持 `--json`；写操作与 Web/MCP 走同一套门与审批。
-日常运维（体检、备份、恢复、事件保留）见[运维指南](operations.zh-CN.md)。
+日常运维（体检、备份、恢复、事件保留）见[运维指南](operations.zh.md)。
 
 顶层命令分两类:**界面/模式**(`mcp`、`web`、`tui`、`console`——接管终端或绑定端口)与
 **命令**(`overview`、`task`、`sample`、`search`、`ask`、`chat`——执行一次查询/写操作后退出)。
@@ -52,7 +50,7 @@ bacmap plan reject <plan_id> --version 1 --reason "样本选错"
 ```
 
 Web 控制台的 **计划**（`/plans`）页面提供同样操作。客户端配置见
-[智能体 Harness 指南](harnesses.zh-CN.md)，MCP 工具面见 §5。
+[智能体 Harness 指南](harnesses.zh.md)，MCP 工具面见 §5。
 
 ### 给 mine 任务一份数据路径
 
@@ -195,7 +193,7 @@ ssh -L 8800:127.0.0.1:8800 user@10.0.0.5
 - 多个用户各自建各自的隧道，互不影响
 - 传输全程加密——符合基因组数据（D3/D4）不出本地网络且不落明文的要求
 - 无需 root、无需在工作站开防火墙端口、无需给 bacmap 加认证层
-- 数据文件仍由操作员在工作机上按[配置指南 §5](configuration.zh-CN.md)注册；
+- 数据文件仍由操作员在工作机上按[配置指南 §5](configuration.zh.md)注册；
   远程上传功能属于规划项（待智能体生信分析功能完成后再考虑）
 
 ## 5. MCP 智能体接入
@@ -279,7 +277,7 @@ bacmap mcp --transport http --host 127.0.0.1 --port 8765
 | 任务查询 | `bacmap_task_status` `bacmap_task_result` | 状态（`cloud` 下不回传消息）；结果摘要含运行 ID 与门结论（`cloud` 下只给计数） |
 | 任务控制 | `bacmap_task_cancel` | 取消本客户端直接提交或经其自建计划提交、仍在运行的任务 |
 
-智能体还可经 MCP prompts 获取领域说明书：每个已交付角色（analyst / curator / miner / literature / writer / epidemiologist）以 `bacmap_role_<名称>` prompt 暴露其说明书（全局原则 + 权限边界 + SKILL 指导）。`SKILL.md` 原文另以资源 `skill://bacmap/<角色>/SKILL.md` 发布，元数据带 `sha256` 摘要。各 Harness 的接入步骤见[智能体 Harness 指南](harnesses.zh-CN.md)。
+智能体还可经 MCP prompts 获取领域说明书：每个已交付角色（analyst / curator / miner / literature / writer / epidemiologist）以 `bacmap_role_<名称>` prompt 暴露其说明书（全局原则 + 权限边界 + SKILL 指导）。`SKILL.md` 原文另以资源 `skill://bacmap/<角色>/SKILL.md` 发布，元数据带 `sha256` 摘要。各 Harness 的接入步骤见[智能体 Harness 指南](harnesses.zh.md)。
 
 安全模型（对任何客户端一致）：
 

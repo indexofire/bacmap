@@ -1,6 +1,5 @@
 # bacmap Tool Reference
 
-**English** | [简体中文](tools.zh-CN.md)
 
 The tool registry in `bacmap.tools.registry` is the single catalog of what bacmap can do. Each entry is a `ToolSpec` with a name, version, description, effect, and trust layer. One source of truth feeds the MCP server and the built-in agents. This page documents all 26 registered tools; all currently sit at version 0.1.0.
 

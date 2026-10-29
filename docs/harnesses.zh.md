@@ -1,5 +1,3 @@
-[English](harnesses.md) | **简体中文**
-
 # 智能体 Harness（Hermes · Pi · DeepSeek Harness）
 
 v1.5 起（冻结 ADR-21），与 bacmap 的对话交互在外部智能体 Harness 的原生界面中进行。Harness 只经
@@ -27,7 +25,7 @@ Harness 不能确认计划，也不能签署审批。MCP elicitation 与 Harness
 
 ## 2. Profile
 
-每个 bacmap MCP 实例启动时绑定一个 Profile（见[使用指南](usage.zh-CN.md)）：
+每个 bacmap MCP 实例启动时绑定一个 Profile（见[使用指南](usage.zh.md)）：
 
 - `cloud`（默认）：输出级别不超过 `[llm.data_policy].cloud_max_data_class` 的工具。任务消息不回传，
   任务结果只给门结论计数——它们可能点名单株。

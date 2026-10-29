@@ -1,11 +1,9 @@
-**English** | [简体中文](index.zh-CN.md)
-
 # bacmap
 
 A local pathogen genome analysis system for a single workstation where data never leaves the local
 network. Deterministic analysis (Snakemake + gside/gapit/gmlst), gates, an immutable evidence chain,
 and MCP for external agents; conversation happens in Hermes / Pi / DSH, confirmations stay in bacmap. Frozen design:
-[architecture-frozen-v1.en.md](architecture-frozen-v1.en.md) (reference translation;
+[architecture-frozen-v1.md](architecture-frozen-v1.md) (reference translation;
 the Chinese version is authoritative).
 
 | Document | Content |

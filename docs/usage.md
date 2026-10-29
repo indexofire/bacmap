@@ -1,5 +1,3 @@
-**English** | [简体中文](usage.zh-CN.md)
-
 # Usage guide
 
 bacmap has three entry points: the **CLI** (operations), the **web task console** (humans), and **MCP** (AI agents).

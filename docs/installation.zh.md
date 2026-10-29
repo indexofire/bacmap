@@ -1,5 +1,3 @@
-[English](installation.md) | **简体中文**
-
 # 安装指南
 
 bacmap 面向单工作站部署（Linux / 64 GB 内存推荐 / 数据不出网）。本文覆盖从零安装到首次验证。
@@ -153,7 +151,7 @@ export BACMAP_ALLOW_UNSANDBOXED=1   # 仅受控开发环境的直通通道（无
 
 没有沙箱后端时，凡带脚本的 mine 任务（包括对话助手读取外部数据的链路）都会失败并
 提示「沙箱不可用」——这是执行环境问题，不是权限配置问题。数据接入方式见
-[使用指南](usage.zh-CN.md) §2「给助手一份数据路径」。
+[使用指南](usage.zh.md) §2「给助手一份数据路径」。
 
 ## 7. 首次验证
 
@@ -164,4 +162,4 @@ bacmap web &                                       # 任务台 http://127.0.0.1:
 timeout 3 bacmap mcp --read-only < /dev/null       # MCP 只读冒烟（应正常退出）
 ```
 
-三步全过即安装完成。下一步：[配置指南](configuration.zh-CN.md) → [使用指南](usage.zh-CN.md)。
+三步全过即安装完成。下一步：[配置指南](configuration.zh.md) → [使用指南](usage.zh.md)。

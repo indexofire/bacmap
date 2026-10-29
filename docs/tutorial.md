@@ -1,5 +1,3 @@
-**English** | [简体中文](tutorial.zh-CN.md)
-
 # No commands required: doing pathogen genomics with an agent
 
 > bacmap exists to remove two everyday pains: **nobody wants to memorise bioinformatics CLIs**, and

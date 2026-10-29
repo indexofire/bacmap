@@ -1,5 +1,3 @@
-**English** | [简体中文](harnesses.zh-CN.md)
-
 # Agent harnesses (Hermes · Pi · DeepSeek Harness)
 
 From v1.5 (frozen ADR-21), conversation with bacmap is meant to happen in the native interface of an

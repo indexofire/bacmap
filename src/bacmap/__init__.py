@@ -1,6 +1,6 @@
 """bacmap — 本地病原基因组分析系统。
 
-架构依据 docs/architecture-frozen-v1.md（ADR-01..21）。
+架构依据 docs/architecture-frozen-v1.zh.md（ADR-01..21，中文权威）。
 分层：interfaces / tasks / agent / workflow / tools / core / store，
 依赖方向只能自上而下（ADR-02，import-linter 在 CI 强制）。
 """

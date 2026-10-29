@@ -1,5 +1,3 @@
-**English** | [简体中文](installation.zh-CN.md)
-
 # Installation guide
 
 bacmap targets single-workstation deployment (Linux / 64 GB RAM recommended / data never leaves the local network). This guide covers a from-zero installation through first verification.

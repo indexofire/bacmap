@@ -1,0 +1,11 @@
+/*
+ * Horizontal-navigation layout (same as gside):
+ * the top tab bar carries the primary sections, each page shows its content
+ * and the right-hand TOC, and the primary sidebar is hidden on desktop.
+ * Keep the drawer on tablet/mobile widths, where the tab bar is hidden.
+ */
+@media screen and (min-width: 76.25em) {
+  .md-sidebar--primary {
+    display: none;
+  }
+}

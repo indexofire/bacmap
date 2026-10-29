@@ -270,9 +270,9 @@
   （证据与辩论记录，仅本地阅读，已 gitignore 不提交）。
 - 三份用户文档：`docs/installation.md` / `configuration.md` / `usage.md`
   （含 SSH 隧道远程访问方案）。
-- **文档全面双语化（英文为默认语言）**：README 与全部 docs 提供 EN + `.zh-CN.md`
+- **文档全面双语化（英文为默认语言）**：README 与全部 docs 提供 EN + `.zh.md`
   双版本，顶部语言切换链接，跨链同语言互指；新增工具参考 `docs/tools.md`（24 工具
-  全参数，源自运行时注册表）；冻结架构文档补全量英译 `architecture-frozen-v1.en.md`
+  全参数，源自运行时注册表）；冻结架构文档补全量英译 `architecture-frozen-v1.md`（英文）
   （中文版为权威，英文版为参考翻译）。
 - Web 任务台现代化重设计：DESIGN.md 设计系统（257 行契约）+ 858 行本地 CSS，
   Linear 式暗色操作台、六态语义徽章、轮询守卫修复、零外联（ADR-16）。

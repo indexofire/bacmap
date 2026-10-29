@@ -1,5 +1,3 @@
-[English](configuration.md) | **简体中文**
-
 # 配置指南
 
 bacmap 的全部配置来自**环境变量 + 一个 TOML 文件**。任何路径不由源码位置推导（ADR-03）。
@@ -78,7 +76,7 @@ cloud_max_data_class = "D1"            # 见 §3，不可通过配置放宽超�
   会话，沙箱工具整体排除，会话级别由裁剪后工具带派生（≤D2）。要获得完整能力请放宽到
   `"D2"`；只允许 D1 时助手仅剩 D0 工具（参考基因组清单/诊断）。本地/局域网端点不受影响；
 - 密钥注入方式、GLM 通用端点与 coding 端点的匹配关系、以及 401/429 等接入报错的
-  完整排查表，见[安装指南 §5](installation.zh-CN.md)。
+  完整排查表，见[安装指南 §5](installation.zh.md)。
 
 ## 3. 数据分级政策（ADR-16，安全红线）
 
@@ -183,7 +181,7 @@ allow_local_trusted = true   # 必须是布尔 true；否则 --profile local-tru
 从 v1.4 升级：原先依赖 D2–D4 工具（`bio_get_result`、`bio_query_metadata`、序列工具等）的
 Hermes/Codex/OpenCode 配置，需要补上该设置与 `--profile local-trusted` 参数。
 
-详见[使用指南](usage.zh-CN.md)。
+详见[使用指南](usage.zh.md)。
 
 ## 7. 运行记录与外部数据库（ADR-18/20）
 

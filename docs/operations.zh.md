@@ -1,5 +1,3 @@
-[English](operations.md) | **简体中文**
-
 # 运维指南
 
 上线后的日常事务：体检、备份、恢复、事件保留、schema 迁移与升级。全部在单工作站上完成，
@@ -103,4 +101,4 @@ MCP Profile 只保护经过 MCP 的数据，挡不住 Harness 自己的 Shell。
 - `bacmap web` 与 `bacmap mcp --transport http` 以该账户运行，绑定 `127.0.0.1`；
 - Harness 只拿到 MCP 地址与 token，绝不给 Web 令牌。
 
-原因与残余风险见[智能体 Harness 指南](harnesses.zh-CN.md) §4。
+原因与残余风险见[智能体 Harness 指南](harnesses.zh.md) §4。

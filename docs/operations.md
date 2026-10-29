@@ -1,5 +1,3 @@
-**English** | [简体中文](operations.zh-CN.md)
-
 # Operations guide
 
 Day-two tasks: health checks, backups, restores, event retention, schema migrations and upgrades.

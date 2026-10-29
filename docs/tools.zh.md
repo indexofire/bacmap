@@ -1,10 +1,9 @@
 # bacmap 工具参考
 
-[English](tools.md) | **简体中文**
 
 `bacmap.tools.registry` 中的工具注册表是 bacmap 能力的唯一清单。每个条目是一个 `ToolSpec`，带名称、版本、描述、effect 与信任层。同一个事实来源同时供给 MCP 服务器与内置智能体。本页记录全部 26 个注册工具，当前版本统一为 0.1.0。
 
-每个工具都标注 effect。`read` 工具只做只读查询；`compute` 工具执行计算或封装外部程序，不写持久状态；`write` 工具会写 GOM 或数据库，绝不直接注册进 MCP。MCP 服务器暴露 22 个 read/compute 工具，外加任务工具 `bacmap_submit_task`、`bacmap_task_status`、`bacmap_task_result`、`bacmap_task_cancel`（v1.5.2）、计划工具 `bacmap_create_plan`、`bacmap_revise_plan`、`bacmap_get_plan`，以及 `bacmap_record_data`（仅 local-trusted，v1.8.4）与 `bacmap_confirm_plan_locally`（stdio 本机弹窗，v1.9.0）。任务只经任务提交或在 bacmap CLI/Web 中确认的计划进入引擎；MCP 不提供确认工具。只读模式（`bacmap mcp --read-only`）下连任务工具也不会注册。v1.5 起每个 MCP 实例还按 **Profile** 裁剪（ADR-12/16）：默认 `cloud` 只暴露输出级别不超过 `cloud_max_data_class` 的工具（默认 D1，即仅 `bio_list_reference_genomes` 与 `bio_diagnose`）；`local-trusted`（须管理员显式开启）暴露全部 22 个。详见[使用指南](usage.zh-CN.md)。
+每个工具都标注 effect。`read` 工具只做只读查询；`compute` 工具执行计算或封装外部程序，不写持久状态；`write` 工具会写 GOM 或数据库，绝不直接注册进 MCP。MCP 服务器暴露 22 个 read/compute 工具，外加任务工具 `bacmap_submit_task`、`bacmap_task_status`、`bacmap_task_result`、`bacmap_task_cancel`（v1.5.2）、计划工具 `bacmap_create_plan`、`bacmap_revise_plan`、`bacmap_get_plan`，以及 `bacmap_record_data`（仅 local-trusted，v1.8.4）与 `bacmap_confirm_plan_locally`（stdio 本机弹窗，v1.9.0）。任务只经任务提交或在 bacmap CLI/Web 中确认的计划进入引擎；MCP 不提供确认工具。只读模式（`bacmap mcp --read-only`）下连任务工具也不会注册。v1.5 起每个 MCP 实例还按 **Profile** 裁剪（ADR-12/16）：默认 `cloud` 只暴露输出级别不超过 `cloud_max_data_class` 的工具（默认 D1，即仅 `bio_list_reference_genomes` 与 `bio_diagnose`）；`local-trusted`（须管理员显式开启）暴露全部 22 个。详见[使用指南](usage.zh.md)。
 
 信任层标记调用方的自主程度：L1 是固定管线，只调用、不改写；L2 是受控探索，经沙箱执行并接受人审；L3 是自由对话，受门约束。26 个工具按 effect 分为 9 个 read、13 个 compute、4 个 write。四个 write 工具是 `bio_analyze_pathogen`、`bio_generate_report`、`bio_add_lab_result` 与 `bio_add_metadata`。
 
