@@ -152,6 +152,8 @@ def build_candidate(
     # 与 bio_list_samples / Web 的 results 扫描口径一致（*/report/*_summary.json）。
     for sdir in sorted((home / "results").glob("*/report/*_summary.json")):
         strain_id = sdir.parent.parent.name
+        if sdir.name != f"{strain_id}_summary.json":
+            continue  # 报告目录里遗留的旧名 summary 不得被当成另一份数据集
         isolate = isolate_of.get(strain_id, strain_id)
         if scope.get("strains") and not (
             strain_id in scope["strains"] or isolate in scope["strains"]
@@ -235,6 +237,17 @@ def build_candidate(
             "reason": reason,
         }
         strains.append({k: v for k, v in pick.items() if k != "_mtime"})
+
+    # 显式代表运行里指向不存在 isolate 的条目不能静默丢弃（用户会以为已生效）。
+    for isolate, wanted in explicit.items():
+        if isolate not in groups:
+            excluded.append(
+                {
+                    "isolate_id": isolate,
+                    "strain_id": str(wanted),
+                    "reason": "representative_isolate_missing",
+                }
+            )
 
     return {
         "home": str(home),

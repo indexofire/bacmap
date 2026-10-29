@@ -758,6 +758,12 @@ def main_args(argv: list[str]) -> int:
         help="同时生成 PDF（headless chromium 打印，weasyprint 兜底）",
     )
     parser.add_argument(
+        "--results-dir",
+        type=str,
+        default=None,
+        help="本次运行的物理结果目录（run 级隔离；默认 BACMAP_HOME/results）",
+    )
+    parser.add_argument(
         "--group",
         type=str,
         default=None,
@@ -768,6 +774,10 @@ def main_args(argv: list[str]) -> int:
         ),
     )
     args = parser.parse_args(argv)
+
+    global RESULTS_DIR
+    if args.results_dir:
+        RESULTS_DIR = Path(args.results_dir).resolve()
 
     if args.group is not None and not args.cohort:
         parser.error("--group requires --cohort")

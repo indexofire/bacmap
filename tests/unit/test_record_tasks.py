@@ -158,3 +158,22 @@ class TestNoDirectWriteBypass:
             from pydantic import TypeAdapter
 
             TypeAdapter(PlannableTask).validate_python({"task_type": "record"})
+
+
+class TestKnowledgeApprovalOnce:
+    def test_second_approval_task_fails_without_overwriting(self, engine):
+        from bacmap.store.knowledge import KnowledgeStore
+
+        store = KnowledgeStore(engine.home / "data" / "knowledge.sqlite")
+        eid = store.import_candidate({"title": "t", "identifier": "PMID:12345678"}, "a")
+        first = engine.submit(
+            TaskType.RECORD, {"kind": "knowledge_approve", "entry_id": eid}, "reviewer-1"
+        )
+        _wait(engine, first)
+        second = engine.submit(
+            TaskType.RECORD, {"kind": "knowledge_approve", "entry_id": eid}, "reviewer-2"
+        )
+        st = _wait(engine, second)
+        assert st.state.value == "failed"
+        assert "already approved" in (st.message or "")
+        assert store.get(eid)["approved_by"] == "reviewer-1"

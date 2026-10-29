@@ -176,5 +176,11 @@ _SAMPLE_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 def _validate_sample_id(sample_id: str) -> bool:
-    """summary 读取前的 sample_id 白名单校验（不过 → handler 返回错误 JSON）。"""
-    return bool(sample_id) and _SAMPLE_ID_RE.match(sample_id) is not None
+    """summary 读取前的 sample_id 白名单校验（不过 → handler 返回错误 JSON）。
+
+    正则本身允许 ``.``/``..``（它们是合法字符），但这两个名字会逃出样本目录
+    （``results/../report``），因此单独拒绝。
+    """
+    if not sample_id or sample_id in (".", ".."):
+        return False
+    return _SAMPLE_ID_RE.match(sample_id) is not None

@@ -264,6 +264,10 @@ def load_summaries(engine: DbosTaskEngine) -> list[dict[str, Any]]:
     results = Path(engine.home) / "results"
     out: list[dict[str, Any]] = []
     for sj in sorted(results.glob("*/report/*_summary.json")):
+        # 只认与样本目录同名的 summary（与 sample_page/report_path 口径一致）：
+        # 报告目录里遗留的旧名 summary 不得变成第二行/读成错误样本。
+        if sj.name != f"{sj.parent.parent.name}_summary.json":
+            continue
         data = _read_summary(sj)
         if data is not None:
             out.append(data)

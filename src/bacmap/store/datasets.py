@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 _CHUNK = 8 * 1024 * 1024
+_CLASS_RANK = {"D0": 0, "D1": 1, "D2": 2, "D3": 3, "D4": 4}
 
 _SCHEMA = [
     """CREATE TABLE IF NOT EXISTS datasets (
@@ -139,6 +140,23 @@ class DatasetRegistry:
             found = self.get(existing["dataset_id"])
             if found is None:  # pragma: no cover — 刚登记即读不回，库损坏
                 raise RuntimeError(f"dataset {existing['dataset_id']} vanished after insert")
+            # 内容去重不能降低数据级别：同一份内容先按 D3 登记、后按 D4 登记时，
+            # 必须升到更敏感者（ADR-16：D4 不得因登记顺序被当成 D3 外发）。
+            updates: list[str] = []
+            values: list[object] = []
+            if _CLASS_RANK.get(data_class, 0) > _CLASS_RANK.get(found.data_class, 0):
+                updates.append("data_class = ?")
+                values.append(data_class)
+            if found.status != "registered":
+                # 本次内容哈希与登记清单一致，说明此前 "changed" 已恢复。
+                updates.append("status = 'registered'")
+            if updates:
+                values.append(found.dataset_id)
+                self._conn.execute(
+                    f"UPDATE datasets SET {', '.join(updates)} WHERE dataset_id = ?",  # noqa: S608
+                    values,
+                )
+                found = self.get(found.dataset_id) or found
             return found  # 内容去重：同清单复用既有 dataset_id
 
         st = resolved.stat()

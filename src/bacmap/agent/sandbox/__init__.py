@@ -2,8 +2,8 @@
 
 默认 Apptainer：``--containall --cleanenv --network none``；任务工作区
 可读写、GOM 导出只读；宿主机无 Apptainer 时回退 rootless Podman
-（``--network none``）。回退链：Apptainer → Podman → 直接执行（仅当
-BACMAP_ALLOW_UNSANDBOXED=1 显式开启——默认拒绝，防静默降级）。
+（``--network none``）。回退链：Apptainer → Podman。都不可用时拒绝执行，除非显式设置
+BACMAP_ALLOW_UNSANDBOXED=1 才允许直接执行（仅受控开发，防静默降级）。
 Docker 刻意不在链内（root 守护进程权限面，安装指南 §6）。
 """
 
@@ -128,7 +128,7 @@ def _run(cmd: list[str], timeout: int, cwd: Path | None = None) -> SandboxResult
 
 
 class SandboxExecutor:
-    """回退链：Apptainer → Podman → Docker →（显式开启时）直接执行。"""
+    """回退链：Apptainer → Podman →（显式开启时）直接执行（Docker 刻意不在链内）。"""
 
     def __init__(
         self,

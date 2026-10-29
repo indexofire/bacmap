@@ -51,7 +51,7 @@ def engine(tmp_path: Path, monkeypatch):
         },
     )
     monkeypatch.setattr(eng, "_run_snakemake", lambda p: _Proc())
-    monkeypatch.setattr(eng, "_generate_report_for", lambda s: {"sample_id": s})
+    monkeypatch.setattr(eng, "_generate_report_for", lambda s, *a: {"sample_id": s})
     monkeypatch.setattr(eng, "_step_create_run", lambda p: {"run_id": "web-run-1"})
     monkeypatch.setattr(eng, "_step_finish_run", lambda rid, p: None)
     import contextlib
@@ -442,3 +442,28 @@ class TestSampleReportDelivery:
         assert r.status_code == 200
         assert "/samples/SAM-001/report" in r.text
         assert "/samples/SAM-001/report?download=1" in r.text
+
+
+class TestApprovalConflict:
+    def test_approving_finished_task_returns_409(self, client):
+        c, _ = client
+        r = c.post(
+            "/tasks/submit",
+            data={"task_type": "analyze", "samples": "SAM-001"},
+            follow_redirects=True,
+        )
+        tid = str(r.url).rstrip("/").split("/")[-1]
+        _poll_fragment(c, tid, "succeeded")
+        r2 = c.post(
+            f"/tasks/{tid}/approve",
+            data={"approver": "reviewer", "decision": "approve", "signature": "sig"},
+        )
+        assert r2.status_code == 409
+
+
+class TestScopeValidation:
+    def test_non_object_scope_rejected(self, client):
+        c, _ = client
+        r = c.post("/tasks/submit", data={"task_type": "curate", "scope": "[1,2]"})
+        assert r.status_code == 400
+        assert "JSON 对象" in r.text

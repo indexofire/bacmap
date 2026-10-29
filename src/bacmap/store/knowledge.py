@@ -143,13 +143,25 @@ class KnowledgeStore:
             return int(cur.lastrowid or 0)
 
     def approve(self, entry_id: int, approver: str) -> None:
+        """人审通过（一次性）：已审核条目不得被后续审核者覆盖（审计链完整性）。"""
         with self._conn() as conn:
+            # 条件 UPDATE 是原子判定：并发两次审核只有一个能写入（无 SELECT→UPDATE 竞态）。
             cur = conn.execute(
-                "UPDATE knowledge_entries SET approved_by = ? WHERE id = ?",
+                "UPDATE knowledge_entries SET approved_by = ?"
+                " WHERE id = ? AND approved_by IS NULL",
                 (approver, entry_id),
             )
-            if cur.rowcount == 0:
+            if cur.rowcount:
+                return
+            row = conn.execute(
+                "SELECT approved_by FROM knowledge_entries WHERE id = ?", (entry_id,)
+            ).fetchone()
+            if row is None:
                 raise KeyError(f"no knowledge entry {entry_id}")
+            raise ValueError(
+                f"knowledge entry {entry_id} was already approved by "
+                f"{row['approved_by']!r}; approval is immutable"
+            )
 
     def get(self, entry_id: int) -> dict[str, Any] | None:
         with self._conn() as conn:

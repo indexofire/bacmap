@@ -17,6 +17,7 @@ Harness 不是必需的。没有 Harness 时，CLI 与 Web 控制台照常提供
 | `bacmap_task_status` / `bacmap_task_result` / `bacmap_task_cancel` | 跟踪任务；结果为摘要（运行 ID、门结论）；取消仅限本客户端提交的任务 |
 | `bacmap_record_data` | 经 `record` 任务录入元数据/化验/知识库（仅 local-trusted） |
 | `bacmap_confirm_plan_locally` | stdio 下弹本机确认对话框；人的点击即确认 |
+| 计划归属 | `bacmap_get_plan` / `bacmap_revise_plan` 仅对本客户端创建的计划有效 |
 | `bacmap_capabilities` | 服务版本、Profile 与数据级别上限、可计划任务类型、推荐写入路径、长任务机制 |
 | `bacmap_submit_task` | 直接提交的兼容入口 |
 | prompts `bacmap_role_<角色>` 与资源 `skill://bacmap/<角色>/SKILL.md` | 领域说明书；每个资源的元数据带 `sha256` 摘要 |

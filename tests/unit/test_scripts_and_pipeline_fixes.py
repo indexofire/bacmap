@@ -158,3 +158,28 @@ class TestCohortTargets:
         snp = mod._cohort_targets(tsv, "snp")
         assert all("/snp/" in p and p.count("/snp/") == 1 for p in snp)
         assert not any(p.endswith("/snp/snp_summary.json") for p in snp)
+
+
+class TestGenerateReportResultsDir:
+    def test_internal_results_dir_override_is_forwarded(self, tmp_path, monkeypatch):
+        from bacmap.tools import pipeline
+
+        seen: dict = {}
+
+        def _fake_script(name, args, timeout=3600):
+            seen["name"] = name
+            seen["args"] = args
+            return "ok"
+
+        monkeypatch.setattr(pipeline, "_run_project_script", _fake_script)
+        run_dir = tmp_path / "runs" / "t1"
+        rep = run_dir / "S1" / "report"
+        rep.mkdir(parents=True)
+        (rep / "S1_report.html").write_text("<html></html>")
+        out = json.loads(
+            pipeline.generate_report({"sample_id": "S1", "results_dir": str(run_dir)})
+        )
+        assert out["report_path"] == str(rep / "S1_report.html")
+        assert seen["name"] == "generate_report.py"
+        assert "--results-dir" in seen["args"]
+        assert str(run_dir) in seen["args"]

@@ -177,6 +177,23 @@ class TestWriteWorkflow:
         )
         assert engine.status(tid).state == TaskState.SUCCEEDED
 
+    def test_empty_known_citations_falls_back_to_knowledge_base(self, engine, tmp_path: Path):
+        """WriteParams 默认 known_citations=[]：空列表应回退知识库，而不是"无任何可引用"。"""
+        from bacmap.store.knowledge import KnowledgeStore
+
+        ks = KnowledgeStore(tmp_path / "data" / "knowledge.sqlite")
+        entry = ks.import_candidate(
+            {"title": "CTX-M outbreak", "identifier": "PMID:12345678"}, imported_by="librarian"
+        )
+        ks.approve(entry, approver="reviewer")
+        tid = engine.submit(
+            TaskType.WRITE,
+            {"draft": "检出 blaCTX-M-15 [12345678]。", "known_citations": []},
+            "writer",
+        )
+        st = self._wait(engine, tid)
+        assert st.state == TaskState.AWAITING_APPROVAL, st.message
+
     def test_write_unknown_citation_fails_immediately(self, engine):
         """V11⑥：含知识库中不存在引用的成稿被引用门拒绝导出。"""
         tid = engine.submit(

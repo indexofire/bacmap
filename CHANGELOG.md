@@ -5,6 +5,24 @@
 
 ## [未发布]
 
+### 冻结文档 v1.9.3：并发 run 隔离 + DBOS 检查点备份
+- analyze 的 summary/门/报告/cgMLST/队列入库只读 `results/runs/<task_id>/`；
+  报告脚本内部支持 `--results-dir`。
+- `bacmap backup` 纳入 `dbos.sqlite`，恢复后运行中任务可继续。
+- 测试基线：1606 → 1610。
+
+### 冻结文档 v1.9.2：20 轮巡检修复
+- 结果迁移自动覆盖旧扁平样本与 snp/cgmlst 实体目录，升级后首次运行不再失败；
+  另修复 sample id/证据链路径、预授权范围、计划归属、引用门回退、审核不可覆盖、
+  数据集级别去重、Web 409/scope/重定向与工作流错误可读性。
+- 测试基线：1571 → 1606。
+
+### 冻结文档 v1.9.1：巡检修复（R1–R7）
+- 结果迁移绝不删除既有运行目录；旧行缺 checksum 时重算比对；
+  auto_confirm 配置非法时安全回退。
+- 连续 3 轮无新问题结束（范围见 dev/code-review-log.md）。
+- 测试基线：1568 → 1571。
+
 ### 冻结文档 v1.9.0：计划确认三通道
 - 计划返回 `confirm_url`；新增本地弹窗确认（stdio，`local-dialog`）；
   `[plans.auto_confirm]` 低风险预授权（默认关，仅 analyze）。

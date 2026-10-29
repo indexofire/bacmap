@@ -114,13 +114,16 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha2
 ```
 
 - Columns: `sample` (ID), `species` (expected species), `R1`/`R2` (FASTQ paths, relative to
-  the workflows directory), `assembly` (optional, v1.4.33: **pre-assembled FASTA entry** —
+  `BACMAP_HOME`), `assembly` (optional, v1.4.33: **pre-assembled FASTA entry** —
   skips QC/assembly and feeds typing/AMR downstream directly; path relative to BACMAP_HOME;
   either reads or assembly per sample — when both are listed, reads win)
 - `species` is **dual-accept**: a 3-letter code (`SAL`, `ECO`, `SHI`, `VPA`, `KPN`, …; see
   `core/pathogens.yaml`) or a gside label / display name (`Salmonella`, `V_parahaemolyticus`,
   `E. coli`). The registry resolves either form to the code — codes are preferred for new
   registrations (the 40 pathogens gside's marker rules cover are all registered).
+- Dataset ids (the `sample` column and file names) may use `A-Z a-z 0-9 . _ -` only, and may not
+  be `.` or `..`. Directory registration skips other names with a reason instead of creating an
+  unreadable result directory.
 - Sequencing data should follow the `gs/<sample>/<sample>_R{1,2}.fastq.gz` conventional layout
 - **One strain, many sequencing runs (v1.8)**: name each dataset
   `<isolate>__<platform>[__<date>]` (for example `HZCPE-01__ilm__20261012` and
@@ -143,9 +146,13 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha2
 Physical results live under `$BACMAP_HOME/results/runs/<task_id>/<sample>/`; each execution keeps
 its own directory and is never overwritten. `results/<sample>`, `results/snp` and `results/cgmlst`
 are relative symlinks to the latest run, so existing paths and scripts keep working. Migrate legacy
-flat directories with `bacmap results migrate [--dry-run]` (moves them into `runs/legacy-<sample>/`
-and replaces them with a link). Do not create a real `results/<sample>` directory by hand — relinking
-will refuse to overwrite it.
+flat directories with `bacmap results migrate [--dry-run]` (moves samples **and legacy
+`results/snp` / `results/cgmlst`** into `runs/legacy-<name>/` and replaces each with a link).
+A new analysis run also migrates any remaining flat directories automatically before linking, so an
+upgrade never turns a successful run into a failed task. After the pipeline succeeds, ingestion,
+gates and report generation read **this run's** directory (`runs/<task_id>/`), so two concurrent
+analyses of the same dataset cannot consume each other's results. Do not create a real `results/<name>`
+directory by hand; it will be migrated on the next run.
 
 ### Plan confirmation (v1.9.0)
 
@@ -160,7 +167,8 @@ Plans are confirmed on a trusted surface, never by the model:
 ```toml
 [plans.auto_confirm]
 enabled = true          # default false
-max_samples = 20        # analyze only, no scripts, no mine/write/curate
+max_samples = 20        # analyze only, registered samples, no directory ingestion,
+                        # no scripts; mine/write/curate are never auto-confirmed
 ```
 
 ## 6. Agent client (MCP) side configuration

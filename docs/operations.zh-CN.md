@@ -68,8 +68,8 @@ bacmap events prune --days 0       # 全部删除（通常不建议）
 结果写入 `results/runs/<task_id>/<sample>/`；扁平路径是指向最新运行的链接。
 
 ```bash
-bacmap results migrate --dry-run     # 列出旧扁平目录
-bacmap results migrate               # 搬入 runs/legacy-<sample>/ 并建立链接
+bacmap results migrate --dry-run     # 列出旧扁平目录（样本 + snp/cgmlst）
+bacmap results migrate               # 搬入 runs/legacy-<name>/ 并建立链接
 ```
 
 升级后执行一次。不会删除数据：全部搬入运行目录，旧路径变成链接。若之后又出现真实的

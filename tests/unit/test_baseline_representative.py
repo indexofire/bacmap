@@ -100,3 +100,31 @@ class TestRepresentative:
         _meta(home, "ISO-2")
         cand = baseline.build_candidate(home, {"strains": ["ISO-1"]})
         assert [s["strain_id"] for s in cand["strains"]] == ["DS1__ont"]
+
+
+class TestUnknownRepresentativeIsolate:
+    def test_typo_isolate_is_reported_not_silently_ignored(self, home):
+        _tsv(home, [("DS1__ilm", "ISO-1")])
+        _sample_dir(home, "DS1__ilm", 1_700_000_000)
+        _meta(home, "ISO-1")
+        cand = baseline.build_candidate(
+            home,
+            {"representative_dataset": {"ISO-1": "DS1__ilm", "TYPO": "DS1__ilm"}},
+        )
+        assert [s["strain_id"] for s in cand["strains"]] == ["DS1__ilm"]
+        assert any(
+            e["reason"] == "representative_isolate_missing" and e["isolate_id"] == "TYPO"
+            for e in cand["excluded"]
+        )
+
+
+class TestStaleSummaryNotCounted:
+    def test_differently_named_summary_ignored(self, home):
+        _tsv(home, [("DS1__ilm", "ISO-1")])
+        _sample_dir(home, "DS1__ilm", 1_700_000_000)
+        rep = home / "results" / "DS1__ilm" / "report"
+        (rep / "STALE_summary.json").write_text(json.dumps(_summary("STALE")))
+        _meta(home, "ISO-1")
+        cand = baseline.build_candidate(home, {})
+        assert [s["strain_id"] for s in cand["strains"]] == ["DS1__ilm"]
+        assert cand["superseded"] == []

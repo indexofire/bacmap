@@ -44,8 +44,15 @@ def _link(link: Path, target: Path) -> None:
 
 
 def link_run_results(home: Path | str, task_id: str, samples: Iterable[str]) -> None:
-    """把扁平别名指向本次运行：每个样本一条，外加队列目录 snp/cgmlst（若存在）。"""
+    """把扁平别名指向本次运行：每个样本一条，外加队列目录 snp/cgmlst（若存在）。
+
+    升级后首次运行若仍有旧扁平实体目录，先就地迁移为链接（v1.9.2）：否则
+    ``_link`` 会拒绝覆盖真实目录，导致**分析已成功却把任务标成失败**；旧数据
+    迁入 ``runs/legacy-*`` 后仍完整保留，绝不删除。
+    """
     home = Path(home)
+    if _flat_result_dirs(home):
+        migrate_flat_results(home)
     rd = run_results_dir(home, task_id)
     root = results_root(home)
     for sample in samples:
@@ -56,13 +63,18 @@ def link_run_results(home: Path | str, task_id: str, samples: Iterable[str]) -> 
             _link(root / name, rd / name)
 
 
-def _flat_sample_dirs(home: Path) -> list[Path]:
+def _flat_result_dirs(home: Path) -> list[Path]:
+    """旧布局下仍是真实目录的扁平项（样本目录与 snp/cgmlst 队列目录）。
+
+    v1.8.1 之前 ``results/snp``、``results/cgmlst`` 也是真实目录；若不迁移，
+    新运行建立最新别名时会撞上 ``_link`` 的"拒绝覆盖真实目录"保护。
+    """
     root = results_root(home)
     if not root.is_dir():
         return []
     out: list[Path] = []
     for p in sorted(root.iterdir()):
-        if p.name in (RUNS_DIRNAME, *COHORT_DIRS):
+        if p.name == RUNS_DIRNAME:
             continue
         if p.is_dir() and not p.is_symlink():
             out.append(p)
@@ -70,22 +82,23 @@ def _flat_sample_dirs(home: Path) -> list[Path]:
 
 
 def flat_result_samples(home: Path | str) -> list[str]:
-    """尚未迁移的旧扁平样本目录名（供 dry-run / doctor 使用）。"""
-    return [p.name for p in _flat_sample_dirs(Path(home))]
+    """尚未迁移的旧扁平结果目录名（样本 + snp/cgmlst；供 dry-run / doctor 使用）。"""
+    return [p.name for p in _flat_result_dirs(Path(home))]
 
 
 def migrate_flat_results(home: Path | str) -> int:
-    """旧扁平 ``results/<sample>/`` → ``runs/legacy-<sample>/<sample>/`` 并替换为链接。"""
+    """旧扁平 ``results/<name>/`` → ``runs/legacy-<name>/<name>/`` 并替换为链接。"""
     home = Path(home)
     moved = 0
-    for flat in _flat_sample_dirs(home):
-        target_root = run_results_dir(home, f"legacy-{flat.name}")
+    for flat in _flat_result_dirs(home):
+        base = run_results_dir(home, f"legacy-{flat.name}")
+        target_root, n = base, 2
+        while (target_root / flat.name).exists():
+            target_root = base.with_name(f"{base.name}-{n}")
+            n += 1
         target_root.mkdir(parents=True, exist_ok=True)
         target = target_root / flat.name
-        if target.exists():
-            shutil.rmtree(target)
         shutil.move(str(flat), str(target))
         _link(flat, target)
         moved += 1
-    # 队列目录若为旧扁平实体（非链接），保持原样（跨运行聚合语义），迁移不处理。
     return moved

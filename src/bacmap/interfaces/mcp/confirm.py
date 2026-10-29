@@ -44,11 +44,19 @@ def auto_confirm_allows(home: Path, tasks: list[Any]) -> bool:
     cfg = _read_config(home).get("plans", {}).get("auto_confirm", {})
     if not isinstance(cfg, dict) or cfg.get("enabled") is not True:
         return False
-    limit = int(cfg.get("max_samples", 20))
+    try:
+        limit = int(cfg.get("max_samples", 20))
+    except (TypeError, ValueError):
+        return False  # 配置坏 → 安全回退为"需人工确认"
     for t in tasks:
         if getattr(t, "task_type", "") != "analyze":
             return False
-        if len(getattr(t, "samples", []) or []) > limit:
+        # 目录直入（fasta_dir/fastq_dir）是数据登记写路径，且 samples 为空会绕过
+        # max_samples（0 ≤ 上限）——预授权只接受已登记样本的分析（v1.9.2）。
+        if getattr(t, "fasta_dir", None) or getattr(t, "fastq_dir", None):
+            return False
+        samples = getattr(t, "samples", []) or []
+        if not samples or len(samples) > limit:
             return False
     return True
 

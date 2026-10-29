@@ -232,9 +232,14 @@ def _submit_task_payload(
         params["samples"] = sample_list
     if scope.strip():
         try:
-            params["scope"] = json.loads(scope)
+            parsed_scope = json.loads(scope)
         except ValueError as exc:
             raise HTTPException(400, "scope 不是合法 JSON") from exc
+        # 工作流按 dict 读取 scope（scope.get）；数组/标量会在任务线程里
+        # 变成含义不明的 FAILED，接口入口直接拒绝（v1.9.2）。
+        if not isinstance(parsed_scope, dict):
+            raise HTTPException(400, "scope 必须是 JSON 对象")
+        params["scope"] = parsed_scope
     return tt, params
 
 
@@ -319,6 +324,9 @@ def _build_task_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
             engine.approve(TaskId(task_id), _approval_from_form(approver, decision, signature))
         except KeyError as exc:
             raise HTTPException(404, "任务不存在") from exc
+        except ValueError as exc:
+            # 重复审批 / 任务已终态：状态冲突（409），不能把状态机拒绝当 500。
+            raise HTTPException(409, str(exc)) from exc
         return RedirectResponse(f"/tasks/{task_id}", status_code=303)
 
 

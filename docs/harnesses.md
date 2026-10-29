@@ -18,6 +18,7 @@ No harness is required. Without one, the CLI and Web console still provide every
 | `bacmap_task_status` / `bacmap_task_result` / `bacmap_task_cancel` | Follow tasks; the result is a summary (run ID, gate verdicts); cancellation is limited to tasks this client submitted |
 | `bacmap_record_data` | Metadata / lab results / knowledge entries via `record` tasks (local-trusted only) |
 | `bacmap_confirm_plan_locally` | Local confirmation dialog over stdio; the human click is the confirmation |
+| Plan ownership | `bacmap_get_plan` / `bacmap_revise_plan` only work for plans this client created |
 | `bacmap_capabilities` | Server version, profile and data-class ceiling, plannable task types, recommended write path, long-task mechanism |
 | `bacmap_submit_task` | Compatibility entry for direct submission |
 | Prompts `bacmap_role_<role>` and resources `skill://bacmap/<role>/SKILL.md` | Domain instructions; each resource carries a `sha256` digest in its metadata |

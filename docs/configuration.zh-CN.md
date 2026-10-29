@@ -110,12 +110,14 @@ SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM
 ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha256>
 ```
 
-- 列：`sample`（ID）、`species`（预期物种）、`R1`/`R2`（FASTQ 路径，相对 workflows 目录）、
+- 列：`sample`（ID）、`species`（预期物种）、`R1`/`R2`（FASTQ 路径，相对 **BACMAP_HOME**）、
   `assembly`（可选，v1.4.33：**已组装 FASTA 直入**——跳过 QC/组装直接进分型/耐药等下游，
   路径相对 BACMAP_HOME；与 `R1`/`R2` 二选一，同时登记时 reads 优先）
 - `species` **双接受**：三字母码（`SAL`/`ECO`/`SHI`/`VPA`/`KPN`…，见 `core/pathogens.yaml`）
   或 gside 标签/显示名（`Salmonella`、`V_parahaemolyticus`、`E. coli`）；registry 归一为码。
   新登记**推荐用码**（gside marker 规则覆盖的 40 条物种均已注册）。
+- dataset id（`sample` 列与文件名）只允许 `A-Z a-z 0-9 . _ -`，且不得为 `.` / `..`；
+  目录登记遇到非法名字会跳过并给出原因，而不是生成读不到的结果目录。
 - 测序数据建议按 `gs/<样本>/<样本>_R{1,2}.fastq.gz` 约定布局
 - **一株多测（v1.8）**：每个数据集命名为 `<isolate>__<platform>[__<日期>]`
   （如 `HZCPE-01__ilm__20261012`、`HZCPE-01__ont__20261020`）。`sample` 列是**数据集** ID，
@@ -133,8 +135,12 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha2
 
 物理结果在 `$BACMAP_HOME/results/runs/<task_id>/<sample>/`；每次执行独立目录、永不覆盖。
 `results/<sample>`、`results/snp`、`results/cgmlst` 是指向最新运行的相对符号链接，旧路径与脚本照常可用。
-旧扁平目录用 `bacmap results migrate [--dry-run]` 迁移（搬入 `runs/legacy-<sample>/` 后替换为链接）。
-不要手工创建真实的 `results/<sample>` 目录——重链会拒绝覆盖并提示先迁移。
+旧扁平目录用 `bacmap results migrate [--dry-run]` 迁移：样本目录**以及旧的 `results/snp` /
+`results/cgmlst` 实体目录**都会搬入 `runs/legacy-<name>/` 后替换为链接。
+新分析运行在建立"最新运行"别名前也会自动迁移遗留实体目录，升级不会再把成功的分析标成失败。
+流水线成功后，入库、门与报告只读**本次运行**的目录（`runs/<task_id>/`），同一 dataset
+并发分析不会互相读到对方结果。
+不要手工创建真实的 `results/<name>` 目录；它会在下一次运行时被迁移。
 
 ### 计划确认（v1.9.0）
 
@@ -148,7 +154,8 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha2
 ```toml
 [plans.auto_confirm]
 enabled = true          # 默认 false
-max_samples = 20        # 仅 analyze、无脚本；mine/write/curate 不适用
+max_samples = 20        # 仅 analyze、已登记样本、不接受目录直入、无脚本；
+                        # mine/write/curate 永不自动确认
 ```
 
 ## 6. 智能体客户端（MCP）侧配置

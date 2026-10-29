@@ -117,8 +117,11 @@ http://127.0.0.1:8800/plans/9a3f2c1b7d4e4f60?version=1
 2. **本地弹窗**（工作站有图形界面时）：对 Hermes 说“在本机弹窗确认”，它调用
    `bacmap_confirm_plan_locally`，系统对话框里点“确认”；只有 stdio 会话可用；
 3. **预授权**（管理员可选）：`config.toml` 里开启 `[plans.auto_confirm]` 后，
-   仅含 analyze、样本数不超限的计划自动确认（`actor=policy:auto-confirm`），
-   mine/write/发布仍需人工。
+   仅含 analyze、**引用已登记样本**且样本数不超限的计划自动确认
+   （`actor=policy:auto-confirm`）；目录直入、脚本、mine/write/发布仍需人工。
+
+计划按客户端隔离：换一个 Harness 后，它不能读取或修订另一个客户端创建的计划。
+请用同一个客户端确认/完成，或重新创建一个计划。
 
 本地弹窗的对话可以这样说：
 

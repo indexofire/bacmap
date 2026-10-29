@@ -35,8 +35,10 @@ bacmap backup --out /backup/full.zip --with-results   # includes results/ (large
 What goes in, and how:
 
 - `config.toml`, `refs/manifest.json`;
-- every SQLite database (`tasks`, `runs`, `gom`, `baseline`, `data/bacmap`, `data/knowledge`) —
-  copied with SQLite's **backup API**, so the snapshot is consistent even while a task runs;
+- every SQLite database (`tasks`, `dbos`, `runs`, `gom`, `baseline`, `data/bacmap`,
+  `data/knowledge`) — copied with SQLite's **backup API**, so the snapshot is consistent even while
+  a task runs. `dbos.sqlite` holds DBOS workflow/step checkpoints; including it lets in-flight tasks
+  resume after a restore;
 - `runs/*/run_manifest.json` (the on-disk half of the evidence chain, ADR-18).
 
 `results/` (reports, per-sample artefacts) and `workspaces/` are **not** included by default; add
@@ -73,8 +75,8 @@ approvals in their own tables are **not** touched by this command.
 Results are written to `results/runs/<task_id>/<sample>/`; flat paths are links to the latest run.
 
 ```bash
-bacmap results migrate --dry-run     # list legacy flat directories
-bacmap results migrate               # move into runs/legacy-<sample>/ and link
+bacmap results migrate --dry-run     # list legacy flat directories (samples + snp/cgmlst)
+bacmap results migrate               # move into runs/legacy-<name>/ and link
 ```
 
 Run this once after upgrading. It never deletes data: everything moves into a run directory, and the

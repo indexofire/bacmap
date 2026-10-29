@@ -55,6 +55,7 @@ class TestBackupRestore:
         with zipfile.ZipFile(out) as z:
             names = z.namelist()
         assert any(n.endswith("tasks.sqlite") for n in names)
+        assert any(n.endswith("dbos.sqlite") for n in names)  # 工作流检查点
         assert "config.toml" in names
 
         target = tmp_path / "restored"

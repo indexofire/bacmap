@@ -280,6 +280,14 @@ def _register_plan_tools(server: MCPServer, engine: Any, actor: str) -> None:
     )
     def revise_plan(plan_id: str, tasks: list[PlannableTask], rationale: str = "") -> str:
         try:
+            if service.get(plan_id).created_by != actor:
+                return json.dumps(
+                    {
+                        "code": "forbidden",
+                        "error": "only the MCP client that created this plan may revise it",
+                    },
+                    ensure_ascii=False,
+                )
             return _out(service.revise(plan_id, tasks, rationale, actor))
         except ApplicationError as exc:
             return _err(exc)
@@ -296,7 +304,17 @@ def _register_plan_tools(server: MCPServer, engine: Any, actor: str) -> None:
     )
     def get_plan(plan_id: str, version: int | None = None) -> str:
         try:
-            return _out(service.get(plan_id, version))
+            rec = service.get(plan_id, version)
+            if rec.created_by != actor:
+                # 计划参数可能含脚本/草稿（D3/D4）；跨客户端读取按最小权限拒绝。
+                return json.dumps(
+                    {
+                        "code": "forbidden",
+                        "error": "only the MCP client that created this plan may read it",
+                    },
+                    ensure_ascii=False,
+                )
+            return _out(rec)
         except ApplicationError as exc:
             return _err(exc)
 

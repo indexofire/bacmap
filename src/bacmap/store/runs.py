@@ -271,6 +271,18 @@ def finish_run(run: AnalysisRun, db_path: Path | None = None) -> None:
     conn.close()
 
 
+def mark_ingested(run_id: str, db_path: Path) -> None:
+    """标记运行记录已入库 GOM（ADR-18 的 ``ingested_at``）；幂等，不覆盖首次时间。"""
+    conn = sqlite3.connect(db_path)
+    with conn:
+        conn.execute(
+            "UPDATE analysis_runs SET ingested_at = ?"
+            " WHERE run_id = ? AND ingested_at IS NULL",
+            (datetime.now(UTC).isoformat(), run_id),
+        )
+    conn.close()
+
+
 def list_runs(db_path: Path, limit: int = 50) -> list[dict[str, Any]]:
     """最近运行记录（证据可见性，v1.7.1）：按开始时间倒序的摘要行。"""
     migrate(Path(db_path), RUNS_MIGRATIONS)

@@ -119,7 +119,7 @@ class TestTaskToolsRoundtrip:
         monkeypatch.setattr(eng, "_run_snakemake", lambda params: _Proc())
         monkeypatch.setattr(eng, "_step_create_run", lambda params: {"run_id": "mcp-run-1"})
         monkeypatch.setattr(eng, "_step_finish_run", lambda run_id, params: None)
-        monkeypatch.setattr(eng, "_generate_report_for", lambda s: {"sample_id": s})
+        monkeypatch.setattr(eng, "_generate_report_for", lambda s, *a: {"sample_id": s})
         monkeypatch.setattr(eng, "_memory_arbiter", _noop_arbiter)
         engine = eng.DbosTaskEngine(tmp_path)
         srv = build_server(engine, TRUSTED)
@@ -421,7 +421,7 @@ class TestTaskResultTool:
         monkeypatch.setattr(eng, "_run_snakemake", lambda params: _Proc())
         monkeypatch.setattr(eng, "_step_create_run", lambda params: {"run_id": "mcp-run-9"})
         monkeypatch.setattr(eng, "_step_finish_run", lambda run_id, params: None)
-        monkeypatch.setattr(eng, "_generate_report_for", lambda s: {"sample_id": s})
+        monkeypatch.setattr(eng, "_generate_report_for", lambda s, *a: {"sample_id": s})
         monkeypatch.setattr(eng, "_memory_arbiter", _noop_arbiter)
         e = eng.DbosTaskEngine(tmp_path)
         yield e
@@ -654,3 +654,108 @@ class TestConfirmationChannels:
             {"tasks": [{"task_type": "analyze", "samples": ["S1", "S2"]}]},
         )
         assert big["state"] == "awaiting_confirmation"
+
+
+class TestAutoConfirmRobustness:
+    def test_malformed_policy_does_not_crash(self, tmp_path: Path, monkeypatch):
+        from bacmap.tasks.engine import task_engine
+
+        (tmp_path / "config.toml").write_text(
+            "[plans.auto_confirm]\nenabled = true\nmax_samples = 'many'\n"
+        )
+        monkeypatch.setattr(task_engine.DBOS, "start_workflow", lambda wf, p: None)
+        e = eng.DbosTaskEngine(tmp_path)
+        try:
+            out = _call(
+                build_server(e), "bacmap_create_plan",
+                {"tasks": [{"task_type": "analyze", "samples": ["S1"]}]},
+            )
+            assert out["state"] == "awaiting_confirmation"  # 配置坏 → 安全回退为需确认
+        finally:
+            eng.shutdown_dbos()
+
+
+class TestAutoConfirmInputScope:
+    def test_directory_ingestion_never_auto_confirmed(self, tmp_path: Path, monkeypatch):
+        """samples=[] + fasta_dir 会绕过 max_samples，预授权必须拒绝。"""
+        from bacmap.tasks.engine import task_engine
+
+        (tmp_path / "config.toml").write_text(
+            "[plans.auto_confirm]\nenabled = true\nmax_samples = 5\n"
+        )
+        fasta = tmp_path / "fasta"
+        fasta.mkdir()
+        (fasta / "S1.fna").write_text(">c\nACGT\n")
+        monkeypatch.setattr(task_engine.DBOS, "start_workflow", lambda wf, p: None)
+        e = eng.DbosTaskEngine(tmp_path)
+        try:
+            out = _call(
+                build_server(e),
+                "bacmap_create_plan",
+                {"tasks": [{"task_type": "analyze", "fasta_dir": str(fasta)}]},
+            )
+            assert out["state"] == "awaiting_confirmation"
+        finally:
+            eng.shutdown_dbos()
+
+
+class TestPlanOwnership:
+    @pytest.fixture
+    def engine(self, tmp_path: Path, monkeypatch):
+        from bacmap.tasks.engine import task_engine
+
+        monkeypatch.setattr(task_engine.DBOS, "start_workflow", lambda wf, p: None)
+        e = eng.DbosTaskEngine(tmp_path)
+        yield e
+        eng.shutdown_dbos()
+
+    def _server(self, engine, user: str):
+        return build_server(
+            engine,
+            ProfileSpec(
+                profile=McpProfile.CLOUD,
+                max_data_class=DataClass.D1,
+                actor=f"mcp-stdio:cloud:{user}",
+            ),
+        )
+
+    def _create(self, engine, user: str) -> str:
+        out = _call(
+            self._server(engine, user),
+            "bacmap_create_plan",
+            {"tasks": [{"task_type": "analyze", "samples": ["S1"]}]},
+        )
+        return out["plan_id"]
+
+    def test_other_client_cannot_read_plan(self, engine, tmp_path: Path):
+        plan_id = self._create(engine, "alice")
+        out = _call(self._server(engine, "bob"), "bacmap_get_plan", {"plan_id": plan_id})
+        assert out["code"] == "forbidden"
+        own = _call(self._server(engine, "alice"), "bacmap_get_plan", {"plan_id": plan_id})
+        assert own["plan_id"] == plan_id
+
+    def test_other_client_cannot_revise_plan(self, engine, tmp_path: Path):
+        plan_id = self._create(engine, "alice")
+        out = _call(
+            self._server(engine, "bob"),
+            "bacmap_revise_plan",
+            {
+                "plan_id": plan_id,
+                "tasks": [{"task_type": "analyze", "samples": ["S2"]}],
+            },
+        )
+        assert out["code"] == "forbidden"
+        latest = _call(self._server(engine, "alice"), "bacmap_get_plan", {"plan_id": plan_id})
+        assert latest["version"] == 1
+
+    def test_creator_can_revise(self, engine, tmp_path: Path):
+        plan_id = self._create(engine, "alice")
+        out = _call(
+            self._server(engine, "alice"),
+            "bacmap_revise_plan",
+            {
+                "plan_id": plan_id,
+                "tasks": [{"task_type": "analyze", "samples": ["S2"]}],
+            },
+        )
+        assert out["version"] == 2

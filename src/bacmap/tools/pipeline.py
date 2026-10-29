@@ -217,8 +217,13 @@ def generate_report(args: dict[str, Any], **kwargs: Any) -> str:
     sample_id = args.get("sample_id", "")
     if not _validate_sample_id(sample_id):
         return json.dumps({"error": f"invalid sample_id: {sample_id!r}"})
-    script_out = _run_project_script("generate_report.py", ["--sample", sample_id], timeout=60)
-    report_path = _RESULTS_DIR / sample_id / "report" / f"{sample_id}_report.html"
+    # 内部调用（run 级隔离）可指定本次运行的物理结果目录；MCP/工具面不暴露该参数。
+    results_dir = Path(args["results_dir"]) if args.get("results_dir") else _RESULTS_DIR
+    script_args = ["--sample", sample_id]
+    if results_dir != _RESULTS_DIR:
+        script_args += ["--results-dir", str(results_dir)]
+    script_out = _run_project_script("generate_report.py", script_args, timeout=60)
+    report_path = results_dir / sample_id / "report" / f"{sample_id}_report.html"
     if report_path.exists():
         return json.dumps({"sample_id": sample_id, "report_path": str(report_path)})
     detail = _script_error(script_out)

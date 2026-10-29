@@ -145,7 +145,7 @@ MCP 客户端永远看不到它们。
 bacmap record metadata --strain-id S1 --field province=Guangdong --field sample_source=food
 bacmap record lab --strain-id S1 --category mic --test-name meropenem --result 0.25 --unit mg/L
 bacmap record knowledge-import --title "论文标题" --identifier PMID:12345678
-bacmap record knowledge-approve 7        # 引用门只认已审核条目
+bacmap record knowledge-approve 7        # 引用门只认已审核条目；审核一次性，不能被后来者覆盖
 ```
 
 每条命令提交一个 `record` 任务，`bacmap task show <id>` 查看结果。知识库条目先入暂存
@@ -272,7 +272,7 @@ bacmap mcp --transport http --host 127.0.0.1 --port 8765
 |---|---|---|
 | 能力协商 | `bacmap_capabilities` | 版本、Profile 与数据级别上限、可计划任务类型、长任务机制——建议先调用 |
 | 读/算（22） | `bio_fastq_qc` `bio_align` `bio_blast` `bio_samtools` `bio_variant` `bio_gene_scan` `bio_seq_stats` `bio_compare_runs` … | 同步返回结果，可吃任意本地路径 |
-| 计划（v1.5.1） | `bacmap_create_plan` `bacmap_revise_plan` `bacmap_get_plan` | **推荐的写入路径**：智能体提出类型化任务；在 bacmap 中由人确认该确切版本前不执行。返回带 `confirm_url` |
+| 计划（v1.5.1） | `bacmap_create_plan` `bacmap_revise_plan` `bacmap_get_plan` | **推荐的写入路径**：智能体提出类型化任务；在 bacmap 中由人确认该确切版本前不执行。返回带 `confirm_url`。读取/修订仅限创建该计划的客户端（计划可能含 D3/D4 脚本或草稿） |
 | 计划确认（v1.9.0） | `bacmap_confirm_plan_locally` | 弹**本机**确认对话框（仅 stdio）；人的点击即确认（`actor=local-dialog`）。云端/HTTP 会话返回 forbidden |
 | 数据记录（v1.8.4） | `bacmap_record_data` | 经 `record` 任务录入元数据/化验/知识库；仅 `local-trusted`（D4）可见 |
 | 任务提交 | `bacmap_submit_task` | 兼容入口（直接提交）；analyze/curate 任务异步执行 |
@@ -311,6 +311,8 @@ bacmap mcp --transport http --host 127.0.0.1 --port 8765
 
 保证：修订（`bacmap_revise_plan`）产生新版本，旧版本不能再被确认；输入目录（或 `mine` 的输入文件）
 在建计划后发生变化时，确认以冲突失败；重复确认（或 CLI 与 Web 同时确认）只提交一次。
+计划按创建它的 MCP 客户端隔离：其他客户端读取或修订会得到 `forbidden`，
+避免另一个 Harness 在你确认前掉包计划。
 
 开放路径计划（`mine` / `write`）在确认时**完整展示**——沙箱脚本或成稿全文都进入计划哈希，
 所见即所执行。`mine` 在沙箱内无网络执行，产物仍要过挖掘门与签字。
@@ -340,7 +342,7 @@ Web 控制台对应 **运行** 与 **GOM** 页面，运行详情页可直接比�
 | `analyze` | 全流程管线：QC→组装→分型→AMR/毒力→报告；**任务末尾自动生成 HTML 报告**（`results/{id}/report/{id}_report.html`） | 分析结论门（矛盾解读标记人工复核） |
 | `curate` | 本地流行特征库构建（去标识、汇总） | **发布门**：不达金标准阈值拒绝发布 |
 | `mine` | 沙箱内跑自定义分析脚本 | **签字门**：未签字产物不得进入报告 |
-| `write` | LLM 撰写报告/简报 | **引用门**：引用知识库中不存在的条目拒绝导出 |
+| `write` | LLM 撰写报告/简报 | **引用门**：引用知识库中不存在的条目拒绝导出；`known_citations` 为空时自动装载已审核条目标识符 |
 
 断点恢复：任务引擎基于 DBOS，运行中 kill 进程重启后从断点继续（V2 已验证）。
 

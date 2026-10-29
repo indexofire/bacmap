@@ -169,7 +169,8 @@ so every write is auditable. Use the **记录 / Records** page (`/records`) or t
 bacmap record metadata --strain-id S1 --field province=Guangdong --field sample_source=food
 bacmap record lab --strain-id S1 --category mic --test-name meropenem --result 0.25 --unit mg/L
 bacmap record knowledge-import --title "Paper" --identifier PMID:12345678
-bacmap record knowledge-approve 7        # the citation gate only honours approved entries
+bacmap record knowledge-approve 7        # the citation gate only honours approved entries;
+                                        # approval is recorded once and cannot be overwritten
 ```
 
 Each command submits a `record` task; `bacmap task show <id>` reports the outcome. Knowledge
@@ -298,7 +299,7 @@ Once connected, agents can call (under `local-trusted`; `cloud` shows the D0–D
 |---|---|---|
 | Capabilities | `bacmap_capabilities` | Version, profile and data-class ceiling, plannable task types, long-task mechanism — call it first |
 | Read/compute (22) | `bio_fastq_qc` `bio_align` `bio_blast` `bio_samtools` `bio_variant` `bio_gene_scan` `bio_seq_stats` `bio_compare_runs` … | Return results synchronously; accept any local path |
-| Plans (v1.5.1) | `bacmap_create_plan` `bacmap_revise_plan` `bacmap_get_plan` | **Recommended write path**: the agent proposes typed tasks; nothing runs until a person confirms the exact version. Replies include `confirm_url` |
+| Plans (v1.5.1) | `bacmap_create_plan` `bacmap_revise_plan` `bacmap_get_plan` | **Recommended write path**: the agent proposes typed tasks; nothing runs until a person confirms the exact version. Replies include `confirm_url`. Read/revise are limited to the client that created the plan (plans may contain D3/D4 scripts or drafts) |
 | Plan confirmation (v1.9.0) | `bacmap_confirm_plan_locally` | Opens a **local** dialog (stdio only); the human click is the confirmation (`actor=local-dialog`). Cloud/HTTP sessions get `forbidden` |
 | Data records (v1.8.4) | `bacmap_record_data` | Metadata / lab / knowledge through `record` tasks; only shown on `local-trusted` (D4) |
 | Task submission | `bacmap_submit_task` | Compatibility entry (direct submission); analyze/curate tasks run asynchronously |
@@ -339,7 +340,8 @@ Security model (identical for every client):
 Guarantees: a revision (`bacmap_revise_plan`) creates a new version and the old one can no longer be
 confirmed; if an input directory (or a `mine` input file) changes between creation and confirmation,
 confirmation fails with a conflict; confirming twice (or from CLI and Web at the same time) submits
-the tasks only once.
+the tasks only once. Plans are scoped to their creating MCP client: another client cannot read or
+revise them (it gets `forbidden`), so one harness cannot swap a plan that you are about to confirm.
 
 Open-path plans (`mine` / `write`) are shown **in full** at confirmation — the sandbox script or the
 draft text is part of the plan hash, so what you read is what runs. `mine` executes with no network
@@ -371,7 +373,7 @@ A typical exchange with an agent:
 | `analyze` | Full pipeline: QC→assembly→typing→AMR/virulence→report. An HTML report is **generated automatically at the end of the task** (`results/{id}/report/{id}_report.html`) | Analysis-conclusion gate (contradictory interpretations are flagged for human review) |
 | `curate` | Build the local epidemiological baseline library (de-identification, aggregation) | **Release gate**: anything below the gold-standard thresholds is refused release |
 | `mine` | Run custom analysis scripts inside the sandbox | **Signature gate**: unsigned output must not enter reports |
-| `write` | LLM drafts reports / briefs | **Citation gate**: exports are refused if they cite entries absent from the knowledge base |
+| `write` | LLM drafts reports / briefs | **Citation gate**: exports are refused if they cite entries absent from the knowledge base. With an empty `known_citations`, the approved knowledge-base identifiers are loaded automatically |
 
 Checkpoint resume: the task engine is built on DBOS. Kill a running process and restart it, and the task continues from its checkpoint (verified in V2).
 

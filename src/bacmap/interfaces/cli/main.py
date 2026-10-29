@@ -3,7 +3,7 @@
 子命令：
 - ``bacmap mcp``       MCP 服务器：stdio（默认）或 Streamable HTTP（Bearer 鉴权，ADR-12）
 - ``bacmap web``       Web 控制台（默认 127.0.0.1:8800，ADR-16 只绑本机）
-- ``bacmap tui``       全屏 TUI（Textual；监控 + 写操作 + 智能体对话）
+- ``bacmap tui``       全屏 TUI（Textual；任务/样本监控、写操作与签批，无内置对话）
 - ``bacmap console``   交互式菜单（面向不使用子命令的用户）
 - ``bacmap overview``  系统概览
 - ``bacmap task list|show|submit|approve|cancel``  任务查询与写操作（list 别名 ls）
@@ -227,9 +227,12 @@ def _run_task_submit(args: argparse.Namespace) -> None:
         params["samples"] = [s.strip() for s in args.samples.split(",") if s.strip()]
     if args.scope:
         try:
-            params["scope"] = _json.loads(args.scope)
+            scope = _json.loads(args.scope)
         except ValueError as exc:
             raise SystemExit(f"scope 不是合法 JSON: {exc}") from exc
+        if not isinstance(scope, dict):
+            raise SystemExit("scope 必须是 JSON 对象")
+        params["scope"] = scope
     try:
         tid = _engine(args.home).submit(TaskType(args.type), params, args.by)
     except (ValueError, NotImplementedError) as exc:

@@ -101,3 +101,44 @@ class TestCollision:
         (b / "P1__ilm_R2.fastq.gz").write_text("CCCC")
         with pytest.raises(ValueError, match="dataset id collision"):
             register_fastqs_dir(home, b, "UNK")
+
+
+class TestLegacyChecksum:
+    def test_legacy_row_without_checksum_detects_content_change(self, tmp_path: Path):
+        d = tmp_path / "data"
+        d.mkdir()
+        fa = d / "S1.fna"
+        fa.write_text(">c\nACGT\n")
+        home = tmp_path / "home"
+        register_fastas(home, d, "VPA")
+        tsv = home / "workflows" / "bacmap" / "config" / "samples.tsv"
+        header, row = tsv.read_text().splitlines()[:2]
+        cols = header.split("\t")
+        rec = dict(zip(cols, row.split("\t"), strict=False))
+        rec["checksum"] = ""  # 模拟 v1.8.0 之前的旧行
+        tsv.write_text(
+            "\t".join(cols) + "\n" + "\t".join(rec[c] for c in cols) + "\n"
+        )
+        other = tmp_path / "other"
+        other.mkdir()
+        (other / "S1.fna").write_text(">c\nTTTT\n")  # 同 ID、不同路径/内容
+        with pytest.raises(ValueError, match="dataset id collision"):
+            register_fastas(home, other, "VPA")
+
+
+class TestDatasetIdValidation:
+    def test_dot_names_rejected_by_whitelist(self):
+        from bacmap.tools._common import _validate_sample_id
+
+        assert not _validate_sample_id(".")
+        assert not _validate_sample_id("..")
+        assert _validate_sample_id("S1__ilm__20261012")
+
+    def test_registration_skips_illegal_dataset_id(self, tmp_path: Path):
+        d = tmp_path / "data"
+        d.mkdir()
+        (d / "bad name.fna").write_text(">c\nACGT\n")
+        (d / "S1.fna").write_text(">c\nACGT\n")
+        out = register_fastas(tmp_path / "home", d, "VPA")
+        assert out["samples"] == ["S1"]
+        assert out["skipped"] and "非法 dataset id" in out["skipped"][0]["reason"]

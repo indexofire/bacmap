@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from bacmap.core.species_codes import species_code
+from bacmap.tools._common import _validate_sample_id
 
 _FASTA_EXTS = {".fna", ".fasta", ".fa"}
 # `sample` 列语义 = dataset_id（历史列名保留，避免改 10 个 .smk 规则）；
@@ -196,7 +197,18 @@ def _guard_collision(
         )
     if not old_sum:
         old_path = record.get("assembly") or record.get("R1")
-        if old_path and old_path != new_path:
+        old_files = [Path(record[k]) for k in ("R1", "R2") if record.get(k)]
+        if not old_files and record.get("assembly"):
+            old_files = [Path(record["assembly"])]
+        if old_files and all(p.is_file() for p in old_files):
+            old_sum = _checksum(old_files)
+            if old_sum != checksum:
+                raise ValueError(
+                    f"dataset id collision: {dataset_id!r} already registered with different "
+                    f"content at {old_path} (legacy row, checksum recomputed). "
+                    "Rename the file or use a distinct dataset id."
+                )
+        elif old_path and old_path != new_path:
             raise ValueError(
                 f"dataset id collision: {dataset_id!r} is registered to {old_path}, "
                 f"but this run points at {new_path}. Rename the file or use a distinct dataset id."
@@ -239,6 +251,14 @@ def register_fastas(
     added = 0
     for fa in files:
         sid, isolate, platform = parse_dataset_name(fa.stem)
+        if not _validate_sample_id(sid):
+            skipped.append(
+                {
+                    "file": str(fa),
+                    "reason": f"非法 dataset id {sid!r}（允许 A-Za-z0-9._-，且不得为 . / ..）",
+                }
+            )
+            continue
         sum_ = _checksum([fa])
         row = _existing(rows, header, sid)
         if row is not None:
@@ -299,6 +319,14 @@ def register_fastqs_dir(
         m = _MATE_PAT.match(_strip_read_ext(r1.name))
         stem = m.group("prefix") if m else r1.stem
         sid, isolate, platform = parse_dataset_name(stem)
+        if not _validate_sample_id(sid):
+            skipped.append(
+                {
+                    "file": str(r1),
+                    "reason": f"非法 dataset id {sid!r}（允许 A-Za-z0-9._-，且不得为 . / ..）",
+                }
+            )
+            continue
         if r2 is None:
             skipped.append({"file": str(r1), "reason": "单端 reads（管线需双端配对）"})
             continue

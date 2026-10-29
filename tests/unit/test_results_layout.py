@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from bacmap.store.results_layout import (
     link_run_results,
     migrate_flat_results,
@@ -43,12 +41,16 @@ class TestLayout:
         assert (tmp_path / "results" / "S1").resolve() == (new / "S1").resolve()
         assert (old / "S1" / "report" / "S1_summary.json").is_file()
 
-    def test_refuses_to_replace_real_directory(self, tmp_path: Path):
+    def test_auto_migrates_legacy_dir_before_linking(self, tmp_path: Path):
+        """升级后首次运行：旧扁平实体目录先迁移（数据保留），再指向新运行。"""
         legacy = tmp_path / "results" / "S1" / "report"
         legacy.mkdir(parents=True)
-        _make_run(tmp_path, "t1", "S1")
-        with pytest.raises(RuntimeError, match="migrate"):
-            link_run_results(tmp_path, "t1", ["S1"])
+        (legacy / "S1_summary.json").write_text("old")
+        rd = _make_run(tmp_path, "t1", "S1")
+        link_run_results(tmp_path, "t1", ["S1"])
+        assert (tmp_path / "results" / "S1").resolve() == (rd / "S1").resolve()
+        kept = tmp_path / "results" / "runs" / "legacy-S1" / "S1" / "report"
+        assert (kept / "S1_summary.json").read_text() == "old"
 
 
 class TestMigration:
@@ -63,11 +65,15 @@ class TestMigration:
         assert (tmp_path / "results" / "OLD").is_symlink()
         assert not (tmp_path / "results" / "OLD").is_dir() or (tmp_path / "results" / "OLD").is_symlink()
 
-    def test_skips_runs_and_cohort_dirs(self, tmp_path: Path):
+    def test_migrates_legacy_cohort_dirs(self, tmp_path: Path):
+        """旧布局的 results/snp、results/cgmlst 也是实体目录：一并迁移，否则新运行撞保护。"""
         _make_run(tmp_path, "t1", "S1")
-        (tmp_path / "results" / "snp").mkdir(parents=True)
-        (tmp_path / "results" / "cgmlst").mkdir(parents=True)
-        assert migrate_flat_results(tmp_path) == 0
+        (tmp_path / "results" / "snp" / "SAL").mkdir(parents=True)
+        (tmp_path / "results" / "cgmlst" / "SAL").mkdir(parents=True)
+        assert migrate_flat_results(tmp_path) == 2
+        assert (tmp_path / "results" / "snp").is_symlink()
+        assert (tmp_path / "results" / "cgmlst").is_symlink()
+        assert (tmp_path / "results" / "snp" / "SAL").is_dir()
 
 
 class TestEngineWritesRunScoped:
@@ -100,3 +106,17 @@ class TestEngineWritesRunScoped:
         ]
         assert seen["overrides"] == {"workdir": "results/runs/t9"}
         assert (tmp_path / "results" / "S1").is_symlink()
+
+
+class TestMigrationSafety:
+    def test_never_deletes_existing_legacy_target(self, tmp_path: Path):
+        flat = tmp_path / "results" / "OLD" / "report"
+        flat.mkdir(parents=True)
+        (flat / "OLD_summary.json").write_text("new")
+        target = tmp_path / "results" / "runs" / "legacy-OLD" / "OLD"
+        target.mkdir(parents=True)
+        (target / "keep.txt").write_text("old")
+        migrate_flat_results(tmp_path)
+        assert (target / "keep.txt").read_text() == "old"  # 既有运行数据不得删除
+        assert (tmp_path / "results" / "OLD").is_symlink()
+        assert (tmp_path / "results" / "OLD" / "report" / "OLD_summary.json").read_text() == "new"

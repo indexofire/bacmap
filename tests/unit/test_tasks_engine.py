@@ -221,8 +221,9 @@ class TestFastqResolution:
         alt.mkdir()
         (alt / "SAM-ALT_R1.fastq.gz").write_bytes(b"x")
         (alt / "SAM-ALT_R2.fastq.gz").write_bytes(b"x")
-        home = self._make_home(tmp_path, {"SAM-ALT": ("../../alt/SAM-ALT_R1.fastq.gz",
-                                                      "../../alt/SAM-ALT_R2.fastq.gz")})
+        # 相对路径基准是 BACMAP_HOME（与 Snakefile PROJECT_ROOT 一致，v1.9.2 修正）
+        home = self._make_home(tmp_path, {"SAM-ALT": ("alt/SAM-ALT_R1.fastq.gz",
+                                                      "alt/SAM-ALT_R2.fastq.gz")})
         got = eng._fastqs(home, ["SAM-ALT"])
         assert [p.name for p in got] == ["SAM-ALT_R1.fastq.gz", "SAM-ALT_R2.fastq.gz"]
 
@@ -338,7 +339,7 @@ class TestAnalyzeAutoReport:
     def test_report_generated_at_end_of_analyze(self, engine, monkeypatch):
         calls: list[str] = []
         monkeypatch.setattr(
-            eng, "_generate_report_for", lambda s: (calls.append(s), {"sample_id": s})[1]
+            eng, "_generate_report_for", lambda s, *a: (calls.append(s), {"sample_id": s})[1]
         )
         tid = engine.submit(TaskType.ANALYZE, {"samples": ["SAM-001"]}, "t")
         st = _wait(engine, tid)
@@ -515,3 +516,85 @@ def _insert_task_helper(e, tid: str, state: str) -> None:
             " VALUES (?,?,?,?,?,?,?,?,?)",
             (tid, "curate", state, "{}", "t", now, now, "", "curate"),
         )
+
+
+class TestWorkflowPreparationErrors:
+    """准备阶段异常（目录不存在等）必须落成可读的 FAILED，而不是裸 workflow ERROR。"""
+
+    def test_analyze_bad_fasta_dir_reports_reason(self, engine, tmp_path):
+        tid = engine.submit(
+            TaskType.ANALYZE, {"fasta_dir": str(tmp_path / "missing")}, "cli"
+        )
+        st = _wait(engine, tid)
+        assert st.state == TaskState.FAILED
+        assert "输入登记失败" in (st.message or "")
+
+    def test_mine_bad_input_path_reports_reason(self, engine, tmp_path):
+        tid = engine.submit(
+            TaskType.MINE,
+            {"script": "pass", "input_paths": [str(tmp_path / "missing")]},
+            "analyst",
+        )
+        st = _wait(engine, tid)
+        assert st.state == TaskState.FAILED
+        assert "沙箱准备失败" in (st.message or "")
+
+
+class TestRunScopedReads:
+    """v1.9.3：入库/门/报告必须读本次运行的物理目录，不能跟"最新运行"别名。"""
+
+    def test_load_summary_prefers_run_dir(self, tmp_path):
+        from bacmap.store.results_layout import run_results_dir
+
+        flat = tmp_path / "results" / "S1" / "report"
+        flat.mkdir(parents=True)
+        (flat / "S1_summary.json").write_text('{"sample": "flat"}')
+        rd = run_results_dir(tmp_path, "t1")
+        rep = rd / "S1" / "report"
+        rep.mkdir(parents=True)
+        (rep / "S1_summary.json").write_text('{"sample": "run"}')
+        assert eng._load_summary(tmp_path, "S1", rd)["sample"] == "run"
+        assert eng._load_summary(tmp_path, "S1")["sample"] == "flat"
+
+    def test_existing_run_dir_without_summary_does_not_fall_back(self, tmp_path):
+        """运行目录存在但缺 summary → 视为该次运行无结果，绝不读别次运行的别名。"""
+        from bacmap.store.results_layout import run_results_dir
+
+        flat = tmp_path / "results" / "S1" / "report"
+        flat.mkdir(parents=True)
+        (flat / "S1_summary.json").write_text('{"sample": "flat"}')
+        rd = run_results_dir(tmp_path, "t1")
+        (rd / "S1").mkdir(parents=True)
+        assert eng._load_summary(tmp_path, "S1", rd) == {}
+
+    def test_analyze_ingests_its_own_run_not_latest_alias(self, engine, tmp_path, monkeypatch):
+        from bacmap.store.results_layout import run_results_dir
+
+        stale = tmp_path / "results" / "S1" / "report"
+        stale.mkdir(parents=True)
+        (stale / "S1_summary.json").write_text(
+            json.dumps({"sample": "S1", "steps": {"species": {"verdict": "Vibrio parahaemolyticus"}}})
+        )
+
+        def fake_run(params):
+            rd = run_results_dir(tmp_path, params["task_id"])
+            rep = rd / "S1" / "report"
+            rep.mkdir(parents=True)
+            (rep / "S1_summary.json").write_text(
+                json.dumps(
+                    {"sample": "S1", "steps": {"species": {"verdict": "Salmonella"}}}
+                )
+            )
+            return _Proc(0)
+
+        monkeypatch.setattr(eng, "_run_snakemake", fake_run)
+        monkeypatch.setattr(eng, "_generate_report_for", lambda s, *a: {"sample_id": s})
+        tid = engine.submit(TaskType.ANALYZE, {"samples": ["S1"]}, "cli")
+        st = _wait(engine, tid)
+        assert st.state == TaskState.SUCCEEDED, st.message
+
+        from bacmap.store.genome_object_service import GenomeObjectService
+
+        with GenomeObjectService(tmp_path / "gom.sqlite") as gos:
+            obj = gos.read("analysis:S1:test-run-1", 1)
+        assert obj.payload["species_verdict"] == "Salmonella"

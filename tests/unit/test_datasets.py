@@ -72,6 +72,25 @@ class TestDatasetRegistry:
         finally:
             reg.close()
 
+    def test_dedup_escalates_data_class_and_resets_status(self, tmp_path: Path, data_dir: Path):
+        """内容去重不得降低数据级别；内容恢复后重复登记应清除 changed 状态。"""
+        reg = DatasetRegistry(tmp_path / "gom.sqlite")
+        try:
+            first = reg.register(data_dir, registered_by="a", data_class="D3")
+            escalated = reg.register(data_dir, registered_by="b", data_class="D4")
+            assert escalated.dataset_id == first.dataset_id
+            assert escalated.data_class == "D4"
+            assert reg.register(data_dir, registered_by="c", data_class="D2").data_class == "D4"
+
+            (data_dir / "a.txt").write_text("CHANGED", encoding="utf-8")
+            assert reg.verify(first.dataset_id) is False
+            assert reg.get(first.dataset_id).status == "changed"
+            (data_dir / "a.txt").write_text("alpha", encoding="utf-8")
+            restored = reg.register(data_dir, registered_by="d", data_class="D4")
+            assert restored.status == "registered"
+        finally:
+            reg.close()
+
     def test_verify_detects_change_and_missing(self, tmp_path: Path, data_dir: Path):
         reg = DatasetRegistry(tmp_path / "gom.sqlite")
         try:

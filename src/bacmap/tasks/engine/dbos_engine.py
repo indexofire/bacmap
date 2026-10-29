@@ -94,8 +94,25 @@ def _run_snakemake(params: dict[str, Any]) -> Any:
     return result
 
 
-def _load_summary(home: Path, sample: str) -> dict[str, Any]:
-    p = home / "results" / sample / "report" / f"{sample}_summary.json"
+def _run_results_base(home: Path, run_dir_s: str | None) -> Path:
+    """本次运行的物理结果目录；目录不存在时回落旧扁平布局（仅兼容夹具/旧任务）。
+
+    真实分析在启动 Snakemake 前就创建 ``results/runs/<task_id>/``，因此生产路径
+    一旦有 run 目录就只读它，绝不跟随可能已被并发任务重链的"最新运行"别名。
+    """
+    if run_dir_s:
+        rd = Path(run_dir_s)
+        if rd.is_dir():
+            return rd
+    return home / "results"
+
+
+def _load_summary(
+    home: Path, sample: str, run_dir: Path | None = None
+) -> dict[str, Any]:
+    """读取样本 summary；``run_dir`` 存在时只读该次运行的物理目录（v1.9.3）。"""
+    base = _run_results_base(home, str(run_dir) if run_dir is not None else None)
+    p = base / sample / "report" / f"{sample}_summary.json"
     return json.loads(p.read_text(encoding="utf-8")) if p.is_file() else {}
 
 
@@ -120,7 +137,9 @@ def _fastqs(home: Path, samples: list[str]) -> list[Path]:
     out: list[Path] = []
     for s in samples:
         if s in registered:
-            pair = [home / "workflows" / "bacmap" / p for p in registered[s]]
+            # samples.tsv 的相对路径基准是 PROJECT_ROOT（BACMAP_HOME），与 Snakefile
+            # 的 r1_path/r2_path 一致；此前按部署目录解析会漏掉证据链 input_files。
+            pair = [home / p for p in registered[s]]
         elif s in registered_asm:
             # assembly 直入：与 Snakefile assembly_path 同约定（相对 BACMAP_HOME）
             pair = [home / registered_asm[s]]
@@ -335,15 +354,18 @@ def _step_ingest_gom(home_s: str, sample: str, run_id: str, summary: dict[str, A
 
 
 @DBOS.step()
-def _step_ingest_cgmlst_profiles(home_s: str, samples: list[str], run_id: str) -> int:
+def _step_ingest_cgmlst_profiles(
+    home_s: str, samples: list[str], run_id: str, run_dir_s: str | None = None
+) -> int:
     """入库逐样本 cgMLST 谱（ANALYSIS cgmlst_profile，指向 run_id）。"""
     from bacmap.core.utils import parse_cgmlst_profile
 
     home = Path(home_s)
+    base = _run_results_base(home, run_dir_s)
     provenance = _analysis_provenance(home, run_id)
     count = 0
     for sample in samples:
-        tsv = home / "results" / sample / "typing" / "cgmlst.tsv"
+        tsv = base / sample / "typing" / "cgmlst.tsv"
         if not tsv.is_file():
             continue
         try:
@@ -374,9 +396,12 @@ def _step_ingest_cgmlst_profiles(home_s: str, samples: list[str], run_id: str) -
 
 
 @DBOS.step()
-def _step_ingest_cohorts(home_s: str, run_id: str) -> int:
+def _step_ingest_cohorts(
+    home_s: str, run_id: str, run_dir_s: str | None = None
+) -> int:
     """入库队列级 SNP / cgMLST 汇总（ANALYSIS，strain_id = cohort:<group>-<kind>）。"""
     home = Path(home_s)
+    base = _run_results_base(home, run_dir_s)
     provenance = _analysis_provenance(home, run_id)
     specs = (
         ("snp", "snp_summary.json", "-snp", "snp_cohort"),
@@ -384,10 +409,10 @@ def _step_ingest_cohorts(home_s: str, run_id: str) -> int:
     )
     count = 0
     for sub, filename, suffix, analysis_type in specs:
-        base = home / "results" / sub
-        if not base.is_dir():
+        cohort_dir = base / sub
+        if not cohort_dir.is_dir():
             continue
-        for summary_path in sorted(base.glob(f"*/{filename}")):
+        for summary_path in sorted(cohort_dir.glob(f"*/{filename}")):
             try:
                 summary = json.loads(summary_path.read_text(encoding="utf-8"))
             except (ValueError, OSError):
@@ -411,14 +436,22 @@ def _step_ingest_cohorts(home_s: str, run_id: str) -> int:
                 organism if isinstance(organism, str) else None,
             )
             count += 1
+    # 逐样本 GOM + cgMLST 谱均已在上一步入库；队列汇总是最后一步 → 标记运行记录入库时间。
+    from bacmap.store import runs as runs_store
+
+    runs_store.mark_ingested(run_id, home / "runs.sqlite")
     return count
 
 
 @DBOS.step()
-def _step_gate(home_s: str, sample: str, interpretation_text: str) -> dict[str, Any]:
+def _step_gate(
+    home_s: str, sample: str, interpretation_text: str, run_dir_s: str | None = None
+) -> dict[str, Any]:
     from bacmap.tasks import gates
 
-    summary = _load_summary(Path(home_s), sample)
+    summary = _load_summary(
+        Path(home_s), sample, Path(run_dir_s) if run_dir_s else None
+    )
     if not summary:
         return {
             "gate": "analysis_claims",
@@ -507,7 +540,18 @@ def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
     home = Path(params["home"])
 
     if params.get("fasta_dir") or params.get("fastq_dir"):
-        reg = _step_register_inputs(params)
+        try:
+            reg = _step_register_inputs(params)
+        except Exception as exc:
+            # 登记失败（目录不存在/非法样本名/写盘失败）要给可执行原因，而不是
+            # 让 DBOS 只留下 "workflow ERROR"（v1.9.2 巡检）。
+            logger.exception("input registration failed")
+            return {
+                "status": "FAILED",
+                "snakemake_returncode": 0,
+                "message": f"输入登记失败：{type(exc).__name__}: {exc}",
+                "gates": {},
+            }
         if not reg["samples"]:
             reasons = "；".join(f"{s['file']}: {s['reason']}" for s in reg["skipped"][:3])
             return {
@@ -531,36 +575,50 @@ def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
     run = _step_create_run(params)
     _step_finish_run(run["run_id"], params)
 
+    # 本次运行的物理目录：后续入库/门/报告都只读这里，避免并发同 dataset 分析
+    # 互相读到对方刚建立的"最新运行"别名（v1.9.3）。
+    from bacmap.store.results_layout import run_results_dir
+
+    task_id = str(params.get("task_id") or "")
+    run_dir = run_results_dir(home, task_id) if task_id else None
+    run_dir_s = str(run_dir) if run_dir is not None else None
+
     out: dict[str, Any] = {"status": "SUCCEEDED", "run_id": run["run_id"], "gates": {}}
     text = params.get("interpretation_text", "")
     for s in params["samples"]:
-        summary = _load_summary(home, s)
+        summary = _load_summary(home, s, run_dir)
         object_id: str | None = None
         if summary:
             object_id = _step_ingest_gom(str(home), s, run["run_id"], summary)
-        gate_out = _step_gate(str(home), s, text)
+        gate_out = _step_gate(str(home), s, text, run_dir_s)
         if object_id is not None:
             _step_record_gate(str(home), object_id, gate_out)
         out["gates"][s] = gate_out
-        out.setdefault("reports", {})[s] = _step_report(s)
+        out.setdefault("reports", {})[s] = _step_report(s, run_dir_s)
     out["cgmlst_profiles_ingested"] = _step_ingest_cgmlst_profiles(
-        str(home), params["samples"], run["run_id"]
+        str(home), params["samples"], run["run_id"], run_dir_s
     )
-    out["cohorts_ingested"] = _step_ingest_cohorts(str(home), run["run_id"])
+    out["cohorts_ingested"] = _step_ingest_cohorts(str(home), run["run_id"], run_dir_s)
     if any(g["verdict"] != "pass" for g in out["gates"].values()):
         out["status"] = "AWAITING_APPROVAL"
     return out
 
 
-def _generate_report_for(sample_id: str) -> dict[str, Any]:
+def _generate_report_for(
+    sample_id: str, results_dir: str | None = None
+) -> dict[str, Any]:
     """任务末尾模板化分析报告（冻结 §2 注①：确定性路径、C3 无 LLM 可用）。
 
-    报告失败不拖垮分析任务——返回 error 信封供人审跟进。
+    ``results_dir`` 指定本次运行的物理目录（v1.9.3）；报告失败不拖垮分析任务——
+    返回 error 信封供人审跟进。
     """
     from bacmap.tools.pipeline import generate_report
 
+    payload: dict[str, Any] = {"sample_id": sample_id}
+    if results_dir:
+        payload["results_dir"] = results_dir
     try:
-        raw = generate_report({"sample_id": sample_id})
+        raw = generate_report(payload)
         parsed = json.loads(raw) if isinstance(raw, str) else {"error": str(raw)}
         return dict(parsed)
     except Exception as exc:  # 报告为呈现层：任何失败降级为 error 信封
@@ -569,8 +627,8 @@ def _generate_report_for(sample_id: str) -> dict[str, Any]:
 
 
 @DBOS.step()
-def _step_report(sample_id: str) -> dict[str, Any]:
-    return _generate_report_for(sample_id)
+def _step_report(sample_id: str, results_dir_s: str | None = None) -> dict[str, Any]:
+    return _generate_report_for(sample_id, results_dir_s)
 
 
 def _run_sandbox(spec: Any) -> Any:
@@ -704,7 +762,16 @@ def mine_workflow(params: dict[str, Any]) -> dict[str, Any]:
 
     approve() 时带 signed_by 重过挖掘门（V11⑤：未签字产物不得进入报告）。
     """
-    result = _step_mine_run(params)
+    try:
+        result = _step_mine_run(params)
+    except Exception as exc:
+        logger.exception("mine sandbox preparation failed")
+        return {
+            "status": "FAILED",
+            "sandbox_returncode": 1,
+            "message": f"沙箱准备失败：{type(exc).__name__}: {exc}",
+            "gates": {},
+        }
     if result["returncode"] != 0:
         detail = (result.get("stderr") or "").strip() or "无 stderr 输出"
         return {
@@ -732,7 +799,9 @@ def _step_write_draft(params: dict[str, Any]) -> dict[str, Any]:
     """
     _progress(params, "draft")
     known = params.get("known_citations")
-    if known is None:
+    if not known:
+        # WriteParams 的默认值是空列表而非 None；按契约"空则由知识库已审核条目决定"，
+        # 空列表同样回退知识库（v1.9.2 巡检：此前只有 None 才回退，默认成稿必被拒）。
         from bacmap.store.knowledge import KnowledgeStore
 
         home = Path(params["home"])
@@ -890,6 +959,8 @@ def _step_record(params: dict[str, Any]) -> dict[str, Any]:
             "kind": record.kind,
             "message": f"no knowledge entry {record.entry_id}",
         }
+    except ValueError as exc:  # 已审核：不得覆盖原审核人
+        return {"status": "FAILED", "kind": record.kind, "message": str(exc)}
     return {
         "status": "SUCCEEDED",
         "kind": record.kind,

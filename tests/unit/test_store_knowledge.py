@@ -153,3 +153,13 @@ class TestFtsUpdateTrigger:
 
         assert [h["id"] for h in ks.search("parahaemolyticus")] == [kid]
         assert ks.search("Salmonella outbreak") == []
+
+
+class TestApprovalImmutability:
+    def test_second_approval_cannot_overwrite_reviewer(self, tmp_path: Path):
+        ks = _store(tmp_path)
+        kid = ks.import_candidate(_pmid_entry(), imported_by="a")
+        ks.approve(kid, approver="first-reviewer")
+        with pytest.raises(ValueError, match="already approved"):
+            ks.approve(kid, approver="second-reviewer")
+        assert ks.get(kid)["approved_by"] == "first-reviewer"

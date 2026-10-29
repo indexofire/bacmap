@@ -269,7 +269,16 @@ def verify_csrf(request: Request, form_csrf: str) -> bool:
 
 
 def safe_next(target: str, default: str = "/") -> str:
-    """只允许站内路径（防开放重定向）。"""
-    if target.startswith("/") and not target.startswith("//"):
-        return target
-    return default
+    """只允许站内路径（防开放重定向）。
+
+    浏览器会把 ``/\\evil.com`` 规范化为协议相对 URL（等同 ``//evil.com``），
+    只检查 ``//`` 前缀仍可被绕过（v1.9.2 巡检）；控制字符还会污染 Location 头。
+    """
+    if not target.startswith("/") or target.startswith("//"):
+        return default
+    if "\\" in target or any(ch in target for ch in "\r\n\0"):
+        return default
+    parsed = urlparse(target)
+    if parsed.scheme or parsed.netloc:
+        return default
+    return target

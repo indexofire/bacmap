@@ -355,3 +355,55 @@ class TestManifestSelfVerify:
         out = self._finalized(tmp_path, workflow_dir, monkeypatch)
         leftovers = list((tmp_path / "runs" / out.run_id).glob("*.tmp"))
         assert leftovers == []
+
+
+class TestFastqEvidencePaths:
+    """samples.tsv 相对路径必须按 BACMAP_HOME 解析（与 Snakefile PROJECT_ROOT 一致）。"""
+
+    def _write_tsv(self, home: Path, rows: list[list[str]]) -> None:
+        cfg = home / "workflows" / "bacmap" / "config"
+        cfg.mkdir(parents=True)
+        header = "sample\tspecies\tR1\tR2\tassembly\tisolate\tplatform\tchecksum"
+        body = "\n".join("\t".join(r) for r in rows)
+        (cfg / "samples.tsv").write_text(header + "\n" + body + "\n")
+
+    def test_relative_reads_resolved_against_home(self, tmp_path: Path):
+        from bacmap.tasks.engine.dbos_engine import _fastqs
+
+        r1 = tmp_path / "gs" / "S1" / "S1_R1.fastq.gz"
+        r2 = tmp_path / "gs" / "S1" / "S1_R2.fastq.gz"
+        r1.parent.mkdir(parents=True)
+        r1.write_text("x")
+        r2.write_text("y")
+        self._write_tsv(
+            tmp_path,
+            [["S1", "VPA", "gs/S1/S1_R1.fastq.gz", "gs/S1/S1_R2.fastq.gz", "", "S1", "ilm", ""]],
+        )
+        assert _fastqs(tmp_path, ["S1"]) == [r1, r2]
+
+    def test_relative_assembly_resolved_against_home(self, tmp_path: Path):
+        from bacmap.tasks.engine.dbos_engine import _fastqs
+
+        asm = tmp_path / "gs" / "A1" / "A1.fasta"
+        asm.parent.mkdir(parents=True)
+        asm.write_text(">c\nACGT\n")
+        self._write_tsv(
+            tmp_path,
+            [["A1", "VPA", "", "", "gs/A1/A1.fasta", "A1", "ont", ""]],
+        )
+        assert _fastqs(tmp_path, ["A1"]) == [asm]
+
+
+class TestIngestedAt:
+    def test_mark_ingested_is_idempotent(self, tmp_path: Path):
+        wf = tmp_path / "wf"
+        (wf / "config").mkdir(parents=True)
+        (wf / "config" / "config.yaml").write_text("threads: 2\n")
+        db = tmp_path / "runs.sqlite"
+        run = runs.create_run("bacmap", wf, ["S1"], db_path=db)
+        assert runs.read_run(run.run_id, db).ingested_at is None
+        runs.mark_ingested(run.run_id, db)
+        first = runs.read_run(run.run_id, db).ingested_at
+        assert first is not None
+        runs.mark_ingested(run.run_id, db)
+        assert runs.read_run(run.run_id, db).ingested_at == first

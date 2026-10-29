@@ -205,7 +205,7 @@ class TestWorkflowProgress:
 
         monkeypatch.setattr(runs, "create_run", lambda **kw: _Run())
         monkeypatch.setattr(runs, "finalize_run", lambda *a, **kw: None)
-        monkeypatch.setattr(eng, "_generate_report_for", lambda s: {"sample_id": s})
+        monkeypatch.setattr(eng, "_generate_report_for", lambda s, *a: {"sample_id": s})
         engine = eng.DbosTaskEngine(tmp_path)
         try:
             tid = engine.submit(TaskType.ANALYZE, {"samples": ["S1"]}, "cli")

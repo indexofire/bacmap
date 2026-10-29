@@ -19,6 +19,7 @@ from typing import Any
 
 _DB_NAMES = (
     "tasks.sqlite",
+    "dbos.sqlite",  # DBOS 系统库：工作流/步骤检查点，缺它则运行中任务无法恢复
     "runs.sqlite",
     "gom.sqlite",
     "baseline.sqlite",
@@ -214,10 +215,10 @@ def results_migrate(args: argparse.Namespace) -> None:
     home = Path(args.home)
     pending = flat_result_samples(home)
     if args.dry_run:
-        print(f"待迁移 {len(pending)} 个扁平样本目录：{', '.join(pending) or '无'}")
+        print(f"待迁移 {len(pending)} 个扁平结果目录：{', '.join(pending) or '无'}")
         return
     moved = migrate_flat_results(home)
-    print(f"已迁移 {moved} 个扁平样本目录到 results/runs/legacy-*/ 并替换为最新运行链接")
+    print(f"已迁移 {moved} 个扁平结果目录到 results/runs/legacy-*/ 并替换为最新运行链接")
 
 
 def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
@@ -240,7 +241,9 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
 
     res = sub.add_parser("results", help="结果目录维护（P2：run 级布局）")
     rs = res.add_subparsers(dest="results_command", required=True)
-    rm = rs.add_parser("migrate", help="旧扁平 results/<sample> 迁入 runs/ 并替换为链接")
+    rm = rs.add_parser(
+        "migrate", help="旧扁平 results/<name>（样本 + snp/cgmlst）迁入 runs/ 并替换为链接"
+    )
     add_home(rm)
     rm.add_argument("--dry-run", action="store_true", help="只列出待迁移目录")
     rm.set_defaults(func=results_migrate)

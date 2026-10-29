@@ -185,3 +185,17 @@ def test_console_tables_escape_untrusted_values():
                          "current_step": "[b]qc[/b]", "submitted_by": "[i]me"}])
     assert task.columns[3]._cells[0] == r"\[b]qc\[/b]"
     assert task.columns[4]._cells[0] == r"\[i]me"
+
+
+def test_task_submit_rejects_non_object_scope(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "bacmap", "task", "submit", "--type", "curate",
+            "--home", str(tmp_path), "--scope", "[1,2]",
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert "JSON 对象" in str(exc.value.code)

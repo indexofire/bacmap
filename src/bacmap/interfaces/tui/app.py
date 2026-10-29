@@ -48,9 +48,6 @@ _BACMAP_DARK = Theme(
     variables={
         "text-muted": "#8b949e",
         "border": "#30363d",
-        "tool": "#d2a8ff",
-        "user": "#79c0ff",
-        "assistant": "#3fb950",
     },
 )
 _BACMAP_LIGHT = Theme(
@@ -69,9 +66,6 @@ _BACMAP_LIGHT = Theme(
     variables={
         "text-muted": "#59636e",
         "border": "#d0d7de",
-        "tool": "#8250df",
-        "user": "#0969da",
-        "assistant": "#1a7f37",
     },
 )
 
