@@ -1,5 +1,49 @@
 # Guide: choose an interface
 
+<div class="grid cards" markdown>
+
+-   **Interfaces**
+
+    ---
+
+    Web, CLI, TUI and JSON API: routes, commands, keys and authentication.
+
+    [Interfaces](interfaces.md)
+
+-   **Tasks and gates**
+
+    ---
+
+    The five task types, parameters, states and the four gates.
+
+    [Tasks & gates](tasks.md)
+
+-   **Data and identity**
+
+    ---
+
+    isolate → dataset → run, `samples.tsv`, registration, records and external datasets.
+
+    [Data & identity](data.md)
+
+-   **Agents and plans**
+
+    ---
+
+    MCP profiles, Hermes/Pi/DSH setup, plan creation and human confirmation.
+
+    [Agents & plans](agent-plans.md)
+
+-   **Results and evidence**
+
+    ---
+
+    Run-scoped results, reports, run records, GOM objects and search.
+
+    [Results & evidence](results.md)
+
+</div>
+
 bacmap has four human interfaces and one machine interface. They all talk to the same task engine,
 so a task submitted from the CLI is visible and approvable in the Web console, and a plan created
 over MCP is confirmed in the same place.

@@ -33,6 +33,7 @@ plugins:
             Operations: 运维
             Reference: 参考
             Development: 开发
+            Installation: 安装
             Configuration: 配置
             Tutorial: 教程
             Interfaces: 界面
@@ -45,6 +46,9 @@ plugins:
             Task Engine & DBOS: 任务引擎与 DBOS
             Security: 安全
             Frozen Design: 冻结设计
+            Health and retention: 体检与保留
+            Backup and restore: 备份与恢复
+            Upgrades and migrations: 升级与迁移
             Troubleshooting: 排障
             CLI: 命令行
             MCP: MCP
@@ -86,6 +90,7 @@ nav:
   - Home: index.md
   - Getting Started:
       - getting-started/index.md
+      - Installation: getting-started/installation.md
       - Configuration: getting-started/configuration.md
       - Tutorial: getting-started/tutorial.md
   - Guide:
@@ -104,6 +109,9 @@ nav:
       - Frozen Design: concepts/frozen-design.md
   - Operations:
       - operations/index.md
+      - Health and retention: operations/health.md
+      - Backup and restore: operations/backup.md
+      - Upgrades and migrations: operations/upgrades.md
       - Troubleshooting: operations/troubleshooting.md
   - Reference:
       - reference/index.md
@@ -118,6 +126,7 @@ nav:
 markdown_extensions:
   - tables
   - fenced_code
+  - attr_list
   - md_in_html
   - toc:
       permalink: true

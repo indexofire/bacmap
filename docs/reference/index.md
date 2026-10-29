@@ -2,13 +2,49 @@
 
 Lookup material for exact names, flags, payloads and defaults.
 
-| Page | Contents |
-|---|---|
-| [CLI](cli.md) | every command, subcommand, flag and exit behaviour |
-| [MCP](mcp.md) | transports, profiles, tools, prompts, resources, error shapes |
-| [HTTP API](api.md) | `/api/v1` endpoints, auth, CSRF, SSE and errors |
-| [Configuration](configuration.md) | environment variables, TOML keys, defaults and constraints |
-| [Tool registry](tools.md) | all 26 `bio_*` tools, effects, data classes and parameters |
+<div class="grid cards" markdown>
+
+-   **CLI**
+
+    ---
+
+    Every command, subcommand, flag and exit behaviour.
+
+    [CLI](cli.md)
+
+-   **MCP**
+
+    ---
+
+    Transports, profiles, tools, prompts, resources and error shapes.
+
+    [MCP](mcp.md)
+
+-   **HTTP API**
+
+    ---
+
+    `/api/v1` endpoints, authentication, CSRF, SSE and errors.
+
+    [HTTP API](api.md)
+
+-   **Configuration**
+
+    ---
+
+    Environment variables, TOML keys, defaults and constraints.
+
+    [Configuration](configuration.md)
+
+-   **Tool registry**
+
+    ---
+
+    All 26 `bio_*` tools, effects, data classes and parameters.
+
+    [Tools](tools.md)
+
+</div>
 
 Conventions:
 

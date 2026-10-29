@@ -3,6 +3,50 @@
 本节说明 bacmap 是如何组织的，以及为什么这样组织。在修改代码、审查安全边界或解读审计痕迹之前，
 都应当先读这里。
 
+<div class="grid cards" markdown>
+
+-   **架构**
+
+    ---
+
+    分层、组件地图、依赖规则与请求流程。
+
+    [架构](architecture.zh.md)
+
+-   **数据模型**
+
+    ---
+
+    isolate → dataset → run、数据库、存储布局与生命周期。
+
+    [数据模型](data-model.zh.md)
+
+-   **任务引擎与门**
+
+    ---
+
+    DBOS 工作流、任务状态、四道门、恢复与审计事件。
+
+    [任务引擎与 DBOS](task-engine.zh.md)
+
+-   **安全与数据分级**
+
+    ---
+
+    D0–D4、MCP Profile、确认边界、沙箱与鉴权。
+
+    [安全](security.zh.md)
+
+-   **冻结设计**
+
+    ---
+
+    权威 ADR 正文；以中文版为准。
+
+    [冻结设计](frozen-design.zh.md)
+
+</div>
+
 ## 术语
 
 | 术语 | 含义 |

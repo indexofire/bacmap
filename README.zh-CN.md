@@ -58,7 +58,7 @@ bacmap plan confirm <plan_id> --version 1 --hash <前12位>
 
 | 我想… | 阅读 |
 |---|---|
-| 安装并验证 | [快速开始](docs/getting-started/index.zh.md) |
+| 安装并验证 | [快速开始](docs/getting-started/installation.zh.md) |
 | 配置端点、样本、MCP | [配置](docs/getting-started/configuration.zh.md) |
 | 跟着智能体走一遍 | [教程](docs/getting-started/tutorial.zh.md) |
 | CLI / Web / TUI / API | [界面](docs/guide/interfaces.zh.md) |

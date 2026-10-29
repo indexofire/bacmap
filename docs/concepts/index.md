@@ -3,6 +3,50 @@
 This section explains how bacmap is put together and why. It is the place to read before changing
 code, reviewing a security boundary, or interpreting an audit trail.
 
+<div class="grid cards" markdown>
+
+-   **Architecture**
+
+    ---
+
+    Layers, component map, dependency rules and request flows.
+
+    [Architecture](architecture.md)
+
+-   **Data model**
+
+    ---
+
+    isolate → dataset → run, databases, storage layout and lifecycle.
+
+    [Data model](data-model.md)
+
+-   **Task engine and gates**
+
+    ---
+
+    DBOS workflows, task states, the four gates, recovery and audit events.
+
+    [Task engine & DBOS](task-engine.md)
+
+-   **Security and data classes**
+
+    ---
+
+    D0–D4, MCP profiles, the confirmation boundary, sandbox and authentication.
+
+    [Security](security.md)
+
+-   **Frozen design**
+
+    ---
+
+    The authoritative ADR text; the Chinese version governs.
+
+    [Frozen design](frozen-design.md)
+
+</div>
+
 ## Vocabulary
 
 | Term | Meaning |

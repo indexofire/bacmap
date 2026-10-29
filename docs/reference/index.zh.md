@@ -2,13 +2,49 @@
 
 用于查阅精确的名称、参数、载荷与默认值。
 
-| 页面 | 内容 |
-|---|---|
-| [CLI](cli.zh.md) | 每条命令、子命令、参数与退出行为 |
-| [MCP](mcp.zh.md) | 传输方式、Profile、工具、提示词、资源、错误结构 |
-| [HTTP API](api.zh.md) | `/api/v1` 端点、鉴权、CSRF、SSE 与错误 |
-| [配置](configuration.zh.md) | 环境变量、TOML 键、默认值与约束 |
-| [工具注册表](tools.zh.md) | 全部 26 个 `bio_*` 工具、效果、数据分级与参数 |
+<div class="grid cards" markdown>
+
+-   **CLI**
+
+    ---
+
+    每条命令、子命令、参数与退出行为。
+
+    [CLI](cli.zh.md)
+
+-   **MCP**
+
+    ---
+
+    传输方式、Profile、工具、提示词、资源与错误结构。
+
+    [MCP](mcp.zh.md)
+
+-   **HTTP API**
+
+    ---
+
+    `/api/v1` 端点、鉴权、CSRF、SSE 与错误。
+
+    [HTTP API](api.zh.md)
+
+-   **配置**
+
+    ---
+
+    环境变量、TOML 键、默认值与约束。
+
+    [配置](configuration.zh.md)
+
+-   **工具注册表**
+
+    ---
+
+    全部 26 个 `bio_*` 工具、效果、数据分级与参数。
+
+    [工具](tools.zh.md)
+
+</div>
 
 约定：
 

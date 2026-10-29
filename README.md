@@ -60,7 +60,7 @@ Full bilingual site: <https://indexofire.github.io/bacmap/> (Chinese: `/zh/`).
 
 | Start | Read |
 |---|---|
-| Install and verify | [Getting started](docs/getting-started/index.md) |
+| Install and verify | [Getting started](docs/getting-started/installation.md) |
 | Configure endpoints, samples, MCP | [Configuration](docs/getting-started/configuration.md) |
 | Agent-driven walkthrough | [Tutorial](docs/getting-started/tutorial.md) |
 | CLI / Web / TUI / API | [Interfaces](docs/guide/interfaces.md) |

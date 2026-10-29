@@ -1,5 +1,49 @@
 # 指南：选择一种界面
 
+<div class="grid cards" markdown>
+
+-   **界面**
+
+    ---
+
+    Web、CLI、TUI 与 JSON API：路由、命令、按键与鉴权。
+
+    [界面](interfaces.zh.md)
+
+-   **任务与门**
+
+    ---
+
+    五种任务类型、参数、状态与四道门。
+
+    [任务与门](tasks.zh.md)
+
+-   **数据与身份**
+
+    ---
+
+    isolate → dataset → run、`samples.tsv`、登记、记录与外部数据集。
+
+    [数据与身份](data.zh.md)
+
+-   **智能体与计划**
+
+    ---
+
+    MCP Profile、Hermes/Pi/DSH 配置、计划创建与人工确认。
+
+    [智能体与计划](agent-plans.zh.md)
+
+-   **结果与证据**
+
+    ---
+
+    run 级结果、报告、运行记录、GOM 对象与检索。
+
+    [结果与证据](results.zh.md)
+
+</div>
+
 bacmap 有四类人工界面和一个机器接口。它们都对接同一个任务引擎，因此从 CLI 提交的任务在 Web
 控制台中同样可见、可审批，经 MCP 创建的计划也在同一处确认。
 
