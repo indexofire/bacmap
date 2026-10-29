@@ -1,117 +1,93 @@
-**English** | [简体中文](README.zh.md)
+**English** | [简体中文](README.zh-CN.md)
 
 # bacmap
 
-A local pathogen genome analysis system (with a built-in agent layer), built on a
-standalone architecture. The frozen design is documented in
-[docs/architecture-frozen-v1.md](docs/architecture-frozen-v1.md) (v1.4.10).
+A local pathogen-genomics workstation: deterministic analysis, a durable task engine with gates and
+an immutable evidence chain, and an MCP server for external AI agents. Data stays on the machine.
 
-## Overview
+Frozen design: [docs/concepts/frozen-design.md](docs/concepts/frozen-design.md) (English reference;
+the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.9.3**).
+Program version: **0.1.2**.
 
-A pathogen genomic epidemiology analysis system for a **single workstation**
-(64 GB RAM, data never leaves the local network):
+## What it does
 
-- **Tool registry** (25 `bio_*` tools): read-only and compute tools are exposed directly; every write operation goes through task submission;
-- **Task engine**: DBOS workflows (four task types, analyze / curate / mine / write, all checkpoint-resumable);
-- **Snakemake 9 pipelines**: QC → assembly → typing → AMR/virulence → report;
-- **Agent layer**: a local LLM (Strata / OpenAI-compatible endpoint) handles intent classification and interpretation drafting, with data-classification gating across the entire chain;
-- **External tool division of labor** (ADR-20): species identification belongs to [gside](https://github.com/indexofire/gside), gene screening and serotyping to gapit, MLST/cgMLST/MST to gmlst. bacmap only does orchestration and judgment;
-- **Integration**: MCP only (ruled in v1.4.8; stdio by default, Streamable HTTP with bearer auth). From v1.5, conversation is meant to happen in the native UI of an external harness — Hermes, Pi or DeepSeek Harness — while confirmations and approvals stay in bacmap's CLI/Web (ADR-21). MCP instances run under a data-class **profile**: `cloud` by default (D0–D1 tools only), `local-trusted` (up to D4) by explicit opt-in.
+- **Deterministic pipeline** — Snakemake 9 runs QC → assembly → species → typing/AMR → report.
+  Species identification, gene screening/serotyping and MLST/cgMLST are delegated to
+  [gside](https://github.com/indexofire/gside), `gapit` and `gmlst` (ADR-20).
+- **Five task types** — `analyze`, `curate`, `mine`, `write`, `record`. Every write goes through the
+  task layer; open-path scripts/drafts require a human-confirmed plan.
+- **Durable execution** — DBOS workflows checkpoint every step, so a crash resumes from the last
+  completed step; Snakemake resumes from `.snakemake`.
+- **Gates + human sign-off** — analysis claims, baseline release, mining and citation gates; agents
+  can propose, humans confirm plans and sign releases.
+- **Immutable evidence** — run-scoped results, `runs.sqlite` records, manifests with hashes/tool
+  versions/seeds, and versioned GOM objects.
+- **MCP-only agent access** — 26 registry tools plus plan/task/record tools, filtered by a fixed
+  `cloud` (default) or `local-trusted` data-class profile. No built-in chat (ADR-21).
+- **Interfaces** — Web task console, CLI, TUI, JSON API `/api/v1`, MCP (stdio / Streamable HTTP).
 
 ## Quick start
 
-Detailed documentation: [Tutorial](docs/tutorial.md) · [Installation](docs/installation.md) · [Configuration](docs/configuration.md) · [Usage](docs/usage.md) · [Operations](docs/operations.md) · [Agent harnesses](docs/harnesses.md)
-
 ```bash
-pixi install          # 安装运行时环境（含生信工具链）
-pixi shell            # 进入环境
-bacmap --help         # 统一命令行入口
+git clone <repo> bacmap && cd bacmap
+pixi install            # runtime environment (Python 3.12 + bioinformatics tools)
+pixi shell
+bacmap --version        # 0.1.2
+bacmap doctor           # health check
+bacmap web              # http://127.0.0.1:8800
 ```
 
-| Command | Description |
-|---|---|
-| `bacmap tui [--home H]` | Task console (Textual): tasks/samples sidebar, operation log, command input, leader chords (`Ctrl+G`), approval signing |
-| `bacmap console [--home H]` | Interactive menu (rich) for users who prefer prompts over subcommands |
-| `bacmap overview [--json]` | System overview (endpoints / data policy / versions / paths / sandbox) |
-| `bacmap task ls\|show\|submit\|approve\|cancel` | Task query and write operations (explicit, no-LLM path) |
-| `bacmap plan ls\|show\|confirm\|reject` | Review and confirm analysis plans proposed by agents over MCP (v1.5.1; also at Web `/plans`) |
-| `bacmap record metadata\|lab\|knowledge-import\|knowledge-approve` | Enter metadata, lab results and knowledge entries through the task layer (v1.7; also at Web `/records`) |
-| `bacmap run ls\|show\|compare` · `bacmap gom ls\|show` | Evidence trail: run records and GOM objects (v1.7.1; Web `/runs`, `/gom`) |
-| `bacmap doctor` · `bacmap backup` · `bacmap restore` · `bacmap events prune` | Health check, backup/restore, event retention (v1.7.2; see the operations guide) |
-| `bacmap sample ls\|show` / `bacmap search` | Sample browsing and search |
-| `bacmap mcp [--read-only] [--profile cloud\|local-trusted] [--home H]` | Start the MCP server: stdio (default) or Streamable HTTP with bearer auth (ADR-12). Up to 22 read/compute tools plus task tools, filtered by profile (default `cloud`) |
-| `bacmap web [--host 127.0.0.1] [--port 8800]` | Start the web console (tasks / assistant / samples / search / reports) |
+First analysis:
 
-All query subcommands accept `--json` for scripting. Equivalent module form:
-`python -m bacmap.interfaces.mcp` / `python -m bacmap.interfaces.web`.
+```bash
+bacmap task submit --type analyze --samples SAM-TYP-001
+bacmap task list
+bacmap task show <task_id>
+```
+
+Agent flow:
+
+```bash
+bacmap mcp --profile local-trusted     # or plain `bacmap mcp` for cloud
+bacmap plan list
+bacmap plan show <plan_id>
+bacmap plan confirm <plan_id> --version 1 --hash <first-12-chars>
+```
+
+## Documentation
+
+Full bilingual site: <https://indexofire.github.io/bacmap/> (Chinese: `/zh/`).
+
+| Start | Read |
+|---|---|
+| Install and verify | [Getting started](docs/getting-started/index.md) |
+| Configure endpoints, samples, MCP | [Configuration](docs/getting-started/configuration.md) |
+| Agent-driven walkthrough | [Tutorial](docs/getting-started/tutorial.md) |
+| CLI / Web / TUI / API | [Interfaces](docs/guide/interfaces.md) |
+| Task types and gates | [Tasks & gates](docs/guide/tasks.md) |
+| Identity, samples, records | [Data & identity](docs/guide/data.md) |
+| Hermes / Pi / DSH + plans | [Agents & plans](docs/guide/agent-plans.md) |
+| Results, runs, GOM | [Results & evidence](docs/guide/results.md) |
+| Architecture and DBOS | [Concepts](docs/concepts/index.md) |
+| Backup, upgrades, troubleshooting | [Operations](docs/operations/index.md) |
+| Exact CLI/MCP/API/config/tools | [Reference](docs/reference/index.md) |
 
 ## Development
 
 ```bash
-pixi run -e dev test        # pytest（基线：1369 passed）
+pixi install -e dev
+pixi run -e dev test        # pytest (current baseline: 1610 passed)
 pixi run -e dev lint        # ruff
-pixi run -e dev contracts   # import-linter 依赖方向契约
+pixi run -e dev typecheck   # mypy
+pixi run -e dev contracts   # import-linter (5 contracts)
+pixi run -e dev docs-build  # mkdocs, both languages
 ```
 
-> Note: pytest and ruff are installed in the **dev environment**, so tasks must include `-e dev`;
-> the default environment ships runtime dependencies only.
+> Always use `-e dev` for pytest/ruff; the default environment has runtime dependencies only.
 
-## Data directory layout (ADR-03)
-
-No path is derived from the source tree location. Everything lives under `BACMAP_HOME`
-(default `~/.local/share/bacmap`, overridable through the `BACMAP_HOME` environment variable):
-
-```
-$BACMAP_HOME/
-├── data/            # 本地库（bacmap.sqlite：元数据/化验/特征索引）与参考库（reference/、db/）
-├── results/         # 分析结果
-├── workflows/       # 工作流文件
-├── workflow_state/  # .snakemake 运行状态与日志
-├── gom.sqlite       # GOM：分析对象 + 门/审计事件
-├── runs.sqlite      # 分析运行记录（ADR-18）
-├── tasks.sqlite     # 任务表
-├── dbos.sqlite      # DBOS 系统库
-└── config.toml      # 可选配置（LLM 端点、路由、数据策略）
-```
-
-## Configuring third-party LLM APIs
-
-All endpoints use the **OpenAI-compatible protocol** (the `pydantic-ai` openai channel). In `$BACMAP_HOME/config.toml`:
-
-```toml
-[llm.endpoints.strata]
-location = "local"                # local | lan | cloud
-base_url = "http://127.0.0.1:8080/v1"
-model = "qwen3.8-flash-next-iq3_xxs"
-
-[llm.endpoints.deepseek]          # 任意 OpenAI 兼容第三方 API
-location = "cloud"
-base_url = "https://api.deepseek.com/v1"
-model = "deepseek-chat"
-api_key_env = "DEEPSEEK_API_KEY"  # 密钥从环境变量读取，不落盘
-
-[llm.routing]
-intent_classifier = "strata"
-interpretation = "deepseek"
-
-[llm.data_policy]
-cloud_max_data_class = "D1"       # ADR-16：cloud 端点默认 D1，管理员最多放宽到 D2；D3/D4 永不
-```
-
-## Verification status (§8)
-
-| Item | Content | Status |
-|---|---|---|
-| V1 | 12-strain gold-standard end-to-end run (Snakemake 9.x) | ✅ PASS |
-| V3 | Intent classification / tool calling / mining samples / license (tested live on Strata, evidence §10.20) | ✅ 99/100 · tools 45/46 · mining 3/3 · license confirmed · IQ3_XXS single profile + arbitration |
-| V4 | MCP connection from Hermes (22 tools) | ✅ Connected 2038ms |
-| V8 | Three re-runs, identical field by field | ✅ IDENTICAL |
-| V10 | gside/gmlst/gapit integration review | ✅ 10/12 (2 attributed: limits inherent to the marker method) |
-| V11 | Enforcement of the six gates | ✅ all intercepted |
-| V2/V6/V7 | DBOS recovery / pydantic-ai×Strata / same-machine arbitration | ✅ (completed with the migration steps) |
-| V5 | Apptainer on Xinchuang Kylin V10 | ⏳ waiting for a physical machine |
-| V9 | Cloud API + data-classification interception, live test | ⏳ waiting for API credentials |
+Dependency direction and contribution rules: [Development](docs/development/index.md) and
+[AGENTS.md](AGENTS.md).
 
 ## License
 
-[MIT](LICENSE) © 2026 indexofire
+See [LICENSE](LICENSE).

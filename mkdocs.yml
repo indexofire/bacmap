@@ -27,14 +27,30 @@ plugins:
           build: true
           nav_translations:
             Home: 首页
-            Installation: 安装
+            Getting Started: 快速开始
+            Guide: 使用指南
+            Concepts: 核心概念
+            Operations: 运维
+            Reference: 参考
+            Development: 开发
             Configuration: 配置
             Tutorial: 教程
-            Usage: 使用
-            Tools: 工具
-            Operations: 运维
-            Harnesses: 智能体
+            Interfaces: 界面
+            Tasks & Gates: 任务与门
+            Data & Identity: 数据与身份
+            Agents & Plans: 智能体与计划
+            Results & Evidence: 结果与证据
             Architecture: 架构
+            Data Model: 数据模型
+            Task Engine & DBOS: 任务引擎与 DBOS
+            Security: 安全
+            Frozen Design: 冻结设计
+            Troubleshooting: 排障
+            CLI: 命令行
+            MCP: MCP
+            HTTP API: HTTP API
+            Configuration Reference: 配置参考
+            Tools: 工具
 
 theme:
   name: material
@@ -68,14 +84,36 @@ theme:
 
 nav:
   - Home: index.md
-  - Installation: installation.md
-  - Configuration: configuration.md
-  - Tutorial: tutorial.md
-  - Usage: usage.md
-  - Tools: tools.md
-  - Operations: operations.md
-  - Harnesses: harnesses.md
-  - Architecture: architecture-frozen-v1.md
+  - Getting Started:
+      - getting-started/index.md
+      - Configuration: getting-started/configuration.md
+      - Tutorial: getting-started/tutorial.md
+  - Guide:
+      - guide/index.md
+      - Interfaces: guide/interfaces.md
+      - Tasks & Gates: guide/tasks.md
+      - Data & Identity: guide/data.md
+      - Agents & Plans: guide/agent-plans.md
+      - Results & Evidence: guide/results.md
+  - Concepts:
+      - concepts/index.md
+      - Architecture: concepts/architecture.md
+      - Data Model: concepts/data-model.md
+      - Task Engine & DBOS: concepts/task-engine.md
+      - Security: concepts/security.md
+      - Frozen Design: concepts/frozen-design.md
+  - Operations:
+      - operations/index.md
+      - Troubleshooting: operations/troubleshooting.md
+  - Reference:
+      - reference/index.md
+      - CLI: reference/cli.md
+      - MCP: reference/mcp.md
+      - HTTP API: reference/api.md
+      - Configuration Reference: reference/configuration.md
+      - Tools: reference/tools.md
+  - Development:
+      - development/index.md
 
 markdown_extensions:
   - tables

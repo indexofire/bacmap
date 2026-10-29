@@ -5,7 +5,7 @@ bacmap：本地病原菌基因组分析系统（单工作站、数据不出网�
 
 ## 黄金规则（违反任何一条即返工）
 
-1. **冻结文档是宪法**：`docs/architecture-frozen-v1.zh.md`（v1.9.3）中标"冻结"的决策，
+1. **冻结文档是宪法**：`docs/concepts/frozen-design.zh.md`（v1.9.3）中标"冻结"的决策，
    修改必须在该文档第 10 节新增一条 `v1.9.x` 修订记录（原因、证据、迁移成本），
    并同步 `dev/research-framework-evidence.md` 的对应 §10.x 证据小节。
 2. **依赖方向契约（ADR-02）**：`core/store/tools` 不得导入
@@ -31,10 +31,11 @@ bacmap：本地病原菌基因组分析系统（单工作站、数据不出网�
 9. **文档双语制与及时同步**：英文为默认语言（README.md、docs/<name>.md），
    中文版带 `.zh.md` 后缀；站点由 `mkdocs-static-i18n` 在页面顶部提供中英切换
    （`/` 与 `/zh/`），源文件不再手写语言链接。改文档时两版同步改，
-   架构冻结文档以中文版（`docs/architecture-frozen-v1.zh.md`）为权威（英文版为参考翻译）。
+   架构冻结文档以中文版（`docs/concepts/frozen-design.zh.md`）为权威（英文版为参考翻译）。
 10. **功能变更必须同步文档**：新增或修改功能（工具、路由、任务行为、CLI、
-    配置项）的同一批改动中，必须更新受影响文档——README 双语、
-    docs/usage|configuration|installation 双语、docs/tools 双语（注册表变化时）。
+    配置项）的同一批改动中，必须更新受影响文档——README 双语，以及
+    `docs/getting-started|guide|concepts|operations|reference` 中对应的中英文页面
+    （页面结构见 `mkdocs.yml` 的 nav）。
     提交前自查：这个行为变化用户能在文档里读到吗？读不到就先补文档。
     涉及冻结决策的另走第 1 条修订流程。
 
@@ -75,7 +76,7 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟；默认 c
   （`application/plans.py::PlanService` 是 CLI/Web/MCP 共用实现，不要在接口层另写一套）。
 - 计划/任务关键转换写领域事件（`tasks/events.py`）；对外 JSON 接口放 `/api/v1`（`interfaces/web/api.py`），
   错误用 `application/errors.py` 的统一码。
-- 接 Harness 的步骤与实测记录见 `docs/harnesses.md`（含 Hermes 0.17 全新 data root 引导失败的上游问题）。
+- 接 Harness 的步骤与实测记录见 `docs/guide/agent-plans.md`（含 Hermes 0.17 全新 data root 引导失败的上游问题）。
 - SQLite 表结构变更一律走 `store/migrations.py` 的编号迁移（只追加，不改已发布迁移）；
   不再新增裸 `CREATE TABLE IF NOT EXISTS` 式建表。
 

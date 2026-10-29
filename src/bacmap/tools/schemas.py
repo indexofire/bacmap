@@ -854,7 +854,7 @@ INSPECT_DATASET = {
         "lists all registered datasets (id, kind, size, status, source path). With "
         "dataset_id, returns the file manifest, SHA256 manifest hash and sandbox "
         "mount; set verify=true to recompute SHA256 and detect changes. Pass a "
-        "dataset_id to sandbox_run to read that data inside the sandbox."
+        "dataset_id to a mine task's input_paths to read that data inside the sandbox."
     ),
     "parameters": {
         "type": "object",

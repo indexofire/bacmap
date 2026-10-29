@@ -5,6 +5,14 @@
 
 ## [未发布]
 
+### 文档站重构：按软件文档结构重写（中英双语）
+- 信息架构改为 Home / Getting Started / Guide / Concepts / Operations / Reference /
+  Development；新增概念、参考、开发章节与各节 landing page。
+- 内容按当前代码校准：五类任务、`bacmap_record_data`、计划归属、run 级结果隔离、
+  DBOS 检查点备份、`samples.tsv` 相对路径与 ID 规则等。
+- 大量补充可复制示例（CLI/JSON/TOML/MCP/API）与概念解释；README 同步重写。
+- 中文页面统一为 `.zh.md`，顶部语言切换由 `mkdocs-static-i18n` 提供。
+
 ### 冻结文档 v1.9.3：并发 run 隔离 + DBOS 检查点备份
 - analyze 的 summary/门/报告/cgMLST/队列入库只读 `results/runs/<task_id>/`；
   报告脚本内部支持 `--results-dir`。

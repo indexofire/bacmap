@@ -30,7 +30,7 @@ pixi install && pixi shell     # install bacmap itself (the only command you mus
 bacmap doctor                  # health check: home, databases, sandbox, model, disk
 ```
 
-Then connect one agent (pick one; configuration in the [harness guide](harnesses.md)):
+Then connect one agent (pick one; configuration in the [harness guide](../guide/agent-plans.md)):
 
 - **Hermes** — result checks and notifications from a phone IM;
 - **Pi** — the most comfortable terminal assistant;
@@ -62,17 +62,19 @@ hermes mcp test bacmap
 
 ```
 ✓ Connected (1939ms)
-✓ Tools discovered: 10
+✓ Tools discovered (cloud profile)
   bio_list_reference_genomes, bio_diagnose,
   bacmap_capabilities, bacmap_create_plan, bacmap_revise_plan, bacmap_get_plan,
-  bacmap_submit_task, bacmap_task_status, bacmap_task_cancel, bacmap_task_result
+  bacmap_confirm_plan_locally, bacmap_submit_task, bacmap_task_status,
+  bacmap_task_cancel, bacmap_task_result
 ```
 
 Two things to know:
 
 1. Hermes needs its **own** model configuration (`/model` or `/login` inside Hermes). That is separate
    from bacmap's `config.toml` endpoint, which only powers in-task interpretation.
-2. The default `cloud` profile exposes these 10 tools; not seeing `bio_get_result` is expected (data classes).
+2. The default `cloud` profile exposes only tools within the data-class ceiling; not seeing
+   `bio_get_result` is expected. The exact list is reported by `bacmap_capabilities`.
 
 ### 3.2 Launch and state the request
 
@@ -198,6 +200,8 @@ Where an isolate came from, lab results, supporting papers — just say it:
 > **Agent**: "Staged as entry 12; it becomes citable only after review. Approve now?"
 
 All writes go through the task layer: they are auditable, not "the agent edited the database".
+The MCP `bacmap_record_data` tool is only registered on the **local-trusted** profile; under the
+default `cloud` profile use the Web **Records** page or `bacmap record …` for the same task path.
 
 When the information is complete:
 
@@ -289,9 +293,9 @@ locally and the model handles understanding and explanation.
 ## 10. When you still use the CLI or web console
 
 - **Deployment, health checks, backup, upgrade**: `bacmap doctor`, `backup`, `restore`
-  ([operations guide](operations.md));
+  ([operations guide](../operations/index.md));
 - **No agent available**: the Web console covers submission, confirmation, approval and reports;
-- **Automation/batch**: CLI and `/api/v1` ([usage guide](usage.md)).
+- **Automation/batch**: CLI and `/api/v1` ([interfaces guide](../guide/interfaces.md)).
 
 They are the fallback, not an "expert-only" tier.
 
@@ -315,4 +319,4 @@ They are the fallback, not an "expert-only" tier.
 >
 > If you forget the commands, remember three things: **where the data is, what you need, and who signs.**
 
-Further reading: [usage guide](usage.md) · [agent harnesses](harnesses.md) · [operations](operations.md) · [tool reference](tools.md)
+Further reading: [interfaces guide](../guide/interfaces.md) · [agent harnesses](../guide/agent-plans.md) · [operations](../operations/index.md) · [tool reference](../reference/tools.md)

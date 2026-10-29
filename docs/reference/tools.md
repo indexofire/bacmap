@@ -1,11 +1,34 @@
 # bacmap Tool Reference
 
 
-The tool registry in `bacmap.tools.registry` is the single catalog of what bacmap can do. Each entry is a `ToolSpec` with a name, version, description, effect, and trust layer. One source of truth feeds the MCP server and the built-in agents. This page documents all 26 registered tools; all currently sit at version 0.1.0.
+The tool registry in `bacmap.tools.registry` is the single catalog of what bacmap can do. Each entry is a `ToolSpec` with a name, version, description, effect, and trust layer. One source of truth feeds the MCP server and the interfaces that call tool handlers. This page documents all 26 registered tools; all currently sit at version 0.1.0.
 
-Every tool carries an effect label. `read` tools query stored results. `compute` tools run analysis or wrap external binaries without writing persistent state. `write` tools change the GOM or the database, and they are never registered into MCP directly. The MCP server exposes the 22 read/compute tools plus the task tools `bacmap_submit_task`, `bacmap_task_status`, `bacmap_task_result` and `bacmap_task_cancel` (v1.5.2), the plan tools `bacmap_create_plan`, `bacmap_revise_plan` and `bacmap_get_plan`, `bacmap_record_data` (local-trusted only, v1.8.4) and `bacmap_confirm_plan_locally` (stdio dialog, v1.9.0). Tasks reach the engine only through task submission or a plan confirmed in the bacmap CLI/Web; MCP has no confirmation tool. In read-only mode (`bacmap mcp --read-only`), even the task tools stay unregistered. From v1.5 each MCP instance is also filtered by its **profile** (ADR-12/16): the default `cloud` profile only exposes tools whose output data class is at or below `cloud_max_data_class` (D1 by default, so only `bio_list_reference_genomes` and `bio_diagnose`), while `local-trusted` (an explicit administrator opt-in) exposes all 22. See the [usage guide](usage.md).
+Every tool carries an effect label. `read` tools query stored results. `compute` tools run analysis or wrap external binaries without writing persistent state. `write` tools change the GOM or the database, and they are never registered into MCP directly. The MCP server exposes the 22 read/compute tools plus the task tools `bacmap_submit_task`, `bacmap_task_status`, `bacmap_task_result` and `bacmap_task_cancel` (v1.5.2), the plan tools `bacmap_create_plan`, `bacmap_revise_plan` and `bacmap_get_plan`, `bacmap_record_data` (local-trusted only, v1.8.4) and `bacmap_confirm_plan_locally` (stdio dialog, v1.9.0). Tasks reach the engine only through task submission or a plan confirmed in the bacmap CLI/Web; there is no model-confirm tool. In read-only mode (`bacmap mcp --read-only`), even the task tools stay unregistered. From v1.5 each MCP instance is also filtered by its **profile** (ADR-12/16): the default `cloud` profile only exposes read/compute tools whose output data class is at or below `cloud_max_data_class` (D1 by default, so only `bio_list_reference_genomes` and `bio_diagnose`; the plan/task/capability tools are added separately), while `local-trusted` (an explicit administrator opt-in) exposes all 22 read/compute tools. See [Agents & plans](../guide/agent-plans.md).
 
 Trust layers mark how much autonomy the calling layer has: L1 is the fixed pipeline, invoke only, no rewriting; L2 is controlled exploration in a sandbox with human review; L3 is free conversation behind gates. The 26 tools split into 9 read, 13 compute, and 4 write. The four write tools are `bio_analyze_pathogen`, `bio_generate_report`, `bio_add_lab_result`, and `bio_add_metadata`.
+
+## Calling a tool
+
+MCP clients pass a single JSON object as the tool arguments (the same shape as the `parameters`
+section below). Examples:
+
+```json
+// bio_get_result
+{"sample_id": "SAM-001"}
+
+// bio_search_samples
+{"serotype": "Typhimurium", "amr_gene": "blaCTX-M-15", "limit": 20}
+
+// bio_compare_runs
+{"sample_id": "SAM-001", "run_a": "4f2c...", "run_b": "9a31..."}
+
+// bio_inspect_dataset
+{"dataset_id": "ds-0123456789abcdef", "verify": true}
+```
+
+Internal callers (CLI, Web, task steps) use the same handler contract:
+`handler(args: dict) -> str` returning a JSON string. Errors are `{"error": "..."}` with the
+exception type only; full details stay in logs.
 
 ## Summary
 
@@ -86,7 +109,7 @@ Align sequencing reads to a reference genome. Wraps BWA-MEM (short-read DNA), mi
 
 Version `v0.1.0` | Effect: `write` | Trust layer: `L1`
 
-Run the full pathogen analysis pipeline (QC, assembly, species identification via invA/uidA/ipaH three-gene routing, MLST, serotyping, AMR, virulence, plasmid, DEC pathotype, report). Works for Salmonella, DEC (E. coli), Shigella, EIEC; species routing is automatic. Returns a summary of results. For pipeline guidance and troubleshooting, read the MCP prompt bacmap_role_analyst.
+Run the full pathogen analysis pipeline (QC, assembly, species identification via gside, MLST/cgMLST via gmlst, screening/serotyping via gapit, AMR/virulence/plasmid, report). Species routing is automatic and follows the pathogen registry. Returns a summary of results. For pipeline guidance and troubleshooting, read the MCP prompt bacmap_role_analyst.
 
 **Parameters**
 
@@ -193,7 +216,7 @@ Retrieve analysis summary for a completed sample. Returns species type (Salmonel
 
 Version `v0.1.0` | Effect: `read` | Trust layer: `L1`
 
-List or inspect datasets registered for sandbox access — local paths the user provided, registered zero-copy with SHA256 by a `mine` task's `input_paths`. Without `dataset_id` it lists all registered datasets; with `dataset_id` it returns the file manifest, manifest SHA256 and the sandbox mount point. Pass a `dataset_id` to `sandbox_run` to read that data inside the sandbox.
+List or inspect datasets registered for sandbox access — local paths the user provided, registered zero-copy with SHA256 by a `mine` task's `input_paths`. Without `dataset_id` it lists all registered datasets; with `dataset_id` it returns the file manifest, manifest SHA256 and the sandbox mount point. A `mine` task receives these datasets as read-only mounts; the workspace `context.json` maps each `dataset_id` to its guest path.
 
 **Parameters**
 
