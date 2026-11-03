@@ -82,8 +82,7 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟；默认 c
 
 ## 外部工具依赖（pixi [pypi-dependencies]）
 
-- `gside`：PyPI 发布版（当前 ==0.1.4）
-- `gapit ==0.5.6`、`gmlst ==0.5.5`：PyPI 发布版
+- `gside ==0.2.2`、`gapit ==0.6.8`、`gmlst ==0.6.1`、`gseek ==0.10.4`：PyPI 发布版
 - 升级这些工具后必须复核：CLI 接口签名 + bacmap 侧解析器 + V10 式单株冒烟
 
 ## 已知占位（等外部能力就绪后替换）

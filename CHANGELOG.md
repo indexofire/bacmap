@@ -5,6 +5,19 @@
 
 ## [未发布]
 
+### 外部工具依赖升级（gside / gapit / gmlst / gseek）
+- PyPI 依赖升级：`gside 0.1.4 → 0.2.2`、`gapit 0.5.6 → 0.6.8`、
+  `gmlst 0.5.5 → 0.6.1`；新增 `gseek ==0.10.4`（gside 0.2+ 依赖，gapit/gmlst
+  可选引擎共用）。
+- 适配 gapit 0.6 数据库重命名：`ecoli_dec → eco_dec`、`lm_doumith → lmo_sero`。
+- 补齐 Listeria MLST 声明 `lmonocytogenes_1`，并修复未声明物种静默回退
+  `salmonella_2` 的问题；无 scheme 时如实输出 `scheme=none / ST=N/A`。
+- CLI 签名复核与真实单株 analyze 冒烟通过：gside 0.2.2 鉴定
+  *E. coli*（high）、gmlst 0.6.1 得 ecoli_1 ST795、gapit 0.6.8 eco_dec 得
+  EPEC_atypical（high），ecoh 如实 `no_scheme`，分析门 pass。
+- 注意：gapit 0.6.7 起 `ecoh`/`ncbi`/`resfinder` 不再随 wheel 捆绑，需要时在安装期
+  `gapit db fetch -d ...`。
+
 ### 配置模板与分层配置路径
 - 新增根目录模板 `config.example.toml`，并纳入发行包。
 - 新增 `bacmap config init|path`：默认写 `$BACMAP_HOME/config.toml`，`--user` 写

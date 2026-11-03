@@ -7,7 +7,7 @@ JSON：
     {
       "status": "ran" | "skipped" | "empty",
       "databases": {
-        "lm_doumith": {"status": "ran", "schemes": {"doumith_serogroup": "IIa"},
+        "lmo_sero": {"status": "ran", "schemes": {"doumith_serogroup": "IIa"},
                         "confidence": "high", "genes": [...], "raw": {...}},
         "ecoh":       {"status": "no_scheme", "error": "database 'ecoh' carries no typing scheme"}
       }
@@ -20,7 +20,7 @@ JSON：
 - ``skipped``    gapit 不在 PATH；
 - ``failed``     screen/typing 执行失败（带 stage/error）。
 
-`ecoli_dec` 由 `run_dec_typing.py` 专门处理（DEC 致病型有独立契约），此处排除。
+`eco_dec` 由 `run_dec_typing.py` 专门处理（DEC 致病型有独立契约），此处排除。
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ import sys
 from pathlib import Path
 
 # 由专用步骤承担的库（避免重复执行）：DEC 致病型走 run_dec_typing.py。
-_HANDLED_ELSEWHERE = frozenset({"ecoli_dec"})
+_HANDLED_ELSEWHERE = frozenset({"eco_dec"})
 
 _NO_SCHEME_CODES = frozenset({"TYPING_NO_SCHEME"})
 

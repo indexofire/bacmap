@@ -6,7 +6,7 @@ A local pathogen-genomics workstation: deterministic analysis, a durable task en
 an immutable evidence chain, and an MCP server for external AI agents. Data stays on the machine.
 
 Frozen design: [docs/concepts/frozen-design.md](docs/concepts/frozen-design.md) (English reference;
-the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.10.6**).
+the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.10.7**).
 Program version: **0.1.2**.
 
 ## Operating in natural language (the intended entry point)

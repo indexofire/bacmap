@@ -61,4 +61,4 @@ Conventions:
 - CLI query commands accept `--json`.
 - MCP tool arguments are shown as JSON objects; the actual call is made by the client.
 - Data classes: D0 public, D1 aggregate, D2 single-strain, D3 sequence, D4 personal.
-- The program version and the frozen design revision are independent (currently 0.1.2 / v1.10.6).
+- The program version and the frozen design revision are independent (currently 0.1.2 / v1.10.7).

@@ -79,7 +79,7 @@ def test_non_salmonella_marks_sistr_not_applicable(tmp_path):
     assert summary["steps"]["serotype"]["sistr_status"] == "not_applicable"
     assert "vpa_serotype" not in summary["steps"]
     assert "vpa_virulence" not in summary["steps"]
-    # DEC 致病型仍适用（ECO 有 ecoli_dec）
+    # DEC 致病型仍适用（ECO 有 eco_dec）
     # 本桩未提供 pathotype 文件 → 该子步骤不适用
     assert summary["steps"]["dec"]["pathotype_status"] == "not_applicable"
 

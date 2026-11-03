@@ -8,7 +8,7 @@ from bacmap.core.analysis.dec_pathotype import summarize
 def _ran(phenotypes: dict, genes: list[str] | None = None) -> dict:
     return {
         "status": "ran",
-        "db": "ecoli_dec",
+        "db": "eco_dec",
         "files": [
             {
                 "file": "contigs.fasta",

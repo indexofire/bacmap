@@ -2,7 +2,7 @@ import sys
 
 # DEC + Shigella 分析（project.md §7.3.2-3）
 # v1.4.7：ecoh/shigella 血清型判定外移外部工具（用户裁定），集成前输出占位；
-# v1.4.18：DEC 致病型判定外移 gapit（`ecoli_dec` 库）——bacmap 不再自判路径型。
+# v1.4.18：DEC 致病型判定外移 gapit（`eco_dec` 库）——bacmap 不再自判路径型。
 # v1.4.24：志贺菌血清型接 **ShigaTyper**（读段级外部工具；未来迁 gapit），
 #          且本文件各步骤仅在物种适用时由 report 依赖触发（SISTR 只属沙门菌）。
 
@@ -31,7 +31,7 @@ rule dec_pathotype:
         py_script = str(PROJECT_ROOT / "workflows/bacmap/scripts/run_dec_typing.py"),
         python = sys.executable,
         workdir = str(WORKDIR) + "/{sample}/dec",
-        db = "ecoli_dec"
+        db = "eco_dec"
     threads: 4
     shell:
         "mkdir -p $(dirname {output.result}) && "

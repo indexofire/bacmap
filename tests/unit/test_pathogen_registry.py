@@ -21,6 +21,7 @@ GOLDEN_MLST_SCHEMES = {
     "SHI": "ecoli_1",
     "ECO": "ecoli_1",
     "VPA": "vparahaemolyticus_1",
+    "LMO": "lmonocytogenes_1",  # Pasteur 7 位点；此前缺声明导致静默回退 salmonella_2
 }
 GOLDEN_CGMLST_SCHEMES = {
     "SAL": "senterica_2",
@@ -35,9 +36,9 @@ GOLDEN_AMRFINDER_ORGANISMS = {
     # V.parahaemolyticus 故意缺席：AMRFinderPlus 无其策展库 → 不传 -O。
 }
 GOLDEN_GAPIT_SCREENS = {
-    "ECO": ["ecoli_dec", "ecoh"],
+    "ECO": ["eco_dec", "ecoh"],
     "VPA": ["vpara_virulence"],
-    "LMO": ["lm_doumith"],
+    "LMO": ["lmo_sero"],
     "KPN": ["kpsc_k", "kpsc_o"],
     "ABA": ["ab_k", "ab_o"],
 }
@@ -202,8 +203,8 @@ class TestResolveDualAccept:
     def test_gapit_screens_for(self):
         from bacmap.core.pathogen_registry import gapit_screens_for
 
-        assert gapit_screens_for("E.coli") == ["ecoli_dec", "ecoh"]
-        assert gapit_screens_for("Listeria_monocytogenes") == ["lm_doumith"]
+        assert gapit_screens_for("E.coli") == ["eco_dec", "ecoh"]
+        assert gapit_screens_for("Listeria_monocytogenes") == ["lmo_sero"]
         assert gapit_screens_for("Salmonella") == []
         assert gapit_screens_for("Unknown") == []
 

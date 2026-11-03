@@ -1,4 +1,4 @@
-"""DEC 致病型结果归一（gapit `ecoli_dec` → 摘要字段）。
+"""DEC 致病型结果归一（gapit `eco_dec` → 摘要字段）。
 
 纯格式适配（ADR-20：判定由 gapit 做，bacmap 只整理形状）。输入是
 ``gapit.typing_result/1``（见 `gapit typing -f json`）或我们的 skipped/failed 信封；

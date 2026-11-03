@@ -1,7 +1,7 @@
 # gapit 分型编排（ADR-20：外部工具；bacmap 只编排 + 适配）。
 # 库清单由 registry 的 `gapit_screens` 派生（samples.tsv species → 码 → 库），
 # 逐库 screen + typing；无 scheme 的库如实记 no_scheme（不猜测）。
-# ecoli_dec 由 dec_pathotype 规则专门处理（DEC 致病型契约），此处排除。
+# eco_dec 由 dec_pathotype 规则专门处理（DEC 致病型契约），此处排除。
 
 import sys
 

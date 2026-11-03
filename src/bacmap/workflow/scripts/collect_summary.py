@@ -78,7 +78,7 @@ if sistr_path is None:
     summary["steps"]["serotype"]["sistr_status"] = "not_applicable"
     summary["steps"]["serotype"]["sistr_reason"] = "SISTR 仅用于沙门菌血清型预测"
 
-# gapit 分型（registry 驱动；lm_doumith 等带 typing scheme 的库给出表型）
+# gapit 分型（registry 驱动；lmo_sero 等带 typing scheme 的库给出表型）
 from bacmap.core.analysis.gapit_typing import summarize as summarize_gapit_typing  # noqa: E402
 
 gapit_tp = summarize_gapit_typing(read_json(snakemake.input.gapit_typing, {}))
@@ -112,7 +112,7 @@ if _dec_applicable:
     dec_serotype = read_json(dec_serotype_path, {}) if dec_serotype_path else {}
     if not isinstance(dec_serotype, dict):
         dec_serotype = {}
-    # DEC 致病型：gapit `ecoli_dec` 的 typing 结果（v1.4.18，判定外部化）
+    # DEC 致病型：gapit `eco_dec` 的 typing 结果（v1.4.18，判定外部化）
     from bacmap.core.analysis.dec_pathotype import (
         summarize as summarize_dec_pathotype,
     )
@@ -171,7 +171,7 @@ if _dec_applicable:
     summary["steps"]["dec"]["primary_serotype"] = primary_serotype
     summary["steps"]["dec"]["serotype_method"] = serotype_method
 else:
-    # 非 DEC/志贺菌物种：整段不适用（不跑 gapit ecoli_dec / ecoh / ShigaTyper）
+    # 非 DEC/志贺菌物种：整段不适用（不跑 gapit eco_dec / ecoh / ShigaTyper）
     summary["steps"]["dec"] = {
         "status": "not_applicable",
         "reason": "DEC 致病型 / 志贺菌血清型仅适用于大肠埃希菌与志贺菌",

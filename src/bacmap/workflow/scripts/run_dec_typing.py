@@ -1,6 +1,6 @@
-"""DEC 致病型判定（gapit `ecoli_dec`，ADR-20：bacmap 只编排 + 适配）。
+"""DEC 致病型判定（gapit `eco_dec`，ADR-20：bacmap 只编排 + 适配）。
 
-调 `gapit screen --db ecoli_dec` + `gapit typing -f json`，把
+调 `gapit screen --db eco_dec` + `gapit typing -f json`，把
 ``gapit.typing_result/1`` 原样写入 `--out`（供报告与运行记录溯源）。
 
 **gapit 缺失不静默**：写 `status="skipped"` + reason；screen/typing 失败写
@@ -96,11 +96,11 @@ def run(contigs: Path, out: Path, workdir: Path, *, db: str, timeout: int) -> in
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="DEC pathotype via gapit ecoli_dec")
+    ap = argparse.ArgumentParser(description="DEC pathotype via gapit eco_dec")
     ap.add_argument("--contigs", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--workdir", required=True)
-    ap.add_argument("--db", default="ecoli_dec")
+    ap.add_argument("--db", default="eco_dec")
     ap.add_argument("--timeout", type=int, default=600)
     args = ap.parse_args()
     return run(

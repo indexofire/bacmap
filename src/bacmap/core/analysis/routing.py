@@ -6,7 +6,7 @@
 - SISTR 只做**沙门菌**血清型；
 - ShigaTyper（未来迁 gapit）只做**志贺菌**血清型；
 - `ecoh`（gapit）只做**大肠埃希菌** O/H；
-- `ecoli_dec`（gapit）只做**大肠埃希菌/志贺菌** DEC 致病型；
+- `eco_dec`（gapit）只做**大肠埃希菌/志贺菌** DEC 致病型；
 - `vpara_virulence`/vpara 血清型只做**副溶血性弧菌**。
 
 本模块是纯函数（无 Snakemake 依赖），供 `rules/report.smk` 构造条件依赖，也便于单测。
@@ -62,7 +62,7 @@ def report_inputs(
         files["ectyper"] = f"{base}/dec/ecoh_serotype.json"
     if engine == "shigatyper":
         files["shigella_serotype"] = f"{base}/dec/shigella_serotype.json"
-    if uses_gapit_db(species_value, "ecoli_dec"):
+    if uses_gapit_db(species_value, "eco_dec"):
         files["pathotype"] = f"{base}/dec/pathotype.json"
     if uses_gapit_db(species_value, "vpara_virulence"):
         files["vpa_serotype"] = f"{base}/vpa/vpa_serotype.json"

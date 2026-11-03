@@ -52,12 +52,12 @@ class TestSerotypeEngine:
 
 
 class TestGapitDbRouting:
-    def test_ecoli_dec_only_where_declared(self):
-        assert uses_gapit_db("DEC", "ecoli_dec") is True
-        # 志贺菌的血清型走 ShigaTyper；registry 未为其声明 ecoli_dec
-        assert uses_gapit_db("Shigella", "ecoli_dec") is False
-        assert uses_gapit_db("SAL", "ecoli_dec") is False
-        assert uses_gapit_db("V_parahaemolyticus", "ecoli_dec") is False
+    def test_eco_dec_only_where_declared(self):
+        assert uses_gapit_db("DEC", "eco_dec") is True
+        # 志贺菌的血清型走 ShigaTyper；registry 未为其声明 eco_dec
+        assert uses_gapit_db("Shigella", "eco_dec") is False
+        assert uses_gapit_db("SAL", "eco_dec") is False
+        assert uses_gapit_db("V_parahaemolyticus", "eco_dec") is False
 
     def test_vpara_only_for_vpara(self):
         assert uses_gapit_db("V_parahaemolyticus", "vpara_virulence") is True
@@ -84,7 +84,7 @@ class TestReportInputsGating:
         assert extra == {"vpa_serotype", "vpa_virulence"}
 
     def test_listeria_uses_none_of_them(self):
-        # LMO 的血清群由 gapit lm_doumith 给出（走 gapit_typing），不额外起步骤
+        # LMO 的血清群由 gapit lmo_sero 给出（走 gapit_typing），不额外起步骤
         assert _extra("Listeria_monocytogenes") == set()
 
     def test_unknown_species_has_no_species_steps(self):

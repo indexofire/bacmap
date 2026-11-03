@@ -15,7 +15,7 @@ class TestSummarizeGapitTyping:
             _payload(
                 "ran",
                 {
-                    "lm_doumith": {
+                    "lmo_sero": {
                         "status": "ran",
                         "schemes": {"doumith_serogroup": "IIa"},
                         "confidence": "high",
@@ -26,8 +26,8 @@ class TestSummarizeGapitTyping:
         )
         assert out["serogroup"] == "IIa"
         assert out["serogroup_scheme"] == "doumith_serogroup"
-        assert out["databases"]["lm_doumith"]["confidence"] == "high"
-        assert out["databases"]["lm_doumith"]["genes"] == ["lmo0737", "prs"]
+        assert out["databases"]["lmo_sero"]["confidence"] == "high"
+        assert out["databases"]["lmo_sero"]["genes"] == ["lmo0737", "prs"]
 
     def test_no_scheme_is_preserved(self):
         out = summarize(
@@ -42,10 +42,10 @@ class TestSummarizeGapitTyping:
 
     def test_non_serogroup_scheme_not_used_as_serogroup(self):
         out = summarize(
-            _payload("ran", {"ecoli_dec": {"status": "ran", "schemes": {"gb4789_6": "EHEC"}}})
+            _payload("ran", {"eco_dec": {"status": "ran", "schemes": {"gb4789_6": "EHEC"}}})
         )
         assert out["serogroup"] == ""
-        assert out["databases"]["ecoli_dec"]["schemes"] == {"gb4789_6": "EHEC"}
+        assert out["databases"]["eco_dec"]["schemes"] == {"gb4789_6": "EHEC"}
 
     def test_malformed_inputs_are_safe(self):
         for payload in (None, {}, {"databases": "oops"}, {"databases": {"db": None}}):

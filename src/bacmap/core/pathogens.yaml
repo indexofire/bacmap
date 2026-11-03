@@ -46,7 +46,7 @@ pathogens:
     mlst_scheme: ecoli_1
     cgmlst_scheme: ecoli_2
     amrfinder_organism: Escherichia
-    gapit_screens: [ecoli_dec, ecoh]
+    gapit_screens: [eco_dec, ecoh]
     snp_group: ecoli
     plan: {snp: true, cgmlst: true, recombination: false}
   VPA:
@@ -70,9 +70,10 @@ pathogens:
   LMO:
     display_name: 单核细胞增生李斯特菌
     gside_labels: [Listeria_monocytogenes]
+    mlst_scheme: lmonocytogenes_1
     snp_group: lmo
     plan: {snp: true}
-    gapit_screens: [lm_doumith]
+    gapit_screens: [lmo_sero]
   SAU:
     display_name: 金黄色葡萄球菌
     gside_labels: [Staphylococcus_aureus]

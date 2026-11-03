@@ -1,4 +1,4 @@
-"""DEC 致病型适配器（gapit ecoli_dec）：守卫 + 两段调用 + 失败留痕。"""
+"""DEC 致病型适配器（gapit eco_dec）：守卫 + 两段调用 + 失败留痕。"""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ class _Proc:
 _TYPING = json.dumps(
     {
         "schema": "gapit.typing_result/1",
-        "db": "ecoli_dec",
+        "db": "eco_dec",
         "files": [
             {
                 "file": "c.fasta",
@@ -46,7 +46,7 @@ class TestRunDecTyping:
         mod = _load()
         monkeypatch.setattr(mod.shutil, "which", lambda name: None)
         out = tmp_path / "pathotype.json"
-        assert mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", db="ecoli_dec", timeout=10) == 0
+        assert mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", db="eco_dec", timeout=10) == 0
         assert json.loads(out.read_text())["status"] == "skipped"
 
     def test_ran_screen_then_typing(self, tmp_path, monkeypatch):
@@ -63,10 +63,10 @@ class TestRunDecTyping:
 
         monkeypatch.setattr(mod.subprocess, "run", fake_run)
         out = tmp_path / "pathotype.json"
-        assert mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", db="ecoli_dec", timeout=60) == 0
+        assert mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", db="eco_dec", timeout=60) == 0
         data = json.loads(out.read_text())
         assert data["status"] == "ran"
-        assert data["db"] == "ecoli_dec"
+        assert data["db"] == "eco_dec"
         assert [c[1] for c in calls] == ["screen", "typing"]
 
     def test_screen_failure_recorded(self, tmp_path, monkeypatch):
@@ -74,7 +74,7 @@ class TestRunDecTyping:
         monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
         monkeypatch.setattr(mod.subprocess, "run", lambda *a, **k: _Proc(2, err="no hits"))
         out = tmp_path / "pathotype.json"
-        assert mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", db="ecoli_dec", timeout=60) == 0
+        assert mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", db="eco_dec", timeout=60) == 0
         data = json.loads(out.read_text())
         assert data["status"] == "failed" and data["stage"] == "screen"
 
@@ -90,5 +90,5 @@ class TestRunDecTyping:
 
         monkeypatch.setattr(mod.subprocess, "run", fake_run)
         out = tmp_path / "pathotype.json"
-        assert mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", db="ecoli_dec", timeout=60) == 0
+        assert mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", db="eco_dec", timeout=60) == 0
         assert json.loads(out.read_text())["stage"] == "typing"

@@ -33,7 +33,10 @@ def _uses_gapit_db(sample, db):
 
 
 def _mlst_scheme(sample):
-    return _GMLST_SCHEMES.get(_sample_code(sample) or "", "salmonella_2")
+    """物种未声明 MLST scheme 时返回空串：绝不静默回退到无关 scheme
+    （曾把 Listeria 一律跑成 salmonella_2，位点全 '-'）——空串走
+    "scheme=none / ST=N/A" 分支，不再调用 gmlst。"""
+    return _GMLST_SCHEMES.get(_sample_code(sample) or "", "")
 
 
 def _amr_org_flag(sample):
@@ -51,13 +54,17 @@ rule typing_mlst:
     output:
         result = str(WORKDIR) + "/{sample}/typing/mlst.tsv"
     params:
-        scheme = lambda wc: _mlst_scheme(wc.sample)
+        scheme = lambda wc: _mlst_scheme(wc.sample),
     threads: 4
     shell:
         "mkdir -p $(dirname {output.result}) && "
+        "if [ -n \"{params.scheme}\" ]; then "
         "{GMLST_BIN} typing mlst -s {params.scheme} "
         "-o {output.result} {input.contigs} || "
-        "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\t{params.scheme}\\tN/A' > {output.result}"
+        "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\t{params.scheme}\\tN/A' > {output.result}; "
+        "else "
+        "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\tnone\\tN/A' > {output.result}; "
+        "fi"
 
 rule typing_sistr:
     input:

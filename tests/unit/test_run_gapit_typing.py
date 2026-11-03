@@ -1,4 +1,4 @@
-"""gapit 分型编排：多库状态（ran/no_scheme/skipped/failed）+ ecoli_dec 排除。"""
+"""gapit 分型编排：多库状态（ran/no_scheme/skipped/failed）+ eco_dec 排除。"""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def _typing_json(phenotype: str = "IIa") -> str:
     return json.dumps(
         {
             "schema": "gapit.typing_result/1",
-            "db": "lm_doumith",
+            "db": "lmo_sero",
             "files": [
                 {
                     "file": "c.fasta",
@@ -69,21 +69,21 @@ class TestRunGapitTyping:
         out = tmp_path / "typing.json"
         assert (
             mod.run(
-                tmp_path / "c.fasta", out, tmp_path / "wd", databases=["lm_doumith"], timeout=10
+                tmp_path / "c.fasta", out, tmp_path / "wd", databases=["lmo_sero"], timeout=10
             )
             == 0
         )
         data = json.loads(out.read_text())
         assert data["status"] == "skipped"
-        assert data["databases"]["lm_doumith"]["status"] == "skipped"
+        assert data["databases"]["lmo_sero"]["status"] == "skipped"
 
     def test_empty_when_no_databases(self, tmp_path, monkeypatch):
         mod = _load()
         monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
         out = tmp_path / "typing.json"
-        # ecoli_dec 被专用步骤排除 → 无库可跑
+        # eco_dec 被专用步骤排除 → 无库可跑
         assert (
-            mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", databases=["ecoli_dec"], timeout=10)
+            mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", databases=["eco_dec"], timeout=10)
             == 0
         )
         assert json.loads(out.read_text()) == {"status": "empty", "databases": {}}
@@ -112,28 +112,28 @@ class TestRunGapitTyping:
     def test_ran_and_no_scheme_mixed(self, tmp_path, monkeypatch):
         mod = _load()
         monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
-        monkeypatch.setattr(mod.subprocess, "run", _fake_run({"lm_doumith": _typing_json("IIa")}))
+        monkeypatch.setattr(mod.subprocess, "run", _fake_run({"lmo_sero": _typing_json("IIa")}))
         out = tmp_path / "typing.json"
         mod.run(
-            tmp_path / "c.fasta", out, tmp_path / "wd", databases=["lm_doumith", "ecoh"], timeout=60
+            tmp_path / "c.fasta", out, tmp_path / "wd", databases=["lmo_sero", "ecoh"], timeout=60
         )
         data = json.loads(out.read_text())
         assert data["status"] == "ran"
-        assert data["databases"]["lm_doumith"]["status"] == "ran"
-        assert data["databases"]["lm_doumith"]["schemes"] == {"doumith_serogroup": "IIa"}
+        assert data["databases"]["lmo_sero"]["status"] == "ran"
+        assert data["databases"]["lmo_sero"]["schemes"] == {"doumith_serogroup": "IIa"}
         assert data["databases"]["ecoh"]["status"] == "no_scheme"
 
     def test_screen_failure_recorded(self, tmp_path, monkeypatch):
         mod = _load()
         monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
         monkeypatch.setattr(
-            mod.subprocess, "run", _fake_run({}, screen_fail={"lm_doumith"})
+            mod.subprocess, "run", _fake_run({}, screen_fail={"lmo_sero"})
         )
         out = tmp_path / "typing.json"
-        mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", databases=["lm_doumith"], timeout=60)
+        mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", databases=["lmo_sero"], timeout=60)
         data = json.loads(out.read_text())
-        assert data["databases"]["lm_doumith"]["status"] == "failed"
-        assert data["databases"]["lm_doumith"]["stage"] == "screen"
+        assert data["databases"]["lmo_sero"]["status"] == "failed"
+        assert data["databases"]["lmo_sero"]["stage"] == "screen"
 
     def test_missing_database_is_unavailable(self, tmp_path, monkeypatch):
         mod = _load()
