@@ -22,6 +22,96 @@ bacmap MCP server ── profile (cloud | local-trusted)
               you
 ```
 
+## 0. Minimal operating sequence (copy this)
+
+1. make your client start `bacmap mcp` (configuration in §3);
+2. state the goal and an **absolute path** in the chat:
+   > Analyse the eight *V. parahaemolyticus* read sets in `/data/run42` with the standard pipeline.
+3. the agent calls `bacmap_create_plan` and returns `plan_id`, `version`, `plan_hash` and
+   `confirm_url`;
+4. **you** confirm that exact version: open `confirm_url`, ask the agent to show the local dialog,
+   or run:
+   ```bash
+   bacmap plan confirm <plan_id> --version <version> --hash <first-12-chars>
+   ```
+5. keep asking:
+   > Where is the run? When it finishes, summarise serotype and AMR and list the samples needing
+   > review.
+
+The agent cannot confirm for you; that is a design boundary, not a malfunction. For a complete
+example see the [tutorial](../getting-started/tutorial.md).
+
+## 0.1 No per-message boilerplate: persistent instructions / hooks
+
+The bacmap MCP server returns **server instructions** during initialisation. They already state:
+
+- route analysis/writes through `bacmap_create_plan`;
+- a human confirms the exact plan version; the agent cannot;
+- do not use the harness shell/file tools to run `snakemake`/`gside`/`gapit`/`gmlst`;
+- do not read raw sequences; pass absolute paths or sample IDs and let bacmap execute locally;
+- track execution with `bacmap_get_plan` / `bacmap_task_status` / `bacmap_task_result`;
+- cite sample, task and run identifiers in conclusions.
+
+Clients that honour MCP instructions include this automatically. If yours does not—or you want a
+stronger reminder—use that client's persistent-instruction mechanism instead of pasting rules every
+turn.
+
+### Hermes
+
+Hermes auto-injects project context files. In the directory where Hermes starts, create one of:
+
+```text
+.hermes.md        # Hermes-specific; can inherit with the project
+AGENTS.md         # portable across agents (current directory)
+```
+
+Add:
+
+```markdown
+# bacmap operating rules
+
+- For bacmap work, call only mcp__bacmap__* tools.
+- Create a plan first with bacmap_create_plan; show plan_id/version/plan_hash/confirm_url and wait for human confirmation.
+- Never run snakemake/gside/gapit/gmlst through the shell; never read FASTQ/FASTA content.
+- The user provides absolute paths or sample IDs; bacmap executes locally.
+- Track with bacmap_get_plan/bacmap_task_status and cite task_id/run_id in conclusions.
+```
+
+Start a new session and ask “what are your bacmap operating rules?” to verify injection.
+`hermes --ignore-rules` disables context injection for a control test.
+
+### Pi
+
+Pi supports persistent system instructions at both levels:
+
+```text
+~/.pi/agent/APPEND_SYSTEM.md     # appended globally
+<project>/.pi/APPEND_SYSTEM.md   # project-level (requires project trust)
+<project>/AGENTS.md              # ordinary context file
+```
+
+Put the same rules in `~/.pi/agent/APPEND_SYSTEM.md`, then run `/reload` inside Pi or start a new
+session.
+
+### DSH
+
+DSH's agent-instructions plugin reads:
+
+```text
+$DSH_HOME/AGENTS.md              # global; defaults to ~/.dsh
+<workspace>/AGENTS.md            # workspace instructions
+```
+
+Add the same rules to one of those files and open a new session. The first session-log message with
+`source.kind=agent-instructions` should contain it; `dsh <profile> --dump-config` shows whether
+`@deepseek-ai/dsh-agent-instructions` is enabled.
+
+### When do you need a real hook?
+
+Use a hook/plugin only for mechanical enforcement—intercepting shell calls, rewriting prompts, or
+writing audit events. For “do not bypass bacmap”, persistent instructions plus bacmap's server-side
+plan gate are enough: even a misled model has no tool to confirm a plan or sign a gate.
+
 ## 1. Start an MCP server
 
 ```bash
@@ -59,43 +149,133 @@ Use `local-trusted` only when the harness talks to a local/LAN model. Under `clo
 are withheld (they may contain sample IDs/paths) but `bacmap_task_status` returns a redacted
 `failure` block with a failure kind, suggested fix and recovery commands.
 
-## 3. Client configuration
+## 3. Client installation and configuration
 
-Replace `/path/to/bacmap` with your executable
-(`/path/to/bacmap/.pixi/envs/default/bin/bacmap`).
+### 3.0 Install a harness first (pick one)
+
+All three are independent of the bacmap environment. Install them with their own installer, npm,
+pipx or conda environment; they do not need `snakemake`, `gside`, `gapit` or `gmlst` on PATH.
+
+**Hermes**
+
+```bash
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+hermes --version
+```
+
+**Pi** (built-in MCP needs ≥0.99; Node ≥22.19)
+
+```bash
+curl -fsSL https://pi.dev/install.sh | sh
+# or: npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+pi --version
+```
+
+**DeepSeek Harness (DSH)**
+
+```bash
+npx @deepseek-ai/dsh web
+# Web UI defaults to http://127.0.0.1:3080
+```
+
+### 3.1 Where the bacmap executable lives
+
+The current supported distribution uses pixi:
+
+```text
+/path/to/bacmap/.pixi/envs/default/bin/bacmap
+```
+
+Once a standalone conda package is published it will be installable as:
+
+```bash
+conda create -n bacmap -c conda-forge -c bioconda bacmap
+```
+
+For a stdio client, do not rely on the harness PATH. Two robust wiring patterns:
+
+**Point directly at the executable (pixi / conda env bin)**
+
+```text
+command: /opt/conda/envs/bacmap/bin/bacmap
+args: ["mcp"]
+```
+
+**Launch through conda run (so PATH comes from that environment)**
+
+```text
+command: conda
+args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "mcp"]
+```
+
+`--no-capture-output` matters: MCP stdio must be passed through unchanged.
+
+For HTTP, start bacmap inside its environment; clients need only the URL and token:
+
+```bash
+conda run --no-capture-output -n bacmap bacmap mcp \
+  --transport http --host 127.0.0.1 --port 8765
+```
 
 ### Hermes
+
+Configure the MCP server:
 
 ```yaml
 # ~/.hermes/config.yaml
 mcp_servers:
   bacmap:
     command: /path/to/bacmap
-    args: ["mcp"]                 # add "--profile", "local-trusted" for local models
+    args: ["mcp"]
+    # With a local/LAN model and [mcp] allow_local_trusted = true:
+    # args: ["mcp", "--profile", "local-trusted"]
 ```
+
+Model credentials belong to Hermes, not bacmap. Configure them with Hermes itself (usually
+`/login`, `/model`, or `hermes auth add ...`), then verify:
 
 ```bash
 hermes mcp test bacmap
+hermes
 ```
 
+Connected tools appear as `mcp__bacmap__bacmap_create_plan`.
+
 ### Pi (≥0.99 for built-in MCP)
+
+The CLI is the easiest way to write the config:
+
+```bash
+pi mcp add bacmap -- /path/to/bacmap mcp
+# Trusted local profile:
+pi mcp add bacmap -- /path/to/bacmap mcp --profile local-trusted
+
+pi mcp list
+pi
+```
+
+Equivalent JSON:
 
 ```json
 // ~/.pi/agent/mcp.json
 {"mcpServers": {"bacmap": {
-  "command": "/path/to/bacmap", "args": ["mcp"]}}}
+  "command": "/path/to/bacmap",
+  "args": ["mcp"],
+  "description": "Local pathogen genomics workstation"
+}}}
 ```
 
-```bash
-pi mcp list
-```
+Configure models with Pi's `/login` and `/model`. Use `/mcp` inside a session to inspect the
+connection.
 
 ### DeepSeek Harness (DSH)
 
-A new entry must be wrapped in `insert:`; a bare entry is treated as a patch and skipped.
+DSH connects over its MCP-client plugin. A new entry must be wrapped in `insert:`; a bare entry is
+treated as a patch and skipped.
 
 ```yaml
 # $DSH_HOME/cordis.patch.yml
+# DSH_HOME defaults to ~/.dsh
 - insert:
   - id: mcp-bacmap
     name: '@deepseek-ai/dsh-mcp-client'
@@ -104,8 +284,25 @@ A new entry must be wrapped in `insert:`; a bare entry is treated as a patch and
       transport: stdio
       command: /path/to/bacmap
       args: ['mcp']
+      # Trusted local profile:
+      # args: ['mcp', '--profile', 'local-trusted']
       failOnStartupError: true
 ```
+
+Check the composed configuration:
+
+```bash
+dsh <profile> --dump-config
+```
+
+Start it:
+
+```bash
+npx @deepseek-ai/dsh web
+```
+
+Tools appear as `mcp__bacmap__bacmap_create_plan`. Configure models in DSH's
+**Settings → Models**.
 
 ### Codex
 
@@ -126,17 +323,51 @@ args = ["mcp"]
   "enabled": true}}}
 ```
 
-### Streamable HTTP
+### Streamable HTTP (recommended for multi-client/isolated deployment)
 
-Point the client at `http://127.0.0.1:8765/mcp` and send:
+Start bacmap inside its environment:
 
-```http
-Authorization: Bearer <BACMAP_MCP_TOKEN>
+```bash
+export BACMAP_MCP_TOKEN="$(openssl rand -hex 24)"
+bacmap mcp --transport http --host 127.0.0.1 --port 8765
 ```
 
-Hermes uses `url` + `headers`; Pi supports
-`pi mcp add bacmap --url … --bearer-token-env-var BACMAP_MCP_TOKEN`; DSH uses
-`transport: streamable-http`.
+Hermes:
+
+```yaml
+mcp_servers:
+  bacmap:
+    url: http://127.0.0.1:8765/mcp
+    headers:
+      Authorization: "Bearer ${BACMAP_MCP_TOKEN}"
+```
+
+Pi:
+
+```bash
+pi mcp add bacmap \
+  --url http://127.0.0.1:8765/mcp \
+  --bearer-token-env-var BACMAP_MCP_TOKEN
+pi mcp list
+```
+
+DSH:
+
+```yaml
+- insert:
+  - id: mcp-bacmap
+    name: '@deepseek-ai/dsh-mcp-client'
+    config:
+      serverName: bacmap
+      transport: streamable-http
+      url: http://127.0.0.1:8765/mcp
+      headers:
+        Authorization: "Bearer ${BACMAP_MCP_TOKEN}"
+      failOnStartupError: true
+```
+
+In HTTP mode the harness needs neither bacmap's conda nor its pixi environment; it only reaches the
+local URL. To expose both `cloud` and `local-trusted`, run two ports with separate tokens.
 
 ## 4. What the tools expose
 

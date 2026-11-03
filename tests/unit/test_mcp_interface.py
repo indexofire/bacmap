@@ -472,6 +472,13 @@ class TestCapabilitiesTool:
     def test_available_in_read_only_mode(self):
         assert "bacmap_capabilities" in _list_tool_names(build_server())
 
+    def test_server_instructions_codify_harness_boundary(self):
+        text = str(build_server().instructions)
+        assert "bacmap_create_plan" in text
+        assert "智能体不能确认" in text
+        assert "不要用 Harness 自己的 shell/文件工具" in text
+        assert "结论必须引用样本/task/run 标识" in text
+
 
 class TestRecordDataTool:
     """自然语言数据管理（v1.8.4）：D4 Profile 下智能体可提交 record 任务。"""

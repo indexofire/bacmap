@@ -2,6 +2,19 @@
 
 安装 bacmap、设置数据根目录、验证环境，并完成一次分析。本页是简短导览，每一步都链接到详细页面。
 
+## 只想用自然语言？
+
+这是设计上的主路径：
+
+1. 完成下面的 `pixi install` / `bacmap doctor`；
+2. 按客户端配置把 `bacmap mcp` 接入 Hermes / Pi / DSH；
+3. 在对话里说：**“用标准管线分析 `/data/run42` 下的八套副溶血性弧菌 reads。”**
+4. 打开智能体给出的确认链接，点击确认；
+5. 回到对话继续问：“运行到哪一步了？汇总血清型和耐药。”
+
+完整对话与故障处理见[教程](tutorial.zh.md)；MCP 配置见
+[智能体与计划](../guide/agent-plans.zh.md)。
+
 <div class="grid cards" markdown>
 
 -   **安装与首次运行**

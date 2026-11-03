@@ -40,7 +40,7 @@ The development environment is separate:
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest (current baseline: 1683 passed)
+pixi run -e dev test        # pytest (current baseline: 1684 passed)
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter dependency contracts
@@ -49,6 +49,42 @@ pixi run -e dev docs-build  # mkdocs (both languages)
 
 > Always use `-e dev` for pytest/ruff. Without it, pixi resolves the system Python and collection
 > fails with `No module named 'dbos'` — an environment mistake, not a code failure.
+
+### 2.1 Standalone conda and the agent environment
+
+A pixi environment is effectively a project-local conda environment (`.pixi/envs/default`). The
+currently supported and tested installation is pixi. Once bacmap ships a conda package, the intended
+form will be:
+
+```bash
+conda create -n bacmap -c conda-forge -c bioconda bacmap
+conda activate bacmap
+bacmap doctor
+```
+
+Until then, avoid hand-assembling a conda environment: `pixi.toml` locks the bioinformatics tools,
+PyPI packages and native dependencies, and a manual reconstruction is easy to get wrong.
+
+Whether bacmap uses pixi or conda, **Hermes / Pi / DSH do not need to share its environment**:
+
+```text
+Hermes / Pi / DSH (their own installation)
+        │ MCP stdio or HTTP
+        ▼
+bacmap (pixi/conda environment with Snakemake and bioinformatics tools)
+        ▼
+gside / gapit / gmlst / samtools / blast / ...
+```
+
+For stdio access to a standalone conda environment, prefer:
+
+```yaml
+command: conda
+args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "mcp"]
+```
+
+`--no-capture-output` keeps MCP stdio unbuffered. Full client configuration is in
+[Agents and plans](../guide/agent-plans.md).
 
 ## 3. Data root and first health check
 

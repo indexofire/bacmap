@@ -5,6 +5,16 @@
 
 ## [未发布]
 
+### 智能体接入文档与 MCP 操作规程
+- MCP server instructions 现在明确写入操作边界：分析/写入先 `bacmap_create_plan`、
+  人工确认、不得用 Harness shell 运行生信工具或读取原始序列、结论引用样本/task/run
+  标识；无需用户每轮粘贴长提示词。
+- 文档新增持久指令/Hook 方案：Hermes `.hermes.md`/`AGENTS.md`、Pi
+  `APPEND_SYSTEM.md`、DSH `$DSH_HOME/AGENTS.md`。
+- 补全 Hermes / Pi / DSH 的安装、stdio/HTTP 配置、模型凭据与验证命令；说明独立
+  conda 环境与 Harness 环境解耦，`conda run --no-capture-output` 的 stdio 接法。
+- 测试：新增 MCP instructions 边界断言；测试基线 1683 → 1684。
+
 ### 代码质量审计循环（第 1–3 轮，无严重问题）
 - 第 1 轮（debug/research 面）：`benjamini_hochberg` 拒绝 `[0,1]` 外的 p 值；
   `associate_counts` 拒绝负格子并在 n>2000 时明示正态近似；`event_period`

@@ -35,7 +35,7 @@ plugins:
             Development: 开发
             Installation: 安装
             Configuration: 配置
-            Tutorial: 教程
+            Natural-language tutorial: 自然语言教程
             Interfaces: 界面
             Tasks & Gates: 任务与门
             Data & Identity: 数据与身份
@@ -94,7 +94,7 @@ nav:
       - getting-started/index.md
       - Installation: getting-started/installation.md
       - Configuration: getting-started/configuration.md
-      - Tutorial: getting-started/tutorial.md
+      - Natural-language tutorial: getting-started/tutorial.md
   - Guide:
       - guide/index.md
       - Interfaces: guide/interfaces.md

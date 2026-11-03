@@ -21,6 +21,33 @@ sequencing reads / assembled genomes
   CLI · Web task console · TUI · MCP (Hermes / Pi / DSH / any MCP client)
 ```
 
+## Natural-language entry point (start here)
+
+The intended way to use bacmap is not to memorise commands first: tell an external agent what you
+need. The conversation lives in Hermes, Pi, DSH or another MCP client; bacmap exposes tools and
+keeps every write inside the “plan + human confirmation” loop.
+
+```text
+you state the goal and the data path
+    → the agent calls bacmap_create_plan
+    → you confirm that exact version in Web / local dialog / CLI
+    → bacmap executes deterministically and records evidence
+    → you keep asking about the results in natural language
+```
+
+Your first message can be:
+
+> Analyse the eight *V. parahaemolyticus* read sets in `/data/run42` with the standard pipeline,
+> then summarise serotype and AMR resistance.
+
+Then simply say:
+
+> Open this plan's confirmation link / show a local confirmation dialog.
+> Where is the run now? When it finishes, tell me which samples need review.
+
+See the [tutorial](getting-started/tutorial.md) for the full walkthrough and
+[Agents & plans](guide/agent-plans.md) for client configuration.
+
 ## What you can do
 
 | Goal | Start here |

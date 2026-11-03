@@ -21,6 +21,90 @@ bacmap MCP server ── profile (cloud | local-trusted)
               you
 ```
 
+## 0. 最小操作序列（照抄即可）
+
+1. 让客户端启动 `bacmap mcp`（配置见 §3）；
+2. 在对话里给出目标与**绝对路径**：
+   > 用标准管线分析 `/data/run42` 下的八套副溶血性弧菌 reads。
+3. 智能体调用 `bacmap_create_plan`，返回 `plan_id`、`version`、`plan_hash` 和 `confirm_url`；
+4. **你**确认这个确切版本：点击 `confirm_url`、让智能体调用本机对话框，或执行：
+   ```bash
+   bacmap plan confirm <plan_id> --version <version> --hash <前12位>
+   ```
+5. 继续追问：
+   > 运行到哪一步了？完成后汇总血清型和耐药，并列出需要复核的样本。
+
+智能体不能替你确认；这是设计边界，不是故障。完整示例见[教程](../getting-started/tutorial.zh.md)。
+
+## 0.1 不必每次粘贴规则：持久指令 / Hook
+
+bacmap MCP 服务器在初始化时会返回一段 **server instructions**，已经写明：
+
+- 分析/写入先 `bacmap_create_plan`；
+- 计划由人确认，智能体不能确认；
+- 不要用 Harness 自己的 shell/文件工具运行 `snakemake`/`gside`/`gapit`/`gmlst`；
+- 不要读取原始序列，只传绝对路径或样本 ID；
+- 结果用 `bacmap_get_plan` / `bacmap_task_status` / `bacmap_task_result` 跟踪；
+- 结论引用样本、task、run 标识。
+
+支持 MCP instructions 的客户端会自动把它纳入上下文。若你的客户端没有这样做，或你想更强制一点，用该客户端的**持久指令/自动注入机制**，而不是每轮粘贴。
+
+### Hermes
+
+Hermes 会自动注入项目上下文文件。在启动 Hermes 的工作目录放：
+
+```text
+.hermes.md        # Hermes 专用，可随项目继承
+AGENTS.md         # 跨客户端通用（当前目录）
+```
+
+写入：
+
+```markdown
+# bacmap 操作规则
+
+- bacmap 相关分析只调用 mcp__bacmap__* 工具。
+- 写入/分析先 bacmap_create_plan；把 plan_id/version/plan_hash/confirm_url 给用户，等待人工确认。
+- 禁止用 shell 运行 snakemake/gside/gapit/gmlst；禁止读取 FASTQ/FASTA 原文。
+- 用户提供绝对路径或样本 ID；由 bacmap 本地执行。
+- 跟踪用 bacmap_get_plan/bacmap_task_status；结论引用 task_id/run_id。
+```
+
+验证是否注入：新会话直接问“你操作 bacmap 的规则是什么”。用
+`hermes --ignore-rules` 可以临时关闭上下文注入做对照。
+
+### Pi
+
+Pi 支持全局与项目级持久系统指令：
+
+```text
+~/.pi/agent/APPEND_SYSTEM.md     # 全局追加
+<project>/.pi/APPEND_SYSTEM.md   # 项目级（需项目信任）
+<project>/AGENTS.md              # 常规上下文
+```
+
+推荐把上面同一段“bacmap 操作规则”放进 `~/.pi/agent/APPEND_SYSTEM.md`。修改后在会话内执行
+`/reload`，或重开 Pi。
+
+### DSH
+
+DSH 的 agent-instructions 插件会读取：
+
+```text
+$DSH_HOME/AGENTS.md              # 全局指令；DSH_HOME 未设置时为 ~/.dsh
+<workspace>/AGENTS.md            # 工作区指令
+```
+
+把同一段规则写入其中一个文件，然后开新会话。会话日志的第一条
+`source.kind=agent-instructions` 消息应包含这段文本；也可用
+`dsh <profile> --dump-config` 确认 `@deepseek-ai/dsh-agent-instructions` 已启用。
+
+### 什么时候用真正的 Hook？
+
+只有当你想**机械强制**（例如拦截 shell 调用、改写提示词、记录审计事件）时才用 Hook/插件。
+对“不要绕过 bacmap”这种操作规程，持久指令 + bacmap 服务端计划门已经足够：即使模型被提示
+注入误导，它也没有确认计划或签门的权限。
+
 ## 1. 启动 MCP 服务器
 
 ```bash
@@ -57,43 +141,131 @@ allow_local_trusted = true
 可能含有样本 ID/路径），但 `bacmap_task_status` 会返回一个脱敏的 `failure` 块，包含失败类型、
 建议修复方式与恢复命令。
 
-## 3. 客户端配置
+## 3. 客户端安装与配置
 
-把 `/path/to/bacmap` 换成你的可执行文件
-（`/path/to/bacmap/.pixi/envs/default/bin/bacmap`）。
+### 3.0 先安装 Harness（三者任选）
+
+三者都与 bacmap 环境解耦，可以装在系统、npm、pipx 或各自的独立 conda 环境中；它们不需要
+看见 `snakemake`、`gside`、`gapit`、`gmlst`。
+
+**Hermes**
+
+```bash
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+hermes --version
+```
+
+**Pi**（内置 MCP 需 ≥0.99；Node ≥22.19）
+
+```bash
+curl -fsSL https://pi.dev/install.sh | sh
+# 或：npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+pi --version
+```
+
+**DeepSeek Harness / DSH**
+
+```bash
+npx @deepseek-ai/dsh web
+# 默认 Web UI: http://127.0.0.1:3080
+```
+
+### 3.1 bacmap 可执行文件的位置
+
+当前官方发布形态是 pixi：
+
+```text
+/path/to/bacmap/.pixi/envs/default/bin/bacmap
+```
+
+未来提供独立 conda 包后，可安装成：
+
+```bash
+conda create -n bacmap -c conda-forge -c bioconda bacmap
+```
+
+stdio 客户端不要依赖自己的 PATH。推荐两种接法：
+
+**直接指向可执行文件（pixi / conda env 的 bin）**
+
+```text
+command: /opt/conda/envs/bacmap/bin/bacmap
+args: ["mcp"]
+```
+
+**用 conda run 启动（确保 PATH 来自该环境）**
+
+```text
+command: conda
+args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "mcp"]
+```
+
+`--no-capture-output` 很重要：MCP stdio 必须原样透传，不能被 conda 缓冲/包裹。
+
+HTTP 模式则先在 bacmap 环境内启动服务，客户端只需要 URL 和 token，完全不需要生信工具：
+
+```bash
+conda run --no-capture-output -n bacmap bacmap mcp \
+  --transport http --host 127.0.0.1 --port 8765
+```
 
 ### Hermes
+
+配置 MCP 服务器：
 
 ```yaml
 # ~/.hermes/config.yaml
 mcp_servers:
   bacmap:
     command: /path/to/bacmap
-    args: ["mcp"]                 # add "--profile", "local-trusted" for local models
+    args: ["mcp"]
+    # 本地/内网模型且已开启 [mcp] allow_local_trusted = true 时：
+    # args: ["mcp", "--profile", "local-trusted"]
 ```
+
+模型凭据属于 Hermes，不属于 bacmap。按 Hermes 自己的方式配置（通常是 `/login`、`/model`
+或 `hermes auth add ...`），然后验证：
 
 ```bash
 hermes mcp test bacmap
+hermes
 ```
 
+连接成功后工具名形如 `mcp__bacmap__bacmap_create_plan`。
+
 ### Pi（内置 MCP 需 ≥0.99）
+
+推荐用 CLI 写入配置：
+
+```bash
+pi mcp add bacmap -- /path/to/bacmap mcp
+# 本地可信 Profile：
+pi mcp add bacmap -- /path/to/bacmap mcp --profile local-trusted
+
+pi mcp list
+pi
+```
+
+等价 JSON：
 
 ```json
 // ~/.pi/agent/mcp.json
 {"mcpServers": {"bacmap": {
-  "command": "/path/to/bacmap", "args": ["mcp"]}}}
+  "command": "/path/to/bacmap",
+  "args": ["mcp"],
+  "description": "Local pathogen genomics workstation"
+}}}
 ```
 
-```bash
-pi mcp list
-```
+模型用 Pi 的 `/login` 与 `/model` 配置。MCP 状态在会话内用 `/mcp` 查看。
 
 ### DeepSeek Harness（DSH）
 
-新增条目必须包在 `insert:` 下；裸条目会被当作补丁并跳过。
+DSH 通过插件连接 MCP。新增条目必须包在 `insert:` 下；裸条目会被当作补丁并跳过。
 
 ```yaml
 # $DSH_HOME/cordis.patch.yml
+# DSH_HOME 未设置时通常是 ~/.dsh
 - insert:
   - id: mcp-bacmap
     name: '@deepseek-ai/dsh-mcp-client'
@@ -102,8 +274,25 @@ pi mcp list
       transport: stdio
       command: /path/to/bacmap
       args: ['mcp']
+      # 本地可信 Profile：
+      # args: ['mcp', '--profile', 'local-trusted']
       failOnStartupError: true
 ```
+
+检查组合结果：
+
+```bash
+dsh <profile> --dump-config
+```
+
+启动：
+
+```bash
+npx @deepseek-ai/dsh web
+```
+
+工具名形如 `mcp__bacmap__bacmap_create_plan`。模型在 DSH 的
+**Settings → Models** 中配置。
 
 ### Codex
 
@@ -124,17 +313,51 @@ args = ["mcp"]
   "enabled": true}}}
 ```
 
-### Streamable HTTP
+### Streamable HTTP（推荐多客户端/隔离部署）
 
-让客户端指向 `http://127.0.0.1:8765/mcp` 并发送：
+先在 bacmap 环境内启动服务：
 
-```http
-Authorization: Bearer <BACMAP_MCP_TOKEN>
+```bash
+export BACMAP_MCP_TOKEN="$(openssl rand -hex 24)"
+bacmap mcp --transport http --host 127.0.0.1 --port 8765
 ```
 
-Hermes 使用 `url` + `headers`；Pi 支持
-`pi mcp add bacmap --url … --bearer-token-env-var BACMAP_MCP_TOKEN`；DSH 使用
-`transport: streamable-http`。
+Hermes：
+
+```yaml
+mcp_servers:
+  bacmap:
+    url: http://127.0.0.1:8765/mcp
+    headers:
+      Authorization: "Bearer ${BACMAP_MCP_TOKEN}"
+```
+
+Pi：
+
+```bash
+pi mcp add bacmap \
+  --url http://127.0.0.1:8765/mcp \
+  --bearer-token-env-var BACMAP_MCP_TOKEN
+pi mcp list
+```
+
+DSH：
+
+```yaml
+- insert:
+  - id: mcp-bacmap
+    name: '@deepseek-ai/dsh-mcp-client'
+    config:
+      serverName: bacmap
+      transport: streamable-http
+      url: http://127.0.0.1:8765/mcp
+      headers:
+        Authorization: "Bearer ${BACMAP_MCP_TOKEN}"
+      failOnStartupError: true
+```
+
+HTTP 模式下 Harness 完全不需要 bacmap 的 conda/pixi 环境；它只访问本机 URL。若要同时提供
+`cloud` 与 `local-trusted`，分别启动两个端口并使用不同 token。
 
 ## 4. 工具暴露了什么
 

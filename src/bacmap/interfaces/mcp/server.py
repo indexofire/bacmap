@@ -89,10 +89,14 @@ def build_server(engine: Any = None, profile: ProfileSpec = DEFAULT_PROFILE) -> 
     server = MCPServer(
         name="bacmap",
         instructions=(
-            "bacmap 病原微生物基因组分析。只读/计算工具直接调用；"
-            "写操作（分析、建库）优先经 bacmap_create_plan 提交计划，由用户在 bacmap "
-            "CLI/Web 中确认后执行（bacmap_get_plan 查看状态与 task_id）；"
-            "用 bacmap_task_status 轮询任务（长任务句柄模式）。"
+            "bacmap 病原微生物基因组分析。操作规程："
+            "1) 分析/写入先调用 bacmap_create_plan，把 plan_id/version/plan_hash/confirm_url "
+            "交给用户，并由人在 bacmap Web/CLI/本地对话框确认；智能体不能确认。"
+            "2) 确认后用 bacmap_get_plan 获取 task_ids，用 bacmap_task_status 跟踪，"
+            "用 bacmap_task_result 汇总；结论必须引用样本/task/run 标识。"
+            "3) 不要用 Harness 自己的 shell/文件工具运行 snakemake/gside/gapit/gmlst，"
+            "也不要读取原始序列；用户应提供绝对路径或样本 ID，由 bacmap 在本地执行。"
+            "4) 只读/计算工具可直接调用。"
             f"本实例 Profile={profile.profile.value}，"
             f"工具数据级别上限 {profile.max_data_class.name}（ADR-16）。"
         ),

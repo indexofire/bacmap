@@ -6,7 +6,26 @@
 AI 智能体使用的 MCP 服务。数据不出本地网络。
 
 冻结设计：[docs/concepts/frozen-design.zh.md](docs/concepts/frozen-design.zh.md)（中文权威，修订
-**v1.10.0**）；[英文参考翻译](docs/concepts/frozen-design.md)。程序版本：**0.1.2**。
+**v1.10.3**）；[英文参考翻译](docs/concepts/frozen-design.md)。程序版本：**0.1.2**。
+
+## 用自然语言操作（推荐入口）
+
+bacmap **没有内置聊天窗口**：对话发生在外部智能体（Hermes / Pi / DeepSeek Harness / 任意
+MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小操作序列只有五步：
+
+1. 安装并体检：`pixi install && pixi shell && bacmap doctor`；
+2. 在智能体配置里启动 `bacmap mcp`（配置片段见
+   [智能体与计划](docs/guide/agent-plans.zh.md)）；
+3. 在对话中给出**绝对路径**和目标，例如：
+   > 用标准管线分析 `/data/run42` 下的八套副溶血性弧菌 reads。
+4. 智能体会返回一个**计划**（参数、版本、哈希、确认链接）。计划只能由**你**确认：点击
+   Web 链接、让本机弹出确认对话框，或用 CLI `bacmap plan confirm`；
+5. 确认后继续用自然语言跟踪与追问：
+   > 运行到哪一步了？完成后汇总血清型和耐药，并列出需要我复核的样本。
+
+完整对话走见[教程](docs/getting-started/tutorial.zh.md)。如果你在文档里找“先记命令”，那不是
+推荐路径；CLI 只是兜底和运维入口。
+
 
 ## 功能概览
 
@@ -75,7 +94,7 @@ bacmap plan confirm <plan_id> --version 1 --hash <前12位>
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest（当前基线：1683 passed）
+pixi run -e dev test        # pytest（当前基线：1684 passed）
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter（5 条契约）

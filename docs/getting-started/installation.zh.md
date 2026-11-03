@@ -38,7 +38,7 @@ bacmap --version      # 0.1.2
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest（当前基线：1683 passed）
+pixi run -e dev test        # pytest（当前基线：1684 passed）
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter 依赖契约
@@ -47,6 +47,41 @@ pixi run -e dev docs-build  # mkdocs（双语）
 
 > 运行 pytest/ruff 时务必带 `-e dev`。不带它时 pixi 会解析到系统 Python，收集阶段报
 > `No module named 'dbos'`——这是环境用错，不是代码坏了。
+
+### 2.1 独立 conda 环境与智能体环境的关系
+
+pixi 环境本质上就是一个项目本地的 conda 环境（`.pixi/envs/default`）。当前官方支持且经过
+测试的安装方式是 pixi；后续 bacmap 发布 conda 包后，目标安装方式是：
+
+```bash
+conda create -n bacmap -c conda-forge -c bioconda bacmap
+conda activate bacmap
+bacmap doctor
+```
+
+在此之前不建议手工拼一个 conda 环境：生信工具的版本、PyPI 依赖和原生依赖由
+`pixi.toml` 锁定，手工复现容易漏项。
+
+无论 bacmap 用 pixi 还是 conda，**Hermes / Pi / DSH 都不需要与 bacmap 共用环境**：
+
+```text
+Hermes / Pi / DSH（自己的安装环境）
+        │ MCP stdio 或 HTTP
+        ▼
+bacmap（pixi/conda 环境，含 Snakemake 与生信工具）
+        ▼
+gside / gapit / gmlst / samtools / blast / ...
+```
+
+stdio 连接独立 conda 环境时推荐：
+
+```yaml
+command: conda
+args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "mcp"]
+```
+
+`--no-capture-output` 保证 MCP stdio 不被 conda 缓冲。完整客户端配置见
+[智能体与计划](../guide/agent-plans.zh.md)。
 
 ## 3. 数据根目录与首次体检
 

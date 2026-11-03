@@ -6,8 +6,31 @@ A local pathogen-genomics workstation: deterministic analysis, a durable task en
 an immutable evidence chain, and an MCP server for external AI agents. Data stays on the machine.
 
 Frozen design: [docs/concepts/frozen-design.md](docs/concepts/frozen-design.md) (English reference;
-the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.10.0**).
+the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.10.3**).
 Program version: **0.1.2**.
+
+## Operating in natural language (the intended entry point)
+
+bacmap **has no built-in chat window**: the conversation happens in an external agent (Hermes, Pi,
+DeepSeek Harness or any MCP client), while bacmap exposes tools, plans and evidence over MCP. The
+minimal sequence is five steps:
+
+1. install and check the environment: `pixi install && pixi shell && bacmap doctor`;
+2. configure that agent to start `bacmap mcp` (config snippets are in
+   [Agents & plans](docs/guide/agent-plans.md));
+3. state the goal and an **absolute path** in the chat, for example:
+   > Analyse the eight *V. parahaemolyticus* read sets in `/data/run42` with the standard pipeline.
+4. the agent returns a **plan** (parameters, version, hash and a confirmation link). Only **you**
+   can confirm it: open the Web link, approve the local dialog, or run
+   `bacmap plan confirm` in a terminal;
+5. after confirmation, keep asking in natural language:
+   > Where is the run? When it finishes, summarise serotype and AMR, and list the samples I need
+   > to review.
+
+For the complete dialogue walkthrough see the [tutorial](docs/getting-started/tutorial.md). If you
+came looking for “commands to memorise first”, that is not the intended path; the CLI is the
+fallback and operations surface.
+
 
 ## What it does
 
@@ -77,7 +100,7 @@ Full bilingual site: <https://indexofire.github.io/bacmap/> (Chinese: `/zh/`).
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest (current baseline: 1683 passed)
+pixi run -e dev test        # pytest (current baseline: 1684 passed)
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter (5 contracts)
