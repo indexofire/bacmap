@@ -40,7 +40,7 @@ The development environment is separate:
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest (current baseline: 1693 passed)
+pixi run -e dev test        # pytest (current baseline: 1703 passed)
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter dependency contracts
@@ -49,6 +49,32 @@ pixi run -e dev docs-build  # mkdocs (both languages)
 
 > Always use `-e dev` for pytest/ruff. Without it, pixi resolves the system Python and collection
 > fails with `No module named 'dbos'` — an environment mistake, not a code failure.
+
+### 2.1 Configuration template and locations
+
+The repository root provides `config.example.toml` (TOML, not YAML). The simplest initialization is:
+
+```bash
+bacmap config init           # write $BACMAP_HOME/config.toml
+bacmap config init --user    # write ~/.config/bacmap/config.toml
+bacmap config init --project # write ./config.toml (gitignored in source checkouts)
+```
+
+In a pixi/source checkout, a project-local file is not discovered automatically; point to it:
+
+```bash
+cp config.example.toml config.toml
+export BACMAP_CONFIG="$PWD/config.toml"
+```
+
+For a pip/conda installation, prefer:
+
+```bash
+bacmap config init --user
+# ~/.config/bacmap/config.toml
+```
+
+See [Configuration](configuration.md) for the full resolution order.
 
 ### 2.1 Standalone conda and the agent environment
 

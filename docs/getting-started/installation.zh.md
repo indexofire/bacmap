@@ -38,7 +38,7 @@ bacmap --version      # 0.1.2
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest（当前基线：1693 passed）
+pixi run -e dev test        # pytest（当前基线：1703 passed）
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter 依赖契约
@@ -47,6 +47,32 @@ pixi run -e dev docs-build  # mkdocs（双语）
 
 > 运行 pytest/ruff 时务必带 `-e dev`。不带它时 pixi 会解析到系统 Python，收集阶段报
 > `No module named 'dbos'`——这是环境用错，不是代码坏了。
+
+### 2.1 配置模板与配置位置
+
+仓库根目录提供 `config.example.toml`（TOML，不是 YAML）。最简单的初始化方式：
+
+```bash
+bacmap config init          # 写入 $BACMAP_HOME/config.toml
+bacmap config init --user   # 写入 ~/.config/bacmap/config.toml
+bacmap config init --project # 写入当前源码检出 config.toml（已被 .gitignore 忽略）
+```
+
+pixi/源码检出中，项目本地配置不会被自动发现，需显式指定：
+
+```bash
+cp config.example.toml config.toml
+export BACMAP_CONFIG="$PWD/config.toml"
+```
+
+pip/conda 安装时推荐：
+
+```bash
+bacmap config init --user
+# ~/.config/bacmap/config.toml
+```
+
+读取顺序与细节见[配置](configuration.zh.md)。
 
 ### 2.1 独立 conda 环境与智能体环境的关系
 

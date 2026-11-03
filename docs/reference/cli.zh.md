@@ -179,6 +179,20 @@ Claim 审核 → `publication-readiness`（G0–G3）。`--members`、`--spec`�
 `--evidence`、`--outcome` 接受内联 JSON 或 JSON 文件；`cohort create` 也接受完整的
 `cohort_members.json`（读取其中的 `members` 数组）。
 
+## `bacmap config`
+
+```text
+bacmap config init [--user|--project] [--force]
+bacmap config path [--json]
+```
+
+- 默认写入 `$BACMAP_HOME/config.toml`；
+- `--user` 写入 `$XDG_CONFIG_HOME/bacmap/config.toml`（默认 `~/.config/bacmap/config.toml`）；
+- `--project` 写入当前目录 `config.toml`；源码检出中该文件已被 gitignore，使用时设置
+  `BACMAP_CONFIG="$PWD/config.toml"`；
+- 模板来自仓库根目录 `config.example.toml`；
+- `path` 显示当前实际读取的配置文件。
+
 ## `bacmap run`
 
 ```text

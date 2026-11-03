@@ -1,9 +1,14 @@
 """运行时配置与路径解析（ADR-03）。
 
-原则：任何路径都不由源码位置推导。
+原则：数据路径不由源码位置推导。
 - 数据根目录 ``BACMAP_HOME``（默认 ``~/.local/share/bacmap``），可被环境变量覆盖；
-- 配置文件 ``$BACMAP_HOME/config.toml``（可选，不存在时全部取默认值）；
-- 生信工具从当前 pixi 环境的 PATH 解析（``which``），不做路径注入；
+- 配置文件为 TOML（不是 YAML）。解析顺序：
+  1. ``BACMAP_CONFIG`` 显式指定；
+  2. ``$BACMAP_HOME/config.toml``（兼容默认/单机数据目录形态）；
+  3. ``$XDG_CONFIG_HOME/bacmap/config.toml``（默认 ``~/.config/bacmap/config.toml``），
+    适合 pip/conda 安装后把配置与数据分开；
+  4. 都不存在时使用内置默认值。
+- 生信工具从当前 pixi/conda 环境的 PATH 解析（``which``），不做路径注入；
 - 测试与多实例部署通过环境变量覆盖（BACMAP_HOME / BACMAP_DATA_DIR /
   BACMAP_DB_PATH / BACMAP_RESULTS_DIR）。
 
@@ -35,12 +40,49 @@ def _env_path(var: str, default: Path | None) -> Path | None:
     return default
 
 
-def _load_config_toml(home: Path) -> dict[str, Any]:
-    cfg = home / "config.toml"
-    if cfg.is_file():
-        with cfg.open("rb") as fh:
+def _xdg_config_file() -> Path:
+    base = os.environ.get("XDG_CONFIG_HOME")
+    root = Path(base).expanduser() if base else Path.home() / ".config"
+    return root / "bacmap" / "config.toml"
+
+
+def config_path(home: Path | str | None = None) -> Path:
+    """当前生效的配置文件路径（即使尚未创建也返回目标路径）。
+
+    ``BACMAP_CONFIG`` 显式优先。未显式指定时，使用传入的 ``home``（例如命令行
+    ``--home``）或模块级 ``BACMAP_HOME``；已有的 ``config.toml`` 继续兼容，
+    否则落到 XDG 用户配置目录。项目内临时配置可用：
+
+    ``BACMAP_CONFIG=$PWD/config.toml bacmap ...``
+    """
+    explicit = os.environ.get("BACMAP_CONFIG")
+    if explicit:
+        return Path(explicit).expanduser().resolve()
+    root = Path(home).expanduser() if home is not None else BACMAP_HOME
+    home_file = root / "config.toml"
+    if home_file.is_file():
+        return home_file
+    xdg_file = _xdg_config_file()
+    if xdg_file.is_file():
+        return xdg_file
+    return home_file
+
+
+def load_config(path: Path | str | None = None) -> dict[str, Any]:
+    """加载 TOML 配置；缺失或解析失败时返回空字典（内置默认值）。"""
+    target = Path(path).expanduser() if path is not None else config_path()
+    if not target.is_file():
+        return {}
+    try:
+        with target.open("rb") as fh:
             return tomllib.load(fh)
-    return {}
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+
+
+def _load_config_toml(home: Path) -> dict[str, Any]:
+    # 兼容旧内部签名；实际路径由 config_path(home) 统一解析。
+    return load_config(config_path(home))
 
 
 def _resolve_data_dir(home: Path, paths_cfg: dict[str, Any], env_value: str | None) -> Path:
@@ -108,7 +150,7 @@ def _debug_from_config() -> bool:
     The file is read on demand so operators can turn debug mode off without
     restarting every long-lived interface; malformed or missing files mean off.
     """
-    path = BACMAP_HOME / "config.toml"
+    path = config_path()
     if not path.is_file():
         return False
     try:

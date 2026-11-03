@@ -1,13 +1,38 @@
 # Configuration reference
 
-Configuration is **environment variables + one TOML file**. Paths are never derived from the source
-tree (ADR-03). When `config.toml` is absent, built-in defaults apply.
+Configuration is **environment variables + one TOML file** (not YAML). Data paths are never
+derived from the source tree (ADR-03). Missing configuration means built-in defaults.
+
+Template: [`config.example.toml`](https://github.com/indexofire/bacmap/blob/main/config.example.toml)
+in the repository root, or run:
+
+```bash
+bacmap config init           # write $BACMAP_HOME/config.toml
+bacmap config init --user    # write ~/.config/bacmap/config.toml
+bacmap config init --project # write ./config.toml (gitignored in source checkouts)
+bacmap config path           # show the file actually used
+```
+
+Resolution order:
+
+1. a file explicitly named by `BACMAP_CONFIG`;
+2. `$BACMAP_HOME/config.toml` (the existing single-machine form remains compatible);
+3. `$XDG_CONFIG_HOME/bacmap/config.toml`, defaulting to `~/.config/bacmap/config.toml`;
+4. built-in defaults when none exists.
+
+A project-local `config.toml` is **not** discovered automatically; this is intentional (ADR-03).
+After copying the template into a source checkout, export:
+
+```bash
+export BACMAP_CONFIG="$PWD/config.toml"
+```
 
 ## 1. Environment variables
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `BACMAP_HOME` | `~/.local/share/bacmap` | data root |
+| `BACMAP_CONFIG` | see resolution order | explicit config-file path; useful for project-local overrides |
 | `BACMAP_DATA_DIR` | `$BACMAP_HOME/data` | metadata/reference databases |
 | `BACMAP_DB_PATH` | `$DATA_DIR/bacmap.sqlite` | strain metadata + lab results |
 | `BACMAP_GOM_DB` | `$BACMAP_HOME/gom.sqlite` | GOM, datasets, strain index |

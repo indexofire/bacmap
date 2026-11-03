@@ -6,7 +6,7 @@
 AI 智能体使用的 MCP 服务。数据不出本地网络。
 
 冻结设计：[docs/concepts/frozen-design.zh.md](docs/concepts/frozen-design.zh.md)（中文权威，修订
-**v1.10.5**）；[英文参考翻译](docs/concepts/frozen-design.md)。程序版本：**0.1.2**。
+**v1.10.6**）；[英文参考翻译](docs/concepts/frozen-design.md)。程序版本：**0.1.2**。
 
 ## 用自然语言操作（推荐入口）
 
@@ -50,6 +50,7 @@ git clone <repo> bacmap && cd bacmap
 pixi install            # 运行时环境（Python 3.12 + 生信工具链）
 pixi shell
 bacmap --version        # 0.1.2
+bacmap config init      # 可选：从 config.example.toml 生成配置
 bacmap doctor           # 只读体检
 bacmap web              # http://127.0.0.1:8800
 ```
@@ -94,7 +95,7 @@ bacmap plan confirm <plan_id> --version 1 --hash <前12位>
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest（当前基线：1693 passed）
+pixi run -e dev test        # pytest（当前基线：1703 passed）
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter（5 条契约）

@@ -1,9 +1,24 @@
 # Configuration
 
-bacmap is configured by **environment variables** plus one optional TOML file at
-`$BACMAP_HOME/config.toml`. No path is derived from the source-tree location (ADR-03). This page
-covers the settings most installations need; the complete key-by-key reference is
+bacmap is configured by **environment variables** plus one optional TOML file (not YAML).
+No data path is derived from the source-tree location (ADR-03). This page covers the settings most
+installations need; the complete key-by-key reference is
 [Configuration reference](../reference/configuration.md).
+
+Create a configuration from the template:
+
+```bash
+bacmap config init           # $BACMAP_HOME/config.toml (default)
+bacmap config init --user    # ~/.config/bacmap/config.toml (pip/conda installations)
+bacmap config init --project # ./config.toml (gitignored in source checkouts)
+```
+
+Resolution order: `BACMAP_CONFIG` > `$BACMAP_HOME/config.toml` >
+`~/.config/bacmap/config.toml`. A project-local file must be explicit:
+
+```bash
+export BACMAP_CONFIG="$PWD/config.toml"
+```
 
 ## 1. Where things live
 

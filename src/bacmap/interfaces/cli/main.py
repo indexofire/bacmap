@@ -372,7 +372,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(
         dest="command",
         required=True,
-        metavar="{mcp,web,tui,console,overview,task,plan,record,run,gom,doctor,backup,restore,results,events,isolate,sample,search}",
+        metavar="{mcp,web,tui,console,overview,task,plan,record,run,gom,config,doctor,backup,restore,results,events,isolate,sample,search}",
     )
 
     p_mcp = sub.add_parser("mcp", help="启动 MCP 服务器（stdio 或 Streamable HTTP）")
@@ -459,6 +459,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_plan_parser(sub, _add_home, _add_json)
 
+    from bacmap.interfaces.cli.config_cmd import add_parser as add_config_parser
     from bacmap.interfaces.cli.evidence import add_parser as add_evidence_parser
     from bacmap.interfaces.cli.isolates import add_parser as add_isolate_parser
     from bacmap.interfaces.cli.ops import add_parser as add_ops_parser
@@ -466,6 +467,7 @@ def build_parser() -> argparse.ArgumentParser:
     from bacmap.interfaces.cli.research import add_parser as add_research_parser
 
     add_record_parser(sub, _add_home, _add_json)
+    add_config_parser(sub, _add_home, _add_json)
     add_research_parser(sub, _add_home, _add_json)
     add_evidence_parser(sub, _add_home, _add_json)
     add_isolate_parser(sub, _add_home, _add_json)

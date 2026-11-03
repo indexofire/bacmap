@@ -9,7 +9,7 @@ bacmap backup --out /backup/full.zip --with-results
 
 默认包含：
 
-- `config.toml`、`refs/manifest.json`；
+- 实际生效的 `config.toml`（可为 `$BACMAP_HOME`、XDG 用户目录或 `BACMAP_CONFIG` 指向的文件）、`refs/manifest.json`；
 - 全部 SQLite 数据库：`tasks`、`dbos`、`runs`、`gom`、`baseline`、`research`、
   `data/bacmap`、`data/knowledge` —— 用 SQLite backup API 取得一致快照；
 - `runs/*/run_manifest.json`（磁盘侧证据链）。

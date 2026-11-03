@@ -9,7 +9,7 @@ bacmap backup --out /backup/full.zip --with-results
 
 Included by default:
 
-- `config.toml`, `refs/manifest.json`;
+- the actually active `config.toml` (whether under `$BACMAP_HOME`, in the XDG user directory, or pointed to by `BACMAP_CONFIG`) and `refs/manifest.json`;
 - every SQLite database: `tasks`, `dbos`, `runs`, `gom`, `baseline`, `research`,
   `data/bacmap`, `data/knowledge` — via SQLite's backup API for a consistent snapshot;
 - `runs/*/run_manifest.json` (the on-disk evidence chain).

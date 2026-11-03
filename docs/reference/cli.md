@@ -179,6 +179,20 @@ ledger → Claim review → publication-readiness (G0–G3). `--members`, `--spe
 `--evidence` and `--outcome` accept inline JSON or a JSON file. `cohort create` also accepts a
 whole `cohort_members.json` object (the `members` array is used).
 
+## `bacmap config`
+
+```text
+bacmap config init [--user|--project] [--force]
+bacmap config path [--json]
+```
+
+- default writes `$BACMAP_HOME/config.toml`;
+- `--user` writes `$XDG_CONFIG_HOME/bacmap/config.toml` (default `~/.config/bacmap/config.toml`);
+- `--project` writes `./config.toml`; in source checkouts this file is gitignored and requires
+  `BACMAP_CONFIG="$PWD/config.toml"`;
+- the template is `config.example.toml` at the repository root;
+- `path` prints the file bacmap currently reads.
+
 ## `bacmap run`
 
 ```text

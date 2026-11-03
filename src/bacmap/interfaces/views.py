@@ -21,7 +21,9 @@ from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 def overview_data(engine: DbosTaskEngine) -> dict[str, Any]:
     """系统概览只读数据——端点/路由/数据策略/版本/路径/沙箱/任务分布，零密钥。"""
     home = Path(engine.home)
-    cfg = load_llm_config(home / "config.toml")
+    from bacmap.config import config_path
+
+    cfg = load_llm_config(config_path(home))
     endpoints = [
         {
             "name": e.name,

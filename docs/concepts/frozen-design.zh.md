@@ -1,4 +1,4 @@
-# BacMAP Standalone 框架设计（冻结版 v1.10.5）
+# BacMAP Standalone 框架设计（冻结版 v1.10.6）
 
 - **日期**：2026-10-09（v1.1–v1.4.7 同日修订，见第 10 节）
 - **状态**：冻结（Frozen）。第 8 节的验证项全部通过后，转为"已确认"
@@ -109,7 +109,7 @@
 - **理由**：把三个第三方依赖（LLM 库、持久化执行库、Snakemake）各自关在一个模块里，日后替换只改一处；保证 C3（去掉 agent 层，系统仍可运行）。
 
 ### ADR-03 配置与路径 —— 冻结
-- **决策**：任何路径都不由源码位置推导。数据根目录 `BACMAP_HOME`（默认 `~/.local/share/bacmap`），配置文件 `$BACMAP_HOME/config.toml`，由 pydantic 模型加载与校验；生信工具从当前 pixi 环境的 PATH 解析。
+- **决策**：任何路径都不由源码位置推导。数据根目录 `BACMAP_HOME`（默认 `~/.local/share/bacmap`）。配置为 TOML：`BACMAP_CONFIG` 显式路径 > 命令行/模块 home 下的 `config.toml` > `$XDG_CONFIG_HOME/bacmap/config.toml`（默认 `~/.config/bacmap/config.toml`）> 内置默认值（v1.10.6）；模板 `config.example.toml` 随仓库/发行包提供，项目本地文件必须显式指定。生信工具从当前 pixi/conda 环境的 PATH 解析。
 - **理由**：现有 `config.py` 把 `PIXI_BIN`、`PROJECT_ROOT` 写死在开发仓库目录，插件靠软链接加载（证据 §2.2）——这是 standalone 无法安装的根因。
 
 ### ADR-04 工具契约 —— 冻结
@@ -237,7 +237,7 @@ v1.2 起，"能力档位"与"部署位置"是两个独立维度：档位决定�
   - 长任务返回作业句柄，另提供 `job_status`、`job_cancel` 工具；进度通过 `progressToken` 推送；Tasks 扩展等 SDK 支持后再采用
   - MCP 只暴露 `effect=read/compute` 的工具，以及"提交任务"类工具；不暴露直接写入
   - **Profile（v1.5）**：每个 MCP 服务实例绑定一个 Profile——`cloud`（默认）只暴露 `output_data_class ≤ cloud_max_data_class`（默认 D1，最多 D2）的工具；`local-trusted` 可见至 D4，须管理员在 `config.toml` 中设置 `[mcp] allow_local_trusted = true` 显式开启，否则拒绝启动。Profile 由启动参数决定，客户端不可自我升级；2026-07-28 规范下工具列表不随连接变化，不同 Profile 以不同实例提供（stdio 启动参数 / HTTP 各自端口与 token）；调用层再做一次数据级别校验
-  - **计划工具（v1.5.1；v1.10.5 修订）**：`bacmap_create_plan` / `bacmap_revise_plan` / `bacmap_get_plan`——客户端只能建/改/查计划；默认由人在 bacmap CLI/Web/本机对话框确认，或由管理员显式配置的服务端 `[plans.auto_confirm]` 预授权确认（ADR-21）。`bacmap_submit_task` 保留为兼容入口
+  - **计划工具（v1.5.1；v1.10.6 修订）**：`bacmap_create_plan` / `bacmap_revise_plan` / `bacmap_get_plan`——客户端只能建/改/查计划；默认由人在 bacmap CLI/Web/本机对话框确认，或由管理员显式配置的服务端 `[plans.auto_confirm]` 预授权确认（ADR-21）。`bacmap_submit_task` 保留为兼容入口
   - **提交者身份（v1.5）**：由服务端按传输与 Profile 认定（`mcp-stdio:<profile>:<OS 账户>` / `mcp-http:<profile>`），`bacmap_submit_task` 不再接受客户端自填的 `submitted_by`
   - **2026-07-28 规范适配（v1.5）**：Tasks 已成为官方扩展 `io.modelcontextprotocol/tasks`，但 Python SDK v2 尚未实现——长任务继续以显式句柄工具实现，语义对齐该扩展以便日后迁移；MRTR/elicitation 由客户端（Harness）应答，**不得**作为计划确认或审批证据
 - **安全**：客户端配置中的启动命令写死；所有参数按 JSON Schema 严格校验；日志写 stderr（Logging 已弃用）。
@@ -377,7 +377,7 @@ v1.2 起，"能力档位"与"部署位置"是两个独立维度：档位决定�
 - **决策**：
   - **对话式交互外置**：用户的自然语言交互由外部 Harness 的原生界面承担，经 MCP（ADR-12）使用 bacmap；bacmap 内置的会话助手（`AgentSession`、TUI 对话面板、Web `/assistant`、CLI `ask`/`chat`）进入废弃期；移除条件（v1.5.2 调整）为三个 Harness 完成真实对话联调且计划闭环稳定；v1.5.3 已实测三端通过（Hermes/Pi/DSH 各完成创建计划→人工确认→读回任务），条件达成，按计划在 v1.6 移除；废弃期内只显示迁移提示、不再加功能
   - **任务内智能体保留**：analyze 解读、curate 建议、mine/write 开放路径智能体仍由 pydantic-ai 在任务层内运行（ADR-08/10/11 不变）——外部 Harness 无法进入沙箱、不受门约束、无法记录 `LlmProvenance`
-  - **可信确认面留在 bacmap**：计划默认由 bacmap 自有界面（Web 审批页 / CLI / 本机对话框）确认；管理员可用服务端 `[plans.auto_confirm]` 预授权（v1.10.5 起可按任务类型显式放宽）。特征库发布签名、挖掘产物签字等任务门仍在 bacmap 自有界面完成；Harness 内的工具审批与 MCP elicitation 由客户端或模型应答，不构成确认事实
+  - **可信确认面留在 bacmap**：计划默认由 bacmap 自有界面（Web 审批页 / CLI / 本机对话框）确认；管理员可用服务端 `[plans.auto_confirm]` 预授权（v1.10.6 起可按任务类型显式放宽）。特征库发布签名、挖掘产物签字等任务门仍在 bacmap 自有界面完成；Harness 内的工具审批与 MCP elicitation 由客户端或模型应答，不构成确认事实
   - **结构化界面保留**：CLI（含 `--json`）与 Web 的任务/样本/报告/审批页保留，服务非终端用户（ADR-14）与无 LLM 场景（C3）
   - **数据红线由操作系统隔离兜底**：Harness 自带 Shell/文件工具，MCP Profile 只保护经 MCP 的数据。推荐部署：bacmap 以独立系统账户运行、`BACMAP_HOME` 仅该账户可读；Harness 以普通用户运行，仅经 Streamable HTTP（回环或 unix socket）+ Profile token 访问 bacmap（ADR-16）
   - **支持矩阵**：Hermes、Pi（≥0.99）、DSH（rc 阶段固定版本）为 v1.5 一等支持的 Harness，发布前均需真实联调（发现、只读、提交、状态、错误与退出）；Harness 的 Node/Python 运行时由用户自行安装，不进入 bacmap 运行时（与 ADR-13 对 GBrain/Bun 的处理一致，不违反 ADR-01）
@@ -782,3 +782,4 @@ bacmap/
 | v1.10.3 | 2026-11-03 | **开发调试模式 `BACMAP_DEBUG=1`（治理放宽，数据红线不变）**：为本地功能测试提供显式开关。开启后：①Web 免鉴权/免 CSRF（允许非回环绑定但打印警告）；②计划创建/修订自动确认并提交；③任务进入 awaiting_approval 时自动以 `debug:auto-approve` 签名通过；④四道门（analysis_claims/baseline_release/mining/citation）返回 debug pass；⑤MCP Profile 上限统一放宽到 D4，`local-trusted` 无需 config 开关；⑥Research Claim 等级/措辞门与发表门 G0–G3 放行；⑦沙箱无 Apptainer/Podman 时回退 direct。硬边界：D3/D4 仍不得发往 cloud LLM 端点（ADR-16）；不设置该变量时所有控制保持 fail-closed。所有入口打印醒目 DEBUG 警告；新增 13 项测试覆盖放宽面与默认拒绝。测试基线 1665 → 1678 | 用户要求开发时提供 debug 模式 + 实施验证 |
 | v1.10.4 | 2026-11-04 | **计划预授权策略放宽（ADR-21/v1.9.0 修订）**：用户裁定默认"人工点击确认"阻碍智能体自动迭代，允许管理员显式配置自动确认范围。①`[plans.auto_confirm]` 新增 `task_types`（analyze/curate/mine/write）、`max_tasks`、`allow_directory_ingestion`、`allow_scripts`、`allow_drafts`；②默认语义与 v1.9 完全兼容（仅已登记样本的 analyze，无目录/脚本）；③`mine` 必须 `task_types` 包含 mine 且 `allow_scripts=true`，`write` 必须含 write 且 `allow_drafts=true`；目录摄入必须显式放开；④配置非法或任一任务不满足策略 fail-closed 回到人工确认；⑤自动确认发生在服务端并审计 `actor=policy:auto-confirm`，模型/Harness 仍不能自证确认；⑥计划**修订**同样应用预授权，支持自动重试/迭代；⑦任务门不消失：curate 发布、mine 产物签字、write 导出、分析结论复核仍可进入 awaiting_approval。推翻 v1.9.0"mine/write/curate 永不自动确认"的绝对措辞；不改变 ADR-16 数据红线与 ADR-21"确认事实由服务端认定"的原则。测试基线 1684 → 1689 | 用户裁定（支持 AI 全自动迭代，至少允许自动确认）+ 实施验证 |
 | v1.10.5 | 2026-11-04 | **Debug 模式支持配置文件开关**：`debug_mode()` 新增读取 `$BACMAP_HOME/config.toml` 的 `[debug] enabled=true`，无需每个命令前缀 `BACMAP_DEBUG=1`。优先级为显式环境变量 > 配置文件：`BACMAP_DEBUG=0` 可临时关闭配置开启的 debug；配置缺失/解析错误/非布尔 true 均视为关闭。`bacmap doctor` 对配置开启同样输出 `debug=warn`；自动审批签名改为 `DEBUG_MODE`，注释不再误导为仅环境变量。放宽面与硬边界不变：仍不放宽 D3/D4→cloud（ADR-16），生产不得开启。测试基线 1689 → 1693 | 用户要求 debug 模式可写入配置文件 + 实施验证 |
+| v1.10.6 | 2026-11-04 | **配置模板与配置路径分层（ADR-03 修订）**：新增仓库根目录模板 `config.example.toml` 并纳入发行包；新增 CLI `bacmap config init|path`（`--user` 写 XDG、`--project` 写当前目录、默认写 `$BACMAP_HOME`）。配置解析顺序改为：`BACMAP_CONFIG` 显式路径 > 命令行/模块传入 home 的 `config.toml` > `$XDG_CONFIG_HOME/bacmap/config.toml`（默认 `~/.config/bacmap/config.toml`）> 内置默认值。源码检出中的项目根 `config.toml` 被 `.gitignore` 忽略，且**不会被自动发现**，必须显式 `BACMAP_CONFIG="$PWD/config.toml"`，保持“路径不由源码位置推导”的原则。pip/conda 安装可用 `bacmap config init --user` 把配置与数据分离。所有原直接读取 `$BACMAP_HOME/config.toml` 的路径（LLM、MCP Profile、auto-confirm、debug、备份）统一改经 `config_path()`；备份会包含实际生效的外部配置。测试基线 1693 → 1703 | 用户要求提供配置模板、pixi 项目本地配置不入库、conda/pip 使用用户配置目录 + 实施验证 |

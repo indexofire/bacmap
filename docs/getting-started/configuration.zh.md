@@ -1,8 +1,23 @@
 # 配置
 
-bacmap 通过**环境变量**加一个可选的 TOML 文件（`$BACMAP_HOME/config.toml`）进行配置。
-任何路径都不会从源码树位置推导（ADR-03）。本页覆盖大多数安装需要的设置；逐键完整参考见
+bacmap 通过**环境变量**加一个可选的 TOML 文件进行配置（不是 YAML）。任何数据路径都不会
+从源码树位置推导（ADR-03）。本页覆盖大多数安装需要的设置；逐键完整参考见
 [配置参考](../reference/configuration.zh.md)。
+
+从模板创建配置：
+
+```bash
+bacmap config init          # $BACMAP_HOME/config.toml（默认）
+bacmap config init --user   # ~/.config/bacmap/config.toml（适合 pip/conda 安装）
+bacmap config init --project # 当前目录 config.toml（源码检出已 gitignore）
+```
+
+读取顺序：`BACMAP_CONFIG` > `$BACMAP_HOME/config.toml` >
+`~/.config/bacmap/config.toml`。项目内配置需要显式：
+
+```bash
+export BACMAP_CONFIG="$PWD/config.toml"
+```
 
 ## 1. 各类内容的位置
 

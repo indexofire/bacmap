@@ -30,7 +30,9 @@ def confirm_url(plan_id: str, version: int) -> str:
 
 
 def _read_config(home: Path) -> dict[str, Any]:
-    p = Path(home) / "config.toml"
+    from bacmap.config import config_path
+
+    p = config_path(home)
     if not p.is_file():
         return {}
     try:

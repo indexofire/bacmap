@@ -163,9 +163,9 @@ def _memory_arbiter() -> Any:
     """
     from bacmap.agent.llm.arbitration import StrataArbiter
     from bacmap.agent.llm.endpoints import load_llm_config
-    from bacmap.config import BACMAP_HOME
+    from bacmap.config import config_path
 
-    cfg = load_llm_config(BACMAP_HOME / "config.toml")
+    cfg = load_llm_config(config_path())
     if not cfg.resources.co_located:
         return StrataArbiter(enabled=False)
     admin_url = "http://127.0.0.1:8080"

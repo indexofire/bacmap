@@ -5,6 +5,16 @@
 
 ## [未发布]
 
+### 配置模板与分层配置路径
+- 新增根目录模板 `config.example.toml`，并纳入发行包。
+- 新增 `bacmap config init|path`：默认写 `$BACMAP_HOME/config.toml`，`--user` 写
+  XDG 用户配置目录，`--project` 写当前目录（源码检出已 gitignore）。
+- 配置解析顺序：`BACMAP_CONFIG` > `$BACMAP_HOME/config.toml` >
+  `~/.config/bacmap/config.toml`；项目内配置必须显式指定，不由源码位置自动推导。
+- LLM、MCP Profile、auto-confirm、debug 与 backup 统一改走 `config_path()`；
+  备份包含实际生效的外部配置文件。
+- 测试基线：1693 → 1703。
+
 ### Debug 模式配置文件开关
 - 新增 `[debug] enabled = true`：无需每个命令前缀 `BACMAP_DEBUG=1`。
 - 优先级：显式 `BACMAP_DEBUG` > 配置文件；`BACMAP_DEBUG=0` 可临时关闭配置开启的 debug。

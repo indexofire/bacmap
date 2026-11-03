@@ -70,7 +70,9 @@ def resolve_profile(name: str, home: Path, transport: str) -> ProfileSpec:
     from bacmap.config import debug_mode
 
     profile = McpProfile(name)
-    config_path = Path(home) / "config.toml"
+    from bacmap.config import config_path as active_config_path
+
+    config_path = active_config_path(home)
     if debug_mode():
         # 开发模式：跳过 local-trusted 的配置开关，所有 Profile 都可见 D4。
         return ProfileSpec(

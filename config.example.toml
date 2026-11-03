@@ -1,0 +1,54 @@
+# bacmap configuration template
+#
+# Copy this file to one of:
+#   - $BACMAP_HOME/config.toml          (default: ~/.local/share/bacmap/config.toml)
+#   - ~/.config/bacmap/config.toml      (XDG; useful for pip/conda installations)
+#   - $PWD/config.toml                  (project-local; gitignored in source checkouts)
+#     Then run: export BACMAP_CONFIG="$PWD/config.toml"
+#
+# Configuration is TOML, not YAML. Missing sections use built-in defaults.
+# Never put API keys in this file; set api_key_env to the *name* of an env var.
+
+# Optional data-path override. Relative paths are interpreted literally; use
+# absolute paths here to avoid ambiguity.
+[paths]
+# data_dir = "/absolute/path/to/data"
+
+# Task-internal LLM endpoints. The deterministic pipeline works without this block.
+[llm.data_policy]
+cloud_max_data_class = "D1"           # D1 or D2 only; D3/D4 are rejected by code
+
+[llm.endpoints.strata]
+location = "local"                    # local | lan | cloud
+base_url = "http://127.0.0.1:8080/v1"
+model = "qwen3.8-flash-next-iq3_xxs"
+enabled = true
+
+# Example cloud endpoint. The value of api_key_env is an environment-variable NAME.
+# [llm.endpoints.deepseek]
+# location = "cloud"
+# base_url = "https://api.deepseek.com/v1"
+# model = "deepseek-chat"
+# api_key_env = "DEEPSEEK_API_KEY"
+
+[llm.routing]
+interpretation = "strata"
+
+[llm.resources]
+co_located = true
+min_free_ram_gb_for_heavy_steps = 24.0
+
+[mcp]
+allow_local_trusted = false           # true + --profile local-trusted exposes D4 tools
+
+[debug]
+enabled = false                       # development only; never enable in production
+
+[plans.auto_confirm]
+enabled = false
+task_types = ["analyze"]              # analyze | curate | mine | write
+max_samples = 20
+max_tasks = 10
+allow_directory_ingestion = false
+allow_scripts = false
+allow_drafts = false

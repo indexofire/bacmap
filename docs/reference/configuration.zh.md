@@ -1,13 +1,39 @@
 # 配置参考
 
-配置由**环境变量 + 一个 TOML 文件**组成。路径绝不从源码树推导（ADR-03）。
-当 `config.toml` 不存在时，使用内置默认值。
+配置由**环境变量 + 一个 TOML 文件**组成（不是 YAML）。数据路径绝不从源码树推导
+（ADR-03）。当配置文件不存在时，使用内置默认值。
+
+配置模板：仓库根目录的 [`config.example.toml`](https://github.com/indexofire/bacmap/blob/main/config.example.toml)，
+或运行：
+
+```bash
+bacmap config init          # 写入 $BACMAP_HOME/config.toml
+bacmap config init --user   # 写入 ~/.config/bacmap/config.toml
+bacmap config init --project # 写入当前目录 config.toml（源码检出已 gitignore）
+bacmap config path          # 显示当前实际读取的文件
+```
+
+配置文件解析顺序：
+
+1. `BACMAP_CONFIG` 显式指定的文件；
+2. `$BACMAP_HOME/config.toml`（已存在的旧形态继续兼容）；
+3. `$XDG_CONFIG_HOME/bacmap/config.toml`，未设置 XDG 时为
+   `~/.config/bacmap/config.toml`；
+4. 都不存在时使用内置默认值。
+
+项目内 `config.toml` 不会被自动发现；这是有意的（ADR-03）。复制模板到项目根目录后，
+运行前设置：
+
+```bash
+export BACMAP_CONFIG="$PWD/config.toml"
+```
 
 ## 1. 环境变量
 
 | 变量 | 默认值 | 含义 |
 |---|---|---|
 | `BACMAP_HOME` | `~/.local/share/bacmap` | 数据根目录 |
+| `BACMAP_CONFIG` | 见解析顺序 | 显式配置文件路径；适合项目内临时配置 |
 | `BACMAP_DATA_DIR` | `$BACMAP_HOME/data` | 元数据/参考数据库 |
 | `BACMAP_DB_PATH` | `$DATA_DIR/bacmap.sqlite` | 菌株元数据 + 化验结果 |
 | `BACMAP_GOM_DB` | `$BACMAP_HOME/gom.sqlite` | GOM、数据集、菌株索引 |

@@ -145,7 +145,9 @@ def doctor(args: argparse.Namespace) -> None:
 
 def _iter_backup_files(home: Path) -> list[Path]:
     files: list[Path] = []
-    cfg = home / "config.toml"
+    from bacmap.config import config_path
+
+    cfg = config_path(home)
     if cfg.is_file():
         files.append(cfg)
     files.extend(p for p in (home / n for n in _DB_NAMES) if p.is_file())
