@@ -96,4 +96,4 @@ Development       environment, tests, contracts, adding capabilities
 The authoritative design is the frozen document
 [Frozen design](concepts/frozen-design.md) (Chinese version is authoritative; English is a
 reference translation). The program version and the frozen-document revision are independent:
-this build is **0.1.2**, the design revision is **v1.10.2**.
+this build is **0.1.2**, the design revision is **v1.10.3**.

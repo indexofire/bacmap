@@ -106,6 +106,21 @@ def publication_readiness(home: Path | str, study_id: str) -> dict[str, Any]:
         _gate_g2(study, sessions),
         _gate_g3(plans, experiments),
     ]
+    from bacmap.config import debug_mode
+
+    if debug_mode():
+        for gate in gates:
+            gate["blockers"] = [
+                f"debug bypass: {blocker}" for blocker in gate["blockers"]
+            ]
+            gate["ok"] = True
+        return {
+            "study_id": study_id,
+            "ready": True,
+            "debug_bypass": True,
+            "gates": gates,
+            "note": "BACMAP_DEBUG=1: publication gates bypassed for development.",
+        }
     return {
         "study_id": study_id,
         "ready": all(g["ok"] for g in gates),

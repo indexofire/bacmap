@@ -27,6 +27,10 @@ _TRANSMISSION_WORDS = ("transmitted", "transmission", "传播", "传给")
 
 def validate_claim(claim: Claim, decision: str) -> None:
     """在 support/approve 前检查；challenge/reject 不要求证据等级。"""
+    from bacmap.config import debug_mode
+
+    if debug_mode():
+        return
     if decision not in {"support", "approve"}:
         return
     _validate_level(claim)

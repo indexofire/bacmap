@@ -14,7 +14,7 @@ pixi shell
 回退到没有 DBOS 的 Python）。
 
 ```bash
-pixi run -e dev test          # pytest；当前基线 1610 passed
+pixi run -e dev test          # pytest；当前基线 1683 passed
 pixi run -e dev lint          # ruff（src + tests）
 pixi run -e dev typecheck     # 对 src/bacmap 跑 mypy
 pixi run -e dev contracts     # import-linter（5 条契约）
@@ -22,6 +22,22 @@ pixi run -e dev docs-build    # mkdocs（英文 + 中文）
 ```
 
 五项全部通过，改动才算完成。CI 按相同顺序执行。
+
+## Debug 模式（仅开发）
+
+本地功能测试可设置 `BACMAP_DEBUG=1`，关闭平时拖慢迭代的运行控制：
+
+```bash
+BACMAP_DEBUG=1 bacmap web --host 127.0.0.1
+BACMAP_DEBUG=1 bacmap mcp --profile local-trusted
+BACMAP_DEBUG=1 bacmap research ...
+```
+
+它会关闭 Web 鉴权/CSRF、计划确认、任务审批、四道门、MCP Profile 数据级别上限（所有
+Profile 可见 D4）、Research Claim/发表门和沙箱回退。每个入口都会打印警告。
+
+**硬边界：** `BACMAP_DEBUG` **不会**允许 D3/D4 载荷发往 cloud LLM 端点（ADR-16）。
+不要在生产或共享主机设置该变量；不设置时，上述控制全部保持 fail-closed。
 
 ## 2. 依赖方向
 
@@ -122,7 +138,7 @@ dev/               仅本地的调研笔记/脚本（不入库）
 - 程序版本：`pyproject.toml` / `pixi.toml`（当前 0.1.2），仅在明确发布决定后更改。
 - 冻结设计修订：`docs/concepts/frozen-design.zh.md` 中的标题与修订表（v1.10.0），
   独立于程序版本。
-- 测试基线：`AGENTS.md` 规则 7（当前 1610）。
+- 测试基线：`AGENTS.md` 规则 7（当前 1683）。
 
 ## 10. 提交清单
 

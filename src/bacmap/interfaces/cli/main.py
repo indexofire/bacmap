@@ -109,6 +109,10 @@ def _run_web(args: argparse.Namespace) -> None:
             f"bearer 模式（API 客户端）；浏览器登录请设 BACMAP_WEB_AUTH=cookie 后重启，"
             f"或用 Authorization: Bearer <{args.token_env}>"
         )
+    from bacmap.config import debug_mode, debug_warning
+
+    if debug_mode():
+        print(debug_warning("bacmap web"), file=sys.stderr)
     print(f"bacmap web → http://{args.host}:{args.port}/  ·  {hint}")
     uvicorn.run(create_app(engine, auth_token=token or None), host=args.host, port=args.port)
 

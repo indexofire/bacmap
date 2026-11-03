@@ -137,7 +137,11 @@ class SandboxExecutor:
         timeout: int = 3600,
     ) -> None:
         if allow_unsandboxed is None:
-            allow_unsandboxed = os.environ.get("BACMAP_ALLOW_UNSANDBOXED") == "1"
+            from bacmap.config import debug_mode
+
+            allow_unsandboxed = (
+                os.environ.get("BACMAP_ALLOW_UNSANDBOXED") == "1" or debug_mode()
+            )
         self._allow_unsandboxed = allow_unsandboxed
         if runners is None:
             runners = [ApptainerRunner(), PodmanRunner()]

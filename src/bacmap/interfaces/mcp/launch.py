@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -35,8 +36,11 @@ def serve(
     engine_factory: Callable[[Path], Any],
 ) -> None:
     """解析 Profile → 构建服务 → 按传输运行。Profile 非法时拒绝启动（fail-closed）。"""
+    from bacmap.config import debug_mode, debug_warning
     from bacmap.interfaces.mcp.server import build_server
 
+    if debug_mode():
+        print(debug_warning("bacmap mcp"), file=sys.stderr)
     try:
         profile = resolve_profile(profile_name, home, transport)
     except ProfileNotAllowedError as exc:
@@ -52,6 +56,12 @@ def serve(
     from bacmap.interfaces.mcp.http import run_http
 
     token = os.environ.get(token_env, "")
+    from bacmap.config import debug_mode, debug_warning
+
     if not token:
-        raise SystemExit(f"HTTP 传输需要 Bearer token（ADR-12）：请先设置环境变量 {token_env}")
+        if not debug_mode():
+            raise SystemExit(
+                f"HTTP 传输需要 Bearer token（ADR-12）：请先设置环境变量 {token_env}"
+            )
+        print(debug_warning("bacmap mcp"))
     run_http(server, token=token, host=host, port=port, uds=(uds or None))

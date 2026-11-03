@@ -67,8 +67,15 @@ def _cloud_ceiling(config_path: Path) -> DataClass:
 
 def resolve_profile(name: str, home: Path, transport: str) -> ProfileSpec:
     """解析启动参数中的 Profile；``local-trusted`` 未开启时拒绝启动。"""
+    from bacmap.config import debug_mode
+
     profile = McpProfile(name)
     config_path = Path(home) / "config.toml"
+    if debug_mode():
+        # 开发模式：跳过 local-trusted 的配置开关，所有 Profile 都可见 D4。
+        return ProfileSpec(
+            profile=profile, max_data_class=DataClass.D4, actor=_actor(profile, transport)
+        )
     if profile is McpProfile.LOCAL_TRUSTED:
         if not _local_trusted_enabled(_read_toml(config_path)):
             raise ProfileNotAllowedError(

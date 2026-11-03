@@ -180,6 +180,27 @@ class DbosTaskEngine:
                     state, message = outcome
                     self._transition_from_running(task_id, state.value, message)
 
+        from bacmap.config import debug_mode
+
+        if debug_mode() and state == TaskState.AWAITING_APPROVAL:
+            # 开发模式：审批门自动通过（签名仅用于审计，不是生产批准）。
+            self.approve(
+                task_id,
+                Approval(
+                    approver="debug:auto-approve",
+                    decision="approve",
+                    signature="BACMAP_DEBUG",
+                    comment="auto-approved by BACMAP_DEBUG=1",
+                    at=datetime.now(UTC),
+                ),
+            )
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT state, message FROM tasks WHERE task_id = ?", (task_id,)
+                ).fetchone()
+            if row is not None:
+                state, message = TaskState(row["state"]), row["message"]
+
         return TaskStatus(
             task_id=task_id, state=state, current_step=row["current_step"], message=message
         )

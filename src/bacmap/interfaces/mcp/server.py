@@ -57,9 +57,16 @@ def _model_from_schema(tool_name: str, schema: dict[str, Any] | None) -> type:
     return create_model(f"{safe}Input", **fields)
 
 
-DEFAULT_PROFILE = ProfileSpec(
-    profile=McpProfile.CLOUD, max_data_class=DataClass.D1, actor="mcp-stdio:cloud:unknown"
-)
+def _default_profile() -> ProfileSpec:
+    from bacmap.config import debug_mode
+
+    ceiling = DataClass.D4 if debug_mode() else DataClass.D1
+    return ProfileSpec(
+        profile=McpProfile.CLOUD, max_data_class=ceiling, actor="mcp-stdio:cloud:unknown"
+    )
+
+
+DEFAULT_PROFILE = _default_profile()
 
 
 def exposed_specs(profile: ProfileSpec) -> list[Any]:

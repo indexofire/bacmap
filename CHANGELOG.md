@@ -5,6 +5,24 @@
 
 ## [未发布]
 
+### 代码质量审计循环（第 1–3 轮，无严重问题）
+- 第 1 轮（debug/research 面）：`benjamini_hochberg` 拒绝 `[0,1]` 外的 p 值；
+  `associate_counts` 拒绝负格子并在 n>2000 时明示正态近似；`event_period`
+  拒绝 00/13 月；Web Study 页的 Cohort/Plan 下拉只列已冻结对象。
+- 第 2 轮（API/文档面）：`OutbreakAnalyzeRequest.events` 增加上限 10000；
+  README/installation/development 的测试基线陈旧值统一刷新。
+- 第 3 轮（运维面）：`bacmap doctor` 在 `BACMAP_DEBUG=1` 时输出 `debug=warn`
+  （此前只显示沙箱 direct，不提示治理限制已放宽）。
+- 连续 3 轮未发现严重问题，按停止条件结束；全量验证见证据 §10.79。
+- 测试基线：1678 → 1683。
+
+### 开发调试模式（BACMAP_DEBUG）
+- 新增 `BACMAP_DEBUG=1`：开发机放宽 Web 鉴权/CSRF、计划确认、任务审批、四道门、
+  MCP Profile 数据级别、Research Claim/发表门与沙箱回退；所有入口打印警告。
+- 硬边界不变：D3/D4 仍不得发往 cloud LLM 端点（ADR-16）；默认不设置时全部 fail-closed。
+- 新增 13 项测试：显式放宽面 + 默认拒绝 + 数据红线边界。
+- 测试基线：1665 → 1678。
+
 ### P2 收尾 + 暴发事件挖掘 + 真实队列敏感性 + P3 第一片
 - Web `/research` 与 Study 页补齐 Study/Cohort/Plan/Experiment/Claim 创建、冻结、审核和
   G0–G3 发表门展示，不再只能走 API/CLI。

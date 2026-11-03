@@ -146,6 +146,12 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _debug_mode() -> bool:
+    from bacmap.config import debug_mode
+
+    return debug_mode()
+
+
 class PlanService:
     """计划的创建、修订、查询、拒绝与确认提交（CLI/Web/MCP 共用）。"""
 
@@ -187,6 +193,8 @@ class PlanService:
             self._insert(conn, plan_id, 1, tasks, rationale, actor)
         record = self.get(plan_id, 1)
         self._emit(EventType.PLAN_CREATED, record, actor)
+        if _debug_mode():
+            return self.confirm(plan_id, 1, record.plan_hash, "policy:debug-auto-confirm")
         return record
 
     def revise(
@@ -209,6 +217,8 @@ class PlanService:
             self._insert(conn, plan_id, version, tasks, rationale, actor)
         record = self.get(plan_id, version)
         self._emit(EventType.PLAN_REVISED, record, actor)
+        if _debug_mode():
+            return self.confirm(plan_id, version, record.plan_hash, "policy:debug-auto-confirm")
         return record
 
     def reject(self, plan_id: str, version: int, reason: str, actor: str) -> PlanRecord:

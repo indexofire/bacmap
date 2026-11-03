@@ -35,6 +35,16 @@ def _check(name: str, status: str, detail: str) -> dict[str, str]:
 
 def collect_checks(home: Path) -> list[dict[str, str]]:
     checks: list[dict[str, str]] = []
+    from bacmap.config import debug_mode
+
+    if debug_mode():
+        checks.append(
+            _check(
+                "debug",
+                "warn",
+                "BACMAP_DEBUG=1：鉴权/审批/门/Profile 限制已放宽（仅限开发环境）",
+            )
+        )
     if not home.is_dir():
         return [_check("home", "fail", f"目录不存在：{home}")]
     try:

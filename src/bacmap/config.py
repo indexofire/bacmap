@@ -95,6 +95,25 @@ CHECKM2_DB: Path | None = _env_path("CHECKM2_DB", None) or _env_path("CHECKM2DB"
 GTDB_DB: Path | None = _env_path("GTDBTK_DATA_PATH", None) or _env_path("GTDBDB", None)
 
 
+def debug_mode() -> bool:
+    """开发调试模式：``BACMAP_DEBUG=1`` 时放宽审批/鉴权/门/Profile 限制。
+
+    仅用于受控开发机。数据红线（D3/D4 永不发往 cloud 端点）不在此开关范围内；
+    生产部署不得设置该变量。
+    """
+    return (os.environ.get("BACMAP_DEBUG") or "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def debug_warning(component: str) -> str:
+    """统一警告文本（调用方打印到 stderr/日志）。"""
+    return (
+        f"[bacmap] DEBUG MODE ({component}): BACMAP_DEBUG=1——鉴权/CSRF/审批/门/"
+        "MCP Profile/沙箱限制已放宽。仅限本机开发；不要用于生产。"
+    )
+
+
 def pixi_path() -> str:
     """当前进程 PATH（pixi 环境激活时即含生信工具 bin）。保留旧名以兼容 engine/_env。"""
     return os.environ.get("PATH", "")

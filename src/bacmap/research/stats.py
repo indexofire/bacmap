@@ -150,8 +150,11 @@ def benjamini_hochberg(p_values: list[float | None]) -> list[float | None]:
     """Benjamini–Hochberg FDR adjustment, preserving order and missing values.
 
     ``None`` entries (e.g. an untestable stratum) are left as ``None`` and do not
-    count towards the number of hypotheses.
+    count towards the number of hypotheses. Values outside ``[0, 1]`` are rejected.
     """
+    for value in p_values:
+        if value is not None and not 0.0 <= value <= 1.0:
+            raise ValueError(f"p-value out of range: {value}")
     indexed = [(i, p) for i, p in enumerate(p_values) if p is not None]
     m = len(indexed)
     if m == 0:
@@ -333,6 +336,8 @@ def associate_counts(
     a: int, b: int, c: int, d: int, diagnostics: list[str] | None = None
 ) -> StatResult:
     """纯 2×2 → OR/95% CI/Fisher p（供服务和科学基准复用）。"""
+    if min(a, b, c, d) < 0:
+        raise ValueError("2x2 counts must be non-negative")
     diagnostics = list(diagnostics or [])
     table = {
         "gene_pos_resistant": a,
@@ -354,6 +359,10 @@ def associate_counts(
         log_or = math.log(odds_ratio)
         ci_low = math.exp(log_or - _Z95 * se)
         ci_high = math.exp(log_or + _Z95 * se)
+    if n > 2000:
+        diagnostics.append(
+            "n>2000: p-value uses a two-proportion normal approximation, not Fisher exact"
+        )
     p_value = _fisher_two_sided(a, b, c, d)
     if p_value is None:
         diagnostics.append("Fisher exact test unavailable")

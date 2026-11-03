@@ -144,6 +144,17 @@ class LlmGateway:
             )
 
         instructions = None
+        from bacmap.config import debug_mode
+
+        if debug_mode():
+            if role:
+                from bacmap.agent import roledef
+
+                try:
+                    instructions = roledef.build_system_prompt(role)
+                except (OSError, ValueError) as exc:
+                    raise LlmUnavailableError(f"role {role!r} unavailable: {exc}") from exc
+            return endpoint, instructions
         if role:
             from bacmap.agent import roledef
 

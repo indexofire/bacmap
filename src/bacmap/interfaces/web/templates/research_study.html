@@ -39,7 +39,7 @@
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="field"><label class="field__label" for="pl-cohort">Cohort</label>
       <select class="field__control" id="pl-cohort" name="cohort_id" required>
-        {% for c in cohorts %}<option value="{{ c.cohort_id }}">{{ c.cohort_id }} ({{ c.status.value }})</option>{% endfor %}
+        {% for c in cohorts if c.status.value == 'frozen' %}<option value="{{ c.cohort_id }}">{{ c.cohort_id }}</option>{% endfor %}
       </select></div>
     <div class="field"><label class="field__label" for="pl-spec">spec JSON</label>
       <textarea class="field__control" id="pl-spec" name="spec" rows="4" required>{"run_id":"R1","gene":"blaKPC","test_name":"meropenem"}</textarea></div>
@@ -55,7 +55,7 @@
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="field"><label class="field__label" for="ex-plan">Plan</label>
       <select class="field__control" id="ex-plan" name="plan_id">
-        {% for p in plans %}<option value="{{ p.plan_id }}">{{ p.plan_id }} ({{ p.status.value }})</option>{% endfor %}
+        {% for p in plans if p.status.value == 'frozen' %}<option value="{{ p.plan_id }}">{{ p.plan_id }}</option>{% endfor %}
       </select></div>
     <div class="field"><label class="field__label" for="ex-status">状态</label>
       <select class="field__control" id="ex-status" name="status">

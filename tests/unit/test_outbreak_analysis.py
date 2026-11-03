@@ -16,6 +16,8 @@ class TestOutbreakEvents:
         assert event_period("2012-XX-XX") == "2012"
         assert event_period("XXXX-XX-XX") == ""
         assert event_period("") == ""
+        assert event_period("2012-13-01") == "2012"
+        assert event_period("2012-00-01") == "2012"
 
     def test_clusters_are_location_period_and_unknown_is_sporadic(self):
         events = [
@@ -61,6 +63,29 @@ class TestOutbreakEvents:
         ]
         report = summarize_outbreak(events, min_count=1)
         assert {m["exposure"] for m in report["mining"]} == {"clustered", "source", "lineage"}
+
+
+class TestStatInputValidation:
+    def test_bh_rejects_out_of_range_p(self):
+        from bacmap.research.stats import benjamini_hochberg
+
+        with pytest.raises(ValueError, match="out of range"):
+            benjamini_hochberg([-0.1])
+        with pytest.raises(ValueError, match="out of range"):
+            benjamini_hochberg([1.1])
+
+    def test_counts_reject_negative_cells(self):
+        from bacmap.research.stats import associate_counts
+
+        with pytest.raises(ValueError, match="non-negative"):
+            associate_counts(-1, 2, 3, 4)
+
+    def test_large_n_approximation_is_disclosed(self):
+        from bacmap.research.stats import associate_counts
+
+        stat = associate_counts(1000, 1000, 1000, 1000)
+        assert stat.odds_ratio == pytest.approx(1.0)
+        assert any("normal approximation" in d for d in stat.diagnostics)
 
 
 class TestSensitivity:

@@ -400,10 +400,13 @@ class TestResearchObjectAPI:
             follow_redirects=False,
         )
         assert cohort.status_code == 303, cohort.text
+        cohort_id = cohort.headers["location"].split("/")[-1]
 
         page = c.get(f"/research/studies/{study_id}")
         assert page.status_code == 200
         assert "G0" in page.text and "新建 Study" not in page.text
+        # Draft cohorts/plans must not be selectable for downstream steps.
+        assert f'<option value="{cohort_id}"' not in page.text
 
 
 class TestClaimGate:

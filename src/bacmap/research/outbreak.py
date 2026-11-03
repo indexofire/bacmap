@@ -35,7 +35,7 @@ class OutbreakEvent(BaseModel):
 
 
 class OutbreakAnalyzeRequest(BaseModel):
-    events: list[OutbreakEvent]
+    events: list[OutbreakEvent] = Field(default_factory=list, max_length=10000)
     min_count: int = Field(default=5, ge=1, le=100)
 
 
@@ -45,7 +45,7 @@ def event_period(raw: str) -> str:
     if not text or text.upper().startswith("XXXX"):
         return ""
     match = _MONTH.match(text)
-    if match and match.group(2).isdigit():
+    if match and match.group(2).isdigit() and 1 <= int(match.group(2)) <= 12:
         return f"{match.group(1)}-{match.group(2)}"
     match = _YEAR.match(text)
     return match.group(1) if match else ""
