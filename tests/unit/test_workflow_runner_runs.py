@@ -172,7 +172,9 @@ class TestRunnerSubprocess:
         assert cmd[0] == "snakemake" and cmd[1] == "-s"
         assert "--cores" in cmd and "4" in cmd
         assert "--rerun-incomplete" in cmd
-        assert cmd[-1] == "results/S/report/s.json"
+        # targets 必须在 --config 之前：--config 是 nargs="*"，会吞掉其后参数
+        assert cmd.index("results/S/report/s.json") < cmd.index("--config")
+        assert cmd[cmd.index("--config") + 1 :] == ["threads=4"]
         assert recorded["cwd"] == str(tmp_path)
 
 

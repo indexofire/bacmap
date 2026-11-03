@@ -191,9 +191,11 @@ class WorkflowRunner:
             "--rerun-incomplete",
             "--printshellcmds",
         ]
+        # targets 必须放在 --config 之前：snakemake 的 --config 是 nargs="*"，
+        # 会贪婪吞掉其后所有参数，把目标文件当 KEY=VALUE 解析（v1.9.3 巡检）。
+        cmd += targets
         if config_overrides:
             cmd += ["--config"] + [f"{k}={v}" for k, v in config_overrides.items()]
-        cmd += targets
         return subprocess.run(
             cmd,
             cwd=str(self.dir),

@@ -71,9 +71,10 @@ def run_snakemake(
         "--rerun-incomplete",
         "--printshellcmds",
     ]
+    # targets 必须放在 --config 之前（--config 是 nargs="*"，会吞掉后续参数）
+    cmd += targets
     if config_overrides:
         cmd += ["--config"] + [f"{k}={v}" for k, v in config_overrides.items()]
-    cmd += targets
 
     print(f"\n{'=' * 60}")
     print(f"启动 Snakemake 自动编排 ({len(targets)} target(s))")
