@@ -24,7 +24,7 @@ tree (ADR-03). When `config.toml` is absent, built-in defaults apply.
 | `BACMAP_WEB_SECRET` | derived from token | HMAC key for session cookies |
 | `BACMAP_WEB_COOKIE_SECURE` | off | `1` adds `Secure` to cookies |
 | `BACMAP_RESEARCH_PROFILE` | `research` | default governance profile for Research Workbench (`open-test`/`research`/`publication`) |
-| `BACMAP_DEBUG` | off | **development only**: `1` disables Web auth/CSRF, plan confirmation, task approvals, gates, MCP Profile limits, Research claim/publication gates and sandbox fallback. D3/D4→cloud remains blocked. |
+| `BACMAP_DEBUG` | off | **development only**: explicit override of `[debug].enabled`; `1` enables, `0` disables. Disables Web auth/CSRF, plan confirmation, task approvals, gates, MCP Profile limits, Research claim/publication gates and sandbox fallback. D3/D4→cloud remains blocked. |
 | `BACMAP_BENCHMARK_DATA` | — | local public-data snapshot for research benchmarks; may be a dataset dir or a parent containing `bvbrc_kpn_meropenem`/`osf_n78q3` |
 | `BACMAP_ALLOW_UNSANDBOXED` | off | `1` allows direct execution (dev only) |
 | `CHECKM2_DB` | — | CheckM2 database path |
@@ -54,9 +54,17 @@ min_free_ram_gb_for_heavy_steps = 24.0
 [mcp]
 allow_local_trusted = false
 
+[debug]
+enabled = false
+
 [plans.auto_confirm]
 enabled = false
+task_types = ["analyze"]
 max_samples = 20
+max_tasks = 10
+allow_directory_ingestion = false
+allow_scripts = false
+allow_drafts = false
 ```
 
 ## 3. LLM endpoints
@@ -122,22 +130,76 @@ allow_local_trusted = false   # must be the boolean true to start --profile loca
 MCP servers default to the `cloud` profile. The profile ceiling is the same
 `cloud_max_data_class`. See [MCP reference](mcp.md).
 
+## 4.1 Development debug mode
+
+Debug mode can also be persisted in the configuration file instead of exported per command:
+
+```toml
+# $BACMAP_HOME/config.toml
+[debug]
+enabled = true
+```
+
+Precedence: an explicit `BACMAP_DEBUG` overrides `[debug].enabled`. After enabling it in the
+file, `BACMAP_DEBUG=0` temporarily disables it:
+
+```bash
+BACMAP_DEBUG=0 bacmap doctor
+```
+
+A configuration-file setting is persistent; `bacmap doctor` reports `debug=warn`. Never enable
+it in production. It does not relax the ADR-16 data boundary: D3/D4 still cannot be sent to a
+cloud LLM endpoint.
+
 ## 5. Plans
+
+Auto-confirmation is off by default and remains fail-closed.
 
 ```toml
 [plans.auto_confirm]
 enabled = false
-max_samples = 20
+task_types = ["analyze"]       # choices: analyze / curate / mine / write
+max_samples = 20               # analyze over an explicit samples list
+max_tasks = 10                 # tasks per plan (hard maximum is also 10)
+allow_directory_ingestion = false
+allow_scripts = false
+allow_drafts = false
 ```
 
-Auto-confirm applies only to `analyze` plans that:
+The default is compatible with v1.9: only an `analyze` plan is auto-confirmed when it:
 
-- reference a non-empty list of already registered `samples`;
-- do not use `fasta_dir`/`fastq_dir` (directory ingestion) or scripts;
-- have at most `max_samples` samples.
+- uses a non-empty list of registered `samples`;
+- does not use `fasta_dir`/`fastq_dir`;
+- has at most `max_samples` samples.
 
-`mine`, `write`, `curate` and record tasks are never auto-confirmed. A malformed `max_samples`
-fails safe to “human confirmation required”. The audit actor is `policy:auto-confirm`.
+Administrators may explicitly broaden it for automated iteration:
+
+| Key | Broadens | Boundaries that remain |
+|---|---|---|
+| `task_types` | task types eligible for auto-confirm | unlisted types still need a human |
+| `allow_directory_ingestion` | analyze over directory inputs | input fingerprints are still rechecked |
+| `allow_scripts` | `mine` plans | scripts still run offline in a sandbox and pass the mining gate |
+| `allow_drafts` | `write` plans | citation gate remains; export still needs a human signature |
+| `max_tasks` | multi-task plans | over the limit means fail-closed |
+
+`mine` requires both `task_types` containing `mine` and `allow_scripts = true`;
+`write` requires both `write` and `allow_drafts = true`. Invalid policy values fall back to
+human confirmation. The audit actor is `policy:auto-confirm`.
+
+Example: fully automated analyze + mine iteration (explicit administrator choice):
+
+```toml
+[plans.auto_confirm]
+enabled = true
+task_types = ["analyze", "mine"]
+max_samples = 100
+allow_directory_ingestion = true
+allow_scripts = true
+```
+
+Task-level approval gates are not removed. `curate` release, `mine` artefact sign-off, `write`
+export and analysis-claim review can still enter `awaiting_approval` and require a human in
+bacmap's trusted surfaces.
 
 ## 6. Sample registration
 
@@ -213,6 +275,6 @@ Docker is not supported. Without a backend, `mine` fails with `sandbox_unavailab
 
 - Unknown TOML keys in typed sections are rejected (pydantic `extra="forbid"`).
 - `cloud_max_data_class` above D2 is a parse error.
-- Invalid `plans.auto_confirm.max_samples` disables auto-confirm (fail-safe).
+- Invalid `plans.auto_confirm` policy (`max_samples`/`max_tasks`/`task_types`/flags) disables auto-confirm (fail-safe).
 - A database newer than the code is refused; restore a matching backup instead of downgrading.
 - `config.toml` may contain only the name of a secret env var, never the key itself.

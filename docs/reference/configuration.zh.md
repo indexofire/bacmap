@@ -24,7 +24,7 @@
 | `BACMAP_WEB_SECRET` | 由 token 派生 | 会话 cookie 的 HMAC 密钥 |
 | `BACMAP_WEB_COOKIE_SECURE` | 关 | `1` 给 cookie 加上 `Secure` |
 | `BACMAP_RESEARCH_PROFILE` | `research` | Research Workbench 默认治理 Profile（`open-test`/`research`/`publication`） |
-| `BACMAP_DEBUG` | 关 | **仅开发**：`1` 关闭 Web 鉴权/CSRF、计划确认、任务审批、门、MCP Profile 限制、Research Claim/发表门与沙箱回退；D3/D4→cloud 仍被阻止。 |
+| `BACMAP_DEBUG` | 关 | **仅开发**：显式覆盖 `[debug].enabled`；`1` 开启，`0` 关闭。关闭 Web 鉴权/CSRF、计划确认、任务审批、门、MCP Profile 限制、Research Claim/发表门与沙箱回退；D3/D4→cloud 仍被阻止。 |
 | `BACMAP_BENCHMARK_DATA` | — | Research 科学基准的本地公共数据快照；可指向单个数据集目录，或包含 `bvbrc_kpn_meropenem`/`osf_n78q3` 的父目录 |
 | `BACMAP_ALLOW_UNSANDBOXED` | 关 | `1` 允许直接执行（仅开发） |
 | `CHECKM2_DB` | — | CheckM2 数据库路径 |
@@ -54,9 +54,17 @@ min_free_ram_gb_for_heavy_steps = 24.0
 [mcp]
 allow_local_trusted = false
 
+[debug]
+enabled = false
+
 [plans.auto_confirm]
 enabled = false
+task_types = ["analyze"]
 max_samples = 20
+max_tasks = 10
+allow_directory_ingestion = false
+allow_scripts = false
+allow_drafts = false
 ```
 
 ## 3. LLM 端点
@@ -122,22 +130,74 @@ allow_local_trusted = false   # 必须是布尔 true 才能启动 --profile loca
 MCP 服务器默认使用 `cloud` Profile。Profile 的上限同样是
 `cloud_max_data_class`。见 [MCP 参考](mcp.zh.md)。
 
+## 4.1 开发调试模式
+
+调试模式也可以持久写入配置文件，不必每次导出环境变量：
+
+```toml
+# $BACMAP_HOME/config.toml
+[debug]
+enabled = true
+```
+
+优先级：`BACMAP_DEBUG` 显式设置 > `[debug].enabled`。因此配置文件开启后，可以用
+`BACMAP_DEBUG=0` 临时关闭：
+
+```bash
+BACMAP_DEBUG=0 bacmap doctor
+```
+
+配置文件开启是**持久状态**；`bacmap doctor` 会输出 `debug=warn`。生产环境不得开启。
+该开关不放宽 ADR-16 数据红线：D3/D4 仍不得发往 cloud LLM 端点。
+
 ## 5. 计划
+
+默认关闭自动确认；开启后仍按下方条件 fail-closed。
 
 ```toml
 [plans.auto_confirm]
 enabled = false
-max_samples = 20
+task_types = ["analyze"]       # 可选：analyze / curate / mine / write
+max_samples = 20               # analyze 且使用 samples 列表时的上限
+max_tasks = 10                 # 单个计划任务数上限（硬上限也是 10）
+allow_directory_ingestion = false
+allow_scripts = false
+allow_drafts = false
 ```
 
-自动确认仅适用于满足以下条件的 `analyze` 计划：
+默认策略与 v1.9 兼容：仅自动确认满足以下条件的 `analyze` 计划：
 
 - 引用非空的、已登记的 `samples` 列表；
-- 不使用 `fasta_dir`/`fastq_dir`（目录摄取）或脚本；
+- 不使用 `fasta_dir`/`fastq_dir`；
 - 样本数量不超过 `max_samples`。
 
-`mine`、`write`、`curate` 与记录任务永不自动确认。`max_samples` 格式错误时会
-安全地回退为“需要人工确认”。审计 actor 为 `policy:auto-confirm`。
+管理员可显式放宽用于自动迭代：
+
+| 配置 | 放宽内容 | 仍然保留的安全边界 |
+|---|---|---|
+| `task_types` | 允许自动确认的任务类型 | 未列出的类型仍需人工确认 |
+| `allow_directory_ingestion` | 自动确认目录直入 analyze | 输入指纹仍会在确认前复核 |
+| `allow_scripts` | 自动确认 `mine` 计划 | 脚本仍在无网络沙箱执行，产物仍过挖掘门 |
+| `allow_drafts` | 自动确认 `write` 计划 | 引用门仍强制，导出仍需人工签 |
+| `max_tasks` | 多任务计划 | 超过上限 fail-closed |
+
+`mine` 必须同时配置 `task_types` 包含 `mine` 与 `allow_scripts = true`；
+`write` 必须同时包含 `write` 与 `allow_drafts = true`。任何配置值非法都会回退为
+“需要人工确认”。自动确认的审计 actor 为 `policy:auto-confirm`。
+
+例：全自动 analyze + mine 迭代（管理员显式选择）：
+
+```toml
+[plans.auto_confirm]
+enabled = true
+task_types = ["analyze", "mine"]
+max_samples = 100
+allow_directory_ingestion = true
+allow_scripts = true
+```
+
+注意：任务内的审批门不因此消失。`curate` 发布、`mine` 产物签字、`write` 导出、
+分析结论复核仍可能进入 `awaiting_approval`，需要人在 bacmap 的可信界面处理。
 
 ## 6. 样本注册
 
@@ -213,6 +273,6 @@ bacmap web --host 127.0.0.1 --port 8800
 
 - 类型化段中的未知 TOML 键会被拒绝（pydantic `extra="forbid"`）。
 - `cloud_max_data_class` 高于 D2 是解析错误。
-- 无效的 `plans.auto_confirm.max_samples` 会禁用自动确认（故障安全）。
+- 无效的 `plans.auto_confirm` 策略（`max_samples`/`max_tasks`/`task_types`/开关）会禁用自动确认（故障安全）。
 - 比代码更新的数据库会被拒绝；请恢复匹配的备份，而不是降级。
 - `config.toml` 只能包含密钥环境变量的名称，绝不能包含密钥本身。

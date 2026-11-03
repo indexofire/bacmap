@@ -15,7 +15,7 @@ Never use the system Python for tests: `pixi run -e dev test` (without `-e dev`,
 back to a Python without DBOS).
 
 ```bash
-pixi run -e dev test          # pytest; current baseline 1684 passed
+pixi run -e dev test          # pytest; current baseline 1693 passed
 pixi run -e dev lint          # ruff (src + tests)
 pixi run -e dev typecheck     # mypy on src/bacmap
 pixi run -e dev contracts     # import-linter (5 contracts)
@@ -26,8 +26,7 @@ All five must be green before a change is considered done. CI runs the same orde
 
 ## Debug mode (development only)
 
-For local feature testing, `BACMAP_DEBUG=1` removes the operational controls that normally
-slow down iteration:
+For local feature testing, use the environment variable:
 
 ```bash
 BACMAP_DEBUG=1 bacmap web --host 127.0.0.1
@@ -35,11 +34,20 @@ BACMAP_DEBUG=1 bacmap mcp --profile local-trusted
 BACMAP_DEBUG=1 bacmap research ...
 ```
 
+You can also persist it in `$BACMAP_HOME/config.toml` instead of prefixing every command:
+
+```toml
+[debug]
+enabled = true
+```
+
+The environment variable takes precedence: `BACMAP_DEBUG=0` temporarily disables a file-enabled
+debug mode.
 It disables Web auth/CSRF, plan confirmation, task approvals, the four gates, MCP Profile
 data-class ceilings (all profiles see D4), Research Claim/publication gates, and the
 sandbox fallback. Every entry point prints a warning.
 
-**Hard boundary:** `BACMAP_DEBUG` does **not** allow D3/D4 payloads to be sent to a cloud LLM
+**Hard boundary:** debug mode (environment variable or configuration file) does **not** allow D3/D4 payloads to be sent to a cloud LLM
 endpoint (ADR-16). Do not set it in production or on a shared host. Without the flag, all
 controls above remain fail-closed.
 
@@ -146,7 +154,7 @@ Guidelines:
   release decision.
 - Frozen design revision: the title and revision table in
   `docs/concepts/frozen-design.zh.md` (v1.10.0), independent of the program version.
-- Test baseline: `AGENTS.md` rule 7 (currently 1684).
+- Test baseline: `AGENTS.md` rule 7 (currently 1693).
 
 ## 10. Commit checklist
 

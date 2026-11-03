@@ -91,7 +91,8 @@ def build_server(engine: Any = None, profile: ProfileSpec = DEFAULT_PROFILE) -> 
         instructions=(
             "bacmap 病原微生物基因组分析。操作规程："
             "1) 分析/写入先调用 bacmap_create_plan，把 plan_id/version/plan_hash/confirm_url "
-            "交给用户，并由人在 bacmap Web/CLI/本地对话框确认；智能体不能确认。"
+            "交给用户；默认由人在 bacmap Web/CLI/本地对话框确认（智能体不能确认），"
+            "除非管理员已显式启用服务端 auto_confirm 预授权策略。"
             "2) 确认后用 bacmap_get_plan 获取 task_ids，用 bacmap_task_status 跟踪，"
             "用 bacmap_task_result 汇总；结论必须引用样本/task/run 标识。"
             "3) 不要用 Harness 自己的 shell/文件工具运行 snakemake/gside/gapit/gmlst，"
@@ -234,7 +235,7 @@ def _register_task_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -
 
 
 def _register_plan_tools(server: MCPServer, engine: Any, actor: str) -> None:
-    """计划工具（v1.5.1，ADR-21）：Harness 只能创建/修订/查询计划；确认只在可信界面。"""
+    """计划工具（ADR-21）：Harness 创建/修订/查询；确认只在可信界面或服务端预授权策略。"""
     from pathlib import Path
 
     from bacmap.application.errors import ApplicationError
@@ -259,11 +260,19 @@ def _register_plan_tools(server: MCPServer, engine: Any, actor: str) -> None:
     def _err(exc: ApplicationError) -> str:
         return json.dumps(exc.to_dict(), ensure_ascii=False)
 
+    def _maybe_auto_confirm(rec: PlanRecord) -> PlanRecord:
+        if confirm_helpers.auto_confirm_allows(Path(engine.home), rec.tasks):
+            return service.confirm(
+                rec.plan_id, rec.version, rec.plan_hash, confirm_helpers.AUTO_ACTOR
+            )
+        return rec
+
     @server.tool(
         name="bacmap_create_plan",
         description=(
             "Create an analysis plan with typed parameters. Nothing runs until the user confirms "
-            "this exact version in the bacmap CLI or Web console. analyze takes exactly one of "
+            "this exact version in the bacmap CLI or Web console, unless an administrator has "
+            "enabled the server-side auto-confirm policy. analyze takes exactly one of "
             "samples / fasta_dir / fastq_dir; curate takes scope; mine takes objective + script "
             "(runs in the sandbox, no network) + optional absolute input_paths; write takes "
             "objective + draft. Returns plan_id, version and plan_hash; the user reviews the full "
@@ -271,15 +280,9 @@ def _register_plan_tools(server: MCPServer, engine: Any, actor: str) -> None:
         ),
     )
     def create_plan(tasks: list[PlannableTask], rationale: str = "") -> str:
-        from pathlib import Path
-
         try:
             rec = service.create(tasks, rationale, actor)
-            if confirm_helpers.auto_confirm_allows(Path(engine.home), rec.tasks):
-                rec = service.confirm(
-                    rec.plan_id, rec.version, rec.plan_hash, confirm_helpers.AUTO_ACTOR
-                )
-            return _out(rec)
+            return _out(_maybe_auto_confirm(rec))
         except ApplicationError as exc:
             return _err(exc)
 
@@ -300,7 +303,8 @@ def _register_plan_tools(server: MCPServer, engine: Any, actor: str) -> None:
                     },
                     ensure_ascii=False,
                 )
-            return _out(service.revise(plan_id, tasks, rationale, actor))
+            rec = service.revise(plan_id, tasks, rationale, actor)
+            return _out(_maybe_auto_confirm(rec))
         except ApplicationError as exc:
             return _err(exc)
 

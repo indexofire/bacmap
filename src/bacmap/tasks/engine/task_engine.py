@@ -189,8 +189,8 @@ class DbosTaskEngine:
                 Approval(
                     approver="debug:auto-approve",
                     decision="approve",
-                    signature="BACMAP_DEBUG",
-                    comment="auto-approved by BACMAP_DEBUG=1",
+                    signature="DEBUG_MODE",
+                    comment="auto-approved by debug mode",
                     at=datetime.now(UTC),
                 ),
             )

@@ -444,15 +444,16 @@ Plannable task shapes:
 A plan holds at most 10 tasks. Input paths are fingerprinted at creation and re-checked at
 confirmation; a change is a conflict.
 
-### 5.2 Confirm (human only)
+### 5.2 Confirm (human or server-side pre-authorisation)
 
 Three channels:
 
 1. **Web link** (default): `confirm_url` → plan page → **Confirm and submit**.
 2. **Local dialog** (stdio): ask the agent to call `bacmap_confirm_plan_locally`; a zenity/kdialog
    dialog shows plan ID/version/hash; the click is the confirmation (`actor=local-dialog`).
-3. **Pre-authorisation** (admin, optional): analyze-only plans over registered samples within
-   `max_samples`; `actor=policy:auto-confirm`.
+3. **Pre-authorisation** (admin, optional): by default only analyze plans over registered samples;
+   `task_types`, `allow_directory_ingestion`, `allow_scripts` and `allow_drafts` can explicitly
+   broaden it for automated iteration (`actor=policy:auto-confirm`).
 
 CLI fallback:
 

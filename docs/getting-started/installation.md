@@ -40,7 +40,7 @@ The development environment is separate:
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest (current baseline: 1684 passed)
+pixi run -e dev test        # pytest (current baseline: 1693 passed)
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter dependency contracts

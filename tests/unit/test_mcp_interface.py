@@ -662,6 +662,72 @@ class TestConfirmationChannels:
         )
         assert big["state"] == "awaiting_confirmation"
 
+    def test_broad_policy_can_auto_confirm_open_paths(self, engine, tmp_path: Path):
+        """v1.10.4：管理员显式放宽后，mine/write 也可进入自动迭代。"""
+        (tmp_path / "config.toml").write_text(
+            "[plans.auto_confirm]\nenabled = true\n"
+            "task_types = [\"analyze\", \"mine\", \"write\", \"curate\"]\n"
+            "allow_scripts = true\nallow_drafts = true\n"
+        )
+        server = build_server(engine)
+        out = _call(
+            server, "bacmap_create_plan",
+            {"tasks": [{"task_type": "mine", "objective": "x", "script": "print(1)"}]},
+        )
+        assert out["state"] == "submitted"
+        assert engine.list_tasks(1)[0]["task_type"] == "mine"
+
+    def test_broad_policy_still_requires_explicit_flags(self, engine, tmp_path: Path):
+        (tmp_path / "config.toml").write_text(
+            "[plans.auto_confirm]\nenabled = true\n"
+            "task_types = [\"mine\", \"write\"]\n"
+        )
+        server = build_server(engine)
+        mine = _call(
+            server, "bacmap_create_plan",
+            {"tasks": [{"task_type": "mine", "objective": "x", "script": "print(1)"}]},
+        )
+        assert mine["state"] == "awaiting_confirmation"
+        draft = _call(
+            server, "bacmap_create_plan",
+            {"tasks": [{"task_type": "write", "objective": "x", "draft": "report"}]},
+        )
+        assert draft["state"] == "awaiting_confirmation"
+
+    def test_broad_policy_auto_confirms_revision(self, engine, tmp_path: Path):
+        (tmp_path / "config.toml").write_text(
+            "[plans.auto_confirm]\nenabled = true\n"
+            "task_types = [\"analyze\"]\nmax_samples = 5\n"
+        )
+        server = build_server(engine)
+        first = self._create(server)
+        assert first["state"] == "submitted"
+        second = _call(
+            server, "bacmap_revise_plan",
+            {
+                "plan_id": first["plan_id"],
+                "tasks": [{"task_type": "analyze", "samples": ["S1"]}],
+                "rationale": "retry",
+            },
+        )
+        # 已 submitted 的计划不能修订；先构造一个待确认计划验证修订后的预授权。
+        pending = _call(
+            server, "bacmap_create_plan",
+            {"tasks": [{"task_type": "analyze", "samples": ["S1", "S2", "S3", "S4",
+                                                              "S5", "S6"]}]},
+        )
+        assert pending["state"] == "awaiting_confirmation"
+        revised = _call(
+            server, "bacmap_revise_plan",
+            {
+                "plan_id": pending["plan_id"],
+                "tasks": [{"task_type": "analyze", "samples": ["S1"]}],
+                "rationale": "narrow scope",
+            },
+        )
+        assert revised["state"] == "submitted"
+        assert second["code"] == "conflict"
+
 
 class TestAutoConfirmRobustness:
     def test_malformed_policy_does_not_crash(self, tmp_path: Path, monkeypatch):
@@ -683,8 +749,8 @@ class TestAutoConfirmRobustness:
 
 
 class TestAutoConfirmInputScope:
-    def test_directory_ingestion_never_auto_confirmed(self, tmp_path: Path, monkeypatch):
-        """samples=[] + fasta_dir 会绕过 max_samples，预授权必须拒绝。"""
+    def test_directory_ingestion_not_auto_confirmed_by_default(self, tmp_path: Path, monkeypatch):
+        """默认策略不自动确认目录摄入；显式 allow_directory_ingestion 才放开。"""
         from bacmap.tasks.engine import task_engine
 
         (tmp_path / "config.toml").write_text(
@@ -766,3 +832,40 @@ class TestPlanOwnership:
             },
         )
         assert out["version"] == 2
+
+
+class TestBroadAutoConfirmInputScope:
+    @pytest.fixture
+    def engine(self, tmp_path: Path, monkeypatch):
+        from bacmap.tasks.engine import task_engine
+
+        monkeypatch.setattr(task_engine.DBOS, "start_workflow", lambda wf, p: None)
+        e = eng.DbosTaskEngine(tmp_path)
+        yield e
+        eng.shutdown_dbos()
+
+    def test_directory_ingestion_requires_explicit_flag(self, engine, tmp_path: Path):
+        fasta = tmp_path / "fasta"
+        fasta.mkdir()
+        (fasta / "S1.fna").write_text(">c\nACGT\n", encoding="utf-8")
+        (tmp_path / "config.toml").write_text(
+            "[plans.auto_confirm]\nenabled = true\ntask_types = [\"analyze\"]\n"
+            "allow_directory_ingestion = true\n",
+            encoding="utf-8",
+        )
+        out = _call(
+            build_server(engine), "bacmap_create_plan",
+            {"tasks": [{"task_type": "analyze", "fasta_dir": str(fasta)}]},
+        )
+        assert out["state"] == "submitted"
+
+    def test_invalid_task_types_fail_closed(self, engine, tmp_path: Path):
+        (tmp_path / "config.toml").write_text(
+            "[plans.auto_confirm]\nenabled = true\ntask_types = [\"analyze\", \"record\"]\n",
+            encoding="utf-8",
+        )
+        out = _call(
+            build_server(engine), "bacmap_create_plan",
+            {"tasks": [{"task_type": "analyze", "samples": ["S1"]}]},
+        )
+        assert out["state"] == "awaiting_confirmation"

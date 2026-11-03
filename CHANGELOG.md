@@ -5,6 +5,21 @@
 
 ## [未发布]
 
+### Debug 模式配置文件开关
+- 新增 `[debug] enabled = true`：无需每个命令前缀 `BACMAP_DEBUG=1`。
+- 优先级：显式 `BACMAP_DEBUG` > 配置文件；`BACMAP_DEBUG=0` 可临时关闭配置开启的 debug。
+- 配置缺失/解析错误/非 `true` 一律视为关闭；doctor 对配置开启同样输出 `debug=warn`。
+- 测试基线：1689 → 1693。
+
+### 计划自动确认策略放宽
+- `[plans.auto_confirm]` 新增 `task_types`、`max_tasks`、`allow_directory_ingestion`、
+  `allow_scripts`、`allow_drafts`；默认行为保持不变（仅已登记样本的 analyze）。
+- 管理员可显式放开目录摄入、mine 脚本与 write 草稿，支持智能体自动迭代；
+  计划修订同样应用预授权。
+- 策略非法或任务不满足条件时 fail-closed 回到人工确认；模型/Harness 仍不能自证确认。
+- 任务门不消失：curate 发布、mine 签字、write 导出与复核仍可能要求人工处理。
+- 测试基线：1684 → 1689。
+
 ### 智能体接入文档与 MCP 操作规程
 - MCP server instructions 现在明确写入操作边界：分析/写入先 `bacmap_create_plan`、
   人工确认、不得用 Harness shell 运行生信工具或读取原始序列、结论引用样本/task/run

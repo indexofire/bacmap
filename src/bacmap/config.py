@@ -95,22 +95,50 @@ CHECKM2_DB: Path | None = _env_path("CHECKM2_DB", None) or _env_path("CHECKM2DB"
 GTDB_DB: Path | None = _env_path("GTDBTK_DATA_PATH", None) or _env_path("GTDBDB", None)
 
 
-def debug_mode() -> bool:
-    """开发调试模式：``BACMAP_DEBUG=1`` 时放宽审批/鉴权/门/Profile 限制。
+def _debug_from_env() -> bool | None:
+    raw = (os.environ.get("BACMAP_DEBUG") or "").strip().lower()
+    if not raw:
+        return None
+    return raw in {"1", "true", "yes", "on"}
 
-    仅用于受控开发机。数据红线（D3/D4 永不发往 cloud 端点）不在此开关范围内；
-    生产部署不得设置该变量。
+
+def _debug_from_config() -> bool:
+    """Read ``[debug] enabled`` from the active ``config.toml``.
+
+    The file is read on demand so operators can turn debug mode off without
+    restarting every long-lived interface; malformed or missing files mean off.
     """
-    return (os.environ.get("BACMAP_DEBUG") or "").strip().lower() in {
-        "1", "true", "yes", "on",
-    }
+    path = BACMAP_HOME / "config.toml"
+    if not path.is_file():
+        return False
+    try:
+        with path.open("rb") as fh:
+            data = tomllib.load(fh)
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+    section = data.get("debug")
+    return isinstance(section, dict) and section.get("enabled") is True
+
+
+def debug_mode() -> bool:
+    """开发调试模式：环境变量或 ``[debug] enabled = true`` 时放宽运行控制。
+
+    优先级：``BACMAP_DEBUG`` 显式设置 > ``config.toml``。因此 ``BACMAP_DEBUG=0``
+    可以临时关闭配置文件开启的 debug 模式。仅用于受控开发机；数据红线
+    （D3/D4 永不发往 cloud 端点）不在此开关范围内。
+    """
+    enabled = _debug_from_env()
+    if enabled is not None:
+        return enabled
+    return _debug_from_config()
 
 
 def debug_warning(component: str) -> str:
     """统一警告文本（调用方打印到 stderr/日志）。"""
     return (
-        f"[bacmap] DEBUG MODE ({component}): BACMAP_DEBUG=1——鉴权/CSRF/审批/门/"
-        "MCP Profile/沙箱限制已放宽。仅限本机开发；不要用于生产。"
+        f"[bacmap] DEBUG MODE ({component}): BACMAP_DEBUG=1 或 "
+        "[debug] enabled=true——鉴权/CSRF/审批/门/MCP Profile/沙箱限制已放宽。"
+        "仅限本机开发；不要用于生产。"
     )
 
 

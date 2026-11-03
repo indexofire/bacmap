@@ -133,17 +133,34 @@ bacmap mcp --profile local-trusted
 
 ## 5. 计划确认（可选的预授权）
 
-计划由人在受信界面上确认。对于低风险、重复性的分析，管理员可以预授权自动确认：
+默认仍需人在 bacmap 的受信界面确认计划。对低风险、重复性的分析，管理员可预授权：
 
 ```toml
 [plans.auto_confirm]
 enabled = true
-max_samples = 20        # 仅 analyze、已登记的样本、无目录摄入、
-                        # 无脚本；mine/write/curate 永不自动确认
+task_types = ["analyze"]   # 默认仅 analyze
+max_samples = 20           # 已登记样本数上限
+max_tasks = 10
 ```
 
-审计操作者记为 `policy:auto-confirm`。默认的人工流程（Web 链接、本地对话框、CLI）见
-[智能体与计划](../guide/agent-plans.zh.md)。
+默认只自动确认“已登记样本、无目录摄入、无脚本”的 `analyze` 计划。
+
+管理员可显式放宽用于自动迭代：
+
+```toml
+[plans.auto_confirm]
+enabled = true
+task_types = ["analyze", "mine"]
+allow_directory_ingestion = true
+allow_scripts = true
+```
+
+- `mine` 脚本仍在无网络沙箱执行，产物仍过挖掘门；
+- `write` 需要 `allow_drafts = true`，引用门仍强制；
+- 任务内的 `awaiting_approval` 不会因此消失；
+- 审计 actor 记为 `policy:auto-confirm`。
+
+更激进的全自动策略见 [配置参考](../reference/configuration.zh.md)。
 
 ## 6. 第一次分析
 

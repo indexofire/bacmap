@@ -87,7 +87,7 @@ bacmap mcp --profile local-trusted  # 要求 [mcp] allow_local_trusted = true
 - 一个计划最多包含 10 个任务；
 - `mine.script` ≤20k 字符；`write.draft` ≤40k；
 - 读取/修订仅限创建该计划的客户端；
-- 模型无法确认；`confirm_url` 指向 Web 计划页面。
+- 模型无法确认；默认 `confirm_url` 指向 Web 计划页面。管理员显式配置 `[plans.auto_confirm]` 时，服务端可按策略自动确认。
 
 ### 3.3 任务
 

@@ -39,24 +39,61 @@ def _read_config(home: Path) -> dict[str, Any]:
         return {}
 
 
+def _bool(cfg: dict[str, Any], key: str) -> bool:
+    return cfg.get(key) is True
+
+
+def _task_types(cfg: dict[str, Any]) -> set[str]:
+    raw = cfg.get("task_types", ["analyze"])
+    if not isinstance(raw, list) or not all(isinstance(x, str) for x in raw):
+        return set()
+    allowed = {"analyze", "curate", "mine", "write"}
+    types = {x.strip().lower() for x in raw}
+    return types if types <= allowed else set()
+
+
 def auto_confirm_allows(home: Path, tasks: list[Any]) -> bool:
-    """C：`[plans.auto_confirm] enabled=true` 且任务全是受限 analyze 时允许自动确认。"""
+    """服务端预授权策略（v1.10.4 起支持按任务类型放宽）。
+
+    默认保持 v1.9 的保守策略：仅针对**已登记样本**的 `analyze` 计划自动确认。
+    管理员可显式放宽：
+
+    - ``task_types``：允许自动确认的任务类型；
+    - ``allow_directory_ingestion``：允许 ``fasta_dir``/``fastq_dir``；
+    - ``allow_scripts``：允许 ``mine`` 生成的脚本；
+    - ``allow_drafts``：允许 ``write`` 生成的草稿；
+    - ``max_tasks``：一个计划中的任务数上限。
+
+    配置非法或任一任务不满足策略时返回 False（fail-closed）。
+    """
     cfg = _read_config(home).get("plans", {}).get("auto_confirm", {})
     if not isinstance(cfg, dict) or cfg.get("enabled") is not True:
         return False
     try:
-        limit = int(cfg.get("max_samples", 20))
+        sample_limit = int(cfg.get("max_samples", 20))
+        task_limit = int(cfg.get("max_tasks", 10))
     except (TypeError, ValueError):
-        return False  # 配置坏 → 安全回退为"需人工确认"
+        return False
+    if sample_limit < 1 or task_limit < 1 or task_limit > 10 or len(tasks) > task_limit:
+        return False
+    allowed_types = _task_types(cfg)
+    if not allowed_types:
+        return False
     for t in tasks:
-        if getattr(t, "task_type", "") != "analyze":
+        kind = str(getattr(t, "task_type", ""))
+        if kind not in allowed_types:
             return False
-        # 目录直入（fasta_dir/fastq_dir）是数据登记写路径，且 samples 为空会绕过
-        # max_samples（0 ≤ 上限）——预授权只接受已登记样本的分析（v1.9.2）。
-        if getattr(t, "fasta_dir", None) or getattr(t, "fastq_dir", None):
-            return False
-        samples = getattr(t, "samples", []) or []
-        if not samples or len(samples) > limit:
+        if kind == "analyze":
+            has_dir = bool(getattr(t, "fasta_dir", None) or getattr(t, "fastq_dir", None))
+            if has_dir and not _bool(cfg, "allow_directory_ingestion"):
+                return False
+            samples = getattr(t, "samples", []) or []
+            # 目录直入（fasta_dir/fastq_dir）是数据登记写路径，且 samples 为空会绕过
+            # max_samples——默认只接受已登记样本；显式放开时由管理员承担该策略。
+            if not has_dir and (not samples or len(samples) > sample_limit):
+                return False
+        required_flag = {"mine": "allow_scripts", "write": "allow_drafts"}.get(kind)
+        if required_flag and not _bool(cfg, required_flag):
             return False
     return True
 

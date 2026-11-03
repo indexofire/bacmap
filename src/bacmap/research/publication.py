@@ -119,7 +119,10 @@ def publication_readiness(home: Path | str, study_id: str) -> dict[str, Any]:
             "ready": True,
             "debug_bypass": True,
             "gates": gates,
-            "note": "BACMAP_DEBUG=1: publication gates bypassed for development.",
+            "note": (
+                "Debug mode (environment or [debug].enabled): "
+                "publication gates bypassed for development."
+            ),
         }
     return {
         "study_id": study_id,

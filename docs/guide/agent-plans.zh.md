@@ -432,15 +432,16 @@ HTTP 模式下 Harness 完全不需要 bacmap 的 conda/pixi 环境；它只访�
 
 一个计划最多包含 10 个任务。输入路径在创建时生成指纹，并在确认时重新校验；发生变化即为冲突。
 
-### 5.2 确认（仅限人）
+### 5.2 确认（人或服务端预授权）
 
 三种渠道：
 
 1. **Web 链接**（默认）：`confirm_url` → 计划页面 → **Confirm and submit**。
 2. **本机对话框**（stdio）：让智能体调用 `bacmap_confirm_plan_locally`；zenity/kdialog
    对话框会显示计划 ID/版本/哈希；点击即确认（`actor=local-dialog`）。
-3. **预授权**（管理员，可选）：仅限 analyze 计划，且只针对已登记样本、样本数不超过
-   `max_samples`；`actor=policy:auto-confirm`。
+3. **预授权**（管理员，可选）：默认仅限已登记样本的 analyze 计划；也可通过
+   `task_types` / `allow_directory_ingestion` / `allow_scripts` / `allow_drafts`
+   显式放宽到自动迭代（`actor=policy:auto-confirm`）。
 
 CLI 备用方式：
 

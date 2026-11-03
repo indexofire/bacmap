@@ -21,9 +21,39 @@ class TestDebugFlag:
         for value in ("1", "true", "yes", "on", "TRUE"):
             monkeypatch.setenv("BACMAP_DEBUG", value)
             assert debug_mode() is True
-        for value in ("", "0", "false", "off"):
+        for value in ("0", "false", "off"):
             monkeypatch.setenv("BACMAP_DEBUG", value)
             assert debug_mode() is False
+        monkeypatch.delenv("BACMAP_DEBUG", raising=False)
+        assert debug_mode() is False
+
+    def test_debug_mode_from_config(self, monkeypatch, tmp_path: Path):
+        import bacmap.config as config
+
+        monkeypatch.delenv("BACMAP_DEBUG", raising=False)
+        monkeypatch.setattr(config, "BACMAP_HOME", tmp_path)
+        (tmp_path / "config.toml").write_text(
+            "[debug]\nenabled = true\n", encoding="utf-8"
+        )
+        assert debug_mode() is True
+
+    def test_env_can_disable_config_debug(self, monkeypatch, tmp_path: Path):
+        import bacmap.config as config
+
+        monkeypatch.setattr(config, "BACMAP_HOME", tmp_path)
+        (tmp_path / "config.toml").write_text(
+            "[debug]\nenabled = true\n", encoding="utf-8"
+        )
+        monkeypatch.setenv("BACMAP_DEBUG", "0")
+        assert debug_mode() is False
+
+    def test_malformed_debug_config_means_off(self, monkeypatch, tmp_path: Path):
+        import bacmap.config as config
+
+        monkeypatch.delenv("BACMAP_DEBUG", raising=False)
+        monkeypatch.setattr(config, "BACMAP_HOME", tmp_path)
+        (tmp_path / "config.toml").write_text("not valid ==", encoding="utf-8")
+        assert debug_mode() is False
 
 
 class TestWebDebug:
@@ -97,6 +127,18 @@ class TestDoctorDebug:
     def test_doctor_warns_in_debug(self, debug, tmp_path: Path):
         from bacmap.interfaces.cli.ops import collect_checks
 
+        checks = collect_checks(tmp_path)
+        assert any(c["name"] == "debug" and c["status"] == "warn" for c in checks)
+
+    def test_doctor_warns_for_config_debug(self, monkeypatch, tmp_path: Path):
+        import bacmap.config as config
+        from bacmap.interfaces.cli.ops import collect_checks
+
+        monkeypatch.delenv("BACMAP_DEBUG", raising=False)
+        monkeypatch.setattr(config, "BACMAP_HOME", tmp_path)
+        (tmp_path / "config.toml").write_text(
+            "[debug]\nenabled = true\n", encoding="utf-8"
+        )
         checks = collect_checks(tmp_path)
         assert any(c["name"] == "debug" and c["status"] == "warn" for c in checks)
 

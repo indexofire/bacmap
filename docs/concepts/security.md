@@ -56,7 +56,7 @@ accepts confirmation only from:
 - Web plan page / approval card (session + CSRF);
 - CLI `plan confirm` / `task approve`;
 - local system dialog (`bacmap_confirm_plan_locally`, stdio, human click);
-- optional `[plans.auto_confirm]` policy for low-risk analyze plans over registered samples.
+- optional `[plans.auto_confirm]` policy: low-risk analyze plans over registered samples by default, explicitly broadenable to directory ingestion, mine scripts or write drafts while gates and sign-offs remain.
 
 A model can propose, revise and poll, but cannot confirm or sign.
 

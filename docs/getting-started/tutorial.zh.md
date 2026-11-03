@@ -117,9 +117,9 @@ http://127.0.0.1:8800/plans/9a3f2c1b7d4e4f60?version=1
 1. **Web 链接**（默认）：点击、确认、回到 Hermes；
 2. **本地对话框**（有图形界面的工作站）：对 Hermes 说"用本地对话框确认"；它调用
    `bacmap_confirm_plan_locally`，你在系统对话框中点击批准（仅 stdio 会话可用）；
-3. **预授权**（管理员选项）：在 `config.toml` 中配置 `[plans.auto_confirm]` 后，仅含 analyze、
-   针对**已登记样本**且在样本上限内的计划会被自动确认（`actor=policy:auto-confirm`）；
-   目录摄入、脚本、mine/write/发布仍然需要人工。
+3. **预授权**（管理员选项）：默认仅对已登记样本的 analyze 计划生效；也可显式放宽到
+   目录摄入、mine 脚本或 write 草稿，支持智能体自动迭代（`actor=policy:auto-confirm`）。
+   任务内的门与签批仍会保留。
 
 计划按客户端隔离：如果你切换到另一个 Harness，它无法读取或修订第一个客户端创建的计划。
 请用同一个客户端确认或完成它，或者创建一个新计划。

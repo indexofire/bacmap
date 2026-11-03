@@ -52,7 +52,7 @@ MCP elicitation 与 harness 工具审批由客户端/模型作答。因此 bacma
 - Web 计划页面 / 签批卡片（会话 + CSRF）；
 - CLI `plan confirm` / `task approve`；
 - 本机系统弹窗（`bacmap_confirm_plan_locally`，stdio，人工点击）；
-- 可选的 `[plans.auto_confirm]` 策略，适用于针对已登记样本的低风险 analyze 计划。
+- 可选的 `[plans.auto_confirm]` 策略：默认仅针对已登记样本的低风险 analyze 计划；管理员可显式放宽到目录摄入、mine 脚本或 write 草稿，但任务门与签批仍保留。
 
 模型可以提议、修订与轮询，但不能确认或签字。
 

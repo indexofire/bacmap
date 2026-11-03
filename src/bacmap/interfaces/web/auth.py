@@ -37,7 +37,7 @@ _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"}
 def require_auth_when_exposed(host: str, token: str | None, *, prog: str = "bacmap web") -> None:
     """非回环绑定且未配置 token 时拒绝启动（对齐 MCP HTTP 的 fail-fast，ADR-14/16）。
 
-    ``BACMAP_DEBUG=1`` 时放行（开发模式），但会打印醒目警告。
+    ``BACMAP_DEBUG=1`` 或 ``[debug] enabled=true`` 时放行（开发模式），但会打印醒目警告。
     回环免鉴权是文档化的单机形态；非回环一旦放开，任务提交/审批签名就
     暴露给整个网段——漏配 token 不应静默降级为无鉴权（v1.4.13 巡检后收紧）。
     """

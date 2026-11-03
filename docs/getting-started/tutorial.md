@@ -120,10 +120,10 @@ Three ways to confirm, easiest first:
 1. **Web link** (default): click, confirm, return to Hermes;
 2. **Local dialog** (workstation with a GUI): tell Hermes "confirm with a local dialog"; it calls
    `bacmap_confirm_plan_locally` and you click approve in the system dialog (stdio sessions only);
-3. **Pre-authorisation** (admin option): with `[plans.auto_confirm]` in `config.toml`, analyze-only
-   plans over **already registered samples** within the sample limit are confirmed automatically
-   (`actor=policy:auto-confirm`); directory ingestion, scripts, mine/write/releases still require a
-   human.
+3. **Pre-authorisation** (admin option): by default analyze plans over registered samples within
+   the sample limit are confirmed automatically. Administrators can also explicitly allow directory
+   ingestion, mine scripts or write drafts for automated iteration (`actor=policy:auto-confirm`).
+   In-task gates and sign-offs still apply.
 
 Plans are per-client: if you switch to another harness, it cannot read or revise a plan created by
 the first one. Confirm or finish it with the same client, or create a fresh plan.

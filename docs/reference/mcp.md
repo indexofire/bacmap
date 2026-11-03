@@ -88,7 +88,7 @@ Rules:
 - a plan holds at most 10 tasks;
 - `mine.script` ≤20k characters; `write.draft` ≤40k;
 - read/revise is limited to the creating client;
-- the model cannot confirm; `confirm_url` points to the Web plan page.
+- the model cannot confirm; by default `confirm_url` points to the Web plan page. With an explicit `[plans.auto_confirm]` policy the server may confirm automatically.
 
 ### 3.3 Tasks
 

@@ -42,7 +42,8 @@ def collect_checks(home: Path) -> list[dict[str, str]]:
             _check(
                 "debug",
                 "warn",
-                "BACMAP_DEBUG=1：鉴权/审批/门/Profile 限制已放宽（仅限开发环境）",
+                "debug 模式已开启（环境变量或 [debug] enabled=true）："
+                "鉴权/审批/门/Profile 限制已放宽",
             )
         )
     if not home.is_dir():

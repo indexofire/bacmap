@@ -38,7 +38,7 @@ bacmap --version      # 0.1.2
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest（当前基线：1684 passed）
+pixi run -e dev test        # pytest（当前基线：1693 passed）
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter 依赖契约

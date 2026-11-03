@@ -139,18 +139,36 @@ Use `local-trusted` only when the harness talks to a local/LAN model. See
 
 ## 5. Plan confirmation (optional pre-authorisation)
 
-Plans are confirmed by a person on a trusted surface. For low-risk, repetitive analyses an
-administrator may pre-authorise automatic confirmation:
+By default a person confirms plans in bacmap's trusted surfaces. For low-risk repeated analysis an
+administrator can pre-authorise them:
 
 ```toml
 [plans.auto_confirm]
 enabled = true
-max_samples = 20        # analyze only, already registered samples, no directory ingestion,
-                        # no scripts; mine/write/curate are never auto-confirmed
+task_types = ["analyze"]   # default: analyze only
+max_samples = 20           # registered-sample limit
+max_tasks = 10
 ```
 
-The audit actor is `policy:auto-confirm`. For the default human flow (Web link, local dialog, CLI)
-see [Agents & plans](../guide/agent-plans.md).
+By default only `analyze` plans over registered samples, without directory ingestion or scripts,
+are auto-confirmed.
+
+Administrators may explicitly broaden it for automated iteration:
+
+```toml
+[plans.auto_confirm]
+enabled = true
+task_types = ["analyze", "mine"]
+allow_directory_ingestion = true
+allow_scripts = true
+```
+
+- `mine` scripts still run offline in a sandbox and pass the mining gate;
+- `write` additionally needs `allow_drafts = true`; the citation gate remains;
+- task-level `awaiting_approval` states are not removed;
+- the audit actor is `policy:auto-confirm`.
+
+See the [configuration reference](../reference/configuration.md) for the full policy.
 
 ## 6. First analysis
 
