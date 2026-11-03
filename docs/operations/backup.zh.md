@@ -10,8 +10,8 @@ bacmap backup --out /backup/full.zip --with-results
 默认包含：
 
 - `config.toml`、`refs/manifest.json`；
-- 全部 SQLite 数据库：`tasks`、`dbos`、`runs`、`gom`、`baseline`、`data/bacmap`、
-  `data/knowledge` —— 用 SQLite backup API 取得一致快照；
+- 全部 SQLite 数据库：`tasks`、`dbos`、`runs`、`gom`、`baseline`、`research`、
+  `data/bacmap`、`data/knowledge` —— 用 SQLite backup API 取得一致快照；
 - `runs/*/run_manifest.json`（磁盘侧证据链）。
 
 `dbos.sqlite` 保存工作流/步骤检查点；纳入后恢复时运行中任务可继续。结果（`results/`）与

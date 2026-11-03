@@ -14,10 +14,11 @@ import json
 import time
 from collections.abc import Iterator
 from importlib.metadata import version as pkg_version
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from bacmap.application.errors import ApplicationError, Conflict, NotFound
@@ -31,6 +32,24 @@ from bacmap.interfaces.views import (
     sample_page,
 )
 from bacmap.interfaces.web.auth import verify_csrf
+from bacmap.research.discovery import ExploreRequest
+from bacmap.research.models import (
+    ClaimCreate,
+    ClaimReview,
+    CohortCreate,
+    CreateSessionRequest,
+    ExperimentCreate,
+    PlanCreate,
+    ResearchError,
+    ResearchProfile,
+    StudyCreate,
+)
+from bacmap.research.outbreak import OutbreakAnalyzeRequest
+from bacmap.research.service import (
+    ResearchObjectService,
+    ResearchService,
+    default_profile,
+)
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 from bacmap.tasks.events import EventLog
 from bacmap.tasks.spec import TaskId
@@ -73,6 +92,7 @@ def build_api_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     _plan_routes(router, PlanService(engine, engine.db))
     _event_routes(router, engine, EventLog(engine.db))
     _evidence_routes(router, engine)
+    _research_routes(router, engine)
     app.include_router(router)
 
 
@@ -209,3 +229,374 @@ def _evidence_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         if data is None:
             raise NotFound(f"no such GOM object: {object_id}")
         return data
+
+
+def _research_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
+    """P1 Research Workbench API（trusted operator surface）。"""
+    _research_session_routes(router, engine)
+    _research_artifact_routes(router, engine)
+    _research_object_routes(router, engine)
+
+
+def _research_status(code: str) -> int:
+    return {"validation_error": 400, "not_found": 404, "conflict": 409}.get(code, 400)
+
+
+def _research_session_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
+    def _err(exc: ResearchError) -> JSONResponse:
+        return JSONResponse(
+            {"code": exc.code, "error": exc.message},
+            status_code=_research_status(exc.code),
+        )
+
+    @router.get("/research/capabilities")
+    def research_capabilities(profile: str | None = None) -> dict[str, Any]:
+        try:
+            p = ResearchProfile(profile) if profile else default_profile()
+        except ValueError as exc:
+            raise HTTPException(400, f"unknown research profile: {profile}") from exc
+        return ResearchService(engine.home).capabilities(p).model_dump(mode="json")
+
+    @router.get("/research/sessions")
+    def research_sessions(limit: int = 50) -> dict[str, Any]:
+        items = ResearchService(engine.home).list_sessions(_limit(limit))
+        return {"items": [s.model_dump(mode="json") for s in items]}
+
+    @router.post("/research/sessions")
+    def research_create(request: Request, body: CreateSessionRequest) -> Any:
+        _require_csrf(request)
+        try:
+            view = ResearchService(engine.home).create_session(body, actor="api")
+        except ResearchError as exc:
+            return _err(exc)
+        return view.model_dump(mode="json")
+
+    @router.get("/research/sessions/{session_id}")
+    def research_get(session_id: str) -> dict[str, Any]:
+        try:
+            return ResearchService(engine.home).get_session(session_id).model_dump(mode="json")
+        except ResearchError as exc:
+            raise HTTPException(_research_status(exc.code), exc.message) from exc
+
+    @router.get("/research/sessions/{session_id}/ledger")
+    def research_ledger(session_id: str) -> dict[str, Any]:
+        svc = ResearchService(engine.home)
+        try:
+            svc.get_session(session_id)
+        except ResearchError as exc:
+            raise HTTPException(_research_status(exc.code), exc.message) from exc
+        return {"items": svc.ledger(session_id)}
+
+
+def _research_artifact_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
+    def _artifact_response(session_id: str, kind: str) -> Path:
+        try:
+            return ResearchService(engine.home).read_artifact(session_id, kind)
+        except ResearchError as exc:
+            raise HTTPException(_research_status(exc.code), exc.message) from exc
+
+    @router.get("/research/sessions/{session_id}/figure.svg")
+    def research_figure(session_id: str) -> FileResponse:
+        return FileResponse(_artifact_response(session_id, "figure"), media_type="image/svg+xml")
+
+    @router.get("/research/sessions/{session_id}/report.md")
+    def research_report(session_id: str) -> PlainTextResponse:
+        path = _artifact_response(session_id, "report")
+        return PlainTextResponse(path.read_text(encoding="utf-8"), media_type="text/markdown")
+
+    @router.get("/research/sessions/{session_id}/manuscript.md")
+    def research_manuscript(session_id: str) -> PlainTextResponse:
+        path = _artifact_response(session_id, "manuscript")
+        return PlainTextResponse(path.read_text(encoding="utf-8"), media_type="text/markdown")
+
+
+def _research_bad(exc: Exception) -> HTTPException:
+    if isinstance(exc, KeyError):
+        return HTTPException(404, str(exc))
+    if isinstance(exc, ValueError):
+        return HTTPException(409, str(exc))
+    return HTTPException(400, str(exc))
+
+
+def _research_object_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
+    """P2 research objects: Study/Cohort/Plan/Claim (trusted operator surface)."""
+
+    def _svc() -> ResearchObjectService:
+        return ResearchObjectService(engine.home)
+
+    @router.get("/research/studies")
+    def list_studies(limit: int = 50) -> dict[str, Any]:
+        return {"items": [s.model_dump(mode="json") for s in _svc().list_studies(_limit(limit))]}
+
+    @router.post("/research/studies")
+    def create_study(request: Request, body: StudyCreate) -> dict[str, Any]:
+        _require_csrf(request)
+        s = _svc().create_study(body.question, body.pathogen_scope, body.data_class, "api")
+        return s.model_dump(mode="json")
+
+    @router.get("/research/studies/{study_id}")
+    def get_study(study_id: str) -> dict[str, Any]:
+        try:
+            return _svc().get_study(study_id).model_dump(mode="json")
+        except Exception as exc:
+            raise _research_bad(exc) from exc
+
+    @router.get("/research/studies/{study_id}/publication-readiness")
+    def publication_readiness(study_id: str) -> dict[str, Any]:
+        try:
+            return _svc().publication_readiness(study_id)
+        except Exception as exc:
+            raise _research_bad(exc) from exc
+
+    @router.post("/research/outbreak/analyze")
+    def analyze_outbreak(request: Request, body: OutbreakAnalyzeRequest) -> dict[str, Any]:
+        _require_csrf(request)
+        from bacmap.research.outbreak import summarize_outbreak
+
+        return summarize_outbreak(body.events, body.min_count)
+
+    @router.post("/research/explore")
+    def explore(request: Request, body: ExploreRequest) -> dict[str, Any]:
+        _require_csrf(request)
+        from bacmap.research.discovery import explore_candidates
+
+        try:
+            return explore_candidates(body.study_id, body.cases, body.budget, body.role)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    _research_cohort_routes(router, _svc)
+    _research_plan_routes(router, _svc)
+    _research_claim_routes(router, _svc)
+    _research_ledger_route(router, _svc)
+    _research_benchmark_routes(router, engine)
+
+
+def _research_cohort_routes(router: APIRouter, svc: Any) -> None:
+    @router.get("/research/cohorts")
+    def list_cohorts(study_id: str | None = None, limit: int = 100) -> dict[str, Any]:
+        from bacmap.research.store import ResearchObjectStore
+
+        with ResearchObjectStore(svc().home) as store:
+            items = store.list_cohorts(study_id, _limit(limit))
+        return {"items": [c.model_dump(mode="json") for c in items]}
+
+    @router.get("/research/cohorts/{cohort_id}")
+    def get_cohort(cohort_id: str) -> dict[str, Any]:
+        from bacmap.research.store import ResearchObjectStore
+
+        try:
+            with ResearchObjectStore(svc().home) as store:
+                return store.get_cohort(cohort_id).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @router.post("/research/cohorts/preview")
+    def preview_cohort(request: Request, body: CohortCreate) -> dict[str, Any]:
+        _require_csrf(request)
+        try:
+            return svc().preview_cohort(
+                body.study_id, [m.model_dump(mode="json") for m in body.members], body.rules
+            )
+        except Exception as exc:
+            raise _research_bad(exc) from exc
+
+    @router.post("/research/cohorts")
+    def create_cohort(request: Request, body: CohortCreate) -> dict[str, Any]:
+        _require_csrf(request)
+        try:
+            c = svc().create_cohort(
+                body.study_id, [m.model_dump(mode="json") for m in body.members],
+                body.rules, body.name, "api",
+            )
+        except Exception as exc:
+            raise _research_bad(exc) from exc
+        return c.model_dump(mode="json")
+
+    @router.post("/research/cohorts/{cohort_id}/freeze")
+    def freeze_cohort(request: Request, cohort_id: str) -> dict[str, Any]:
+        _require_csrf(request)
+        try:
+            return svc().freeze_cohort(cohort_id, "api").model_dump(mode="json")
+        except Exception as exc:
+            raise _research_bad(exc) from exc
+
+
+def _research_plan_routes(router: APIRouter, svc: Any) -> None:
+    @router.get("/research/plans")
+    def list_plans(study_id: str | None = None, limit: int = 100) -> dict[str, Any]:
+        from bacmap.research.store import ResearchObjectStore
+
+        with ResearchObjectStore(svc().home) as store:
+            items = store.list_plans(study_id, _limit(limit))
+        return {"items": [p.model_dump(mode="json") for p in items]}
+
+    @router.get("/research/plans/{plan_id}")
+    def get_plan(plan_id: str) -> dict[str, Any]:
+        from bacmap.research.store import ResearchObjectStore
+
+        try:
+            with ResearchObjectStore(svc().home) as store:
+                return store.get_plan(plan_id).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @router.post("/research/plans")
+    def create_plan(request: Request, body: PlanCreate) -> dict[str, Any]:
+        _require_csrf(request)
+        try:
+            p = svc().create_plan(body.study_id, body.cohort_id, body.spec, "api")
+        except Exception as exc:
+            raise _research_bad(exc) from exc
+        return p.model_dump(mode="json")
+
+    @router.post("/research/plans/{plan_id}/freeze")
+    def freeze_plan(request: Request, plan_id: str) -> dict[str, Any]:
+        _require_csrf(request)
+        try:
+            return svc().freeze_plan(plan_id, "api").model_dump(mode="json")
+        except Exception as exc:
+            raise _research_bad(exc) from exc
+
+    @router.post("/research/plans/{plan_id}/run")
+    def run_plan(request: Request, plan_id: str) -> dict[str, Any]:
+        _require_csrf(request)
+        try:
+            view = svc().run_plan(plan_id, "api")
+        except ResearchError as exc:
+            raise HTTPException(_research_status(exc.code), exc.message) from exc
+        return view.model_dump(mode="json")
+
+    @router.get("/research/experiments")
+    def list_experiments(
+        study_id: str | None = None, plan_id: str | None = None, limit: int = 100
+    ) -> dict[str, Any]:
+        items = svc().list_experiments(study_id, plan_id, _limit(limit))
+        return {"items": [e.model_dump(mode="json") for e in items]}
+
+    @router.post("/research/experiments")
+    def create_experiment(request: Request, body: ExperimentCreate) -> dict[str, Any]:
+        _require_csrf(request)
+        try:
+            exp = svc().record_experiment(
+                body.plan_id,
+                body.status.value,
+                body.run_ids,
+                body.outcome,
+                body.deviation,
+                "api",
+            )
+        except ResearchError as exc:
+            raise HTTPException(_research_status(exc.code), exc.message) from exc
+        return exp.model_dump(mode="json")
+
+
+def _research_claim_routes(router: APIRouter, svc: Any) -> None:
+    @router.get("/research/claims")
+    def list_claims(study_id: str | None = None, limit: int = 100) -> dict[str, Any]:
+        from bacmap.research.store import ResearchObjectStore
+
+        with ResearchObjectStore(svc().home) as store:
+            items = store.list_claims(study_id, _limit(limit))
+        return {"items": [c.model_dump(mode="json") for c in items]}
+
+    @router.get("/research/claims/{claim_id}")
+    def get_claim(claim_id: str) -> dict[str, Any]:
+        from bacmap.research.store import ResearchObjectStore
+
+        try:
+            with ResearchObjectStore(svc().home) as store:
+                return store.get_claim(claim_id).model_dump(mode="json")
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @router.post("/research/claims")
+    def create_claim(request: Request, body: ClaimCreate) -> dict[str, Any]:
+        _require_csrf(request)
+        try:
+            c = svc().create_claim(
+                body.study_id, body.claim_type.value, body.wording,
+                body.evidence_level.value, body.evidence, "api",
+            )
+        except ResearchError as exc:
+            raise HTTPException(_research_status(exc.code), exc.message) from exc
+        except Exception as exc:
+            raise _research_bad(exc) from exc
+        return c.model_dump(mode="json")
+
+    @router.post("/research/claims/from-session")
+    def claim_from_session(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        _require_csrf(request)
+        try:
+            c = svc().claim_from_session(
+                str(body.get("session_id", "")),
+                str(body.get("wording", "")),
+                str(body.get("evidence_level", "E2")),
+                "api",
+            )
+        except ResearchError as exc:
+            raise HTTPException(_research_status(exc.code), exc.message) from exc
+        except Exception as exc:
+            raise _research_bad(exc) from exc
+        return c.model_dump(mode="json")
+
+    @router.post("/research/claims/{claim_id}/review")
+    def review_claim(request: Request, claim_id: str, body: ClaimReview) -> dict[str, Any]:
+        _require_csrf(request)
+        try:
+            c = svc().review_claim(claim_id, body.decision, body.message, "api")
+        except ResearchError as exc:
+            raise HTTPException(_research_status(exc.code), exc.message) from exc
+        return c.model_dump(mode="json")
+
+
+def _research_ledger_route(router: APIRouter, svc: Any) -> None:
+    @router.get("/research/ledger")
+    def research_object_ledger(
+        object_type: str | None = None, object_id: str | None = None, limit: int = 200
+    ) -> dict[str, Any]:
+        from bacmap.research.store import ResearchObjectStore
+
+        with ResearchObjectStore(svc().home) as store:
+            return {"items": store.list_ledger(object_type, object_id, _limit(limit, 500))}
+
+
+def _research_benchmark_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
+    @router.get("/research/benchmarks/amr")
+    def amr_benchmark() -> dict[str, Any]:
+        from bacmap.research.benchmarks import run_amr_benchmark
+
+        return run_amr_benchmark()
+
+    def _benchmark_root(dataset: str) -> Path:
+        import os
+
+        env = os.environ.get("BACMAP_BENCHMARK_DATA")
+        if env:
+            candidate = Path(env)
+            nested = candidate / dataset
+            if nested.is_dir():
+                return nested
+            if candidate.is_dir():
+                return candidate
+        return engine.home / "benchmarks" / dataset
+
+    @router.get("/research/benchmarks/bvbrc-amr")
+    def bvbrc_amr_benchmark() -> dict[str, Any]:
+        from bacmap.research.benchmarks import run_bvbrc_amr_benchmark
+
+        return run_bvbrc_amr_benchmark(_benchmark_root("bvbrc_kpn_meropenem"))
+
+    @router.get("/research/benchmarks/osf-cohort")
+    def osf_cohort_benchmark() -> dict[str, Any]:
+        from bacmap.research.benchmarks import summarize_osf_cohort
+
+        return summarize_osf_cohort(_benchmark_root("osf_n78q3"))
+
+    @router.get("/research/benchmarks/verify")
+    def verify_benchmark(dataset: str = "bvbrc_kpn_meropenem") -> dict[str, Any]:
+        from bacmap.research.benchmarks import verify_benchmark_dir
+
+        if dataset not in {"bvbrc_kpn_meropenem", "osf_n78q3"}:
+            raise HTTPException(404, f"unknown benchmark dataset: {dataset}")
+        return verify_benchmark_dir(_benchmark_root(dataset))

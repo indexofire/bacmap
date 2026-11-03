@@ -42,6 +42,14 @@
 
     [结果与证据](results.zh.md)
 
+-   **研究工作台（P1）**
+
+    ---
+
+    把已有 run 变成确定性的 AMR 统计、图、报告与论文草案。
+
+    [研究工作台](research-workbench.zh.md)
+
 </div>
 
 bacmap 有四类人工界面和一个机器接口。它们都对接同一个任务引擎，因此从 CLI 提交的任务在 Web

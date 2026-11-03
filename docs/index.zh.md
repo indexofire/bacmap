@@ -32,6 +32,7 @@
 | 登记菌株实体、数据集、元数据与实验室结果 | [数据与身份](guide/data.zh.md) |
 | 接入 Hermes / Pi / DSH 并确认计划 | [智能体与计划](guide/agent-plans.zh.md) |
 | 查找结果、运行记录与 GOM 对象 | [结果与证据](guide/results.zh.md) |
+| 把已有 run 变成研究草案 | [研究工作台](guide/research-workbench.zh.md) |
 | 理解设计与信任边界 | [架构](concepts/architecture.zh.md) · [安全](concepts/security.zh.md) |
 | 备份、升级或排障 | [运维](operations/index.zh.md) |
 
@@ -91,4 +92,4 @@ bacmap plan confirm <plan_id> --version 1 --hash <first-12-chars>
 ```
 
 权威设计是冻结文档 [冻结设计](concepts/frozen-design.zh.md)（中文版为权威，英文版为参考
-翻译）。程序版本与冻结文档修订相互独立：当前构建为 **0.1.2**，设计修订为 **v1.9.3**。
+翻译）。程序版本与冻结文档修订相互独立：当前构建为 **0.1.2**，设计修订为 **v1.10.2**。

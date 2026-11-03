@@ -5,6 +5,41 @@
 
 ## [未发布]
 
+### P2 收尾 + 暴发事件挖掘 + 真实队列敏感性 + P3 第一片
+- Web `/research` 与 Study 页补齐 Study/Cohort/Plan/Experiment/Claim 创建、冻结、审核和
+  G0–G3 发表门展示，不再只能走 API/CLI。
+- 新增 `research/outbreak.py`：按已记录地点+日期精度聚类，区分聚集/散在与未知日期，
+  对 clustered/source/lineage 做 BH 校正分类关联；不推断传播方向。OSF n78q3 真实数据
+  得到 71 个上下文聚类、145 聚集/31 散在事件；来源效应明确标注为采样混杂。
+- BV-BRC L1 基准加入真实队列敏感性：Mantel–Haenszel 分层、留一范围与 E-value。
+  KPC crude 113.7→MH 33.9、NDM 28.0→7.87、OXA-48 4.03→2.48、CTX-M 0.70→0.71。
+- 新增 `research/discovery.py`（P3 第一片）：仅 screening 数据、预算/最小 n/FDR 排序、
+  停止原因、拒绝确认性输入、不创建 Claim；CLI/API 增加 `outbreak`/`sensitivity`/`explore`。
+- 测试基线：1649 → 1665。
+
+### 冻结文档 v1.10.1：P2 真实数据基准与统计评审
+- P2 真实数据基准：BV-BRC *K. pneumoniae*/meropenem L1 关联基准（方向先验、BH q、
+  Intermediate 计数）、OSF n78q3 L2 队列表型覆盖摘要、数据集 manifest SHA-256/行数校验。
+- 新增 Benjamini–Hochberg FDR 与 Mantel–Haenszel/Greenland–Robins 分层统计。
+- P2 Experiment 账本与发表门：`success`/`failed`/`negative`/`deviated` 追加式记录，
+  绑定冻结计划哈希；`publication-readiness` 实现 G0–G3（冻结来源、Claim 门、D0–D2、
+  可复现执行）。过门仍需人工评审。
+- P2 CLI 对象生命周期：`bacmap research study|cohort|plan|claim|experiment|publication`
+  支持创建/预检/冻结/执行/审核/发表检查；JSON/文件参数通用。
+- 测试基线：1632 → 1649。
+
+### 冻结文档 v1.10.0：Research Workbench P1
+- 新增 `research/` 模块与 `research.sqlite`：从既有 run 生成确定性 AMR 关联
+  （2×2、OR/95% CI、Fisher 检验、诊断）、SVG 图、报告与论文草案。
+- 新增治理 Profile（open-test/research/publication）、CLI `bacmap research`、
+  Web `/research`、`/api/v1/research`、只读 MCP 研究工具。
+- P2 核心对象：Study/Cohort/AnalysisPlan/Claim/evidence_edges，含冻结哈希、
+  Claim 最低等级/措辞门、冻结计划执行 P1 AMR 配方、对象列表/账本 API、
+  L0 AMR 基准、Cohort 预检、session→Claim、Web study 页面。
+- 不改变 GOM/Snakemake/DBOS/五类任务；P2–P5 见
+  `dev/next-phase-research-workbench-plan.md`。
+- 测试基线：1610 → 1632。
+
 ### 文档站重构：按软件文档结构重写（中英双语）
 - 信息架构改为 Home / Getting Started / Guide / Concepts / Operations / Reference /
   Development；新增概念、参考、开发章节与各节 landing page。

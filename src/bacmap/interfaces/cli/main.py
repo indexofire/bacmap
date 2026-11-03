@@ -459,8 +459,10 @@ def build_parser() -> argparse.ArgumentParser:
     from bacmap.interfaces.cli.isolates import add_parser as add_isolate_parser
     from bacmap.interfaces.cli.ops import add_parser as add_ops_parser
     from bacmap.interfaces.cli.records import add_parser as add_record_parser
+    from bacmap.interfaces.cli.research import add_parser as add_research_parser
 
     add_record_parser(sub, _add_home, _add_json)
+    add_research_parser(sub, _add_home, _add_json)
     add_evidence_parser(sub, _add_home, _add_json)
     add_isolate_parser(sub, _add_home, _add_json)
     add_ops_parser(sub, _add_home, _add_json)

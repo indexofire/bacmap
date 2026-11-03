@@ -41,6 +41,7 @@ plugins:
             Data & Identity: 数据与身份
             Agents & Plans: 智能体与计划
             Results & Evidence: 结果与证据
+            Research Workbench: 研究工作台
             Architecture: 架构
             Data Model: 数据模型
             Task Engine & DBOS: 任务引擎与 DBOS
@@ -54,6 +55,7 @@ plugins:
             MCP: MCP
             HTTP API: HTTP API
             Configuration Reference: 配置参考
+            Research API: 研究 API
             Tools: 工具
 
 theme:
@@ -100,6 +102,7 @@ nav:
       - Data & Identity: guide/data.md
       - Agents & Plans: guide/agent-plans.md
       - Results & Evidence: guide/results.md
+      - Research Workbench: guide/research-workbench.md
   - Concepts:
       - concepts/index.md
       - Architecture: concepts/architecture.md
@@ -119,6 +122,7 @@ nav:
       - MCP: reference/mcp.md
       - HTTP API: reference/api.md
       - Configuration Reference: reference/configuration.md
+      - Research API: reference/research-api.md
       - Tools: reference/tools.md
   - Development:
       - development/index.md

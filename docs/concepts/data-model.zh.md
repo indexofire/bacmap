@@ -48,6 +48,7 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	c3d4�
 | `runs.sqlite` | `analysis_runs` —— 不可变的溯源记录 |
 | `gom.sqlite` | 基因组对象、GOM 事件、数据集、菌株基因型索引、AMR 基因索引 |
 | `baseline.sqlite` | 基线候选与已发布版本 |
+| `research.sqlite` | Research Workbench 会话、统计结果、产物与账本（P1） |
 | `data/bacmap.sqlite` | 菌株元数据、实验室结果、菌株实体 |
 | `data/knowledge.sqlite` | 文献/方法条目 + FTS5 索引 |
 | `refs/manifest.json` | 外部数据库版本/校验和 |
@@ -84,7 +85,8 @@ $BACMAP_HOME/
 ├── dbos.sqlite
 ├── runs.sqlite
 ├── gom.sqlite
-└── baseline.sqlite
+├── baseline.sqlite
+└── research.sqlite
 ```
 
 `results/runs/<task_id>/` 是一次运行唯一写入的位置。扁平路径是指向最新运行的相对符号链接。

@@ -573,6 +573,10 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
     _build_record_routes(app, engine)
     _build_evidence_routes(app, engine)
 
+    from bacmap.interfaces.web.research import build_research_routes
+
+    build_research_routes(app, engine)
+
     from bacmap.interfaces.web.api import build_api_routes
 
     build_api_routes(app, engine)

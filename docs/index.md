@@ -33,6 +33,7 @@ sequencing reads / assembled genomes
 | Register isolates, datasets, metadata and lab results | [Data & identity](guide/data.md) |
 | Connect Hermes / Pi / DSH and confirm plans | [Agents & plans](guide/agent-plans.md) |
 | Find results, run records and GOM objects | [Results & evidence](guide/results.md) |
+| Turn an existing run into a research draft | [Research Workbench](guide/research-workbench.md) |
 | Understand the design and trust boundaries | [Architecture](concepts/architecture.md) · [Security](concepts/security.md) |
 | Back up, upgrade or troubleshoot | [Operations](operations/index.md) |
 
@@ -95,4 +96,4 @@ Development       environment, tests, contracts, adding capabilities
 The authoritative design is the frozen document
 [Frozen design](concepts/frozen-design.md) (Chinese version is authoritative; English is a
 reference translation). The program version and the frozen-document revision are independent:
-this build is **0.1.2**, the design revision is **v1.9.3**.
+this build is **0.1.2**, the design revision is **v1.10.2**.

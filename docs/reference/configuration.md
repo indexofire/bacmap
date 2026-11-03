@@ -23,6 +23,8 @@ tree (ADR-03). When `config.toml` is absent, built-in defaults apply.
 | `BACMAP_WEB_AUTH` | `bearer` | `bearer` or `cookie` |
 | `BACMAP_WEB_SECRET` | derived from token | HMAC key for session cookies |
 | `BACMAP_WEB_COOKIE_SECURE` | off | `1` adds `Secure` to cookies |
+| `BACMAP_RESEARCH_PROFILE` | `research` | default governance profile for Research Workbench (`open-test`/`research`/`publication`) |
+| `BACMAP_BENCHMARK_DATA` | — | local public-data snapshot for research benchmarks; may be a dataset dir or a parent containing `bvbrc_kpn_meropenem`/`osf_n78q3` |
 | `BACMAP_ALLOW_UNSANDBOXED` | off | `1` allows direct execution (dev only) |
 | `CHECKM2_DB` | — | CheckM2 database path |
 | `GTDBTK_DATA_PATH` | — | GTDB-Tk database path |

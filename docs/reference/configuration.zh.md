@@ -23,6 +23,8 @@
 | `BACMAP_WEB_AUTH` | `bearer` | `bearer` 或 `cookie` |
 | `BACMAP_WEB_SECRET` | 由 token 派生 | 会话 cookie 的 HMAC 密钥 |
 | `BACMAP_WEB_COOKIE_SECURE` | 关 | `1` 给 cookie 加上 `Secure` |
+| `BACMAP_RESEARCH_PROFILE` | `research` | Research Workbench 默认治理 Profile（`open-test`/`research`/`publication`） |
+| `BACMAP_BENCHMARK_DATA` | — | Research 科学基准的本地公共数据快照；可指向单个数据集目录，或包含 `bvbrc_kpn_meropenem`/`osf_n78q3` 的父目录 |
 | `BACMAP_ALLOW_UNSANDBOXED` | 关 | `1` 允许直接执行（仅开发） |
 | `CHECKM2_DB` | — | CheckM2 数据库路径 |
 | `GTDBTK_DATA_PATH` | — | GTDB-Tk 数据库路径 |

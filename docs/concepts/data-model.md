@@ -52,6 +52,7 @@ content is a hard error, never a silent overwrite.
 | `runs.sqlite` | `analysis_runs` — immutable provenance records |
 | `gom.sqlite` | genome objects, GOM events, datasets, strain genotype index, AMR gene index |
 | `baseline.sqlite` | baseline candidates and published releases |
+| `research.sqlite` | Research Workbench sessions, stat results, artifacts, ledger (P1) |
 | `data/bacmap.sqlite` | strain metadata, lab results, isolates |
 | `data/knowledge.sqlite` | literature/method entries + FTS5 index |
 | `refs/manifest.json` | external database versions/checksums |
@@ -88,7 +89,8 @@ $BACMAP_HOME/
 ├── dbos.sqlite
 ├── runs.sqlite
 ├── gom.sqlite
-└── baseline.sqlite
+├── baseline.sqlite
+└── research.sqlite
 ```
 
 `results/runs/<task_id>/` is the only place a run writes. Flat paths are relative symlinks to the

@@ -132,6 +132,53 @@ bacmap record knowledge-approve <entry_id>
 
 Examples in [Data & identity](../guide/data.md#5-records-metadata-lab-results-and-knowledge).
 
+## `bacmap research`
+
+```text
+bacmap research list|ls [--limit N] [--json]
+bacmap research show <session_id> [--json]
+bacmap research create --run-id ID --gene NAME --test-name NAME
+                       [--profile open-test|research|publication] [--by ACTOR] [--json]
+bacmap research artifact <session_id> {figure|report|manuscript}
+
+bacmap research study create --question TEXT [--pathogen SCOPE] [--data-class 0-4]
+bacmap research study ls|list [--limit N]
+bacmap research study show <study_id>
+
+bacmap research cohort create --study ID --members FILE [--name NAME] [--rules JSON]
+bacmap research cohort preview --study ID --members FILE
+bacmap research cohort freeze <cohort_id>
+bacmap research cohort ls|list [--study ID]
+
+bacmap research plan create --study ID --cohort ID --spec JSON|FILE
+bacmap research plan freeze <plan_id>
+bacmap research plan run <plan_id>
+
+bacmap research claim create --study ID --type association --wording TEXT --level E2
+bacmap research claim review <claim_id> --decision support|challenge|reject|approve
+bacmap research claim ls|list [--study ID]
+
+bacmap research experiment record --plan ID --status success|failed|negative|deviated
+                                   [--run-id ID ...] [--outcome JSON] [--deviation TEXT]
+bacmap research experiment ls|list [--study ID] [--plan ID]
+bacmap research publication <study_id> [--json]
+
+bacmap research benchmark {amr|bvbrc|osf|verify-bvbrc|verify-osf} [--data DIR]
+
+bacmap research outbreak --events FILE [--min-count N]
+bacmap research sensitivity --table a,b,c,d [--strata JSON|FILE]
+bacmap research explore --study ID --cases FILE
+                        [--max-tests N] [--max-candidates N] [--min-n N] [--max-q Q]
+```
+
+P1 creates a deterministic AMR association draft from an existing run. `open-test` output is
+`TEST/UNVERIFIED`; `research`/`publication` output is `REVIEW REQUIRED`.
+
+P2 adds the full object lifecycle: Study → frozen Cohort → frozen AnalysisPlan → Experiment
+ledger → Claim review → publication-readiness (G0–G3). `--members`, `--spec`, `--rules`,
+`--evidence` and `--outcome` accept inline JSON or a JSON file. `cohort create` also accepts a
+whole `cohort_members.json` object (the `members` array is used).
+
 ## `bacmap run`
 
 ```text

@@ -61,6 +61,7 @@ code, reviewing a security boundary, or interpreting an audit trail.
 | **GOM** | Genome Object Model: immutable, versioned analysis/report/task objects |
 | **data class** | D0–D4 sensitivity label used to constrain endpoints and MCP profiles |
 | **profile** | fixed MCP permission context (`cloud` or `local-trusted`) |
+| **research session** | one deterministic P1 research draft derived from a run |
 
 ## Reading order
 

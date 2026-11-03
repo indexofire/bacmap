@@ -19,6 +19,7 @@ from typing import Any
 
 _DB_NAMES = (
     "tasks.sqlite",
+    "research.sqlite",  # Research Workbench 对象（v1.10）
     "dbos.sqlite",  # DBOS 系统库：工作流/步骤检查点，缺它则运行中任务无法恢复
     "runs.sqlite",
     "gom.sqlite",
@@ -58,6 +59,23 @@ def collect_checks(home: Path) -> list[dict[str, str]]:
             checks.append(_check("database", "fail", f"tasks.sqlite 无法读取：{exc}"))
     else:
         checks.append(_check("database", "warn", "tasks.sqlite 尚未创建（首次运行后生成）"))
+
+    rdb = home / "research.sqlite"
+    if rdb.is_file():
+        try:
+            from bacmap.research.store import RESEARCH_MIGRATIONS
+
+            version = schema_version(rdb)
+            expected = len(RESEARCH_MIGRATIONS)
+            checks.append(
+                _check(
+                    "research",
+                    "ok" if version == expected else "warn",
+                    f"research.sqlite v{version}（期望 {expected}）",
+                )
+            )
+        except sqlite3.Error as exc:
+            checks.append(_check("research", "fail", f"research.sqlite 无法读取：{exc}"))
 
     try:
         from bacmap.agent.sandbox import SandboxExecutor

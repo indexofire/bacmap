@@ -10,8 +10,8 @@ bacmap backup --out /backup/full.zip --with-results
 Included by default:
 
 - `config.toml`, `refs/manifest.json`;
-- every SQLite database: `tasks`, `dbos`, `runs`, `gom`, `baseline`, `data/bacmap`,
-  `data/knowledge` — via SQLite's backup API for a consistent snapshot;
+- every SQLite database: `tasks`, `dbos`, `runs`, `gom`, `baseline`, `research`,
+  `data/bacmap`, `data/knowledge` — via SQLite's backup API for a consistent snapshot;
 - `runs/*/run_manifest.json` (the on-disk evidence chain).
 
 `dbos.sqlite` contains workflow/step checkpoints; including it lets in-flight tasks resume after a

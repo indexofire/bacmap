@@ -100,6 +100,7 @@ def build_server(engine: Any = None, profile: ProfileSpec = DEFAULT_PROFILE) -> 
         _register_task_control_tools(server, engine, profile)
         _register_record_tool(server, engine, profile)
         _register_plan_tools(server, engine, profile.actor)
+        _register_research_tools(server, engine, profile)
 
     _register_capabilities(server, profile)
     _register_role_prompts(server)
@@ -568,3 +569,52 @@ def _register_task_control_tools(server: MCPServer, engine: Any, profile: Profil
             out["run_id"] = result.get("run_id")
             out.update(_gate_summary(result, profile))
         return json.dumps(out, ensure_ascii=False)
+
+
+def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -> None:
+    """P1 Research Workbench 只读工具（D2；cloud D1 不注册）。"""
+    from pathlib import Path as _Path
+
+    from bacmap.research.models import ResearchError
+    from bacmap.research.service import ResearchService, default_profile
+
+    service = ResearchService(_Path(engine.home))
+
+    def _err(exc: ResearchError) -> str:
+        return json.dumps({"code": exc.code, "error": exc.message}, ensure_ascii=False)
+
+    @server.tool(
+        name="bacmap_research_capabilities",
+        description=(
+            "Research Workbench capabilities: P1 creates a deterministic AMR association draft "
+            "from an existing run (stat, figure, report, manuscript). No LLM and no new data."
+        ),
+    )
+    def research_capabilities() -> str:
+        cap = service.capabilities(default_profile())
+        return json.dumps(cap.model_dump(mode="json"), ensure_ascii=False)
+
+    if not profile.allows(DataClass.D2):
+        return
+
+    @server.tool(
+        name="bacmap_research_sessions",
+        description="List recent Research Workbench sessions (P1 AMR association drafts).",
+    )
+    def research_sessions(limit: int = 20) -> str:
+        items = service.list_sessions(max(1, min(limit, 100)))
+        return json.dumps([s.model_dump(mode="json") for s in items], ensure_ascii=False)
+
+    @server.tool(
+        name="bacmap_research_session",
+        description=(
+            "Get one Research Workbench session: stat table, diagnostics and generated artifact "
+            "paths (figure/report/manuscript). P1 output is TEST/UNVERIFIED."
+        ),
+    )
+    def research_session(session_id: str) -> str:
+        try:
+            view = service.get_session(session_id)
+        except ResearchError as exc:
+            return _err(exc)
+        return json.dumps(view.model_dump(mode="json"), ensure_ascii=False)

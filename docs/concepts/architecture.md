@@ -47,6 +47,7 @@ pixi run -e dev contracts
 | Application | plan lifecycle, version/hash confirmation, error codes | `application/` |
 | Agent | LLM gateway, role prompts, interpretation, sandbox | `agent/` |
 | Interfaces | CLI, FastAPI Web + `/api/v1`, Textual TUI, MCP server | `interfaces/` |
+| Research (P1) | Research Workbench: sessions, deterministic stats, figure/report/manuscript | `research/` |
 
 ## 3. Request flows
 

@@ -6,7 +6,7 @@ A local pathogen-genomics workstation: deterministic analysis, a durable task en
 an immutable evidence chain, and an MCP server for external AI agents. Data stays on the machine.
 
 Frozen design: [docs/concepts/frozen-design.md](docs/concepts/frozen-design.md) (English reference;
-the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.9.3**).
+the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.10.0**).
 Program version: **0.1.2**.
 
 ## What it does
@@ -68,6 +68,7 @@ Full bilingual site: <https://indexofire.github.io/bacmap/> (Chinese: `/zh/`).
 | Identity, samples, records | [Data & identity](docs/guide/data.md) |
 | Hermes / Pi / DSH + plans | [Agents & plans](docs/guide/agent-plans.md) |
 | Results, runs, GOM | [Results & evidence](docs/guide/results.md) |
+| Research Workbench (P1) | [Research Workbench](docs/guide/research-workbench.md) |
 | Architecture and DBOS | [Concepts](docs/concepts/index.md) |
 | Backup, upgrades, troubleshooting | [Operations](docs/operations/index.md) |
 | Exact CLI/MCP/API/config/tools | [Reference](docs/reference/index.md) |

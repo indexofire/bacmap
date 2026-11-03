@@ -42,6 +42,14 @@
 
     [Results & evidence](results.md)
 
+-   **Research Workbench (P1)**
+
+    ---
+
+    Turn an existing run into a deterministic AMR stat, figure, report and manuscript draft.
+
+    [Research Workbench](research-workbench.md)
+
 </div>
 
 bacmap has four human interfaces and one machine interface. They all talk to the same task engine,

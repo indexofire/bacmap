@@ -120,7 +120,7 @@ dev/               仅本地的调研笔记/脚本（不入库）
 ## 9. 版本管理
 
 - 程序版本：`pyproject.toml` / `pixi.toml`（当前 0.1.2），仅在明确发布决定后更改。
-- 冻结设计修订：`docs/concepts/frozen-design.zh.md` 中的标题与修订表（v1.9.3），
+- 冻结设计修订：`docs/concepts/frozen-design.zh.md` 中的标题与修订表（v1.10.0），
   独立于程序版本。
 - 测试基线：`AGENTS.md` 规则 7（当前 1610）。
 

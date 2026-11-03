@@ -61,6 +61,7 @@
 | **GOM** | Genome Object Model：不可变、带版本的分析/报告/任务对象 |
 | **data class（数据分级）** | D0–D4 敏感度标签，用于约束端点与 MCP Profile |
 | **profile（Profile）** | 固定的 MCP 权限上下文（`cloud` 或 `local-trusted`） |
+| **research session（研究会话）** | 从 run 派生的一次确定性 P1 研究草案 |
 
 ## 阅读顺序
 

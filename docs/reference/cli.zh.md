@@ -132,6 +132,53 @@ bacmap record knowledge-approve <entry_id>
 
 示例见[数据与身份](../guide/data.zh.md#5-记录元数据化验结果与知识库)。
 
+## `bacmap research`
+
+```text
+bacmap research list|ls [--limit N] [--json]
+bacmap research show <session_id> [--json]
+bacmap research create --run-id ID --gene NAME --test-name NAME
+                       [--profile open-test|research|publication] [--by ACTOR] [--json]
+bacmap research artifact <session_id> {figure|report|manuscript}
+
+bacmap research study create --question TEXT [--pathogen SCOPE] [--data-class 0-4]
+bacmap research study ls|list [--limit N]
+bacmap research study show <study_id>
+
+bacmap research cohort create --study ID --members FILE [--name NAME] [--rules JSON]
+bacmap research cohort preview --study ID --members FILE
+bacmap research cohort freeze <cohort_id>
+bacmap research cohort ls|list [--study ID]
+
+bacmap research plan create --study ID --cohort ID --spec JSON|FILE
+bacmap research plan freeze <plan_id>
+bacmap research plan run <plan_id>
+
+bacmap research claim create --study ID --type association --wording TEXT --level E2
+bacmap research claim review <claim_id> --decision support|challenge|reject|approve
+bacmap research claim ls|list [--study ID]
+
+bacmap research experiment record --plan ID --status success|failed|negative|deviated
+                                   [--run-id ID ...] [--outcome JSON] [--deviation TEXT]
+bacmap research experiment ls|list [--study ID] [--plan ID]
+bacmap research publication <study_id> [--json]
+
+bacmap research benchmark {amr|bvbrc|osf|verify-bvbrc|verify-osf} [--data DIR]
+
+bacmap research outbreak --events FILE [--min-count N]
+bacmap research sensitivity --table a,b,c,d [--strata JSON|FILE]
+bacmap research explore --study ID --cases FILE
+                        [--max-tests N] [--max-candidates N] [--min-n N] [--max-q Q]
+```
+
+P1 从已有 run 生成确定性 AMR 关联草案。`open-test` 产物为 `TEST/UNVERIFIED`；
+`research`/`publication` 为 `REVIEW REQUIRED`。
+
+P2 增加完整对象生命周期：Study → 冻结 Cohort → 冻结 AnalysisPlan → Experiment 账本 →
+Claim 审核 → `publication-readiness`（G0–G3）。`--members`、`--spec`、`--rules`、
+`--evidence`、`--outcome` 接受内联 JSON 或 JSON 文件；`cohort create` 也接受完整的
+`cohort_members.json`（读取其中的 `members` 数组）。
+
 ## `bacmap run`
 
 ```text

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{{ session.session_id }} · 研究 · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/research">研究</a><span class="crumbs__sep">/</span><span class="crumbs__here">{{ session.session_id }}</span></nav>
+<header class="detailhead">
+  <h1 class="detailhead__title">{{ session.gene }} × {{ session.test_name }}</h1>
+  <p class="detailhead__id mono">{{ session.session_id }} · run {{ session.run_id }}</p>
+  <p class="card__lead"><strong>{{ session.label }}</strong> · {{ session.status.value }} · profile {{ session.profile.value }} · D{{ session.data_class }}</p>
+</header>
+
+{% if view.stat %}
+<section class="card">
+  <div class="card__head"><h2 class="card__title">统计结果</h2></div>
+  <table class="table">
+    <thead><tr><th>组</th><th>计数</th></tr></thead>
+    <tbody>
+      <tr><td>gene+ / resistant</td><td>{{ view.stat.table.gene_pos_resistant }}</td></tr>
+      <tr><td>gene+ / susceptible</td><td>{{ view.stat.table.gene_pos_susceptible }}</td></tr>
+      <tr><td>gene- / resistant</td><td>{{ view.stat.table.gene_neg_resistant }}</td></tr>
+      <tr><td>gene- / susceptible</td><td>{{ view.stat.table.gene_neg_susceptible }}</td></tr>
+    </tbody>
+  </table>
+  <p class="card__lead">n={{ view.stat.n }} · OR={{ view.stat.odds_ratio }} (95% CI {{ view.stat.ci_low }}–{{ view.stat.ci_high }}) · p={{ view.stat.p_value }}</p>
+  {% if view.stat.diagnostics %}<p class="card__lead">诊断：{{ view.stat.diagnostics | join('; ') }}</p>{% endif %}
+</section>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">图与产物</h2></div>
+  <img src="/research/{{ session.session_id }}/figure.svg" alt="AMR association figure" style="max-width:100%;border:1px solid #ddd;border-radius:6px">
+  <p class="card__lead">
+    <a href="/research/{{ session.session_id }}/report.md">报告 Markdown</a> ·
+    <a href="/research/{{ session.session_id }}/manuscript.md">论文草案 Markdown</a>
+  </p>
+</section>
+{% endif %}
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">产物哈希</h2></div>
+  {% for a in view.artifacts %}
+    <p class="mono-dim">{{ a.kind.value }} · {{ a.sha256[:16] }}… · {{ a.path }}</p>
+  {% endfor %}
+</section>
+{% endblock %}

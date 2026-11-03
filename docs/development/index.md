@@ -126,7 +126,7 @@ Guidelines:
 - Program version: `pyproject.toml` / `pixi.toml` (currently 0.1.2), changed only by explicit
   release decision.
 - Frozen design revision: the title and revision table in
-  `docs/concepts/frozen-design.zh.md` (v1.9.3), independent of the program version.
+  `docs/concepts/frozen-design.zh.md` (v1.10.0), independent of the program version.
 - Test baseline: `AGENTS.md` rule 7 (currently 1610).
 
 ## 10. Commit checklist

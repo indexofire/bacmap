@@ -133,7 +133,18 @@ bacmap mcp --profile local-trusted  # 要求 [mcp] allow_local_trusted = true
 调用返回 `{"task_id": "...", "kind": "...", "state": "running"}`。随后用
 `bacmap_task_status` 跟踪。
 
-### 3.5 `bio_*` 工具
+### 3.5 Research Workbench（P1）
+
+| 工具 | 参数 | 说明 |
+|---|---|---|
+| `bacmap_research_capabilities` | 无 | P1 能力；所有 Profile 可用 |
+| `bacmap_research_sessions` | `limit?` | D2；仅允许 D2 的 Profile |
+| `bacmap_research_session` | `session_id` | D2；统计表、诊断与产物路径 |
+
+研究创建当前只经 CLI/Web/API；MCP 对研究会话只读。P1 产物为 `TEST/UNVERIFIED`
+（open-test）或 `REVIEW REQUIRED`。
+
+### 3.6 `bio_*` 工具
 
 26 个注册工具记录在[工具注册表](tools.zh.md)中。在 `cloud` 下，只有数据级别在
 上限之内的工具会被注册；在 `local-trusted` 下，全部读/计算工具可用。四个

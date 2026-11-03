@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}研究 · bacmap{% endblock %}
+{% block content %}
+<header class="detailhead">
+  <h1 class="detailhead__title">研究 / Research</h1>
+  <p class="detailhead__lead">从既有 run 生成确定性的 AMR 关联统计、图、报告和论文草案。P1 薄链路：不做因果/机制推断。</p>
+</header>
+
+<section class="card card--form" aria-labelledby="research-create">
+  <div class="card__head"><h2 class="card__title" id="research-create">新建研究会话</h2></div>
+  <form class="form" method="post" action="/research/sessions">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label class="field__label" for="r-run">run_id</label>
+      <input class="field__control" id="r-run" name="run_id" required placeholder="例如 9a31..."></div>
+    <div class="field"><label class="field__label" for="r-gene">基因</label>
+      <input class="field__control" id="r-gene" name="gene" required placeholder="例如 blaKPC-33"></div>
+    <div class="field"><label class="field__label" for="r-test">表型检测</label>
+      <input class="field__control" id="r-test" name="test_name" required placeholder="例如 meropenem"></div>
+    <div class="field"><label class="field__label" for="r-profile">治理 Profile</label>
+      <select class="field__control" id="r-profile" name="profile">
+        {% for p in profiles %}<option value="{{ p }}" {% if p == default_profile %}selected{% endif %}>{{ p }}</option>{% endfor %}
+      </select></div>
+    <div class="form__actions"><button class="btn btn--primary" type="submit">生成草案</button></div>
+  </form>
+</section>
+
+<section class="card" aria-labelledby="research-list">
+  <div class="card__head"><h2 class="card__title" id="research-list">最近会话</h2></div>
+  {% if sessions %}
+  <table class="table">
+    <thead><tr><th>session</th><th>run</th><th>gene × test</th><th>profile</th><th>status</th><th>created</th></tr></thead>
+    <tbody>
+    {% for s in sessions %}
+      <tr>
+        <td><a href="/research/{{ s.session_id }}">{{ s.session_id }}</a></td>
+        <td class="mono">{{ s.run_id }}</td>
+        <td>{{ s.gene }} × {{ s.test_name }}</td>
+        <td>{{ s.profile.value }}</td>
+        <td><code>{{ s.status.value }}</code>{% if s.label %} · {{ s.label }}{% endif %}</td>
+        <td class="mono-dim">{{ s.created_at[:19] }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="card__lead">暂无研究会话。</p>{% endif %}
+</section>
+
+<section class="card card--form" aria-labelledby="research-study-create">
+  <div class="card__head"><h2 class="card__title" id="research-study-create">新建 Study</h2></div>
+  <form class="form" method="post" action="/research/studies">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label class="field__label" for="st-question">研究问题</label>
+      <input class="field__control" id="st-question" name="question" required
+             placeholder="例如 blaKPC 是否与 meropenem 耐药相关？"></div>
+    <div class="field"><label class="field__label" for="st-pathogen">病原范围</label>
+      <input class="field__control" id="st-pathogen" name="pathogen_scope" placeholder="KPN"></div>
+    <div class="field"><label class="field__label" for="st-dc">数据级别</label>
+      <select class="field__control" id="st-dc" name="data_class">
+        <option value="1">D1</option><option value="2" selected>D2</option>
+      </select></div>
+    <div class="form__actions"><button class="btn btn--primary" type="submit">创建 Study</button></div>
+  </form>
+</section>
+
+<section class="card" aria-labelledby="research-objects">
+  <div class="card__head"><h2 class="card__title" id="research-objects">研究对象（P2）</h2></div>
+  <p class="card__lead">Study → 冻结 Cohort → 冻结 Plan → Experiment → Claim → 发表门，均可在 Study 页面完成。</p>
+  {% if studies %}
+  <table class="table">
+    <thead><tr><th>study</th><th>question</th><th>status</th><th>D</th></tr></thead>
+    <tbody>{% for s in studies %}<tr><td><a href="/research/studies/{{ s.study_id }}">{{ s.study_id }}</a></td><td>{{ s.question }}</td><td>{{ s.status.value }}</td><td>D{{ s.data_class }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% else %}<p class="card__lead">暂无 Study。</p>{% endif %}
+  {% if claims %}
+  <table class="table">
+    <thead><tr><th>claim</th><th>type</th><th>level</th><th>status</th><th>wording</th></tr></thead>
+    <tbody>{% for c in claims %}<tr><td class="mono">{{ c.claim_id }}</td><td>{{ c.claim_type.value }}</td><td>{{ c.evidence_level.value }}</td><td>{{ c.status.value }}</td><td>{{ c.wording }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

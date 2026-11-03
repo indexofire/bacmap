@@ -134,7 +134,18 @@ Rules:
 The call returns `{"task_id": "...", "kind": "...", "state": "running"}`. Follow it with
 `bacmap_task_status`.
 
-### 3.5 `bio_*` tools
+### 3.5 Research Workbench (P1)
+
+| Tool | Arguments | Notes |
+|---|---|---|
+| `bacmap_research_capabilities` | none | P1 capabilities; available on every profile |
+| `bacmap_research_sessions` | `limit?` | D2; only if the profile allows D2 |
+| `bacmap_research_session` | `session_id` | D2; stat table, diagnostics and artifact paths |
+
+Research creation is currently CLI/Web/API only; MCP is read-only for research sessions.
+P1 output is `TEST/UNVERIFIED` (open-test) or `REVIEW REQUIRED`.
+
+### 3.6 `bio_*` tools
 
 The 26 registry tools are documented in [Tool registry](tools.md). Under `cloud`, only tools within
 the data ceiling are registered; under `local-trusted`, all read/compute tools are available. Four

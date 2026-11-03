@@ -6,7 +6,7 @@
 AI 智能体使用的 MCP 服务。数据不出本地网络。
 
 冻结设计：[docs/concepts/frozen-design.zh.md](docs/concepts/frozen-design.zh.md)（中文权威，修订
-**v1.9.3**）；[英文参考翻译](docs/concepts/frozen-design.md)。程序版本：**0.1.2**。
+**v1.10.0**）；[英文参考翻译](docs/concepts/frozen-design.md)。程序版本：**0.1.2**。
 
 ## 功能概览
 
@@ -66,6 +66,7 @@ bacmap plan confirm <plan_id> --version 1 --hash <前12位>
 | 身份、样本、记录 | [数据与身份](docs/guide/data.zh.md) |
 | Hermes / Pi / DSH + 计划 | [智能体与计划](docs/guide/agent-plans.zh.md) |
 | 结果、运行记录、GOM | [结果与证据](docs/guide/results.zh.md) |
+| 研究工作台（P1） | [研究工作台](docs/guide/research-workbench.zh.md) |
 | 架构与 DBOS | [核心概念](docs/concepts/index.zh.md) |
 | 备份、升级、排障 | [运维](docs/operations/index.zh.md) |
 | CLI/MCP/API/配置/工具精确参考 | [参考](docs/reference/index.zh.md) |

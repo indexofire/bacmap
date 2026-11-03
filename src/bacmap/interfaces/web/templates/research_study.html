@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}{{ study.study_id }} · 研究 · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/research">研究</a><span class="crumbs__sep">/</span><span class="crumbs__here">{{ study.study_id }}</span></nav>
+<header class="detailhead">
+  <h1 class="detailhead__title">研究问题</h1>
+  <p class="detailhead__lead">{{ study.question }}</p>
+  <p class="detailhead__id mono">{{ study.study_id }} · {{ study.status.value }} · D{{ study.data_class }}</p>
+</header>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">发表门 G0–G3</h2></div>
+  <p class="card__lead">ready = <strong>{{ 'true' if readiness.ready else 'false' }}</strong> · 过门仍需人工评审。</p>
+  <table class="table"><thead><tr><th>gate</th><th>status</th><th>title</th><th>blockers</th></tr></thead>
+  <tbody>{% for g in readiness.gates %}<tr><td class="mono">{{ g.id }}</td><td>{{ 'PASS' if g.ok else 'FAIL' }}</td><td>{{ g.title }}</td><td>{% for b in g.blockers %}<div>{{ b }}</div>{% endfor %}</td></tr>{% endfor %}</tbody></table>
+</section>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">Cohorts</h2></div>
+  <table class="table"><thead><tr><th>id</th><th>name</th><th>status</th><th>members</th><th>snapshot</th><th></th></tr></thead>
+  <tbody>{% for c in cohorts %}<tr><td class="mono">{{ c.cohort_id }}</td><td>{{ c.name }}</td><td>{{ c.status.value }}</td><td>{{ c.members|length }}</td><td class="mono-dim">{{ c.snapshot_hash[:16] }}…</td><td>{% if c.status.value == 'draft' %}<form method="post" action="/research/cohorts/{{ c.cohort_id }}/freeze"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn" type="submit">冻结</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table>
+  <form class="form" method="post" action="/research/studies/{{ study.study_id }}/cohorts">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label class="field__label" for="co-name">名称</label>
+      <input class="field__control" id="co-name" name="name" placeholder="discovery"></div>
+    <div class="field"><label class="field__label" for="co-members">members JSON</label>
+      <textarea class="field__control" id="co-members" name="members" rows="4" required>[{"isolate_id":"I1","dataset_id":"D1","run_id":"R1"}]</textarea></div>
+    <div class="field"><label class="field__label" for="co-rules">rules JSON</label>
+      <textarea class="field__control" id="co-rules" name="rules" rows="2">{}</textarea></div>
+    <div class="form__actions"><button class="btn btn--primary" type="submit">创建 Cohort</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">Plans</h2></div>
+  <table class="table"><thead><tr><th>id</th><th>cohort</th><th>status</th><th>hash</th><th></th></tr></thead>
+  <tbody>{% for p in plans %}<tr><td class="mono">{{ p.plan_id }}</td><td class="mono">{{ p.cohort_id }}</td><td>{{ p.status.value }}</td><td class="mono-dim">{{ p.plan_hash[:16] }}…</td><td>{% if p.status.value == 'draft' %}<form method="post" action="/research/plans/{{ p.plan_id }}/freeze"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn" type="submit">冻结</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table>
+  <form class="form" method="post" action="/research/studies/{{ study.study_id }}/plans">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label class="field__label" for="pl-cohort">Cohort</label>
+      <select class="field__control" id="pl-cohort" name="cohort_id" required>
+        {% for c in cohorts %}<option value="{{ c.cohort_id }}">{{ c.cohort_id }} ({{ c.status.value }})</option>{% endfor %}
+      </select></div>
+    <div class="field"><label class="field__label" for="pl-spec">spec JSON</label>
+      <textarea class="field__control" id="pl-spec" name="spec" rows="4" required>{"run_id":"R1","gene":"blaKPC","test_name":"meropenem"}</textarea></div>
+    <div class="form__actions"><button class="btn btn--primary" type="submit">创建 Plan</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">Experiments</h2></div>
+  <table class="table"><thead><tr><th>id</th><th>plan</th><th>status</th><th>runs</th><th>deviation</th></tr></thead>
+  <tbody>{% for e in experiments %}<tr><td class="mono">{{ e.experiment_id }}</td><td class="mono">{{ e.plan_id }}</td><td>{{ e.status.value }}</td><td class="mono">{{ e.run_ids|join(', ') }}</td><td>{{ e.deviation }}</td></tr>{% endfor %}</tbody></table>
+  <form class="form" method="post" action="/research/experiments">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label class="field__label" for="ex-plan">Plan</label>
+      <select class="field__control" id="ex-plan" name="plan_id">
+        {% for p in plans %}<option value="{{ p.plan_id }}">{{ p.plan_id }} ({{ p.status.value }})</option>{% endfor %}
+      </select></div>
+    <div class="field"><label class="field__label" for="ex-status">状态</label>
+      <select class="field__control" id="ex-status" name="status">
+        <option value="success">success</option><option value="failed">failed</option>
+        <option value="negative">negative</option><option value="deviated">deviated</option>
+      </select></div>
+    <div class="field"><label class="field__label" for="ex-runs">run IDs（逗号分隔）</label>
+      <input class="field__control" id="ex-runs" name="run_ids" placeholder="run-1,run-2"></div>
+    <div class="field"><label class="field__label" for="ex-outcome">outcome JSON</label>
+      <textarea class="field__control" id="ex-outcome" name="outcome" rows="2">{}</textarea></div>
+    <div class="field"><label class="field__label" for="ex-dev">偏离说明</label>
+      <input class="field__control" id="ex-dev" name="deviation" placeholder="仅 deviated 必填"></div>
+    <div class="form__actions"><button class="btn btn--primary" type="submit">记录 Experiment</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">Claims</h2></div>
+  <table class="table"><thead><tr><th>id</th><th>type</th><th>level</th><th>status</th><th>wording</th><th></th></tr></thead>
+  <tbody>{% for c in claims %}<tr><td class="mono">{{ c.claim_id }}</td><td>{{ c.claim_type.value }}</td><td>{{ c.evidence_level.value }}</td><td>{{ c.status.value }}</td><td>{{ c.wording }}</td><td><form method="post" action="/research/claims/{{ c.claim_id }}/review"><input type="hidden" name="csrf" value="{{ csrf }}"><select name="decision"><option value="support">support</option><option value="challenge">challenge</option><option value="reject">reject</option><option value="approve">approve</option></select><button class="btn" type="submit">审核</button></form></td></tr>{% endfor %}</tbody></table>
+  <form class="form" method="post" action="/research/studies/{{ study.study_id }}/claims">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label class="field__label" for="cl-type">类型</label>
+      <select class="field__control" id="cl-type" name="claim_type">
+        <option value="observation">observation</option><option value="association" selected>association</option>
+        <option value="transmission">transmission</option><option value="causal">causal</option>
+        <option value="mechanism">mechanism</option>
+      </select></div>
+    <div class="field"><label class="field__label" for="cl-level">证据等级</label>
+      <select class="field__control" id="cl-level" name="evidence_level">
+        <option value="E0">E0</option><option value="E1">E1</option><option value="E2" selected>E2</option>
+        <option value="E3">E3</option><option value="E4">E4</option>
+      </select></div>
+    <div class="field"><label class="field__label" for="cl-wording">措辞</label>
+      <input class="field__control" id="cl-wording" name="wording" required
+             placeholder="blaKPC is associated with meropenem resistance"></div>
+    <div class="field"><label class="field__label" for="cl-evidence">evidence JSON</label>
+      <textarea class="field__control" id="cl-evidence" name="evidence" rows="3">{"run_id":"R1"}</textarea></div>
+    <div class="form__actions"><button class="btn btn--primary" type="submit">创建 Claim</button></div>
+  </form>
+</section>
+{% endblock %}
