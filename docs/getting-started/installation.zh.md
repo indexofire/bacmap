@@ -102,7 +102,7 @@ stdio 连接独立 conda 环境时推荐：
 
 ```yaml
 command: conda
-args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "mcp"]
+args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "start", "mcp"]
 ```
 
 `--no-capture-output` 保证 MCP stdio 不被 conda 缓冲。完整客户端配置见
@@ -188,8 +188,8 @@ export GTDBTK_DATA_PATH=/srv/db/gtdbtk
 ```bash
 bacmap --version
 bacmap doctor
-bacmap web &                              # http://127.0.0.1:8800
-bacmap mcp --read-only < /dev/null        # stdio 冒烟测试；应干净退出
+bacmap start web &                        # http://127.0.0.1:8800
+bacmap start mcp --read-only < /dev/null  # stdio 冒烟测试；应干净退出
 ```
 
 这些通过后，继续阅读[配置](configuration.zh.md)与[教程](tutorial.zh.md)。若使用外部

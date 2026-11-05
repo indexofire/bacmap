@@ -40,7 +40,7 @@ $BACMAP_HOME/workspaces/<task_id>/      # mine stdout/stderr and context.json
 | `input ... changed since the plan was created` | inputs changed after planning; revise the plan and re-confirm |
 | `plan ... is submitted; cannot revise` | already submitted; create a new plan |
 | `forbidden` on `bacmap_get_plan` | plan belongs to another MCP client; use the same client |
-| `confirm_url` unreachable | start `bacmap web`, or set `BACMAP_WEB_URL`; CLI confirmation still works |
+| `confirm_url` unreachable | run `bacmap start web`, or set `BACMAP_WEB_URL`; CLI confirmation still works |
 | Local dialog does nothing | only stdio sessions with a GUI (zenity/kdialog); use the Web link otherwise |
 | Auto-confirm never fires | policy disabled, non-analyze task, directory ingestion, or malformed `max_samples` (fail-safe) |
 
@@ -88,7 +88,7 @@ The `snakemake_v8` diagnostic is historical; current pins are Snakemake 9 (see `
 
 | Symptom | Fix |
 |---|---|
-| No tools discovered | check `bacmap mcp` starts; `bacmap_capabilities`; profile flag |
+| No tools discovered | check `bacmap start mcp` starts; `bacmap_capabilities`; profile flag |
 | HTTP 401 | `Authorization: Bearer $BACMAP_MCP_TOKEN`; token must match the server's env |
 | `local-trusted` refuses to start | set `[mcp] allow_local_trusted = true` (boolean) |
 | D3/D4 tools missing | you are on `cloud`; use a local model + `local-trusted` |

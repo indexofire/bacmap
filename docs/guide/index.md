@@ -58,11 +58,11 @@ over MCP is confirmed in the same place.
 
 | Interface | Best for | Writes | Confirmation |
 |---|---|---|---|
-| **Web** (`bacmap web`) | daily work, reviewing reports, approving tasks and plans | submit tasks, approve, confirm/reject plans | browser session + CSRF |
+| **Web** (`bacmap start web`) | daily work, reviewing reports, approving tasks and plans | submit tasks, approve, confirm/reject plans | browser session + CSRF |
 | **CLI** (`bacmap …`) | automation, scripts, headless servers | submit/approve/cancel, confirm plans | explicit command |
-| **TUI** (`bacmap tui`) | monitoring on the workstation | submit/approve from the keyboard | two-step keyboard confirmation |
+| **TUI** (`bacmap start tui`) | monitoring on the workstation | submit/approve from the keyboard | two-step keyboard confirmation |
 | **JSON API** (`/api/v1`) | dashboards and integrations | submit/cancel/confirm | bearer token (trusted surface) |
-| **MCP** (`bacmap mcp`) | external agents (Hermes/Pi/DSH) | **plan proposal / record tasks only** | never; a human confirms elsewhere |
+| **MCP** (`bacmap start mcp`) | external agents (Hermes/Pi/DSH) | **plan proposal / record tasks only** | never; a human confirms elsewhere |
 
 ## The lifecycle in one picture
 

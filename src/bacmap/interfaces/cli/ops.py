@@ -17,6 +17,8 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from bacmap.interfaces.i18n import T
+
 _DB_NAMES = (
     "tasks.sqlite",
     "research.sqlite",  # Research Workbench 对象（v1.10）
@@ -42,19 +44,23 @@ def collect_checks(home: Path) -> list[dict[str, str]]:
             _check(
                 "debug",
                 "warn",
-                "debug 模式已开启（环境变量或 [debug] enabled=true）："
-                "鉴权/审批/门/Profile 限制已放宽",
+                T(
+                    "debug mode is enabled (environment variable or [debug] enabled=true): "
+                    "auth/approval/gates/Profile restrictions relaxed",
+                    "debug 模式已开启（环境变量或 [debug] enabled=true）："
+                    "鉴权/审批/门/Profile 限制已放宽",
+                ),
             )
         )
     if not home.is_dir():
-        return [_check("home", "fail", f"目录不存在：{home}")]
+        return [_check("home", "fail", T(f"Directory not found: {home}", f"目录不存在：{home}"))]
     try:
         probe = home / ".doctor-write-probe"
         probe.write_text("ok")
         probe.unlink()
         checks.append(_check("home", "ok", str(home)))
     except OSError as exc:
-        checks.append(_check("home", "fail", f"不可写：{exc}"))
+        checks.append(_check("home", "fail", T(f"not writable: {exc}", f"不可写：{exc}")))
 
     from bacmap.store.migrations import schema_version
     from bacmap.tasks.spec import TASKS_MIGRATIONS
@@ -65,11 +71,35 @@ def collect_checks(home: Path) -> list[dict[str, str]]:
             version = schema_version(db)
             expected = len(TASKS_MIGRATIONS)
             status = "ok" if version == expected else "warn"
-            checks.append(_check("database", status, f"tasks.sqlite v{version}（期望 {expected}）"))
+            checks.append(
+                _check(
+                    "database",
+                    status,
+                    T(
+                        f"tasks.sqlite v{version} (expected {expected})",
+                        f"tasks.sqlite v{version}（期望 {expected}）",
+                    ),
+                )
+            )
         except sqlite3.Error as exc:
-            checks.append(_check("database", "fail", f"tasks.sqlite 无法读取：{exc}"))
+            checks.append(
+                _check(
+                    "database",
+                    "fail",
+                    T(f"tasks.sqlite cannot be read: {exc}", f"tasks.sqlite 无法读取：{exc}"),
+                )
+            )
     else:
-        checks.append(_check("database", "warn", "tasks.sqlite 尚未创建（首次运行后生成）"))
+        checks.append(
+            _check(
+                "database",
+                "warn",
+                T(
+                    "tasks.sqlite not yet created (generated after first run)",
+                    "tasks.sqlite 尚未创建（首次运行后生成）",
+                ),
+            )
+        )
 
     rdb = home / "research.sqlite"
     if rdb.is_file():
@@ -82,11 +112,20 @@ def collect_checks(home: Path) -> list[dict[str, str]]:
                 _check(
                     "research",
                     "ok" if version == expected else "warn",
-                    f"research.sqlite v{version}（期望 {expected}）",
+                    T(
+                        f"research.sqlite v{version} (expected {expected})",
+                        f"research.sqlite v{version}（期望 {expected}）",
+                    ),
                 )
             )
         except sqlite3.Error as exc:
-            checks.append(_check("research", "fail", f"research.sqlite 无法读取：{exc}"))
+            checks.append(
+                _check(
+                    "research",
+                    "fail",
+                    T(f"research.sqlite cannot be read: {exc}", f"research.sqlite 无法读取：{exc}"),
+                )
+            )
 
     try:
         from bacmap.agent.sandbox import SandboxExecutor
@@ -95,7 +134,13 @@ def collect_checks(home: Path) -> list[dict[str, str]]:
         status = "ok" if backend not in ("none", "unavailable") else "warn"
         checks.append(_check("sandbox", status, backend))
     except Exception as exc:  # 体检不因探测失败中断
-        checks.append(_check("sandbox", "warn", f"探测失败：{type(exc).__name__}"))
+        checks.append(
+            _check(
+                "sandbox",
+                "warn",
+                T(f"probe failed: {type(exc).__name__}", f"探测失败：{type(exc).__name__}"),
+            )
+        )
 
     try:
         from bacmap.interfaces.views import endpoint_status
@@ -108,21 +153,31 @@ def collect_checks(home: Path) -> list[dict[str, str]]:
         status = "ok" if "已连接" in detail else "warn"
         checks.append(_check("llm", status, detail))
     except Exception as exc:
-        checks.append(_check("llm", "warn", f"探测失败：{type(exc).__name__}"))
+        checks.append(
+            _check(
+                "llm",
+                "warn",
+                T(f"probe failed: {type(exc).__name__}", f"探测失败：{type(exc).__name__}"),
+            )
+        )
 
     usage = shutil.disk_usage(home)
     free_gb = usage.free / (1024**3)
     checks.append(
-        _check("disk", "ok" if free_gb >= 1 else "fail", f"可用 {free_gb:.1f} GB")
+        _check(
+            "disk",
+            "ok" if free_gb >= 1 else "fail",
+            T(f"{free_gb:.1f} GB free", f"可用 {free_gb:.1f} GB"),
+        )
     )
 
     missing = [
         t for t in ("gside", "gapit", "gmlst", "snakemake") if shutil.which(t) is None
     ]
     tools_detail = (
-        "外部工具缺失：" + ", ".join(missing)
+        T("missing external tools: ", "外部工具缺失：") + ", ".join(missing)
         if missing
-        else "gside/gapit/gmlst/snakemake 可用"
+        else T("gside/gapit/gmlst/snakemake available", "gside/gapit/gmlst/snakemake 可用")
     )
     checks.append(_check("tools", "ok" if not missing else "warn", tools_detail))
     return checks
@@ -138,7 +193,7 @@ def doctor(args: argparse.Namespace) -> None:
         for c in checks:
             mark = {"ok": "✓", "warn": "!", "fail": "✗"}[c["status"]]
             print(f"{mark} {c['name']:<9} {c['detail']}")
-        print("全部通过" if ok else "存在失败项")
+        print(T("all checks passed", "全部通过") if ok else T("some checks failed", "存在失败项"))
     if not ok:
         raise SystemExit(1)
 
@@ -169,7 +224,7 @@ def backup(args: argparse.Namespace) -> None:
     home = Path(args.home)
     out = Path(args.out)
     if not home.is_dir():
-        raise SystemExit(f"目录不存在：{home}")
+        raise SystemExit(T(f"Directory not found: {home}", f"目录不存在：{home}"))
     out.parent.mkdir(parents=True, exist_ok=True)
     count = 0
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as z:
@@ -193,7 +248,7 @@ def backup(args: argparse.Namespace) -> None:
                     if p.is_file():
                         z.write(p, p.relative_to(home).as_posix())
                         count += 1
-    print(f"已备份 {count} 个文件 → {out}")
+    print(T(f"Backed up {count} files → {out}", f"已备份 {count} 个文件 → {out}"))
 
 
 def _safe_extract(z: zipfile.ZipFile, target: Path) -> None:
@@ -202,7 +257,9 @@ def _safe_extract(z: zipfile.ZipFile, target: Path) -> None:
     for name in z.namelist():
         dest = (target / name).resolve()
         if not str(dest).startswith(str(root) + "/") and dest != root:
-            raise SystemExit(f"备份包含非法路径：{name!r}")
+            raise SystemExit(
+                T(f"backup contains an illegal path: {name!r}", f"备份包含非法路径：{name!r}")
+            )
     z.extractall(target)
 
 
@@ -214,20 +271,32 @@ def _verify_dbs(target: Path) -> None:
         with sqlite3.connect(db) as conn:
             row = conn.execute("PRAGMA integrity_check").fetchone()
         if row is None or row[0] != "ok":
-            raise SystemExit(f"恢复后完整性检查失败：{name}")
+            raise SystemExit(
+                T(f"post-restore integrity check failed: {name}", f"恢复后完整性检查失败：{name}")
+            )
 
 
 def restore(args: argparse.Namespace) -> None:
     src = Path(args.from_zip)
     target = Path(args.home)
     if not src.is_file():
-        raise SystemExit(f"备份文件不存在：{src}")
+        raise SystemExit(T(f"backup file not found: {src}", f"备份文件不存在：{src}"))
     if target.exists() and any(target.iterdir()) and not args.force:
-        raise SystemExit(f"目标目录非空：{target}（确认覆盖请加 --force）")
+        raise SystemExit(
+            T(
+                f"target directory not empty: {target} (use --force to overwrite)",
+                f"目标目录非空：{target}（确认覆盖请加 --force）",
+            )
+        )
     with zipfile.ZipFile(src) as z:
         _safe_extract(z, target)
     _verify_dbs(target)
-    print(f"已恢复 → {target}（SQLite 完整性检查通过）")
+    print(
+        T(
+            f"Restored → {target} (SQLite integrity check passed)",
+            f"已恢复 → {target}（SQLite 完整性检查通过）",
+        )
+    )
 
 
 def events_prune(args: argparse.Namespace) -> None:
@@ -235,12 +304,17 @@ def events_prune(args: argparse.Namespace) -> None:
 
     db = Path(args.home) / "tasks.sqlite"
     if not db.is_file():
-        raise SystemExit(f"tasks.sqlite 不存在：{db}")
+        raise SystemExit(T(f"tasks.sqlite not found: {db}", f"tasks.sqlite 不存在：{db}"))
     pruned = EventLog(db).prune(older_than_days=max(0, args.days))
     if args.json:
         print(json.dumps({"pruned": pruned, "days": args.days}))
     else:
-        print(f"已清理 {pruned} 条早于 {args.days} 天的事件")
+        print(
+            T(
+                f"Pruned {pruned} events older than {args.days} days",
+                f"已清理 {pruned} 条早于 {args.days} 天的事件",
+            )
+        )
 
 
 def results_migrate(args: argparse.Namespace) -> None:
@@ -249,43 +323,113 @@ def results_migrate(args: argparse.Namespace) -> None:
     home = Path(args.home)
     pending = flat_result_samples(home)
     if args.dry_run:
-        print(f"待迁移 {len(pending)} 个扁平结果目录：{', '.join(pending) or '无'}")
+        names = ", ".join(pending) or T("none", "无")
+        print(
+            T(
+                f"pending migration: {len(pending)} flat result directories: {names}",
+                f"待迁移 {len(pending)} 个扁平结果目录：{names}",
+            )
+        )
         return
     moved = migrate_flat_results(home)
-    print(f"已迁移 {moved} 个扁平结果目录到 results/runs/legacy-*/ 并替换为最新运行链接")
+    print(
+        T(
+            f"Migrated {moved} flat result directories into results/runs/legacy-*/ "
+            "and replaced with latest run links",
+            f"已迁移 {moved} 个扁平结果目录到 results/runs/legacy-*/ 并替换为最新运行链接",
+        )
+    )
 
 
 def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
-    d = sub.add_parser("doctor", help="只读体检（目录/库/沙箱/LLM/磁盘/外部工具）")
+    d = sub.add_parser(
+        "doctor",
+        help=T(
+            "read-only health check (dirs/database/sandbox/LLM/disk/external tools)",
+            "只读体检（目录/库/沙箱/LLM/磁盘/外部工具）",
+        ),
+    )
     add_home(d)
     add_json(d)
     d.set_defaults(func=doctor)
 
-    b = sub.add_parser("backup", help="备份配置、SQLite 库与运行清单到一个 zip")
+    b = sub.add_parser(
+        "backup",
+        help=T(
+            "back up config, SQLite databases and run manifests into one zip",
+            "备份配置、SQLite 库与运行清单到一个 zip",
+        ),
+    )
     add_home(b)
-    b.add_argument("--out", required=True, help="输出 zip 路径")
-    b.add_argument("--with-results", action="store_true", help="连同 results/ 一起备份（可能很大）")
+    b.add_argument("--out", required=True, help=T("output zip path", "输出 zip 路径"))
+    b.add_argument(
+        "--with-results",
+        action="store_true",
+        help=T("also back up results/ (can be large)", "连同 results/ 一起备份（可能很大）"),
+    )
     b.set_defaults(func=backup)
 
-    r = sub.add_parser("restore", help="从 zip 恢复（默认拒绝非空目录）")
+    r = sub.add_parser(
+        "restore",
+        help=T(
+            "restore from a zip (refuses non-empty directory by default)",
+            "从 zip 恢复（默认拒绝非空目录）",
+        ),
+    )
     add_home(r)
-    r.add_argument("--from", dest="from_zip", required=True, help="备份 zip 路径")
-    r.add_argument("--force", action="store_true", help="允许恢复到非空目录（不删除现有文件）")
+    r.add_argument(
+        "--from", dest="from_zip", required=True,
+        help=T("backup zip path", "备份 zip 路径"),
+    )
+    r.add_argument(
+        "--force",
+        action="store_true",
+        help=T(
+            "allow restoring into a non-empty directory (does not delete existing files)",
+            "允许恢复到非空目录（不删除现有文件）",
+        ),
+    )
     r.set_defaults(func=restore)
 
-    res = sub.add_parser("results", help="结果目录维护（P2：run 级布局）")
+    res = sub.add_parser(
+        "results",
+        help=T(
+            "results directory maintenance (P2: run-level layout)",
+            "结果目录维护（P2：run 级布局）",
+        ),
+    )
     rs = res.add_subparsers(dest="results_command", required=True)
     rm = rs.add_parser(
-        "migrate", help="旧扁平 results/<name>（样本 + snp/cgmlst）迁入 runs/ 并替换为链接"
+        "migrate",
+        help=T(
+            "migrate legacy flat results/<name> (samples + snp/cgmlst) into runs/"
+            " and replace with links",
+            "旧扁平 results/<name>（样本 + snp/cgmlst）迁入 runs/ 并替换为链接",
+        ),
     )
     add_home(rm)
-    rm.add_argument("--dry-run", action="store_true", help="只列出待迁移目录")
+    rm.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=T("only list directories pending migration", "只列出待迁移目录"),
+    )
     rm.set_defaults(func=results_migrate)
 
-    e = sub.add_parser("events", help="领域事件维护")
+    e = sub.add_parser("events", help=T("domain events maintenance", "领域事件维护"))
     es = e.add_subparsers(dest="events_command", required=True)
-    p = es.add_parser("prune", help="按保留期清理事件（管理员操作）")
+    p = es.add_parser(
+        "prune",
+        help=T(
+            "prune events by retention period (admin operation)",
+            "按保留期清理事件（管理员操作）",
+        ),
+    )
     add_home(p)
     add_json(p)
-    p.add_argument("--days", type=int, required=True, help="保留最近 N 天（0 = 全部清理）")
+    p.add_argument(
+        "--days",
+        type=int,
+        required=True,
+        help=T("keep the most recent N days (0 = prune all)", "保留最近 N 天（0 = 全部清理）"),
+    )
     p.set_defaults(func=events_prune)

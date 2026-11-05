@@ -19,9 +19,8 @@ in-task interpretation/gateway paths degrade (C3).
 ## 2. Install
 
 ```bash
-git clone <repo> bacmap
-cd bacmap
-pixi install          # default environment: Python 3.12 + Snakemake 9 + tools
+git clone https://github.com/indexofire/bacmap && cd bacmap
+pixi install --all    # all environments: Python 3.12 + Snakemake 9 + tools
 pixi shell            # activate it
 bacmap --version      # 0.1.2
 ```
@@ -30,11 +29,10 @@ What `pixi install` provides:
 
 - **Snakemake and the toolchain**: fastp, shovill, bwa, minimap2, samtools, bcftools, blast,
   bedtools, iqtree, and more (see `pixi.toml`).
-- **External analysis tools** (ADR-20): `gside` (species identification), `gapit` (gene
+- **Common analysis tools** (ADR-20): `gside` (species identification), `gapit` (gene
   screening/typing), `gmlst` (MLST/cgMLST/MST).
-- **A separate `recomb` environment** with Gubbins for optional recombination detection. It is
-  isolated because its IQ-TREE pin conflicts with the main pipeline; run it with
-  `pixi run -e recomb …`.
+- **A separate `recomb` environment** with Gubbins for optional recombination detection, because
+  its IQ-TREE pin conflicts with the main pipeline; run it with `pixi run -e recomb …`.
 
 The development environment is separate:
 
@@ -106,7 +104,7 @@ For stdio access to a standalone conda environment, prefer:
 
 ```yaml
 command: conda
-args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "mcp"]
+args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "start", "mcp"]
 ```
 
 `--no-capture-output` keeps MCP stdio unbuffered. Full client configuration is in
@@ -194,8 +192,8 @@ the exact versions used:
 ```bash
 bacmap --version
 bacmap doctor
-bacmap web &                              # http://127.0.0.1:8800
-bacmap mcp --read-only < /dev/null        # stdio smoke test; should exit cleanly
+bacmap start web &                        # http://127.0.0.1:8800
+bacmap start mcp --read-only < /dev/null  # stdio smoke test; should exit cleanly
 ```
 
 If these pass, continue with [Configuration](configuration.md) and the

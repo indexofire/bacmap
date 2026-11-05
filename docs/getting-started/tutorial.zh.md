@@ -48,7 +48,7 @@ bacmap doctor                  # 体检：home、数据库、沙箱、模型、�
 mcp_servers:
   bacmap:
     command: /home/you/bacmap/.pixi/envs/default/bin/bacmap
-    args: ["mcp"]                 # 本地模型请加 "--profile", "local-trusted"
+    args: ["start", "mcp"]        # 本地模型请加 "--profile", "local-trusted"
 ```
 
 验证：
@@ -161,7 +161,7 @@ Hermes 调用 `bacmap_task_result`（云端 Profile 只返回门的计数；本�
 - **Hermes 使用云端模型**：这正是红线在起作用；只能做规划与解释。要读取单菌株结果，
   管理员可以将 `cloud_max_data_class` 提高到 `"D2"`（上限）。
 - **本地/局域网模型**：在 `config.toml` 中设置 `[mcp] allow_local_trusted = true`，把 `args`
-  改为 `["mcp", "--profile", "local-trusted"]`，然后重启 Hermes。
+  改为 `["start", "mcp", "--profile", "local-trusted"]`，然后重启 Hermes。
 
 ## 4. 追问：让它读取并比较
 

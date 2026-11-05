@@ -2,7 +2,7 @@
 
 v1.6（ADR-21）：TUI 已是任务台（无内置对话）；这里额外断言"自然语言需求"提示不再出现。
 
-在**伪终端**里启动真实的 `bacmap tui` 进程，像用户一样按键（输入斜杠命令、Leader 和弦），
+在**伪终端**里启动真实的 `bacmap start tui` 进程，像用户一样按键（输入斜杠命令、Leader 和弦），
 抓取终端帧并断言关键内容出现；最后用 Leader+q 退出。全程无 GUI、可离线运行。
 
 与固定 sleep 不同，这里**等标记**（就绪 → 命令输出 → Leader 提示 → 退出），
@@ -53,7 +53,7 @@ def run(home: str, timeout: float = 60.0, rows: int = 45, cols: int = 140) -> in
         os.environ.pop("LINES", None)
         os.execvp(
             sys.executable,
-            [sys.executable, "-m", "bacmap.interfaces.cli", "tui", "--home", home],
+            [sys.executable, "-m", "bacmap.interfaces.cli", "start", "tui", "--home", home],
         )
         os._exit(127)
 

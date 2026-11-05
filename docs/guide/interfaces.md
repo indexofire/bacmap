@@ -6,8 +6,8 @@ you can start a task in one and approve it in another.
 ## 1. Web console
 
 ```bash
-bacmap web                                  # 127.0.0.1:8800 by default
-bacmap web --host 127.0.0.1 --port 8800
+bacmap start web                            # 127.0.0.1:8800 by default
+bacmap start web --host 127.0.0.1 --port 8800
 ```
 
 Pages:
@@ -70,10 +70,10 @@ bacmap results migrate [--dry-run]
 bacmap events prune --days N
 bacmap backup --out FILE [--with-results]
 bacmap restore --from FILE [--force]
-bacmap mcp   # MCP server
-bacmap web   # Web console
-bacmap tui   # task console
-bacmap console  # numbered menu
+bacmap start mcp     # MCP server
+bacmap start web     # Web console
+bacmap start tui     # task console
+bacmap start console  # numbered menu
 ```
 
 Query commands accept `--json`; task/plan IDs accept unique prefixes, so the 12 characters shown by
@@ -140,7 +140,7 @@ Each command submits a `record` task; check it with `bacmap task show`.
 ## 3. TUI task console
 
 ```bash
-bacmap tui
+bacmap start tui
 ```
 
 The TUI is a dashboard plus explicit operations; there is **no chat**.
@@ -177,7 +177,7 @@ submits, `Esc` cancels.
 ## 4. Interactive console
 
 ```bash
-bacmap console
+bacmap start console
 ```
 
 A numbered menu for users who prefer prompts over subcommands. It uses the same engine and gates;
@@ -204,7 +204,7 @@ Full endpoint and error reference: [HTTP API](../reference/api.md).
 
 ## 6. Remote access and authentication
 
-`bacmap web` binds to `127.0.0.1` by default. For remote access, use an SSH tunnel:
+`bacmap start web` binds to `127.0.0.1` by default. For remote access, use an SSH tunnel:
 
 ```bash
 ssh -L 8800:127.0.0.1:8800 user@workstation
@@ -215,7 +215,7 @@ If you bind a non-loopback address, bacmap refuses to start without a token:
 
 ```bash
 export BACMAP_WEB_TOKEN="$(openssl rand -hex 24)"
-bacmap web --host 0.0.0.0 --port 8800
+bacmap start web --host 0.0.0.0 --port 8800
 ```
 
 Two auth modes:

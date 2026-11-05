@@ -28,8 +28,8 @@ pixi run -e dev docs-build    # mkdocs（英文 + 中文）
 本地功能测试可以用环境变量：
 
 ```bash
-BACMAP_DEBUG=1 bacmap web --host 127.0.0.1
-BACMAP_DEBUG=1 bacmap mcp --profile local-trusted
+BACMAP_DEBUG=1 bacmap start web --host 127.0.0.1
+BACMAP_DEBUG=1 bacmap start mcp --profile local-trusted
 BACMAP_DEBUG=1 bacmap research ...
 ```
 

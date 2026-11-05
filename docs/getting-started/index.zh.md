@@ -7,7 +7,7 @@
 这是设计上的主路径：
 
 1. 完成下面的 `pixi install` / `bacmap doctor`；
-2. 按客户端配置把 `bacmap mcp` 接入 Hermes / Pi / DSH；
+2. 按客户端配置把 `bacmap start mcp` 接入 Hermes / Pi / DSH；
 3. 在对话里说：**“用标准管线分析 `/data/run42` 下的八套副溶血性弧菌 reads。”**
 4. 打开智能体给出的确认链接，点击确认；
 5. 回到对话继续问：“运行到哪一步了？汇总血清型和耐药。”
@@ -51,14 +51,14 @@ pixi install
 pixi shell
 bacmap --version          # 0.1.2
 bacmap doctor             # 目录、数据库、沙箱、LLM、磁盘、工具
-bacmap web                # http://127.0.0.1:8800
+bacmap start web          # http://127.0.0.1:8800
 ```
 
 然后使用 Web 控制台，或接入智能体：
 
 ```bash
-bacmap mcp                # 默认 cloud Profile
-bacmap mcp --profile local-trusted   # D4 工具；需 [mcp] allow_local_trusted = true
+bacmap start mcp          # 默认 cloud Profile
+bacmap start mcp --profile local-trusted   # D4 工具；需 [mcp] allow_local_trusted = true
 ```
 
 ## 处理真实样本之前

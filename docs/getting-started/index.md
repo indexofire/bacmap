@@ -8,7 +8,7 @@ Everything on this page is a short orientation; each step links to its detailed 
 That is the intended main path:
 
 1. run `pixi install` and `bacmap doctor` below;
-2. connect `bacmap mcp` to Hermes, Pi or DSH using the client configuration;
+2. connect `bacmap start mcp` to Hermes, Pi or DSH using the client configuration;
 3. say in the chat: **“Analyse the eight *V. parahaemolyticus* read sets in `/data/run42` with the
    standard pipeline.”**
 4. open the confirmation link returned by the agent and approve it;
@@ -53,14 +53,14 @@ pixi install
 pixi shell
 bacmap --version          # 0.1.2
 bacmap doctor             # home, database, sandbox, LLM, disk, tools
-bacmap web                # http://127.0.0.1:8800
+bacmap start web          # http://127.0.0.1:8800
 ```
 
 Then either use the Web console or connect an agent:
 
 ```bash
-bacmap mcp                # cloud profile (default)
-bacmap mcp --profile local-trusted   # D4 tools; requires [mcp] allow_local_trusted = true
+bacmap start mcp          # cloud profile (default)
+bacmap start mcp --profile local-trusted   # D4 tools; requires [mcp] allow_local_trusted = true
 ```
 
 ## Before real samples

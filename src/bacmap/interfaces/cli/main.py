@@ -1,16 +1,19 @@
 """bacmap 控制台命令（CLI）。
 
-子命令：
-- ``bacmap mcp``       MCP 服务器：stdio（默认）或 Streamable HTTP（Bearer 鉴权，ADR-12）
-- ``bacmap web``       Web 控制台（默认 127.0.0.1:8800，ADR-16 只绑本机）
-- ``bacmap tui``       全屏 TUI（Textual；任务/样本监控、写操作与签批，无内置对话）
-- ``bacmap console``   交互式菜单（面向不使用子命令的用户）
+长驻界面（启动后接管终端或端口）统一经 ``bacmap start``：
+- ``bacmap start mcp``       MCP 服务器：stdio（默认）或 Streamable HTTP（Bearer 鉴权，ADR-12）
+- ``bacmap start web``       Web 控制台（默认 127.0.0.1:8800，ADR-16 只绑本机）
+- ``bacmap start tui``       全屏 TUI（Textual；任务/样本监控、写操作与签批，无内置对话）
+- ``bacmap start console``   交互式菜单（面向不使用子命令的用户）
+
+一次性命令（做完即退）：
 - ``bacmap overview``  系统概览
 - ``bacmap task list|show|submit|approve|cancel``  任务查询与写操作（list 别名 ls）
 - ``bacmap sample ls|show``                        样本查询
 - ``bacmap search``                                样本检索
-- ``bacmap version``   版本号
+- ``bacmap --version``                             版本号
 
+显示语言：``[ui] language``（en|zh，默认 en）或环境变量 ``BACMAP_LANG``；
 所有查询子命令支持 ``--json`` 便于脚本消费。
 """
 
@@ -26,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from bacmap.config import BACMAP_HOME
+from bacmap.interfaces.i18n import T
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
@@ -33,8 +37,13 @@ _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 def _warn_if_exposed(host: str) -> None:
     if host not in _LOCAL_HOSTS:
         print(
-            f"[bacmap] 警告：绑定非本机地址 {host!r}（ADR-16 默认只绑本机；"
-            "跨机访问请确认网络边界与鉴权）",
+            T(
+                f"[bacmap] warning: bound to non-loopback address {host!r} "
+                "(ADR-16 defaults to loopback; verify network boundary and auth "
+                "before cross-machine access)",
+                f"[bacmap] 警告：绑定非本机地址 {host!r}（ADR-16 默认只绑本机；"
+                "跨机访问请确认网络边界与鉴权）",
+            ),
             file=sys.stderr,
         )
 
@@ -67,7 +76,7 @@ def _safe(value: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
-# mcp / web / tui / console
+# start mcp / web / tui / console
 # ---------------------------------------------------------------------------
 
 
@@ -101,19 +110,27 @@ def _run_web(args: argparse.Namespace) -> None:
     engine = _engine(args.home)
     mode = (os.environ.get("BACMAP_WEB_AUTH") or "bearer").strip().lower()
     if not token:
-        hint = f"鉴权关闭（未设置 {args.token_env}；仅本机安全）"
+        hint = T(
+            f"auth disabled ({args.token_env} not set; local-only is safe)",
+            f"鉴权关闭（未设置 {args.token_env}；仅本机安全）",
+        )
     elif mode == "cookie":
-        hint = f"浏览器登录：http://{args.host}:{args.port}/login（令牌见 {args.token_env}）"
+        hint = T(
+            f"browser login: http://{args.host}:{args.port}/login (token in {args.token_env})",
+            f"浏览器登录：http://{args.host}:{args.port}/login（令牌见 {args.token_env}）",
+        )
     else:
-        hint = (
+        hint = T(
+            f"bearer mode (API clients); for browser login set BACMAP_WEB_AUTH=cookie "
+            f"and restart, or use Authorization: Bearer <{args.token_env}>",
             f"bearer 模式（API 客户端）；浏览器登录请设 BACMAP_WEB_AUTH=cookie 后重启，"
-            f"或用 Authorization: Bearer <{args.token_env}>"
+            f"或用 Authorization: Bearer <{args.token_env}>",
         )
     from bacmap.config import debug_mode, debug_warning
 
     if debug_mode():
-        print(debug_warning("bacmap web"), file=sys.stderr)
-    print(f"bacmap web → http://{args.host}:{args.port}/  ·  {hint}")
+        print(debug_warning("bacmap start web"), file=sys.stderr)
+    print(f"bacmap start web → http://{args.host}:{args.port}/  ·  {hint}")
     uvicorn.run(create_app(engine, auth_token=token or None), host=args.host, port=args.port)
 
 
@@ -142,16 +159,36 @@ def _run_overview(args: argparse.Namespace) -> None:
         _emit_json(data)
         return
     c = _console()
-    c.print("[bold]bacmap 系统概览[/bold]")
+    c.print(T("[bold]bacmap system overview[/bold]", "[bold]bacmap 系统概览[/bold]"))
     c.print(f"  BACMAP_HOME : {data['paths']['BACMAP_HOME']}")
-    c.print(f"  数据策略     : cloud ≤ {data['cloud_max_data_class']}（ADR-16）")
-    c.print(f"  沙箱后端     : {data['sandbox']}")
-    c.print(f"  组件版本     : {', '.join(f'{k} {v}' for k, v in data['versions'].items())}")
+    c.print(
+        T(
+            f"  data policy : cloud ≤ {data['cloud_max_data_class']} (ADR-16)",
+            f"  数据策略     : cloud ≤ {data['cloud_max_data_class']}（ADR-16）",
+        )
+    )
+    c.print(T(f"  sandbox     : {data['sandbox']}", f"  沙箱后端     : {data['sandbox']}"))
+    c.print(
+        T(
+            f"  components  : {', '.join(f'{k} {v}' for k, v in data['versions'].items())}",
+            f"  组件版本     : {', '.join(f'{k} {v}' for k, v in data['versions'].items())}",
+        )
+    )
     if data["task_counts"]:
-        c.print(f"  任务分布     : {data['task_counts']}")
+        c.print(
+            T(
+                f"  tasks       : {data['task_counts']}",
+                f"  任务分布     : {data['task_counts']}",
+            )
+        )
     for ep in data["endpoints"]:
-        flag = "" if ep["enabled"] else "（禁用）"
-        c.print(f"  LLM 端点     : {ep['name']} [{ep['location']}] {ep['model']}{flag}")
+        flag = T(" (disabled)", "（禁用）") if not ep["enabled"] else ""
+        c.print(
+            T(
+                f"  LLM endpoint: {ep['name']} [{ep['location']}] {ep['model']}{flag}",
+                f"  LLM 端点     : {ep['name']} [{ep['location']}] {ep['model']}{flag}",
+            )
+        )
 
 
 def _run_task_ls(args: argparse.Namespace) -> None:
@@ -164,7 +201,11 @@ def _run_task_ls(args: argparse.Namespace) -> None:
 
     c = _console()
     # box.SQUARE：全线细线（默认 HEAVY_HEAD 的表头粗线与表体不一致，视觉突兀）
-    table = Table(title=f"任务（最近 {len(tasks)}）", show_lines=False, box=box.SQUARE)
+    table = Table(
+        title=T(f"Tasks (latest {len(tasks)})", f"任务（最近 {len(tasks)}）"),
+        show_lines=False,
+        box=box.SQUARE,
+    )
     for col in ("task_id", "type", "state", "step", "submitted_by", "updated_at"):
         table.add_column(col)
     for t in tasks:
@@ -188,9 +229,11 @@ def _resolve_task_id(engine: Any, raw: str) -> Any:
     try:
         return engine.resolve_task_id(raw)
     except KeyError as exc:
-        raise SystemExit(f"任务不存在：{raw}") from exc
+        raise SystemExit(T(f"Task not found: {raw}", f"任务不存在：{raw}")) from exc
     except ValueError as exc:
-        raise SystemExit(f"ID 前缀多义，请加长：{exc}") from exc
+        raise SystemExit(
+            T(f"Ambiguous ID prefix, lengthen it: {exc}", f"ID 前缀多义，请加长：{exc}")
+        ) from exc
 
 
 def _run_task_show(args: argparse.Namespace) -> None:
@@ -199,7 +242,9 @@ def _run_task_show(args: argparse.Namespace) -> None:
     try:
         st = engine.status(task_id)
     except KeyError as exc:
-        raise SystemExit(f"任务不存在：{args.task_id}") from exc
+        raise SystemExit(
+            T(f"Task not found: {args.task_id}", f"任务不存在：{args.task_id}")
+        ) from exc
     if args.json:
         _emit_json(st.model_dump())
         return
@@ -213,17 +258,30 @@ def _run_task_submit(args: argparse.Namespace) -> None:
     from bacmap.tasks.spec import TaskType
 
     if args.type not in ("analyze", "curate"):
-        raise SystemExit("task submit 仅支持 analyze|curate（mine/write 属开放路径）")
+        raise SystemExit(
+            T(
+                "task submit only accepts analyze|curate (mine/write go through plans)",
+                "task submit 仅支持 analyze|curate（mine/write 属开放路径）",
+            )
+        )
     params: dict[str, Any] = {}
     if args.fasta_dir or args.fastq_dir:
         if args.samples or (args.fasta_dir and args.fastq_dir):
-            raise SystemExit("--fasta-dir/--fastq-dir 与 --samples 互斥，目录参数二选一")
+            raise SystemExit(
+                T(
+                    "--fasta-dir/--fastq-dir and --samples are mutually exclusive; "
+                    "give exactly one directory argument",
+                    "--fasta-dir/--fastq-dir 与 --samples 互斥，目录参数二选一",
+                )
+            )
         # 登记属写操作（samples.tsv）：交由任务引擎首步 _step_register_inputs 执行
         # （v1.5：写只经任务，ADR-07），CLI 只做只读的存在性预检。
         key = "fasta_dir" if args.fasta_dir else "fastq_dir"
         directory = Path(args.fasta_dir or args.fastq_dir).expanduser().resolve()
         if not directory.is_dir():
-            raise SystemExit(f"目录不存在：{directory}")
+            raise SystemExit(
+                T(f"Directory not found: {directory}", f"目录不存在：{directory}")
+            )
         params[key] = str(directory)
         if args.species:
             params["species"] = args.species
@@ -233,19 +291,25 @@ def _run_task_submit(args: argparse.Namespace) -> None:
         try:
             scope = _json.loads(args.scope)
         except ValueError as exc:
-            raise SystemExit(f"scope 不是合法 JSON: {exc}") from exc
+            raise SystemExit(
+                T(f"scope is not valid JSON: {exc}", f"scope 不是合法 JSON: {exc}")
+            ) from exc
         if not isinstance(scope, dict):
-            raise SystemExit("scope 必须是 JSON 对象")
+            raise SystemExit(T("scope must be a JSON object", "scope 必须是 JSON 对象"))
         params["scope"] = scope
     try:
         tid = _engine(args.home).submit(TaskType(args.type), params, args.by)
     except (ValueError, NotImplementedError) as exc:
-        raise SystemExit(f"提交失败：{exc}") from exc
+        raise SystemExit(T(f"Submission failed: {exc}", f"提交失败：{exc}")) from exc
     if args.json:
         _emit_json({"task_id": tid, "state": "running"})
     else:
         _console().print(
-            f"已提交任务 [bold]{tid}[/bold]（{args.type}）；用 `bacmap task show {tid}` 轮询"
+            T(
+                f"Submitted task [bold]{tid}[/bold] ({args.type}); "
+                f"poll with `bacmap task show {tid}`",
+                f"已提交任务 [bold]{tid}[/bold]（{args.type}）；用 `bacmap task show {tid}` 轮询",
+            )
         )
 
 
@@ -263,8 +327,11 @@ def _run_task_approve(args: argparse.Namespace) -> None:
         engine = _engine(args.home)
         engine.approve(_resolve_task_id(engine, args.task_id), approval)
     except (KeyError, ValueError) as exc:
-        raise SystemExit(f"审批失败：{exc}") from exc
-    _console().print(f"任务 {args.task_id} 已{('通过' if args.decision == 'approve' else '拒绝')}")
+        raise SystemExit(T(f"Approval failed: {exc}", f"审批失败：{exc}")) from exc
+    if args.decision == "approve":
+        _console().print(T(f"Task {args.task_id} approved", f"任务 {args.task_id} 已通过"))
+    else:
+        _console().print(T(f"Task {args.task_id} rejected", f"任务 {args.task_id} 已拒绝"))
 
 
 def _run_task_cancel(args: argparse.Namespace) -> None:
@@ -272,10 +339,12 @@ def _run_task_cancel(args: argparse.Namespace) -> None:
         engine = _engine(args.home)
         engine.cancel(_resolve_task_id(engine, args.task_id))
     except KeyError as exc:
-        raise SystemExit(f"任务不存在：{args.task_id}") from exc
+        raise SystemExit(
+            T(f"Task not found: {args.task_id}", f"任务不存在：{args.task_id}")
+        ) from exc
     except ValueError as exc:
-        raise SystemExit(f"取消失败：{exc}") from exc
-    _console().print(f"任务 {args.task_id} 已取消")
+        raise SystemExit(T(f"Cancel failed: {exc}", f"取消失败：{exc}")) from exc
+    _console().print(T(f"Task {args.task_id} cancelled", f"任务 {args.task_id} 已取消"))
 
 
 def _run_sample_ls(args: argparse.Namespace) -> None:
@@ -288,7 +357,7 @@ def _run_sample_ls(args: argparse.Namespace) -> None:
     from rich.table import Table
 
     c = _console()
-    table = Table(title=f"样本（{len(rows)}）")
+    table = Table(title=T(f"Samples ({len(rows)})", f"样本（{len(rows)}）"))
     for col in ("sample_id", "species", "ST", "serovar", "AMR", "VF", "plasmid"):
         table.add_column(col)
     for r in rows:
@@ -305,17 +374,34 @@ def _run_sample_show(args: argparse.Namespace) -> None:
     rows = sample_rows(_engine(args.home))
     row = next((r for r in rows if r["sample_id"] == args.sample_id), None)
     if row is None:
-        raise SystemExit(f"样本不存在: {args.sample_id}")
+        raise SystemExit(
+            T(f"Sample not found: {args.sample_id}", f"样本不存在: {args.sample_id}")
+        )
     if args.json:
         _emit_json(row)
         return
     c = _console()
     c.print(
-        f"[bold]{row['sample_id']}[/bold]  物种={_safe(row['verdict'])}  "
-        f"ST={_safe(row['st'])}  血清型={_safe(row['serovar'])}"
+        T(
+            f"[bold]{row['sample_id']}[/bold]  species={_safe(row['verdict'])}  "
+            f"ST={_safe(row['st'])}  serovar={_safe(row['serovar'])}",
+            f"[bold]{row['sample_id']}[/bold]  物种={_safe(row['verdict'])}  "
+            f"ST={_safe(row['st'])}  血清型={_safe(row['serovar'])}",
+        )
     )
-    c.print(f"  毒力/耐药基因: {_safe(', '.join(row['card_genes'] + row['vfdb_genes']) or '无')}")
-    c.print(f"  质粒: {_safe(', '.join(row['plasmids']) or '无')}")
+    c.print(
+        T(
+            f"  virulence/AMR genes: "
+            f"{_safe(', '.join(row['card_genes'] + row['vfdb_genes']) or 'none')}",
+            f"  毒力/耐药基因: {_safe(', '.join(row['card_genes'] + row['vfdb_genes']) or '无')}",
+        )
+    )
+    c.print(
+        T(
+            f"  plasmids: {_safe(', '.join(row['plasmids']) or 'none')}",
+            f"  质粒: {_safe(', '.join(row['plasmids']) or '无')}",
+        )
+    )
 
 
 def _run_search(args: argparse.Namespace) -> None:
@@ -334,7 +420,7 @@ def _run_search(args: argparse.Namespace) -> None:
     from rich.table import Table
 
     c = _console()
-    table = Table(title=f"检索命中（{len(hits)}）")
+    table = Table(title=T(f"Search hits ({len(hits)})", f"检索命中（{len(hits)}）"))
     for col in ("sample_id", "species", "ST", "serovar"):
         table.add_column(col)
     for r in hits:
@@ -348,100 +434,226 @@ def _run_search(args: argparse.Namespace) -> None:
 
 
 def _add_home(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--home", default=str(BACMAP_HOME), help="BACMAP_HOME 根目录")
+    p.add_argument(
+        "--home",
+        default=str(BACMAP_HOME),
+        help=T("BACMAP_HOME root directory", "BACMAP_HOME 根目录"),
+    )
 
 
 def _add_json(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--json", action="store_true", help="以 JSON 输出（脚本友好）")
+    p.add_argument(
+        "--json",
+        action="store_true",
+        help=T("print JSON output (script-friendly)", "以 JSON 输出（脚本友好）"),
+    )
+
+
+def _add_start_parsers(sub: Any) -> None:
+    """长驻界面入口（启动后接管终端或端口）统一挂在 ``bacmap start`` 之下。"""
+    p_start = sub.add_parser(
+        "start",
+        help=T(
+            "start a long-running interface: mcp | web | tui | console",
+            "启动长驻界面：mcp | web | tui | console",
+        ),
+    )
+    start_sub = p_start.add_subparsers(
+        dest="start_target",
+        required=True,
+        metavar="{mcp,web,tui,console}",
+    )
+
+    p_mcp = start_sub.add_parser(
+        "mcp",
+        help=T(
+            "start the MCP server (stdio or Streamable HTTP)",
+            "启动 MCP 服务器（stdio 或 Streamable HTTP）",
+        ),
+    )
+    _add_home(p_mcp)
+    p_mcp.add_argument(
+        "--read-only",
+        action="store_true",
+        help=T("read-only mode (no task-submission tools)", "只读模式（不暴露任务提交工具）"),
+    )
+    from bacmap.interfaces.mcp.launch import add_profile_argument
+
+    add_profile_argument(p_mcp)
+    p_mcp.add_argument(
+        "--transport",
+        choices=["stdio", "http"],
+        default="stdio",
+        help=T("transport", "传输"),
+    )
+    p_mcp.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help=T("HTTP bind address (default loopback only)", "HTTP 绑定地址（默认仅本机）"),
+    )
+    p_mcp.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        help=T("HTTP port (default 8765)", "HTTP 端口（默认 8765）"),
+    )
+    p_mcp.add_argument(
+        "--uds", default="", help=T("use a unix socket path instead", "改用 unix socket 路径")
+    )
+    p_mcp.add_argument(
+        "--token-env",
+        default="BACMAP_MCP_TOKEN",
+        help=T("bearer token env var name", "Bearer token 环境变量名"),
+    )
+    p_mcp.set_defaults(func=_run_mcp)
+
+    p_web = start_sub.add_parser("web", help=T("start the Web console", "启动 Web 控制台"))
+    _add_home(p_web)
+    p_web.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help=T("bind address (default loopback only)", "绑定地址（默认仅本机）"),
+    )
+    p_web.add_argument(
+        "--port",
+        type=int,
+        default=8800,
+        help=T("port (default 8800)", "端口（默认 8800）"),
+    )
+    p_web.add_argument(
+        "--token-env",
+        default="BACMAP_WEB_TOKEN",
+        help=T("bearer token env var name", "Bearer token 环境变量名"),
+    )
+    p_web.set_defaults(func=_run_web)
+
+    p_tui = start_sub.add_parser(
+        "tui", help=T("start the fullscreen TUI (Textual)", "启动全屏 TUI（Textual）")
+    )
+    _add_home(p_tui)
+    p_tui.set_defaults(func=_run_tui)
+
+    p_console = start_sub.add_parser(
+        "console", help=T("start the interactive menu", "启动交互式菜单")
+    )
+    _add_home(p_console)
+    p_console.set_defaults(func=_run_console)
+
+
+def _epilog() -> str:
+    """双列分组帮助：长驻界面 vs 一次性命令（`bacmap --help` 尾部说明）。"""
+    interfaces_label = T(
+        "Long-running interfaces (take over the terminal or a port)",
+        "界面/模式（启动后接管终端或端口）",
+    )
+    commands_label = T(
+        "One-shot commands (query/write; all support --json)",
+        "命令（一次性查询/写操作，均支持 --json）",
+    )
+    note = T(
+        "Each interface keeps its own flags, e.g. `bacmap start mcp --profile local-trusted`.",
+        "注：各界面保留自己的参数，如 `bacmap start mcp --profile local-trusted`。",
+    )
+    return (
+        f"{interfaces_label}: bacmap start {{mcp|web|tui|console}}\n"
+        f"{commands_label}: overview · task · plan · record · run · gom · sample · search\n"
+        f"{note}"
+    )
+
+
+_COMMAND_METAVAR = (
+    "{start,overview,task,plan,record,run,gom,config,doctor,backup,"
+    "restore,results,events,isolate,sample,search}"
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="bacmap",
-        description="bacmap 本地病原菌基因组分析系统（architecture-frozen-v1）",
-        epilog=(
-            "界面/模式（启动后接管终端或端口）：mcp · web · tui · console\n"
-            "命令（一次性查询/写操作，均支持 --json）：overview · task · plan · record · "
-            "run · gom · sample · search\n"
-            "注：bacmap 本身即命令行界面；web/tui/console 是并列的其他交互形态，"
-            "故命令直接挂在顶层（bacmap task list），不再套一层 cli 子命令。"
+        description=T(
+            "bacmap local pathogen genomics analysis system (architecture-frozen-v1)",
+            "bacmap 本地病原菌基因组分析系统（architecture-frozen-v1）",
         ),
+        epilog=_epilog(),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"bacmap {pkg_version('bacmap')}")
     sub = parser.add_subparsers(
         dest="command",
         required=True,
-        metavar="{mcp,web,tui,console,overview,task,plan,record,run,gom,config,doctor,backup,restore,results,events,isolate,sample,search}",
+        metavar=_COMMAND_METAVAR,
     )
 
-    p_mcp = sub.add_parser("mcp", help="启动 MCP 服务器（stdio 或 Streamable HTTP）")
-    _add_home(p_mcp)
-    p_mcp.add_argument("--read-only", action="store_true", help="只读模式（不暴露任务提交工具）")
-    from bacmap.interfaces.mcp.launch import add_profile_argument
+    _add_start_parsers(sub)
 
-    add_profile_argument(p_mcp)
-    p_mcp.add_argument("--transport", choices=["stdio", "http"], default="stdio", help="传输")
-    p_mcp.add_argument("--host", default="127.0.0.1", help="HTTP 绑定地址（默认仅本机）")
-    p_mcp.add_argument("--port", type=int, default=8765, help="HTTP 端口（默认 8765）")
-    p_mcp.add_argument("--uds", default="", help="改用 unix socket 路径")
-    p_mcp.add_argument("--token-env", default="BACMAP_MCP_TOKEN", help="Bearer token 环境变量名")
-    p_mcp.set_defaults(func=_run_mcp)
-
-    p_web = sub.add_parser("web", help="启动 Web 控制台")
-    _add_home(p_web)
-    p_web.add_argument("--host", default="127.0.0.1", help="绑定地址（默认仅本机）")
-    p_web.add_argument("--port", type=int, default=8800, help="端口（默认 8800）")
-    p_web.add_argument("--token-env", default="BACMAP_WEB_TOKEN", help="Bearer token 环境变量名")
-    p_web.set_defaults(func=_run_web)
-
-    p_tui = sub.add_parser("tui", help="启动全屏 TUI（Textual）")
-    _add_home(p_tui)
-    p_tui.set_defaults(func=_run_tui)
-
-    p_console = sub.add_parser("console", help="启动交互式菜单")
-    _add_home(p_console)
-    p_console.set_defaults(func=_run_console)
-
-    p_ov = sub.add_parser("overview", help="系统概览")
+    p_ov = sub.add_parser("overview", help=T("system overview", "系统概览"))
     _add_home(p_ov)
     _add_json(p_ov)
     p_ov.set_defaults(func=_run_overview)
 
-    p_task = sub.add_parser("task", help="任务查询与写操作")
+    p_task = sub.add_parser("task", help=T("task queries and write operations", "任务查询与写操作"))
     task_sub = p_task.add_subparsers(dest="task_command", required=True)
 
-    t_ls = task_sub.add_parser("list", aliases=["ls"], help="列出最近任务")
+    t_ls = task_sub.add_parser("list", aliases=["ls"], help=T("list recent tasks", "列出最近任务"))
     _add_home(t_ls)
     _add_json(t_ls)
     t_ls.add_argument("--limit", type=int, default=50)
     t_ls.set_defaults(func=_run_task_ls)
 
-    t_show = task_sub.add_parser("show", help="查看任务状态")
+    t_show = task_sub.add_parser("show", help=T("show task status", "查看任务状态"))
     t_show.add_argument("task_id")
     _add_home(t_show)
     _add_json(t_show)
     t_show.set_defaults(func=_run_task_show)
 
-    t_sub = task_sub.add_parser("submit", help="提交 analyze/curate 任务")
-    t_sub.add_argument(
-        "--fasta-dir", help="组装 FASTA 目录：递归扫描 .fna/.fasta/.fa 登记后提交 analyze"
+    t_sub = task_sub.add_parser(
+        "submit", help=T("submit an analyze/curate task", "提交 analyze/curate 任务")
     )
     t_sub.add_argument(
-        "--fastq-dir", help="reads 目录：识别 *_R1/_R2 配对登记后提交 analyze"
+        "--fasta-dir",
+        help=T(
+            "assembly FASTA directory: recursively scan .fna/.fasta/.fa, "
+            "register, then submit analyze",
+            "组装 FASTA 目录：递归扫描 .fna/.fasta/.fa 登记后提交 analyze",
+        ),
     )
-    t_sub.add_argument("--species", help="样本物种（码或名称；省略时 FASTA 逐株自动识别）")
+    t_sub.add_argument(
+        "--fastq-dir",
+        help=T(
+            "reads directory: detect *_R1/_R2 pairs, register, then submit analyze",
+            "reads 目录：识别 *_R1/_R2 配对登记后提交 analyze",
+        ),
+    )
+    t_sub.add_argument(
+        "--species",
+        help=T(
+            "sample species (code or name; per-isolate auto-detection from FASTA when omitted)",
+            "样本物种（码或名称；省略时 FASTA 逐株自动识别）",
+        ),
+    )
     t_sub.add_argument("--type", choices=["analyze", "curate"], required=True)
-    t_sub.add_argument("--samples", default="", help="样本 ID，逗号分隔（analyze）")
     t_sub.add_argument(
-        "--scope", default="", help='筛选 JSON（curate，如 {"pathogen":"Salmonella"}）'
+        "--samples",
+        default="",
+        help=T("comma-separated sample IDs (analyze)", "样本 ID，逗号分隔（analyze）"),
     )
-    t_sub.add_argument("--by", default="cli", help="提交者")
+    t_sub.add_argument(
+        "--scope",
+        default="",
+        help=T(
+            'filter JSON (curate, e.g. {"pathogen":"Salmonella"})',
+            '筛选 JSON（curate，如 {"pathogen":"Salmonella"}）',
+        ),
+    )
+    t_sub.add_argument("--by", default="cli", help=T("submitter", "提交者"))
     _add_home(t_sub)
     _add_json(t_sub)
     t_sub.set_defaults(func=_run_task_submit)
 
-    t_appr = task_sub.add_parser("approve", help="审批签名（awaiting_approval 任务）")
+    t_appr = task_sub.add_parser(
+        "approve",
+        help=T("sign an approval (tasks awaiting_approval)", "审批签名（awaiting_approval 任务）"),
+    )
     t_appr.add_argument("task_id")
     t_appr.add_argument("--approver", required=True)
     t_appr.add_argument("--decision", choices=["approve", "reject"], required=True)
@@ -450,7 +662,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_home(t_appr)
     t_appr.set_defaults(func=_run_task_approve)
 
-    t_cancel = task_sub.add_parser("cancel", help="取消任务")
+    t_cancel = task_sub.add_parser("cancel", help=T("cancel a task", "取消任务"))
     t_cancel.add_argument("task_id")
     _add_home(t_cancel)
     t_cancel.set_defaults(func=_run_task_cancel)
@@ -473,23 +685,29 @@ def build_parser() -> argparse.ArgumentParser:
     add_isolate_parser(sub, _add_home, _add_json)
     add_ops_parser(sub, _add_home, _add_json)
 
-    p_sample = sub.add_parser("sample", help="样本查询")
+    p_sample = sub.add_parser("sample", help=T("sample queries", "样本查询"))
     sample_sub = p_sample.add_subparsers(dest="sample_command", required=True)
-    s_ls = sample_sub.add_parser("ls", help="列出已完成样本")
+    s_ls = sample_sub.add_parser("ls", help=T("list completed samples", "列出已完成样本"))
     _add_home(s_ls)
     _add_json(s_ls)
     s_ls.set_defaults(func=_run_sample_ls)
-    s_show = sample_sub.add_parser("show", help="查看样本详情")
+    s_show = sample_sub.add_parser("show", help=T("show sample details", "查看样本详情"))
     s_show.add_argument("sample_id")
     _add_home(s_show)
     _add_json(s_show)
     s_show.set_defaults(func=_run_sample_show)
 
-    p_search = sub.add_parser("search", help="样本检索")
-    p_search.add_argument("--query", default="", help="关键词（物种/血清型/ST/基因）")
-    p_search.add_argument("--serotype", default="", help="血清型过滤")
-    p_search.add_argument("--st", default="", help="MLST ST 过滤")
-    p_search.add_argument("--gene", default="", help="基因过滤（AMR/毒力）")
+    p_search = sub.add_parser("search", help=T("search samples", "样本检索"))
+    p_search.add_argument(
+        "--query",
+        default="",
+        help=T("keyword (species/serotype/ST/gene)", "关键词（物种/血清型/ST/基因）"),
+    )
+    p_search.add_argument("--serotype", default="", help=T("serotype filter", "血清型过滤"))
+    p_search.add_argument("--st", default="", help=T("MLST ST filter", "MLST ST 过滤"))
+    p_search.add_argument(
+        "--gene", default="", help=T("gene filter (AMR/virulence)", "基因过滤（AMR/毒力）")
+    )
     _add_home(p_search)
     _add_json(p_search)
     p_search.set_defaults(func=_run_search)

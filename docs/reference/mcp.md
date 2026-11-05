@@ -8,13 +8,13 @@ bacmap exposes domain tools and a human confirmation boundary.
 
 | Transport | Command | Auth |
 |---|---|---|
-| stdio | `bacmap mcp` | OS process boundary; actor `mcp-stdio:<profile>:<user>` |
-| HTTP | `bacmap mcp --transport http --host 127.0.0.1 --port 8765` | mandatory bearer token |
-| unix socket | `bacmap mcp --transport http --uds /run/bacmap-mcp.sock` | mandatory bearer token |
+| stdio | `bacmap start mcp` | OS process boundary; actor `mcp-stdio:<profile>:<user>` |
+| HTTP | `bacmap start mcp --transport http --host 127.0.0.1 --port 8765` | mandatory bearer token |
+| unix socket | `bacmap start mcp --transport http --uds /run/bacmap-mcp.sock` | mandatory bearer token |
 
 ```bash
 export BACMAP_MCP_TOKEN="$(openssl rand -hex 24)"
-bacmap mcp --transport http --host 127.0.0.1 --port 8765
+bacmap start mcp --transport http --host 127.0.0.1 --port 8765
 # client: http://127.0.0.1:8765/mcp, Authorization: Bearer <token>
 ```
 
@@ -28,8 +28,8 @@ HTTP refuses to start without a token. DNS-rebinding protection only allows conf
 One profile per server instance, fixed at launch:
 
 ```bash
-bacmap mcp                          # cloud (default)
-bacmap mcp --profile local-trusted  # requires [mcp] allow_local_trusted = true
+bacmap start mcp                          # cloud (default)
+bacmap start mcp --profile local-trusted  # requires [mcp] allow_local_trusted = true
 ```
 
 | Profile | Tool output ceiling | Task message | Task result |

@@ -78,6 +78,7 @@ class TestConfigCli:
         assert "[plans.auto_confirm]" in (tmp_path / "config.toml").read_text(encoding="utf-8")
 
     def test_init_refuses_overwrite(self, monkeypatch, capsys, tmp_path: Path):
+        monkeypatch.setenv("BACMAP_LANG", "zh")
         (tmp_path / "config.toml").write_text("existing\n", encoding="utf-8")
         with pytest.raises(SystemExit, match="已存在"):
             self._run(monkeypatch, capsys, ["config", "init", "--home", str(tmp_path)])

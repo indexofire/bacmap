@@ -48,6 +48,7 @@ export BACMAP_CONFIG="$PWD/config.toml"
 | `BACMAP_WEB_AUTH` | `bearer` | `bearer` or `cookie` |
 | `BACMAP_WEB_SECRET` | derived from token | HMAC key for session cookies |
 | `BACMAP_WEB_COOKIE_SECURE` | off | `1` adds `Secure` to cookies |
+| `BACMAP_LANG` | — | CLI display language override (`en`/`zh`); takes precedence over `[ui].language` |
 | `BACMAP_RESEARCH_PROFILE` | `research` | default governance profile for Research Workbench (`open-test`/`research`/`publication`) |
 | `BACMAP_DEBUG` | off | **development only**: explicit override of `[debug].enabled`; `1` enables, `0` disables. Disables Web auth/CSRF, plan confirmation, task approvals, gates, MCP Profile limits, Research claim/publication gates and sandbox fallback. D3/D4→cloud remains blocked. |
 | `BACMAP_BENCHMARK_DATA` | — | local public-data snapshot for research benchmarks; may be a dataset dir or a parent containing `bvbrc_kpn_meropenem`/`osf_n78q3` |
@@ -75,6 +76,9 @@ interpretation = "strata"
 [llm.resources]
 co_located = true
 min_free_ram_gb_for_heavy_steps = 24.0
+
+[ui]
+language = "en"
 
 [mcp]
 allow_local_trusted = false
@@ -276,7 +280,7 @@ export BACMAP_WEB_TOKEN="$(openssl rand -hex 24)"
 export BACMAP_WEB_AUTH=cookie          # optional browser login
 export BACMAP_WEB_SECRET="..."         # optional explicit HMAC key
 export BACMAP_WEB_COOKIE_SECURE=1      # behind TLS
-bacmap web --host 127.0.0.1 --port 8800
+bacmap start web --host 127.0.0.1 --port 8800
 ```
 
 - A non-loopback host without a token refuses to start.
@@ -303,3 +307,14 @@ Docker is not supported. Without a backend, `mine` fails with `sandbox_unavailab
 - Invalid `plans.auto_confirm` policy (`max_samples`/`max_tasks`/`task_types`/flags) disables auto-confirm (fail-safe).
 - A database newer than the code is refused; restore a matching backup instead of downgrading.
 - `config.toml` may contain only the name of a secret env var, never the key itself.
+
+## 12. Display language
+
+| Setting | Default | Notes |
+|---|---|---|
+| `[ui].language` | `en` | CLI help and message language; `en` or `zh` (case-insensitive) |
+| `BACMAP_LANG` | — | environment override; takes precedence over the config file |
+
+Invalid or missing values fall back to `en` deterministically (same tolerance as `[debug]`).
+The setting affects CLI help, prompts and messages only — data, reports and JSON output are
+unaffected.

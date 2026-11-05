@@ -49,6 +49,7 @@ export BACMAP_CONFIG="$PWD/config.toml"
 | `BACMAP_WEB_AUTH` | `bearer` | `bearer` 或 `cookie` |
 | `BACMAP_WEB_SECRET` | 由 token 派生 | 会话 cookie 的 HMAC 密钥 |
 | `BACMAP_WEB_COOKIE_SECURE` | 关 | `1` 给 cookie 加上 `Secure` |
+| `BACMAP_LANG` | — | CLI 显示语言覆盖（`en`/`zh`）；优先于 `[ui].language` |
 | `BACMAP_RESEARCH_PROFILE` | `research` | Research Workbench 默认治理 Profile（`open-test`/`research`/`publication`） |
 | `BACMAP_DEBUG` | 关 | **仅开发**：显式覆盖 `[debug].enabled`；`1` 开启，`0` 关闭。关闭 Web 鉴权/CSRF、计划确认、任务审批、门、MCP Profile 限制、Research Claim/发表门与沙箱回退；D3/D4→cloud 仍被阻止。 |
 | `BACMAP_BENCHMARK_DATA` | — | Research 科学基准的本地公共数据快照；可指向单个数据集目录，或包含 `bvbrc_kpn_meropenem`/`osf_n78q3` 的父目录 |
@@ -76,6 +77,9 @@ interpretation = "strata"
 [llm.resources]
 co_located = true
 min_free_ram_gb_for_heavy_steps = 24.0
+
+[ui]
+language = "en"
 
 [mcp]
 allow_local_trusted = false
@@ -275,7 +279,7 @@ export BACMAP_WEB_TOKEN="$(openssl rand -hex 24)"
 export BACMAP_WEB_AUTH=cookie          # 可选的浏览器登录
 export BACMAP_WEB_SECRET="..."         # 可选的显式 HMAC 密钥
 export BACMAP_WEB_COOKIE_SECURE=1      # 位于 TLS 之后
-bacmap web --host 127.0.0.1 --port 8800
+bacmap start web --host 127.0.0.1 --port 8800
 ```
 
 - 非回环主机且无 token 时拒绝启动。
@@ -302,3 +306,13 @@ bacmap web --host 127.0.0.1 --port 8800
 - 无效的 `plans.auto_confirm` 策略（`max_samples`/`max_tasks`/`task_types`/开关）会禁用自动确认（故障安全）。
 - 比代码更新的数据库会被拒绝；请恢复匹配的备份，而不是降级。
 - `config.toml` 只能包含密钥环境变量的名称，绝不能包含密钥本身。
+
+## 12. 显示语言
+
+| 设置 | 默认值 | 说明 |
+|---|---|---|
+| `[ui].language` | `en` | CLI 帮助与提示文案的语言；`en` 或 `zh`（大小写不敏感） |
+| `BACMAP_LANG` | — | 环境变量覆盖；优先于配置文件 |
+
+非法或缺失的取值确定性回落 `en`（与 `[debug]` 的容错口径一致）。该设置只影响
+CLI 帮助、提示与消息——数据、报告与 JSON 输出不受影响。

@@ -15,6 +15,7 @@ from typing import Any
 
 from bacmap.application.errors import ApplicationError
 from bacmap.application.plans import PlanRecord, PlanService
+from bacmap.interfaces.i18n import T
 
 
 def _actor() -> str:
@@ -83,8 +84,12 @@ def run_show(args: argparse.Namespace) -> None:
     _print(rec)
     if rec.state.value == "awaiting_confirmation":
         print(
-            f"\n确认：bacmap plan confirm {rec.plan_id} --version {rec.version} "
-            f"--hash {rec.short_hash}"
+            T(
+                f"\nConfirm: bacmap plan confirm {rec.plan_id} --version {rec.version} "
+                f"--hash {rec.short_hash}",
+                f"\n确认：bacmap plan confirm {rec.plan_id} --version {rec.version} "
+                f"--hash {rec.short_hash}",
+            )
         )
 
 
@@ -97,8 +102,14 @@ def run_confirm(args: argparse.Namespace) -> None:
         from rich.prompt import Confirm
 
         _print(rec)
-        if not Confirm.ask(f"确认并提交 plan {rec.plan_id} v{rec.version}？", default=False):
-            raise SystemExit("已取消")
+        if not Confirm.ask(
+            T(
+                f"Confirm and submit plan {rec.plan_id} v{rec.version}?",
+                f"确认并提交 plan {rec.plan_id} v{rec.version}？",
+            ),
+            default=False,
+        ):
+            raise SystemExit(T("Cancelled", "已取消"))
         expected = rec.plan_hash
     out = _run(lambda: service.confirm(args.plan_id, rec.version, expected, _actor()))
     if args.json:
@@ -113,7 +124,12 @@ def run_reject(args: argparse.Namespace) -> None:
     out = _run(
         lambda: _service(args).reject(args.plan_id, args.version, args.reason, _actor())
     )
-    print(f"plan {out.plan_id} v{out.version} 已拒绝")
+    print(
+        T(
+            f"plan {out.plan_id} v{out.version} rejected",
+            f"plan {out.plan_id} v{out.version} 已拒绝",
+        )
+    )
 
 
 def add_parser(
@@ -121,33 +137,76 @@ def add_parser(
     add_home: Callable[[argparse.ArgumentParser], None],
     add_json: Callable[[argparse.ArgumentParser], None],
 ) -> None:
-    p_plan = sub.add_parser("plan", help="分析计划：查看 / 确认提交 / 拒绝（v1.5）")
+    p_plan = sub.add_parser(
+        "plan",
+        help=T(
+            "analysis plans: view / confirm and submit / reject (v1.5)",
+            "分析计划：查看 / 确认提交 / 拒绝（v1.5）",
+        ),
+    )
     plan_sub = p_plan.add_subparsers(dest="plan_command", required=True)
 
-    ls = plan_sub.add_parser("list", aliases=["ls"], help="列出最近计划（各取最新版本）")
+    ls = plan_sub.add_parser(
+        "list",
+        aliases=["ls"],
+        help=T("list recent plans (latest version each)", "列出最近计划（各取最新版本）"),
+    )
     ls.add_argument("--limit", type=int, default=20)
     add_home(ls)
     add_json(ls)
     ls.set_defaults(func=run_ls)
 
-    show = plan_sub.add_parser("show", help="查看计划完整参数、哈希与状态")
+    show = plan_sub.add_parser(
+        "show",
+        help=T(
+            "show a plan's full parameters, hash and state",
+            "查看计划完整参数、哈希与状态",
+        ),
+    )
     show.add_argument("plan_id")
-    show.add_argument("--version", type=int, default=None, help="默认最新版本")
+    show.add_argument(
+        "--version",
+        type=int,
+        default=None,
+        help=T("defaults to the latest version", "默认最新版本"),
+    )
     add_home(show)
     add_json(show)
     show.set_defaults(func=run_show)
 
     confirm = plan_sub.add_parser(
-        "confirm", help="确认并提交计划（省略 --hash 时先展示计划再交互确认）"
+        "confirm",
+        help=T(
+            "confirm and submit the plan (without --hash, show it first and confirm interactively)",
+            "确认并提交计划（省略 --hash 时先展示计划再交互确认）",
+        ),
     )
     confirm.add_argument("plan_id")
-    confirm.add_argument("--version", type=int, default=None, help="默认最新版本")
-    confirm.add_argument("--hash", default="", help="plan show 给出的哈希（≥12 位前缀）")
+    confirm.add_argument(
+        "--version",
+        type=int,
+        default=None,
+        help=T("defaults to the latest version", "默认最新版本"),
+    )
+    confirm.add_argument(
+        "--hash",
+        default="",
+        help=T(
+            "hash as printed by plan show (>=12-character prefix)",
+            "plan show 给出的哈希（≥12 位前缀）",
+        ),
+    )
     add_home(confirm)
     add_json(confirm)
     confirm.set_defaults(func=run_confirm)
 
-    reject = plan_sub.add_parser("reject", help="拒绝计划（Harness 可据此修订）")
+    reject = plan_sub.add_parser(
+        "reject",
+        help=T(
+            "reject the plan (the Harness can revise it accordingly)",
+            "拒绝计划（Harness 可据此修订）",
+        ),
+    )
     reject.add_argument("plan_id")
     reject.add_argument("--version", type=int, required=True)
     reject.add_argument("--reason", required=True)

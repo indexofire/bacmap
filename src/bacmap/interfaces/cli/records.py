@@ -11,16 +11,20 @@ import argparse
 import json
 from typing import Any
 
+from bacmap.interfaces.i18n import T
+
 
 def _parse_fields(pairs: list[str]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for raw in pairs:
         if "=" not in raw:
-            raise SystemExit(f"--field 需要 k=v 形式：{raw!r}")
+            raise SystemExit(
+                T(f"--field requires k=v form: {raw!r}", f"--field 需要 k=v 形式：{raw!r}")
+            )
         key, _, value = raw.partition("=")
         key = key.strip()
         if not key:
-            raise SystemExit(f"--field 键为空：{raw!r}")
+            raise SystemExit(T(f"--field key is empty: {raw!r}", f"--field 键为空：{raw!r}"))
         out[key] = value.strip()
     return out
 
@@ -33,11 +37,18 @@ def submit_record(args: argparse.Namespace, params: dict[str, Any]) -> None:
     try:
         tid = _engine(args.home).submit(TaskType.RECORD, params, args.by)
     except ValueError as exc:
-        raise SystemExit(f"提交失败：{exc}") from exc
+        raise SystemExit(T(f"Submission failed: {exc}", f"提交失败：{exc}")) from exc
     if args.json:
         print(json.dumps({"task_id": tid, "state": "running", "kind": params["kind"]}))
         return
-    print(f"已提交记录任务 {tid}（{params['kind']}）；用 `bacmap task show {tid}` 查看结果")
+    print(
+        T(
+            f"Submitted record task {tid} ({params['kind']}); "
+            f"use `bacmap task show {tid}` to view the result",
+            f"已提交记录任务 {tid}（{params['kind']}）；"
+            f"用 `bacmap task show {tid}` 查看结果",
+        )
+    )
 
 
 def run_record(args: argparse.Namespace) -> None:
@@ -84,24 +95,37 @@ def run_record(args: argparse.Namespace) -> None:
 
 
 def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
-    p = sub.add_parser("record", help="记录元数据/化验/文献知识库（经任务层，v1.7）")
+    p = sub.add_parser(
+        "record",
+        help=T(
+            "record metadata / lab results / knowledge entries (via the task layer, v1.7)",
+            "记录元数据/化验/文献知识库（经任务层，v1.7）",
+        ),
+    )
     rec = p.add_subparsers(dest="record_command", required=True)
 
-    m = rec.add_parser("metadata", help="录入/更新菌株元数据")
+    m = rec.add_parser(
+        "metadata", help=T("add or update isolate metadata", "录入/更新菌株元数据")
+    )
     m.add_argument("--strain-id", required=True)
-    m.add_argument("--sample-id", default="", help="默认与 strain-id 相同")
+    m.add_argument(
+        "--sample-id", default="", help=T("defaults to strain-id", "默认与 strain-id 相同")
+    )
     m.add_argument(
         "--field",
         action="append",
         default=[],
-        help="字段 k=v，可重复（如 --field province=Guangdong）",
+        help=T(
+            "field as k=v, repeatable (e.g. --field province=Guangdong)",
+            "字段 k=v，可重复（如 --field province=Guangdong）",
+        ),
     )
-    m.add_argument("--by", default="cli", help="提交者")
+    m.add_argument("--by", default="cli", help=T("submitter", "提交者"))
     add_home(m)
     add_json(m)
     m.set_defaults(func=run_record)
 
-    lab = rec.add_parser("lab", help="录入一条化验结果")
+    lab = rec.add_parser("lab", help=T("add a lab result", "录入一条化验结果"))
     lab.add_argument("--strain-id", required=True)
     lab.add_argument("--category", required=True)
     lab.add_argument("--test-name", required=True)
@@ -114,29 +138,43 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     lab.add_argument("--tested-by", default="")
     lab.add_argument("--lab", default="")
     lab.add_argument("--notes", default="")
-    lab.add_argument("--by", default="cli", help="提交者")
+    lab.add_argument("--by", default="cli", help=T("submitter", "提交者"))
     add_home(lab)
     add_json(lab)
     lab.set_defaults(func=run_record)
 
-    ki = rec.add_parser("knowledge-import", help="文献入暂存区（待审核）")
+    ki = rec.add_parser(
+        "knowledge-import",
+        help=T(
+            "import a knowledge entry into staging (pending review)",
+            "文献入暂存区（待审核）",
+        ),
+    )
     ki.add_argument("--title", required=True)
     ki.add_argument("--authors", default="")
     ki.add_argument("--year", type=int, default=None)
     ki.add_argument("--source", default="")
-    ki.add_argument("--identifier", default="", help="如 PMID:12345678")
+    ki.add_argument(
+        "--identifier", default="", help=T("e.g. PMID:12345678", "如 PMID:12345678")
+    )
     ki.add_argument("--content", default="")
     ki.add_argument(
         "--entry-kind", choices=["literature", "method", "report"], default="literature"
     )
-    ki.add_argument("--by", default="cli", help="提交者")
+    ki.add_argument("--by", default="cli", help=T("submitter", "提交者"))
     add_home(ki)
     add_json(ki)
     ki.set_defaults(func=run_record)
 
-    ka = rec.add_parser("knowledge-approve", help="审核知识库条目（引用门只认已审核）")
+    ka = rec.add_parser(
+        "knowledge-approve",
+        help=T(
+            "review a knowledge entry (the reference gate only accepts reviewed entries)",
+            "审核知识库条目（引用门只认已审核）",
+        ),
+    )
     ka.add_argument("entry_id", type=int)
-    ka.add_argument("--by", default="cli", help="审批者")
+    ka.add_argument("--by", default="cli", help=T("approver", "审批者"))
     add_home(ka)
     add_json(ka)
     ka.set_defaults(func=run_record)

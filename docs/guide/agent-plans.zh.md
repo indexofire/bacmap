@@ -23,7 +23,7 @@ bacmap MCP server ── profile (cloud | local-trusted)
 
 ## 0. 最小操作序列（照抄即可）
 
-1. 让客户端启动 `bacmap mcp`（配置见 §3）；
+1. 让客户端启动 `bacmap start mcp`（配置见 §3）；
 2. 在对话里给出目标与**绝对路径**：
    > 用标准管线分析 `/data/run42` 下的八套副溶血性弧菌 reads。
 3. 智能体调用 `bacmap_create_plan`，返回 `plan_id`、`version`、`plan_hash` 和 `confirm_url`；
@@ -109,17 +109,17 @@ $DSH_HOME/AGENTS.md              # 全局指令；DSH_HOME 未设置时为 ~/.ds
 
 ```bash
 # stdio: the harness launches the process
-bacmap mcp
+bacmap start mcp
 
 # read-only: no task/plan write tools at all
-bacmap mcp --read-only
+bacmap start mcp --read-only
 
 # local-trusted (D4): must be enabled in config.toml first
-bacmap mcp --profile local-trusted
+bacmap start mcp --profile local-trusted
 
 # Streamable HTTP: bearer auth is mandatory
 export BACMAP_MCP_TOKEN="$(openssl rand -hex 24)"
-bacmap mcp --transport http --host 127.0.0.1 --port 8765
+bacmap start mcp --transport http --host 127.0.0.1 --port 8765
 ```
 
 `--profile` 在启动时固定；客户端无法自行提升权限。两个 Profile 请使用不同的端口/令牌。
@@ -190,14 +190,14 @@ stdio 客户端不要依赖自己的 PATH。推荐两种接法：
 
 ```text
 command: /opt/conda/envs/bacmap/bin/bacmap
-args: ["mcp"]
+args: ["start", "mcp"]
 ```
 
 **用 conda run 启动（确保 PATH 来自该环境）**
 
 ```text
 command: conda
-args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "mcp"]
+args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "start", "mcp"]
 ```
 
 `--no-capture-output` 很重要：MCP stdio 必须原样透传，不能被 conda 缓冲/包裹。
@@ -205,7 +205,7 @@ args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "mcp"]
 HTTP 模式则先在 bacmap 环境内启动服务，客户端只需要 URL 和 token，完全不需要生信工具：
 
 ```bash
-conda run --no-capture-output -n bacmap bacmap mcp \
+conda run --no-capture-output -n bacmap bacmap start mcp \
   --transport http --host 127.0.0.1 --port 8765
 ```
 
@@ -218,9 +218,9 @@ conda run --no-capture-output -n bacmap bacmap mcp \
 mcp_servers:
   bacmap:
     command: /path/to/bacmap
-    args: ["mcp"]
+    args: ["start", "mcp"]
     # 本地/内网模型且已开启 [mcp] allow_local_trusted = true 时：
-    # args: ["mcp", "--profile", "local-trusted"]
+    # args: ["start", "mcp", "--profile", "local-trusted"]
 ```
 
 模型凭据属于 Hermes，不属于 bacmap。按 Hermes 自己的方式配置（通常是 `/login`、`/model`
@@ -238,9 +238,9 @@ hermes
 推荐用 CLI 写入配置：
 
 ```bash
-pi mcp add bacmap -- /path/to/bacmap mcp
+pi mcp add bacmap -- /path/to/bacmap start mcp
 # 本地可信 Profile：
-pi mcp add bacmap -- /path/to/bacmap mcp --profile local-trusted
+pi mcp add bacmap -- /path/to/bacmap start mcp --profile local-trusted
 
 pi mcp list
 pi
@@ -252,7 +252,7 @@ pi
 // ~/.pi/agent/mcp.json
 {"mcpServers": {"bacmap": {
   "command": "/path/to/bacmap",
-  "args": ["mcp"],
+  "args": ["start", "mcp"],
   "description": "Local pathogen genomics workstation"
 }}}
 ```
@@ -275,9 +275,9 @@ DSH 通过插件连接 MCP。补丁文件**按 profile 分层**：`$DSH_HOME/pro
       serverName: bacmap
       transport: stdio
       command: /path/to/bacmap
-      args: ['mcp']
+      args: ['start', 'mcp']
       # 本地可信 Profile：
-      # args: ['mcp', '--profile', 'local-trusted']
+      # args: ['start', 'mcp', '--profile', 'local-trusted']
       failOnStartupError: true
 ```
 
@@ -302,7 +302,7 @@ npx @deepseek-ai/dsh web
 # ~/.codex/config.toml
 [mcp_servers.bacmap]
 command = "/path/to/bacmap"
-args = ["mcp"]
+args = ["start", "mcp"]
 ```
 
 ### OpenCode
@@ -311,7 +311,7 @@ args = ["mcp"]
 // opencode.json
 {"mcp": {"bacmap": {
   "type": "local",
-  "command": ["/path/to/bacmap", "mcp"],
+  "command": ["/path/to/bacmap", "start", "mcp"],
   "enabled": true}}}
 ```
 
@@ -321,7 +321,7 @@ args = ["mcp"]
 
 ```bash
 export BACMAP_MCP_TOKEN="$(openssl rand -hex 24)"
-bacmap mcp --transport http --host 127.0.0.1 --port 8765
+bacmap start mcp --transport http --host 127.0.0.1 --port 8765
 ```
 
 Hermes：
@@ -488,7 +488,7 @@ bacmap plan reject 9a3f2c1b7d4e4f60 --version 1 --reason "wrong sample"
 MCP Profile 只保护流经 MCP 的数据。Harness 自带 Shell/文件工具，因此对于使用云端模型的 Harness：
 
 1. 用专用的操作系统账户运行 bacmap，`BACMAP_HOME` 权限设为 `0700`；
-2. 以该账户运行 `bacmap mcp --transport http`（以及 `bacmap web`），只绑定回环地址；
+2. 以该账户运行 `bacmap start mcp --transport http`（以及 `bacmap start web`），只绑定回环地址；
 3. 只把 MCP 的 URL/令牌交给 Harness，绝不给 Web 令牌。
 
 bacmap 无法控制被复制进 Harness 工作区的文件，也无法控制模型提供方如何处理它收到的内容。
@@ -500,7 +500,7 @@ bacmap 无法控制被复制进 Harness 工作区的文件，也无法控制模�
 | Harness 看不到任何工具 | `bacmap_capabilities`；确认进程正在运行，且 Profile 符合预期 |
 | D3/D4 相关工具报“tool not found” | 受 cloud Profile 上限限制；改用 `local-trusted` 并配合本地模型 |
 | `bacmap_get_plan` 返回 `forbidden` | 该计划属于另一个 MCP 客户端；请使用同一个客户端，或新建计划 |
-| `confirm_url` 无法访问 | 检查 `BACMAP_WEB_URL` / 启动 `bacmap web`；或改用 CLI 确认 |
+| `confirm_url` 无法访问 | 检查 `BACMAP_WEB_URL` / 启动 `bacmap start web`；或改用 CLI 确认 |
 | 确认冲突 | 输入在创建计划之后发生了变化；请让智能体修订计划并重新确认 |
 | 任务一直停在 `awaiting_approval` | 必须由人签署该门；智能体无法代签 |
 | `sandbox unavailable` | 安装 Apptainer/Podman；直通模式仅限开发 |

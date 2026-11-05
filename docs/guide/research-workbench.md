@@ -81,7 +81,7 @@ returns each gate's blockers; `ready=true` still requires human review.
 
 ## 4. Web
 
-Start `bacmap web` and open **研究 / Research**:
+Run `bacmap start web` and open **研究 / Research**:
 
 1. enter `run_id`, gene and test name;
 2. choose a governance profile;

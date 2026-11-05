@@ -7,13 +7,13 @@ bacmap 运行一个 MCP 服务器，支持 stdio（默认）或 Streamable HTTP�
 
 | 传输 | 命令 | 鉴权 |
 |---|---|---|
-| stdio | `bacmap mcp` | 操作系统进程边界；actor 为 `mcp-stdio:<profile>:<user>` |
-| HTTP | `bacmap mcp --transport http --host 127.0.0.1 --port 8765` | 强制 bearer token |
-| unix socket | `bacmap mcp --transport http --uds /run/bacmap-mcp.sock` | 强制 bearer token |
+| stdio | `bacmap start mcp` | 操作系统进程边界；actor 为 `mcp-stdio:<profile>:<user>` |
+| HTTP | `bacmap start mcp --transport http --host 127.0.0.1 --port 8765` | 强制 bearer token |
+| unix socket | `bacmap start mcp --transport http --uds /run/bacmap-mcp.sock` | 强制 bearer token |
 
 ```bash
 export BACMAP_MCP_TOKEN="$(openssl rand -hex 24)"
-bacmap mcp --transport http --host 127.0.0.1 --port 8765
+bacmap start mcp --transport http --host 127.0.0.1 --port 8765
 # 客户端：http://127.0.0.1:8765/mcp，Authorization: Bearer <token>
 ```
 
@@ -27,8 +27,8 @@ HTTP 在没有 token 时拒绝启动。DNS 重绑定防护只允许已配置的�
 每个服务实例一个 Profile，启动时固定：
 
 ```bash
-bacmap mcp                          # cloud（默认）
-bacmap mcp --profile local-trusted  # 要求 [mcp] allow_local_trusted = true
+bacmap start mcp                          # cloud（默认）
+bacmap start mcp --profile local-trusted  # 要求 [mcp] allow_local_trusted = true
 ```
 
 | Profile | 工具输出上限 | 任务消息 | 任务结果 |

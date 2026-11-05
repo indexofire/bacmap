@@ -2,7 +2,8 @@
 
 `bacmap` 可执行文件有两类顶层入口：
 
-- **接口/模式**，接管终端或绑定端口：`mcp`、`web`、`tui`、`console`；
+- **`start`**，启动一个接管终端或绑定端口的长驻界面：
+  `bacmap start mcp|web|tui|console`；各界面保留自己的参数；
 - **命令**，执行一次操作后退出：`overview`、`task`、`plan`、`record`、`run`、
   `gom`、`isolate`、`sample`、`search`、`doctor`、`backup`、`restore`、`results`、`events`。
 
@@ -16,12 +17,17 @@
 | `--limit N` | 限制列表条数 |
 | `--type TYPE` | 过滤 GOM 对象（`sample`、`analysis`、`report`、`task`…） |
 
-## `bacmap mcp`
+## 显示语言
+
+CLI 帮助与提示文案跟随显示语言：环境变量 `BACMAP_LANG`（`en` | `zh`）优先于
+`config.toml` 的 `[ui] language`；内置默认 `en`。见[配置参考](configuration.zh.md)。
+
+## `bacmap start mcp`
 
 ```text
-bacmap mcp [--home H] [--read-only] [--profile {cloud,local-trusted}]
-           [--transport {stdio,http}] [--host H] [--port 8765]
-           [--uds PATH] [--token-env ENV]
+bacmap start mcp [--home H] [--read-only] [--profile {cloud,local-trusted}]
+                 [--transport {stdio,http}] [--host H] [--port 8765]
+                 [--uds PATH] [--token-env ENV]
 ```
 
 - 默认使用 stdio；HTTP 为 Streamable HTTP，且要求 bearer token。
@@ -29,33 +35,33 @@ bacmap mcp [--home H] [--read-only] [--profile {cloud,local-trusted}]
 - `local-trusted` 要求 `[mcp] allow_local_trusted = true`。
 
 ```bash
-bacmap mcp
-bacmap mcp --read-only
-bacmap mcp --profile local-trusted
+bacmap start mcp
+bacmap start mcp --read-only
+bacmap start mcp --profile local-trusted
 export BACMAP_MCP_TOKEN="$(openssl rand -hex 24)"
-bacmap mcp --transport http --host 127.0.0.1 --port 8765
-bacmap mcp --transport http --uds /run/bacmap-mcp.sock
+bacmap start mcp --transport http --host 127.0.0.1 --port 8765
+bacmap start mcp --transport http --uds /run/bacmap-mcp.sock
 ```
 
-## `bacmap web`
+## `bacmap start web`
 
 ```text
-bacmap web [--home H] [--host 127.0.0.1] [--port 8800] [--token-env BACMAP_WEB_TOKEN]
+bacmap start web [--home H] [--host 127.0.0.1] [--port 8800] [--token-env BACMAP_WEB_TOKEN]
 ```
 
 默认绑定回环地址。非回环主机且无 token 时拒绝启动。
 
 ```bash
-bacmap web
-BACMAP_WEB_TOKEN=secret bacmap web --host 0.0.0.0 --port 8800
-BACMAP_WEB_AUTH=cookie BACMAP_WEB_TOKEN=secret bacmap web
+bacmap start web
+BACMAP_WEB_TOKEN=secret bacmap start web --host 0.0.0.0 --port 8800
+BACMAP_WEB_AUTH=cookie BACMAP_WEB_TOKEN=secret bacmap start web
 ```
 
-## `bacmap tui` / `bacmap console`
+## `bacmap start tui` / `bacmap start console`
 
 ```bash
-bacmap tui
-bacmap console
+bacmap start tui
+bacmap start console
 ```
 
 TUI 按键与斜杠命令见[界面](../guide/interfaces.zh.md)。`console` 是

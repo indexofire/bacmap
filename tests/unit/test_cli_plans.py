@@ -83,6 +83,7 @@ def test_interactive_decline_does_nothing(env, monkeypatch):
     home, engine, rec = env
     import rich.prompt
 
+    monkeypatch.setenv("BACMAP_LANG", "zh")
     monkeypatch.setattr(rich.prompt.Confirm, "ask", classmethod(lambda cls, *a, **k: False))
     with pytest.raises(SystemExit, match="已取消"):
         cli.main(["plan", "confirm", rec.plan_id, "--home", str(home)])

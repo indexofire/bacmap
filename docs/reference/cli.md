@@ -2,7 +2,8 @@
 
 The `bacmap` executable has two kinds of top-level entries:
 
-- **interfaces/modes** that take over a terminal or bind a port: `mcp`, `web`, `tui`, `console`;
+- **`start`** — launches a long-running interface that takes over the terminal or binds a port:
+  `bacmap start mcp|web|tui|console`; each interface keeps its own flags;
 - **commands** that perform one operation and exit: `overview`, `task`, `plan`, `record`, `run`,
   `gom`, `isolate`, `sample`, `search`, `doctor`, `backup`, `restore`, `results`, `events`.
 
@@ -16,12 +17,18 @@ The `bacmap` executable has two kinds of top-level entries:
 | `--limit N` | cap list output |
 | `--type TYPE` | filter GOM objects (`sample`, `analysis`, `report`, `task`, …) |
 
-## `bacmap mcp`
+## Display language
+
+CLI help and messages follow the display language: the `BACMAP_LANG` environment variable
+(`en` | `zh`) takes precedence over `[ui] language` in `config.toml`; the built-in default is
+`en`. See [Configuration](configuration.md).
+
+## `bacmap start mcp`
 
 ```text
-bacmap mcp [--home H] [--read-only] [--profile {cloud,local-trusted}]
-           [--transport {stdio,http}] [--host H] [--port 8765]
-           [--uds PATH] [--token-env ENV]
+bacmap start mcp [--home H] [--read-only] [--profile {cloud,local-trusted}]
+                 [--transport {stdio,http}] [--host H] [--port 8765]
+                 [--uds PATH] [--token-env ENV]
 ```
 
 - stdio is the default; HTTP is Streamable HTTP and requires a bearer token.
@@ -29,33 +36,33 @@ bacmap mcp [--home H] [--read-only] [--profile {cloud,local-trusted}]
 - `local-trusted` requires `[mcp] allow_local_trusted = true`.
 
 ```bash
-bacmap mcp
-bacmap mcp --read-only
-bacmap mcp --profile local-trusted
+bacmap start mcp
+bacmap start mcp --read-only
+bacmap start mcp --profile local-trusted
 export BACMAP_MCP_TOKEN="$(openssl rand -hex 24)"
-bacmap mcp --transport http --host 127.0.0.1 --port 8765
-bacmap mcp --transport http --uds /run/bacmap-mcp.sock
+bacmap start mcp --transport http --host 127.0.0.1 --port 8765
+bacmap start mcp --transport http --uds /run/bacmap-mcp.sock
 ```
 
-## `bacmap web`
+## `bacmap start web`
 
 ```text
-bacmap web [--home H] [--host 127.0.0.1] [--port 8800] [--token-env BACMAP_WEB_TOKEN]
+bacmap start web [--home H] [--host 127.0.0.1] [--port 8800] [--token-env BACMAP_WEB_TOKEN]
 ```
 
 Binds loopback by default. A non-loopback host without a token refuses to start.
 
 ```bash
-bacmap web
-BACMAP_WEB_TOKEN=secret bacmap web --host 0.0.0.0 --port 8800
-BACMAP_WEB_AUTH=cookie BACMAP_WEB_TOKEN=secret bacmap web
+bacmap start web
+BACMAP_WEB_TOKEN=secret bacmap start web --host 0.0.0.0 --port 8800
+BACMAP_WEB_AUTH=cookie BACMAP_WEB_TOKEN=secret bacmap start web
 ```
 
-## `bacmap tui` / `bacmap console`
+## `bacmap start tui` / `bacmap start console`
 
 ```bash
-bacmap tui
-bacmap console
+bacmap start tui
+bacmap start console
 ```
 
 TUI keys and slash commands are documented in [Interfaces](../guide/interfaces.md). `console` is a

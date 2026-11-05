@@ -29,7 +29,7 @@ def test_missing_subcommand_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_mcp_help_lists_flags(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["bacmap", "mcp", "--help"])
+    monkeypatch.setattr(sys, "argv", ["bacmap", "start", "mcp", "--help"])
     with pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 0
@@ -95,6 +95,7 @@ def test_task_submit_rejects_unknown_type(monkeypatch):
 
 
 def test_task_submit_analyze_without_samples_exits(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACMAP_LANG", "zh")
     monkeypatch.setattr(
         sys,
         "argv",
@@ -109,6 +110,7 @@ def test_task_submit_analyze_without_samples_exits(tmp_path, monkeypatch):
 
 
 def test_task_show_unknown_task_exits(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACMAP_LANG", "zh")
     monkeypatch.setattr(
         sys, "argv", ["bacmap", "task", "show", "nope", "--home", str(tmp_path)]
     )
@@ -121,6 +123,7 @@ def test_task_show_unknown_task_exits(tmp_path, monkeypatch):
 
 
 def test_task_submit_rejects_traversal_sample(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACMAP_LANG", "zh")
     monkeypatch.setattr(
         sys,
         "argv",
@@ -148,12 +151,77 @@ def test_ask_and_chat_are_gone(tmp_path, monkeypatch, capsys):
 
 
 def test_help_documents_interface_vs_command_taxonomy(monkeypatch, capsys):
+    monkeypatch.setenv("BACMAP_LANG", "zh")
     monkeypatch.setattr(sys, "argv", ["bacmap", "--help"])
     with pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 0
     out = capsys.readouterr().out
     assert "界面/模式" in out and "命令（" in out
+    assert "bacmap start {mcp|web|tui|console}" in out
+
+
+def test_interface_commands_live_under_start(monkeypatch):
+    """v0.2 CLI 重构：顶层不再有 mcp/web/tui/console，统一经 `bacmap start <iface>`。"""
+    for cmd in ("mcp", "web", "tui", "console"):
+        monkeypatch.setattr(sys, "argv", ["bacmap", cmd, "--help"])
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 2
+
+
+def test_start_without_target_rejected(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["bacmap", "start"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+
+
+def test_start_help_lists_interfaces(monkeypatch, capsys):
+    monkeypatch.setenv("BACMAP_LANG", "en")
+    monkeypatch.setattr(sys, "argv", ["bacmap", "start", "--help"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "{mcp,web,tui,console}" in out
+
+
+def test_default_language_is_english(monkeypatch, capsys):
+    """默认 en；BACMAP_LANG 显式覆盖可切中文（优先级最高）。"""
+    monkeypatch.setenv("BACMAP_LANG", "en")
+    monkeypatch.setattr(sys, "argv", ["bacmap", "start", "--help"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "start the Web console" in out
+
+    monkeypatch.setenv("BACMAP_LANG", "zh")
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 0
+    assert "启动 Web 控制台" in capsys.readouterr().out
+
+
+def test_language_from_config_toml(tmp_path, monkeypatch, capsys):
+    """``[ui] language`` 生效；非法取值确定性回落默认 en。"""
+    cfg = tmp_path / "config.toml"
+    monkeypatch.setenv("BACMAP_CONFIG", str(cfg))
+    monkeypatch.delenv("BACMAP_LANG", raising=False)
+    monkeypatch.setattr(sys, "argv", ["bacmap", "start", "--help"])
+
+    cfg.write_text('[ui]\nlanguage = "zh"\n', encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 0
+    assert "启动 Web 控制台" in capsys.readouterr().out
+
+    cfg.write_text('[ui]\nlanguage = "fr"\n', encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 0
+    assert "start the Web console" in capsys.readouterr().out
 
 
 def test_safe_escapes_rich_markup():
@@ -188,6 +256,7 @@ def test_console_tables_escape_untrusted_values():
 
 
 def test_task_submit_rejects_non_object_scope(tmp_path, monkeypatch):
+    monkeypatch.setenv("BACMAP_LANG", "zh")
     monkeypatch.setattr(
         sys,
         "argv",

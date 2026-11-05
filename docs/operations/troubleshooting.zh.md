@@ -40,7 +40,7 @@ $BACMAP_HOME/workspaces/<task_id>/      # mine 的 stdout/stderr 与 context.jso
 | `input ... changed since the plan was created` | 计划创建后输入发生了变化；修订计划并重新确认 |
 | `plan ... is submitted; cannot revise` | 已提交；请创建新计划 |
 | `bacmap_get_plan` 上的 `forbidden` | 计划属于另一个 MCP 客户端；请使用同一客户端 |
-| `confirm_url` 不可达 | 启动 `bacmap web`，或设置 `BACMAP_WEB_URL`；CLI 确认仍然可用 |
+| `confirm_url` 不可达 | 启动 `bacmap start web`，或设置 `BACMAP_WEB_URL`；CLI 确认仍然可用 |
 | 本地对话框无反应 | 仅限带 GUI（zenity/kdialog）的 stdio 会话；否则请用 Web 链接 |
 | 自动确认从未触发 | 策略已禁用、任务非 analyze、目录摄取，或 `max_samples` 格式错误（故障安全） |
 
@@ -88,7 +88,7 @@ $BACMAP_HOME/workspaces/<task_id>/      # mine 的 stdout/stderr 与 context.jso
 
 | 症状 | 修复 |
 |---|---|
-| 未发现任何工具 | 检查 `bacmap mcp` 能否启动；`bacmap_capabilities`；profile 参数 |
+| 未发现任何工具 | 检查 `bacmap start mcp` 能否启动；`bacmap_capabilities`；profile 参数 |
 | HTTP 401 | `Authorization: Bearer $BACMAP_MCP_TOKEN`；token 必须与服务端环境一致 |
 | `local-trusted` 拒绝启动 | 设置 `[mcp] allow_local_trusted = true`（布尔值） |
 | D3/D4 工具缺失 | 你处于 `cloud`；请使用本地模型 + `local-trusted` |

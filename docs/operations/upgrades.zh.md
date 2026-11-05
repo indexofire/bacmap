@@ -6,7 +6,7 @@
 2. `bacmap backup --out …` —— 包含 `dbos.sqlite`。
 3. 让运行中任务完成或取消；`bacmap task list` 可看非终态任务。
 4. 更新环境：`pixi install`（开发环境另加 `pixi install -e dev`）。
-5. 重启 `bacmap web` / `bacmap mcp`；工作流按内容哈希自动重部署。
+5. 重启 `bacmap start web` / `bacmap start mcp`；工作流按内容哈希自动重部署。
 6. 再次 `bacmap doctor`，确认数据库版本。
 7. 冒烟：`bacmap overview`、`bacmap run list`、一次小型 `analyze` 或 `record`。
 
@@ -40,7 +40,7 @@ bacmap results migrate             # 搬入 runs/legacy-<name>/ 并建立链接
 MCP Profile 只保护经过 MCP 的数据，不能阻止 Harness 自己的 shell。外部 Harness 场景：
 
 - 用专用系统账户运行 bacmap，`BACMAP_HOME` 权限 `0700`；
-- 以该账户运行 `bacmap web` 与 `bacmap mcp --transport http`，只绑回环；
+- 以该账户运行 `bacmap start web` 与 `bacmap start mcp --transport http`，只绑回环；
 - 只把 MCP URL/token 给 Harness，绝不给 Web token。
 
 威胁模型见[安全与数据分级](../concepts/security.zh.md)。

@@ -214,5 +214,6 @@ class TestCliSubmitDelegatesRegistration:
         assert got["params"] == {"fastq_dir": str((tmp_path / "reads").resolve()), "species": "SAL"}
 
     def test_missing_dir_fails_fast(self, monkeypatch, tmp_path: Path):
+        monkeypatch.setenv("BACMAP_LANG", "zh")
         with pytest.raises(SystemExit, match="目录不存在"):
             self._run(monkeypatch, tmp_path, ["--fasta-dir", str(tmp_path / "nope")])

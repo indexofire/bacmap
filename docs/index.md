@@ -72,7 +72,7 @@ pixi install                 # runtime environment (Python 3.12 + bioinformatics
 pixi shell
 bacmap --version             # 0.1.2
 bacmap doctor                # read-only health check; exit code 1 only on hard failures
-bacmap web                   # http://127.0.0.1:8800
+bacmap start web             # http://127.0.0.1:8800
 ```
 
 Run an analysis from the Web console or CLI:

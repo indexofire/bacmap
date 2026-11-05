@@ -103,6 +103,7 @@ class TestRunCli:
         cli.main(["run", "compare", run_id, run_id, "--home", str(home), "--json"])
         same = json.loads(capsys.readouterr().out)
         assert same["same_provenance"] is True
+        monkeypatch.setenv("BACMAP_LANG", "zh")
         with pytest.raises(SystemExit, match="运行记录不存在"):
             cli.main(["run", "compare", "a" * 8, "b" * 8, "--home", str(home)])
 

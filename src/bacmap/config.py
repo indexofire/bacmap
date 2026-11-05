@@ -184,6 +184,40 @@ def debug_warning(component: str) -> str:
     )
 
 
+_UI_LANGUAGES = ("en", "zh")
+
+
+def _ui_language_from_env() -> str | None:
+    raw = (os.environ.get("BACMAP_LANG") or "").strip().lower()
+    return raw if raw in _UI_LANGUAGES else None
+
+
+def ui_language() -> str:
+    """CLI 文案显示语言：``BACMAP_LANG`` > ``[ui] language`` > 内置默认 ``"en"``。
+
+    取值仅 ``"en"`` | ``"zh"``（大小写不敏感）。环境变量或配置非法/缺失时
+    确定性回落默认值（与 ``debug_mode`` 的容错口径一致），不逐次告警。
+    """
+    from_env = _ui_language_from_env()
+    if from_env is not None:
+        return from_env
+    path = config_path()
+    if path.is_file():
+        try:
+            with path.open("rb") as fh:
+                data = tomllib.load(fh)
+        except (OSError, tomllib.TOMLDecodeError):
+            return "en"
+        section = data.get("ui")
+        if isinstance(section, dict):
+            raw = section.get("language")
+            if isinstance(raw, str):
+                normalized = raw.strip().lower()
+                if normalized in _UI_LANGUAGES:
+                    return normalized
+    return "en"
+
+
 def pixi_path() -> str:
     """当前进程 PATH（pixi 环境激活时即含生信工具 bin）。保留旧名以兼容 engine/_env。"""
     return os.environ.get("PATH", "")

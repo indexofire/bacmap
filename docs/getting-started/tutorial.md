@@ -51,7 +51,7 @@ Edit `~/.hermes/config.yaml`:
 mcp_servers:
   bacmap:
     command: /home/you/bacmap/.pixi/envs/default/bin/bacmap
-    args: ["mcp"]                 # add "--profile", "local-trusted" for local models
+    args: ["start", "mcp"]        # add "--profile", "local-trusted" for local models
 ```
 
 Verify:
@@ -166,7 +166,7 @@ You are on the `cloud` profile:
 - **Cloud model in Hermes**: that is the red line working; planning and explanation only. To read
   single-strain results, an administrator may raise `cloud_max_data_class` to `"D2"` (maximum).
 - **Local/LAN model**: set `[mcp] allow_local_trusted = true` in `config.toml`, change `args` to
-  `["mcp", "--profile", "local-trusted"]`, and restart Hermes.
+  `["start", "mcp", "--profile", "local-trusted"]`, and restart Hermes.
 
 ## 4. Follow-up questions: make it read and compare
 

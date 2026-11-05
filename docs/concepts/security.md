@@ -33,8 +33,8 @@ DataClassViolationError: payload D4 exceeds cloud limit D1
 ## 2. MCP profiles
 
 ```bash
-bacmap mcp                          # cloud (default)
-bacmap mcp --profile local-trusted  # requires [mcp] allow_local_trusted = true
+bacmap start mcp                          # cloud (default)
+bacmap start mcp --profile local-trusted  # requires [mcp] allow_local_trusted = true
 ```
 
 | | `cloud` | `local-trusted` |
@@ -125,9 +125,9 @@ sudo useradd -r -m -d /srv/bacmap bacmap
 sudo chmod 700 /srv/bacmap
 
 # run services as that account, loopback only
-BACMAP_HOME=/srv/bacmap bacmap web --host 127.0.0.1 --port 8800
+BACMAP_HOME=/srv/bacmap bacmap start web --host 127.0.0.1 --port 8800
 BACMAP_HOME=/srv/bacmap BACMAP_MCP_TOKEN=... \
-  bacmap mcp --transport http --host 127.0.0.1 --port 8765
+  bacmap start mcp --transport http --host 127.0.0.1 --port 8765
 
 # the harness runs as your normal user and gets only the MCP URL/token
 ```

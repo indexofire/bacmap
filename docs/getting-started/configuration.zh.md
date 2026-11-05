@@ -140,7 +140,7 @@ allow_local_trusted = true       # 必须是布尔值 true
 ```
 
 ```bash
-bacmap mcp --profile local-trusted
+bacmap start mcp --profile local-trusted
 ```
 
 只有当 Harness 连接的是本地/局域网模型时才使用 `local-trusted`。客户端配置见

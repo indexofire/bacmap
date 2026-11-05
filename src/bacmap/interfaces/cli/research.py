@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from bacmap.interfaces.i18n import T
 from bacmap.research.models import CreateSessionRequest, ResearchError, ResearchProfile
 from bacmap.research.service import ResearchService, default_profile
 
@@ -65,7 +66,11 @@ def run_create(args: argparse.Namespace) -> None:
     if args.json:
         _emit(view.model_dump(mode="json"), True)
         return
-    print(f"已创建 {view.session.session_id}（{view.session.status.value} / {view.session.label}）")
+    message = T(
+        f"Created {view.session.session_id} ({view.session.status.value} / {view.session.label})",
+        f"已创建 {view.session.session_id}（{view.session.status.value} / {view.session.label}）",
+    )
+    print(message)
     for a in view.artifacts:
         print(f"  {a.kind.value}: {a.path}")
 
@@ -416,22 +421,30 @@ def run_benchmark(args: argparse.Namespace) -> None:
 
 
 def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
-    p = sub.add_parser("research", help="Research Workbench（P1 薄链路）")
+    p = sub.add_parser(
+        "research", help=T("Research Workbench (P1 thin path)", "Research Workbench（P1 薄链路）")
+    )
     s = p.add_subparsers(dest="research_command", required=True)
 
-    ls = s.add_parser("list", aliases=["ls"], help="列出研究会话")
+    ls = s.add_parser("list", aliases=["ls"], help=T("List research sessions", "列出研究会话"))
     ls.add_argument("--limit", type=int, default=50)
     add_home(ls)
     add_json(ls)
     ls.set_defaults(func=run_ls)
 
-    show = s.add_parser("show", help="查看研究会话")
+    show = s.add_parser("show", help=T("Show research session", "查看研究会话"))
     show.add_argument("session_id")
     add_home(show)
     add_json(show)
     show.set_defaults(func=run_show)
 
-    create = s.add_parser("create", help="从既有 run 生成 AMR 关联草案")
+    create = s.add_parser(
+        "create",
+        help=T(
+            "Create an AMR association draft from an existing run",
+            "从既有 run 生成 AMR 关联草案",
+        ),
+    )
     create.add_argument("--run-id", required=True)
     create.add_argument("--gene", required=True)
     create.add_argument("--test-name", required=True)
@@ -441,15 +454,17 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_json(create)
     create.set_defaults(func=run_create)
 
-    art = s.add_parser("artifact", help="输出 figure/report/manuscript")
+    art = s.add_parser(
+        "artifact", help=T("Output figure/report/manuscript", "输出 figure/report/manuscript")
+    )
     art.add_argument("session_id")
     art.add_argument("kind", choices=["figure", "report", "manuscript"])
     add_home(art)
     art.set_defaults(func=run_artifact)
 
-    study = s.add_parser("study", help="Study 对象")
+    study = s.add_parser("study", help=T("Study object", "Study 对象"))
     study_sub = study.add_subparsers(dest="study_command", required=True)
-    st_c = study_sub.add_parser("create", help="创建 Study")
+    st_c = study_sub.add_parser("create", help=T("Create a Study", "创建 Study"))
     st_c.add_argument("--question", required=True)
     st_c.add_argument("--pathogen", default="")
     st_c.add_argument("--data-class", type=int, choices=[0, 1, 2, 3, 4], default=2)
@@ -457,85 +472,97 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(st_c)
     add_json(st_c)
     st_c.set_defaults(func=run_study_create)
-    st_ls = study_sub.add_parser("ls", aliases=["list"], help="列出 Study")
+    st_ls = study_sub.add_parser("ls", aliases=["list"], help=T("List Study", "列出 Study"))
     st_ls.add_argument("--limit", type=int, default=50)
     add_home(st_ls)
     add_json(st_ls)
     st_ls.set_defaults(func=run_study_ls)
-    st_s = study_sub.add_parser("show", help="查看 Study")
+    st_s = study_sub.add_parser("show", help=T("Show Study", "查看 Study"))
     st_s.add_argument("study_id")
     add_home(st_s)
     add_json(st_s)
     st_s.set_defaults(func=run_study_show)
 
-    cohort = s.add_parser("cohort", help="Cohort 对象")
+    cohort = s.add_parser("cohort", help=T("Cohort object", "Cohort 对象"))
     cohort_sub = cohort.add_subparsers(dest="cohort_command", required=True)
-    co_c = cohort_sub.add_parser("create", help="创建 Cohort")
+    co_c = cohort_sub.add_parser("create", help=T("Create a Cohort", "创建 Cohort"))
     co_c.add_argument("--study", dest="study_id", required=True)
     co_c.add_argument("--name", default="")
-    co_c.add_argument("--members", required=True, help="JSON 数组或包含 members 的 JSON 文件")
-    co_c.add_argument("--rules", default="", help="JSON 对象或文件")
+    co_c.add_argument(
+        "--members", required=True,
+        help=T(
+            "JSON array, or a JSON file containing members",
+            "JSON 数组或包含 members 的 JSON 文件",
+        ),
+    )
+    co_c.add_argument("--rules", default="", help=T("JSON object or file", "JSON 对象或文件"))
     co_c.add_argument("--by", default="cli")
     add_home(co_c)
     add_json(co_c)
     co_c.set_defaults(func=run_cohort_create)
-    co_p = cohort_sub.add_parser("preview", help="Cohort 预检（不写库）")
+    co_p = cohort_sub.add_parser(
+        "preview", help=T("Cohort dry run (without writing)", "Cohort 预检（不写库）")
+    )
     co_p.add_argument("--study", dest="study_id", required=True)
     co_p.add_argument("--members", required=True)
     co_p.add_argument("--rules", default="")
     add_home(co_p)
     add_json(co_p)
     co_p.set_defaults(func=run_cohort_preview)
-    co_f = cohort_sub.add_parser("freeze", help="冻结 Cohort")
+    co_f = cohort_sub.add_parser("freeze", help=T("Freeze Cohort", "冻结 Cohort"))
     co_f.add_argument("cohort_id")
     co_f.add_argument("--by", default="cli")
     add_home(co_f)
     add_json(co_f)
     co_f.set_defaults(func=run_cohort_freeze)
-    co_ls = cohort_sub.add_parser("ls", aliases=["list"], help="列出 Cohort")
+    co_ls = cohort_sub.add_parser("ls", aliases=["list"], help=T("List Cohort", "列出 Cohort"))
     co_ls.add_argument("--study", dest="study_id", default=None)
     co_ls.add_argument("--limit", type=int, default=100)
     add_home(co_ls)
     add_json(co_ls)
     co_ls.set_defaults(func=run_cohort_ls)
 
-    plan = s.add_parser("plan", help="AnalysisPlan 对象")
+    plan = s.add_parser("plan", help=T("AnalysisPlan object", "AnalysisPlan 对象"))
     plan_sub = plan.add_subparsers(dest="plan_command", required=True)
-    pl_c = plan_sub.add_parser("create", help="创建计划（需已冻结 Cohort）")
+    pl_c = plan_sub.add_parser(
+        "create", help=T("Create a plan (requires a frozen Cohort)", "创建计划（需已冻结 Cohort）")
+    )
     pl_c.add_argument("--study", dest="study_id", required=True)
     pl_c.add_argument("--cohort", dest="cohort_id", required=True)
-    pl_c.add_argument("--spec", required=True, help="JSON 对象或文件")
+    pl_c.add_argument("--spec", required=True, help=T("JSON object or file", "JSON 对象或文件"))
     pl_c.add_argument("--by", default="cli")
     add_home(pl_c)
     add_json(pl_c)
     pl_c.set_defaults(func=run_plan_create)
-    pl_f = plan_sub.add_parser("freeze", help="冻结计划")
+    pl_f = plan_sub.add_parser("freeze", help=T("Freeze plan", "冻结计划"))
     pl_f.add_argument("plan_id")
     pl_f.add_argument("--by", default="cli")
     add_home(pl_f)
     add_json(pl_f)
     pl_f.set_defaults(func=run_plan_freeze)
-    pl_r = plan_sub.add_parser("run", help="执行冻结计划（P1 AMR recipe）")
+    pl_r = plan_sub.add_parser(
+        "run", help=T("Run a frozen plan (P1 AMR recipe)", "执行冻结计划（P1 AMR recipe）")
+    )
     pl_r.add_argument("plan_id")
     pl_r.add_argument("--by", default="cli")
     add_home(pl_r)
     add_json(pl_r)
     pl_r.set_defaults(func=run_plan_run)
 
-    claim = s.add_parser("claim", help="Claim 对象")
+    claim = s.add_parser("claim", help=T("Claim object", "Claim 对象"))
     claim_sub = claim.add_subparsers(dest="claim_command", required=True)
-    cl_c = claim_sub.add_parser("create", help="创建 Claim 草案")
+    cl_c = claim_sub.add_parser("create", help=T("Create a Claim draft", "创建 Claim 草案"))
     cl_c.add_argument("--study", dest="study_id", required=True)
     cl_c.add_argument("--type", dest="claim_type", required=True,
                       choices=["observation", "association", "transmission", "causal", "mechanism"])
     cl_c.add_argument("--wording", required=True)
     cl_c.add_argument("--level", default="E0", choices=["E0", "E1", "E2", "E3", "E4"])
-    cl_c.add_argument("--evidence", default="", help="JSON 对象或文件")
+    cl_c.add_argument("--evidence", default="", help=T("JSON object or file", "JSON 对象或文件"))
     cl_c.add_argument("--by", default="cli")
     add_home(cl_c)
     add_json(cl_c)
     cl_c.set_defaults(func=run_claim_create)
-    cl_r = claim_sub.add_parser("review", help="审核 Claim")
+    cl_r = claim_sub.add_parser("review", help=T("Review Claim", "审核 Claim"))
     cl_r.add_argument("claim_id")
     cl_r.add_argument("--decision", required=True,
                       choices=["support", "challenge", "reject", "approve"])
@@ -544,27 +571,27 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(cl_r)
     add_json(cl_r)
     cl_r.set_defaults(func=run_claim_review)
-    cl_ls = claim_sub.add_parser("ls", aliases=["list"], help="列出 Claim")
+    cl_ls = claim_sub.add_parser("ls", aliases=["list"], help=T("List Claim", "列出 Claim"))
     cl_ls.add_argument("--study", dest="study_id", default=None)
     cl_ls.add_argument("--limit", type=int, default=100)
     add_home(cl_ls)
     add_json(cl_ls)
     cl_ls.set_defaults(func=run_claim_ls)
 
-    experiment = s.add_parser("experiment", help="Experiment 账本")
+    experiment = s.add_parser("experiment", help=T("Experiment ledger", "Experiment 账本"))
     exp_sub = experiment.add_subparsers(dest="experiment_command", required=True)
-    ex_r = exp_sub.add_parser("record", help="记录一次实际执行")
+    ex_r = exp_sub.add_parser("record", help=T("Record an actual run", "记录一次实际执行"))
     ex_r.add_argument("--plan", dest="plan_id", required=True)
     ex_r.add_argument("--status", required=True,
                       choices=["success", "failed", "negative", "deviated"])
     ex_r.add_argument("--run-id", action="append", default=[], dest="run_id")
-    ex_r.add_argument("--outcome", default="", help="JSON 对象或文件")
+    ex_r.add_argument("--outcome", default="", help=T("JSON object or file", "JSON 对象或文件"))
     ex_r.add_argument("--deviation", default="")
     ex_r.add_argument("--by", default="cli")
     add_home(ex_r)
     add_json(ex_r)
     ex_r.set_defaults(func=run_experiment_record)
-    ex_ls = exp_sub.add_parser("ls", aliases=["list"], help="列出 Experiment")
+    ex_ls = exp_sub.add_parser("ls", aliases=["list"], help=T("List Experiment", "列出 Experiment"))
     ex_ls.add_argument("--study", dest="study_id", default=None)
     ex_ls.add_argument("--plan", dest="plan_id", default=None)
     ex_ls.add_argument("--limit", type=int, default=100)
@@ -572,29 +599,54 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_json(ex_ls)
     ex_ls.set_defaults(func=run_experiment_ls)
 
-    pub = s.add_parser("publication", help="检查发表门 G0–G3")
+    pub = s.add_parser("publication", help=T("Check publication gates G0-G3", "检查发表门 G0–G3"))
     pub.add_argument("study_id")
     add_home(pub)
     add_json(pub)
     pub.set_defaults(func=run_publication)
 
-    outbreak = s.add_parser("outbreak", help="暴发/散在事件挖掘（上下文，不做传播方向）")
-    outbreak.add_argument("--events", required=True, help="事件 JSON 数组或文件")
+    outbreak = s.add_parser(
+        "outbreak",
+        help=T(
+            "Outbreak/sporadic event mining (context only, no transmission direction)",
+            "暴发/散在事件挖掘（上下文，不做传播方向）",
+        ),
+    )
+    outbreak.add_argument(
+        "--events", required=True,
+        help=T("JSON array of events, or a file", "事件 JSON 数组或文件"),
+    )
     outbreak.add_argument("--min-count", type=int, default=5, dest="min_count")
     add_home(outbreak)
     add_json(outbreak)
     outbreak.set_defaults(func=run_outbreak)
 
-    sens = s.add_parser("sensitivity", help="2×2 敏感性分析（MH/留一/E-value）")
+    sens = s.add_parser(
+        "sensitivity",
+        help=T(
+            "2x2 sensitivity analysis (MH/leave-one-out/E-value)",
+            "2×2 敏感性分析（MH/留一/E-value）",
+        ),
+    )
     sens.add_argument("--table", required=True, help="a,b,c,d")
-    sens.add_argument("--strata", default="", help="[[label,a,b,c,d], ...] 或文件")
+    sens.add_argument("--strata", default="",
+                      help=T("[[label,a,b,c,d], ...] or a file", "[[label,a,b,c,d], ...] 或文件"))
     add_home(sens)
     add_json(sens)
     sens.set_defaults(func=run_sensitivity)
 
-    explore = s.add_parser("explore", help="P3 候选探索（仅 screening 数据）")
+    explore = s.add_parser(
+        "explore",
+        help=T(
+            "P3 candidate exploration (screening data only)",
+            "P3 候选探索（仅 screening 数据）",
+        ),
+    )
     explore.add_argument("--study", dest="study_id", required=True)
-    explore.add_argument("--cases", required=True, help="候选案例 JSON 数组或文件")
+    explore.add_argument(
+        "--cases", required=True,
+        help=T("JSON array of candidate cases, or a file", "候选案例 JSON 数组或文件"),
+    )
     explore.add_argument("--max-tests", type=int, default=200, dest="max_tests")
     explore.add_argument("--max-candidates", type=int, default=20, dest="max_candidates")
     explore.add_argument("--min-n", type=int, default=20, dest="min_n")
@@ -603,13 +655,25 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_json(explore)
     explore.set_defaults(func=run_explore)
 
-    bench = s.add_parser("benchmark", help="运行 L0/L1/L2 科学基准")
+    bench = s.add_parser(
+        "benchmark", help=T("Run L0/L1/L2 scientific benchmarks", "运行 L0/L1/L2 科学基准")
+    )
     bench.add_argument(
         "name",
         choices=["amr", "bvbrc", "osf", "verify-bvbrc", "verify-osf"],
-        help="amr=L0 合成；bvbrc=L1 真实 AMR；osf=L2 队列摘要；verify-* 校验快照",
+        help=T(
+            "amr=L0 synthetic; bvbrc=L1 real AMR;"
+            " osf=L2 cohort summary; verify-* verifies snapshots",
+            "amr=L0 合成；bvbrc=L1 真实 AMR；osf=L2 队列摘要；verify-* 校验快照",
+        ),
     )
-    bench.add_argument("--data", default="", help="本地数据目录（默认 $BACMAP_HOME/benchmarks）")
+    bench.add_argument(
+        "--data", default="",
+        help=T(
+            "Local data directory (default $BACMAP_HOME/benchmarks)",
+            "本地数据目录（默认 $BACMAP_HOME/benchmarks）",
+        ),
+    )
     add_home(bench)
     add_json(bench)
     bench.set_defaults(func=run_benchmark)

@@ -79,7 +79,7 @@ blockers；`ready=true` 仍需人工评审。
 
 ## 4. Web
 
-`bacmap web` 后打开 **研究 / Research**：
+运行 `bacmap start web` 后打开 **研究 / Research**：
 
 1. 填 `run_id`、基因、检测名；
 2. 选择治理 Profile；

@@ -16,7 +16,7 @@ DeepSeek Harness or any MCP client), while bacmap exposes tools, plans and evide
 minimal sequence is five steps:
 
 1. install and check the environment: `pixi install && pixi shell && bacmap doctor`;
-2. configure that agent to start `bacmap mcp` (config snippets are in
+2. configure that agent to start `bacmap start mcp` (config snippets are in
    [Agents & plans](docs/guide/agent-plans.md));
 3. state the goal and an **absolute path** in the chat, for example:
    > Analyse the eight *V. parahaemolyticus* read sets in `/data/run42` with the standard pipeline.
@@ -58,7 +58,7 @@ pixi shell
 bacmap --version        # 0.1.2
 bacmap config init      # optional: create config from config.example.toml
 bacmap doctor           # health check
-bacmap web              # http://127.0.0.1:8800
+bacmap start web        # http://127.0.0.1:8800
 ```
 
 First analysis:
@@ -72,7 +72,7 @@ bacmap task show <task_id>
 Agent flow:
 
 ```bash
-bacmap mcp --profile local-trusted     # or plain `bacmap mcp` for cloud
+bacmap start mcp --profile local-trusted     # or plain `bacmap start mcp` for cloud
 bacmap plan list
 bacmap plan show <plan_id>
 bacmap plan confirm <plan_id> --version 1 --hash <first-12-chars>

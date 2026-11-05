@@ -1,8 +1,8 @@
 # Agents and plans
 
-From v1.5 (ADR-21), conversation lives in an external agent harness. The harness reaches bacmap
-only over MCP; the deterministic pipeline, gates and **trusted confirmation surface** stay in
-bacmap. There is no built-in chat.
+Natural-language interaction with large language models happens in an external agent harness.
+The harness reaches bacmap only over MCP; the deterministic pipeline, gates and **trusted
+confirmation surface** stay in bacmap. There is no built-in chat.
 
 ```text
 Hermes / Pi / DSH / Codex / any MCP client
@@ -24,7 +24,7 @@ bacmap MCP server ── profile (cloud | local-trusted)
 
 ## 0. Minimal operating sequence (copy this)
 
-1. make your client start `bacmap mcp` (configuration in §3);
+1. make your client start `bacmap start mcp` (configuration in §3);
 2. state the goal and an **absolute path** in the chat:
    > Analyse the eight *V. parahaemolyticus* read sets in `/data/run42` with the standard pipeline.
 3. the agent calls `bacmap_create_plan` and returns `plan_id`, `version`, `plan_hash` and
@@ -116,17 +116,17 @@ plan gate are enough: even a misled model has no tool to confirm a plan or sign 
 
 ```bash
 # stdio: the harness launches the process
-bacmap mcp
+bacmap start mcp
 
 # read-only: no task/plan write tools at all
-bacmap mcp --read-only
+bacmap start mcp --read-only
 
 # local-trusted (D4): must be enabled in config.toml first
-bacmap mcp --profile local-trusted
+bacmap start mcp --profile local-trusted
 
 # Streamable HTTP: bearer auth is mandatory
 export BACMAP_MCP_TOKEN="$(openssl rand -hex 24)"
-bacmap mcp --transport http --host 127.0.0.1 --port 8765
+bacmap start mcp --transport http --host 127.0.0.1 --port 8765
 ```
 
 `--profile` is fixed at launch; a client cannot self-upgrade. Use different ports/tokens for two
@@ -198,14 +198,14 @@ For a stdio client, do not rely on the harness PATH. Two robust wiring patterns:
 
 ```text
 command: /opt/conda/envs/bacmap/bin/bacmap
-args: ["mcp"]
+args: ["start", "mcp"]
 ```
 
 **Launch through conda run (so PATH comes from that environment)**
 
 ```text
 command: conda
-args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "mcp"]
+args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "start", "mcp"]
 ```
 
 `--no-capture-output` matters: MCP stdio must be passed through unchanged.
@@ -213,7 +213,7 @@ args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "mcp"]
 For HTTP, start bacmap inside its environment; clients need only the URL and token:
 
 ```bash
-conda run --no-capture-output -n bacmap bacmap mcp \
+conda run --no-capture-output -n bacmap bacmap start mcp \
   --transport http --host 127.0.0.1 --port 8765
 ```
 
@@ -226,9 +226,9 @@ Configure the MCP server:
 mcp_servers:
   bacmap:
     command: /path/to/bacmap
-    args: ["mcp"]
+    args: ["start", "mcp"]
     # With a local/LAN model and [mcp] allow_local_trusted = true:
-    # args: ["mcp", "--profile", "local-trusted"]
+    # args: ["start", "mcp", "--profile", "local-trusted"]
 ```
 
 Model credentials belong to Hermes, not bacmap. Configure them with Hermes itself (usually
@@ -246,9 +246,9 @@ Connected tools appear as `mcp__bacmap__bacmap_create_plan`.
 The CLI is the easiest way to write the config:
 
 ```bash
-pi mcp add bacmap -- /path/to/bacmap mcp
+pi mcp add bacmap -- /path/to/bacmap start mcp
 # Trusted local profile:
-pi mcp add bacmap -- /path/to/bacmap mcp --profile local-trusted
+pi mcp add bacmap -- /path/to/bacmap start mcp --profile local-trusted
 
 pi mcp list
 pi
@@ -260,7 +260,7 @@ Equivalent JSON:
 // ~/.pi/agent/mcp.json
 {"mcpServers": {"bacmap": {
   "command": "/path/to/bacmap",
-  "args": ["mcp"],
+  "args": ["start", "mcp"],
   "description": "Local pathogen genomics workstation"
 }}}
 ```
@@ -286,9 +286,9 @@ treated as a patch and skipped.
       serverName: bacmap
       transport: stdio
       command: /path/to/bacmap
-      args: ['mcp']
+      args: ['start', 'mcp']
       # Trusted local profile:
-      # args: ['mcp', '--profile', 'local-trusted']
+      # args: ['start', 'mcp', '--profile', 'local-trusted']
       failOnStartupError: true
 ```
 
@@ -313,7 +313,7 @@ Tools appear as `mcp__bacmap__bacmap_create_plan`. Configure models in DSH's
 # ~/.codex/config.toml
 [mcp_servers.bacmap]
 command = "/path/to/bacmap"
-args = ["mcp"]
+args = ["start", "mcp"]
 ```
 
 ### OpenCode
@@ -322,7 +322,7 @@ args = ["mcp"]
 // opencode.json
 {"mcp": {"bacmap": {
   "type": "local",
-  "command": ["/path/to/bacmap", "mcp"],
+  "command": ["/path/to/bacmap", "start", "mcp"],
   "enabled": true}}}
 ```
 
@@ -332,7 +332,7 @@ Start bacmap inside its environment:
 
 ```bash
 export BACMAP_MCP_TOKEN="$(openssl rand -hex 24)"
-bacmap mcp --transport http --host 127.0.0.1 --port 8765
+bacmap start mcp --transport http --host 127.0.0.1 --port 8765
 ```
 
 Hermes:
@@ -503,7 +503,7 @@ MCP profiles only protect data that flows through MCP. Harnesses bring their own
 for cloud-backed harnesses:
 
 1. run bacmap under a dedicated OS account with `BACMAP_HOME` mode `0700`;
-2. run `bacmap mcp --transport http` (and `bacmap web`) as that account, bound to loopback;
+2. run `bacmap start mcp --transport http` (and `bacmap start web`) as that account, bound to loopback;
 3. give the harness only the MCP URL/token, never the Web token.
 
 bacmap cannot control files copied into the harness workspace or what a model provider does with
@@ -516,7 +516,7 @@ content it receives.
 | Harness sees no tools | `bacmap_capabilities`; confirm the process is running and the profile is expected |
 | "tool not found" for D3/D4 | Cloud profile ceiling; use `local-trusted` with a local model |
 | `forbidden` on `bacmap_get_plan` | The plan belongs to another MCP client; use the same client or create a new plan |
-| `confirm_url` unreachable | `BACMAP_WEB_URL` / start `bacmap web`; or use CLI confirmation |
+| `confirm_url` unreachable | `BACMAP_WEB_URL` / run `bacmap start web`; or use CLI confirmation |
 | Confirmation conflict | Input changed since planning; ask the agent to revise and re-confirm |
 | Task `awaiting_approval` forever | A human must sign the gate; agents cannot |
 | `sandbox unavailable` | Install Apptainer/Podman; passthrough is dev-only |

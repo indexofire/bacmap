@@ -6,7 +6,7 @@
 2. `bacmap backup --out …` — including `dbos.sqlite`.
 3. Let running tasks finish or cancel them; `bacmap task list` shows non-terminal tasks.
 4. Update the environment: `pixi install` (and `pixi install -e dev` for development).
-5. Restart `bacmap web` / `bacmap mcp`; redeploy happens automatically with a content-hash check.
+5. Restart `bacmap start web` / `bacmap start mcp`; redeploy happens automatically with a content-hash check.
 6. `bacmap doctor`; verify the database version.
 7. Smoke test: `bacmap overview`, `bacmap run list`, one small `analyze` or `record`.
 
@@ -43,7 +43,7 @@ Rules:
 MCP profiles protect data that flows through MCP, not a harness's own shell. For external harnesses:
 
 - run bacmap under a dedicated OS account with `BACMAP_HOME` mode `0700`;
-- run `bacmap web` and `bacmap mcp --transport http` as that account, bound to loopback;
+- run `bacmap start web` and `bacmap start mcp --transport http` as that account, bound to loopback;
 - give the harness only the MCP URL/token, never the Web token.
 
 See [Security](../concepts/security.md) for the threat model.

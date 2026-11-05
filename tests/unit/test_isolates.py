@@ -52,11 +52,12 @@ class TestRegistrationIntegration:
 
 
 class TestCli:
-    def test_ls_and_show(self, tmp_path, capsys):
+    def test_ls_and_show(self, tmp_path, capsys, monkeypatch):
         import json
 
         import bacmap.interfaces.cli.main as cli
 
+        monkeypatch.setenv("BACMAP_LANG", "zh")
         IsolateService(tmp_path / "data" / "bacmap.sqlite").ensure("EVO-001-P037")
         cli.main(["isolate", "ls", "--home", str(tmp_path), "--json"])
         rows = json.loads(capsys.readouterr().out)

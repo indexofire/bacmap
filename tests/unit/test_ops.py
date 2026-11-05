@@ -74,7 +74,8 @@ class TestBackupRestore:
         cli.main(["restore", "--from", str(out), "--home", str(home), "--force"])
         assert (home / "extra.txt").is_file()  # 非库文件不被删除
 
-    def test_restore_rejects_zip_slip(self, home, tmp_path):
+    def test_restore_rejects_zip_slip(self, home, tmp_path, monkeypatch):
+        monkeypatch.setenv("BACMAP_LANG", "zh")
         bad = tmp_path / "bad.zip"
         with zipfile.ZipFile(bad, "w") as z:
             z.writestr("../evil.txt", "x")

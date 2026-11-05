@@ -69,7 +69,7 @@ pixi install                 # 运行时环境（Python 3.12 + 生信工具）
 pixi shell
 bacmap --version             # 0.1.2
 bacmap doctor                # 只读体检；仅在硬性失败时返回码为 1
-bacmap web                   # http://127.0.0.1:8800
+bacmap start web             # http://127.0.0.1:8800
 ```
 
 从 Web 控制台或 CLI 跑一次分析：

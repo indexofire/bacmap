@@ -6,8 +6,8 @@
 ## 1. Web 控制台
 
 ```bash
-bacmap web                                  # 127.0.0.1:8800 by default
-bacmap web --host 127.0.0.1 --port 8800
+bacmap start web                            # 127.0.0.1:8800 by default
+bacmap start web --host 127.0.0.1 --port 8800
 ```
 
 页面：
@@ -66,10 +66,10 @@ bacmap results migrate [--dry-run]
 bacmap events prune --days N
 bacmap backup --out FILE [--with-results]
 bacmap restore --from FILE [--force]
-bacmap mcp   # MCP server
-bacmap web   # Web console
-bacmap tui   # task console
-bacmap console  # numbered menu
+bacmap start mcp     # MCP server
+bacmap start web     # Web console
+bacmap start tui     # task console
+bacmap start console  # numbered menu
 ```
 
 查询类命令接受 `--json`；任务/计划 ID 支持唯一前缀，因此 `task list` 显示的 12 个字符可直接使用。
@@ -134,7 +134,7 @@ bacmap record knowledge-approve 7
 ## 3. TUI 任务台
 
 ```bash
-bacmap tui
+bacmap start tui
 ```
 
 TUI 是一个仪表盘加显式操作的界面；**没有对话**。
@@ -170,7 +170,7 @@ TUI 是一个仪表盘加显式操作的界面；**没有对话**。
 ## 4. 交互式控制台
 
 ```bash
-bacmap console
+bacmap start console
 ```
 
 为偏爱提示式操作而非子命令的用户准备的编号菜单。它使用同一套引擎与门；不是另一套实现。
@@ -195,7 +195,7 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" \
 
 ## 6. 远程访问与鉴权
 
-`bacmap web` 默认绑定 `127.0.0.1`。需要远程访问时，请使用 SSH 隧道：
+`bacmap start web` 默认绑定 `127.0.0.1`。需要远程访问时，请使用 SSH 隧道：
 
 ```bash
 ssh -L 8800:127.0.0.1:8800 user@workstation
@@ -206,7 +206,7 @@ ssh -L 8800:127.0.0.1:8800 user@workstation
 
 ```bash
 export BACMAP_WEB_TOKEN="$(openssl rand -hex 24)"
-bacmap web --host 0.0.0.0 --port 8800
+bacmap start web --host 0.0.0.0 --port 8800
 ```
 
 两种鉴权模式：

@@ -1,4 +1,4 @@
-"""MCP 服务启动（``bacmap mcp`` 与 ``python -m bacmap.interfaces.mcp`` 共用）。"""
+"""MCP 服务启动（``bacmap start mcp`` 与 ``python -m bacmap.interfaces.mcp`` 共用）。"""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from bacmap.interfaces.i18n import T
 from bacmap.interfaces.mcp.profiles import McpProfile, ProfileNotAllowedError, resolve_profile
 
 
@@ -16,9 +17,12 @@ def add_profile_argument(parser: Any) -> None:
         "--profile",
         choices=[p.value for p in McpProfile],
         default=McpProfile.CLOUD.value,
-        help=(
+        help=T(
+            "data-class Profile (default cloud: tool outputs ≤ cloud_max_data_class; "
+            "local-trusted sees up to D4 and requires config.toml "
+            "[mcp] allow_local_trusted = true)",
             "数据级别 Profile（默认 cloud：工具输出 ≤ cloud_max_data_class；"
-            "local-trusted 可见至 D4，需 config.toml [mcp] allow_local_trusted = true）"
+            "local-trusted 可见至 D4，需 config.toml [mcp] allow_local_trusted = true）",
         ),
     )
 
@@ -40,7 +44,7 @@ def serve(
     from bacmap.interfaces.mcp.server import build_server
 
     if debug_mode():
-        print(debug_warning("bacmap mcp"), file=sys.stderr)
+        print(debug_warning("bacmap start mcp"), file=sys.stderr)
     try:
         profile = resolve_profile(profile_name, home, transport)
     except ProfileNotAllowedError as exc:
@@ -61,7 +65,11 @@ def serve(
     if not token:
         if not debug_mode():
             raise SystemExit(
-                f"HTTP 传输需要 Bearer token（ADR-12）：请先设置环境变量 {token_env}"
+                T(
+                    f"HTTP transport requires a bearer token (ADR-12): "
+                    f"set the {token_env} environment variable first",
+                    f"HTTP 传输需要 Bearer token（ADR-12）：请先设置环境变量 {token_env}",
+                )
             )
-        print(debug_warning("bacmap mcp"))
+        print(debug_warning("bacmap start mcp"))
     run_http(server, token=token, host=host, port=port, uds=(uds or None))

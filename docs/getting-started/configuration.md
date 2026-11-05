@@ -146,7 +146,7 @@ allow_local_trusted = true       # must be the boolean true
 ```
 
 ```bash
-bacmap mcp --profile local-trusted
+bacmap start mcp --profile local-trusted
 ```
 
 Use `local-trusted` only when the harness talks to a local/LAN model. See

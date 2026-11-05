@@ -10,7 +10,7 @@ the Web token to an external agent; agents use MCP.
 
 ```bash
 export BACMAP_WEB_TOKEN="$(openssl rand -hex 24)"
-bacmap web --host 127.0.0.1 --port 8800
+bacmap start web --host 127.0.0.1 --port 8800
 curl -H "Authorization: Bearer $BACMAP_WEB_TOKEN" http://127.0.0.1:8800/api/v1/tasks
 ```
 
@@ -18,7 +18,7 @@ curl -H "Authorization: Bearer $BACMAP_WEB_TOKEN" http://127.0.0.1:8800/api/v1/t
 
 ```bash
 export BACMAP_WEB_AUTH=cookie
-bacmap web
+bacmap start web
 # browser: /login → signed session cookie + bacmap_csrf cookie
 ```
 

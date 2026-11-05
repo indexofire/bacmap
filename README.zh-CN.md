@@ -14,7 +14,7 @@ bacmap **没有内置聊天窗口**：对话发生在外部智能体（Hermes / 
 MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小操作序列只有五步：
 
 1. 安装并体检：`pixi install && pixi shell && bacmap doctor`；
-2. 在智能体配置里启动 `bacmap mcp`（配置片段见
+2. 在智能体配置里启动 `bacmap start mcp`（配置片段见
    [智能体与计划](docs/guide/agent-plans.zh.md)）；
 3. 在对话中给出**绝对路径**和目标，例如：
    > 用标准管线分析 `/data/run42` 下的八套副溶血性弧菌 reads。
@@ -52,7 +52,7 @@ pixi shell
 bacmap --version        # 0.1.2
 bacmap config init      # 可选：从 config.example.toml 生成配置
 bacmap doctor           # 只读体检
-bacmap web              # http://127.0.0.1:8800
+bacmap start web        # http://127.0.0.1:8800
 ```
 
 第一次分析：
@@ -66,7 +66,7 @@ bacmap task show <task_id>
 智能体流程：
 
 ```bash
-bacmap mcp --profile local-trusted     # 或直接用 bacmap mcp（cloud）
+bacmap start mcp --profile local-trusted     # 或直接用 bacmap start mcp（cloud）
 bacmap plan list
 bacmap plan show <plan_id>
 bacmap plan confirm <plan_id> --version 1 --hash <前12位>

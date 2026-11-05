@@ -34,7 +34,9 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"})
 
 
-def require_auth_when_exposed(host: str, token: str | None, *, prog: str = "bacmap web") -> None:
+def require_auth_when_exposed(
+    host: str, token: str | None, *, prog: str = "bacmap start web"
+) -> None:
     """非回环绑定且未配置 token 时拒绝启动（对齐 MCP HTTP 的 fail-fast，ADR-14/16）。
 
     ``BACMAP_DEBUG=1`` 或 ``[debug] enabled=true`` 时放行（开发模式），但会打印醒目警告。
@@ -48,10 +50,18 @@ def require_auth_when_exposed(host: str, token: str | None, *, prog: str = "bacm
         return
     if token or host in _LOOPBACK_HOSTS:
         return
+    from bacmap.interfaces.i18n import T
+
     raise SystemExit(
-        f"[{prog}] 拒绝启动：绑定非本机地址 {host!r} 但未设置鉴权 token。\n"
-        "请设置 BACMAP_WEB_TOKEN（或 --token-env 指定的环境变量）后重启，"
-        "或改绑回环地址（--host 127.0.0.1）。"
+        T(
+            f"[{prog}] refusing to start: bound to non-loopback address {host!r} "
+            "without an auth token.\n"
+            f"Set BACMAP_WEB_TOKEN (or the env var named by --token-env) and restart, "
+            "or bind a loopback address (--host 127.0.0.1).",
+            f"[{prog}] 拒绝启动：绑定非本机地址 {host!r} 但未设置鉴权 token。\n"
+            "请设置 BACMAP_WEB_TOKEN（或 --token-env 指定的环境变量）后重启，"
+            "或改绑回环地址（--host 127.0.0.1）。",
+        )
     )
 
 

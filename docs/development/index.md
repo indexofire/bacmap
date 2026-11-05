@@ -29,8 +29,8 @@ All five must be green before a change is considered done. CI runs the same orde
 For local feature testing, use the environment variable:
 
 ```bash
-BACMAP_DEBUG=1 bacmap web --host 127.0.0.1
-BACMAP_DEBUG=1 bacmap mcp --profile local-trusted
+BACMAP_DEBUG=1 bacmap start web --host 127.0.0.1
+BACMAP_DEBUG=1 bacmap start mcp --profile local-trusted
 BACMAP_DEBUG=1 bacmap research ...
 ```
 

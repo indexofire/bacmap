@@ -72,7 +72,8 @@ def test_knowledge_import_and_approve(engine, capsys, tmp_path: Path):
     assert engine.calls[1][1] == {"entry_id": 7, "kind": "knowledge_approve"}
 
 
-def test_bad_field_and_engine_error(engine, capsys, tmp_path: Path):
+def test_bad_field_and_engine_error(engine, capsys, tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("BACMAP_LANG", "zh")
     with pytest.raises(SystemExit, match="k=v"):
         _run(capsys, "record", "metadata", "--strain-id", "S1", "--field", "province",
              "--home", str(tmp_path))

@@ -5,6 +5,24 @@
 
 ## [未发布]
 
+### CLI：长驻界面统一为 `bacmap start <iface>` + 显示语言设置
+- **破坏性变更**：顶层接口命令 `bacmap mcp|web|tui|console` 移除，统一为
+  `bacmap start mcp|web|tui|console`（不留别名）。一次性命令（overview/task/
+  plan/record/run/gom/isolate/sample/search/doctor/backup/restore/results/events/
+  config/research）保持顶层不变。`python -m bacmap.interfaces.mcp` 模块入口不变。
+- Hermes/Pi/DSH 等外部客户端配置需同步：`args` 由 `["mcp"]` 改为
+  `["start", "mcp"]`（shell 形式 `bacmap mcp` → `bacmap start mcp`）。
+- **新增显示语言**：`config.toml` 新增 `[ui] language`（`en` | `zh`，默认 `en`），
+  环境变量 `BACMAP_LANG` 显式设置时优先（与 `BACMAP_DEBUG` 同构）；CLI 帮助、
+  提示与错误文案按语言输出，JSON 输出不受影响。非法取值确定性回落 `en`。
+- 全部 CLI 模块文案双语化（`interfaces/i18n.py::T(en, zh)`）；`bacmap --help`
+  尾注区分"长驻界面"与"一次性命令"两组。
+- 文档同步：README 双语、getting-started/guide/concepts/operations/reference
+  中英文页面（含 `docs/reference/cli.md` 重构与 `configuration.md` 新增 §12）；
+  `config.example.toml` 新增 `[ui]` 段。
+- 测试基线：1703 → 1708（`start` 入口/旧命令拒绝/语言切换与回落/配置解析新增
+  用例；原中文文案断言改为显式 `BACMAP_LANG=zh` 下断言）。
+
 ### 外部工具依赖升级（gside / gapit / gmlst / gseek）
 - PyPI 依赖升级：`gside 0.1.4 → 0.2.2`、`gapit 0.5.6 → 0.6.8`、
   `gmlst 0.5.5 → 0.6.1`；新增 `gseek ==0.10.4`（gside 0.2+ 依赖，gapit/gmlst
