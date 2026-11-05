@@ -55,7 +55,10 @@ def _labs(home: Path, values: dict[str, str]) -> None:
 
 
 @pytest.fixture
-def home(tmp_path: Path) -> Path:
+def home(tmp_path: Path, monkeypatch) -> Path:
+    # 隔离 XDG 回落：真实机上的 ~/.config/bacmap/config.toml 会经
+    # _iter_backup_files 的 config_path() 泄漏进备份断言（密闭性，同 v1.4.32）。
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-isolated"))
     strains = [f"S{i}" for i in range(16)]
     _run(tmp_path, strains)
     genes = {s: ["blaKPC-33"] for s in strains[:7]}

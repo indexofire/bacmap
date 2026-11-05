@@ -12,9 +12,11 @@ import bacmap.config as config
 
 
 @pytest.fixture(autouse=True)
-def _clear_config_env(monkeypatch):
+def _clear_config_env(monkeypatch, tmp_path):
     monkeypatch.delenv("BACMAP_CONFIG", raising=False)
-    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    # 隔离 XDG 回落：开发者真实机上的 ~/.config/bacmap/config.toml 会泄漏进
+    # 断言（密闭性修复，同 v1.4.32 宿主 podman 暴露测试假设的类别）。
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-isolated"))
 
 
 class TestConfigPath:

@@ -18,9 +18,8 @@
 ## 2. 安装
 
 ```bash
-git clone <repo> bacmap
-cd bacmap
-pixi install          # 默认环境：Python 3.12 + Snakemake 9 + 工具
+git clone https://github.com/indexofire/bacmap && cd bacmap
+pixi install --all    # 安装所有环境：Python 3.12 + Snakemake 9 + 工具
 pixi shell            # 激活环境
 bacmap --version      # 0.1.2
 ```
@@ -29,9 +28,9 @@ bacmap --version      # 0.1.2
 
 - **Snakemake 与工具链**：fastp、shovill、bwa、minimap2、samtools、bcftools、blast、
   bedtools、iqtree 等（见 `pixi.toml`）。
-- **外部分析工具**（ADR-20）：`gside`（物种鉴定）、`gapit`（基因筛查/分型）、
+- **常用分析工具**（ADR-20）：`gside`（物种鉴定）、`gapit`（基因筛查/分型）、
   `gmlst`（MLST/cgMLST/MST）。
-- **独立的 `recomb` 环境**，内含 Gubbins，用于可选的重组检测。它之所以隔离，是因为其
+- **独立的 `recomb` 环境**，内含 Gubbins，用于可选的重组检测。因为其与
   IQ-TREE 版本锁定与主管线冲突；请用 `pixi run -e recomb …` 运行。
 
 开发环境是独立的：

@@ -174,7 +174,10 @@ def backup(args: argparse.Namespace) -> None:
     count = 0
     with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as z:
         for path in _iter_backup_files(home):
-            rel = path.relative_to(home).as_posix()
+            # 活动配置可能位于 XDG 路径（不在 home 下，ADR-03 解析顺序）：
+            # home 内的保持相对路径；home 外的（仅 config.toml 会这样）按扁平名
+            # 写入，恢复时落到 home/config.toml，恰好接回解析优先级第 2 位。
+            rel = path.relative_to(home).as_posix() if path.is_relative_to(home) else path.name
             if path.suffix == ".sqlite":
                 with tempfile.TemporaryDirectory() as td:
                     snap = Path(td) / path.name

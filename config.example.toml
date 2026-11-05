@@ -1,54 +1,111 @@
-# bacmap configuration template
+# bacmap 配置模板
 #
-# Copy this file to one of:
-#   - $BACMAP_HOME/config.toml          (default: ~/.local/share/bacmap/config.toml)
-#   - ~/.config/bacmap/config.toml      (XDG; useful for pip/conda installations)
-#   - $PWD/config.toml                  (project-local; gitignored in source checkouts)
-#     Then run: export BACMAP_CONFIG="$PWD/config.toml"
+# 复制到以下任一位置（解析优先级从高到低）：
+#   1. $BACMAP_CONFIG 显式指定的任意路径
+#   2. $BACMAP_HOME/config.toml        （默认 ~/.local/share/bacmap/config.toml）
+#   3. $HOME/.config/bacmap/config.toml    （XDG；数据与配置分开时推荐）
+#   4. 都不存在 → 使用内置默认值（本文件全部注释时等价于默认值）
 #
-# Configuration is TOML, not YAML. Missing sections use built-in defaults.
-# Never put API keys in this file; set api_key_env to the *name* of an env var.
+# - 配置是 TOML，不是 YAML；缺失的段/键一律回落内置默认值。
+# - 密钥绝不写入本文件：api_key_env 只填环境变量的**名字**。
+# - 常用环境变量（优先级高于本文件）：BACMAP_CONFIG、BACMAP_HOME、
+#   BACMAP_DATA_DIR、BACMAP_DB_PATH、BACMAP_RESULTS_DIR、BACMAP_DEBUG。
 
-# Optional data-path override. Relative paths are interpreted literally; use
-# absolute paths here to avoid ambiguity.
+# ─────────────────────────────────────────────────────────────────
+# [paths] 数据路径覆盖（缺省全部派生自 $BACMAP_HOME，一般无需配置）
+# ─────────────────────────────────────────────────────────────────
 [paths]
+# data_dir：样本数据根目录。相对路径按字面解释，请用绝对路径避免歧义。
 # data_dir = "/absolute/path/to/data"
 
-# Task-internal LLM endpoints. The deterministic pipeline works without this block.
-[llm.data_policy]
-cloud_max_data_class = "D1"           # D1 or D2 only; D3/D4 are rejected by code
+# ─────────────────────────────────────────────────────────────────
+# [llm.*] 任务内 LLM 端点（可选；v1.6+ 对话已外移 Harness，通常无需配置）
+#
+# 适用场景：无人值守跑批时由 bacmap 内部生成 T1 解读（agent/interpret）。
+# 没有任何 [llm.*] 段时：确定性管线完整可用（C3 降级），解读由外部
+# 智能体起草后经 bio_verify_result 的 interpretation_text 传入，并由
+# 确定性的 analysis_claims 门（NLI 反射器，无 LLM）比对管线事实。
+# ─────────────────────────────────────────────────────────────────
 
-[llm.endpoints.strata]
-location = "local"                    # local | lan | cloud
-base_url = "http://127.0.0.1:8080/v1"
-model = "qwen3.8-flash-next-iq3_xxs"
-enabled = true
+# 数据分级上限（ADR-16 红线）：cloud 端点默认 D1，管理员最多放宽到 D2；
+# 配置 D3/D4 会在加载时被直接拒绝。D0=元数据 D1=汇总 D2=单株分型 D3/D4=原始数据。
+# [llm.data_policy]
+# cloud_max_data_class = "D1"
 
-# Example cloud endpoint. The value of api_key_env is an environment-variable NAME.
-# [llm.endpoints.deepseek]
-# location = "cloud"
-# base_url = "https://api.deepseek.com/v1"
-# model = "deepseek-chat"
-# api_key_env = "DEEPSEEK_API_KEY"
+# 端点定义：每个 [llm.endpoints.<名字>] 一个端点。字段含义：
+#   location                  local | lan | cloud（决定数据分级上限的适用）
+#   base_url                  OpenAI 兼容 API 地址
+#   model                     模型 ID（须与服务端实际开通的一致）
+#   api_key_env               存 API 密钥的环境变量名（只写名字，不写密钥）
+#   tier                      T1=仅解读 T2=完整对话/工具调用
+#   enabled                   false 时该端点不参与路由
+#   max_concurrency           并发上限（本地小模型建议 1）
+#   supports_tools_with_schema  function calling 能力（工具调用必需）
+#   constrained_decoding      受限解码（结构化输出）
+#   request_timeout_s         请求超时秒数（默认 300）
+#   admin_url                 Strata /load /unload 管理端点（ADR-17 内存仲裁用）
+# [llm.endpoints.strata]                 # 本地端点示例（无配置时的内置默认）
+# location = "local"
+# base_url = "http://127.0.0.1:8080/v1"
+# model = "qwen3.8-flash-next-iq3_xxs"
+# max_concurrency = 1
+# admin_url = "http://127.0.0.1:8080"
+# [llm.endpoints.glm]                    # 云端端点示例
+# location = "cloud"                     # 外部 API 一律 cloud，受 ADR-16 约束
+# base_url = "https://open.bigmodel.cn/api/coding/paas/v4/"
+# model = "glm-5.3-flash"
+# api_key_env = "GLM_API_KEY"
+# tier = "T2"
+# supports_tools_with_schema = true
 
-[llm.routing]
-interpretation = "strata"
+# 用途路由：purpose → 端点名。两个内置 purpose：
+#   interpretation     分析解读（T1；无路由条目时回落首个 enabled 端点并告警）
+#   intent_classifier  意图分类（保留键；对话外移后仅状态行探测用）
+# [llm.routing]
+# interpretation = "strata"
 
-[llm.resources]
-co_located = true
-min_free_ram_gb_for_heavy_steps = 24.0
+# 资源仲裁（ADR-17）：模型与分析管线同机时防止内存挤占。
+#   co_located                    模型是否与本机管线同机（false=模型在别处/云端，仲裁关闭）
+#   min_free_ram_gb_for_heavy_steps  触发仲裁的最低空闲内存（GB），仅 co_located=true 时有意义
+# [llm.resources]
+# co_located = true
+# min_free_ram_gb_for_heavy_steps = 24.0
 
+# ─────────────────────────────────────────────────────────────────
+# [mcp] MCP 服务端开关
+# ─────────────────────────────────────────────────────────────────
 [mcp]
-allow_local_trusted = false           # true + --profile local-trusted exposes D4 tools
+# allow_local_trusted：默认 false。true 且以 --profile local-trusted 启动时，
+# 才向本机可信实例暴露 D4 级工具（ADR-16；云端 Profile 永不受此影响）。
+allow_local_trusted = false
 
+# ─────────────────────────────────────────────────────────────────
+# [debug] 调试模式
+# ─────────────────────────────────────────────────────────────────
 [debug]
-enabled = false                       # development only; never enable in production
+# enabled：true 时放宽部分开发限制（如沙箱直通）。绝不在生产开启。
+# 环境变量 BACMAP_DEBUG 显式设置时优先于本文件。
+enabled = false
 
+# ─────────────────────────────────────────────────────────────────
+# [plans.auto_confirm] 计划的服务端预授权策略（v1.10.4 起支持按任务类型放宽）
+#
+# 保守默认：关闭。开启后仅对满足全部条件的计划自动确认（任一不满足即
+# 整体不自动确认，fail-closed）：
+#   enabled                  总开关（缺 true 一律不生效）
+#   task_types               允许自动确认的任务类型：analyze | curate | mine | write
+#   max_samples              单任务样本数上限（≥1，默认 20）
+#   max_tasks                单计划任务数上限（1–10，默认 10；>10 视为非法）
+#   allow_directory_ingestion  允许 fasta_dir/fastq_dir 目录直入（数据登记写路径，
+#                              且空 samples 会绕过 max_samples——放开由管理员承担）
+#   allow_scripts             允许 mine 任务生成的脚本
+#   allow_drafts              允许 write 任务生成的草稿
+# ─────────────────────────────────────────────────────────────────
 [plans.auto_confirm]
 enabled = false
-task_types = ["analyze"]              # analyze | curate | mine | write
-max_samples = 20
-max_tasks = 10
-allow_directory_ingestion = false
-allow_scripts = false
-allow_drafts = false
+# task_types = ["analyze"]
+# max_samples = 20
+# max_tasks = 10
+# allow_directory_ingestion = false
+# allow_scripts = false
+# allow_drafts = false

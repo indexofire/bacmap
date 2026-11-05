@@ -1,6 +1,6 @@
 # 智能体与计划
 
-自 v1.5 起（ADR-21），对话交互位于外部智能体 Harness 中。Harness 只经 MCP 访问 bacmap；
+用户使用自然语言与大语言模型交互直接使用外部智能体 Harness。Harness 经 MCP 访问 bacmap；
 确定性管线、门以及**可信确认界面**都留在 bacmap 内。没有内置对话。
 
 ```text
@@ -261,11 +261,13 @@ pi
 
 ### DeepSeek Harness（DSH）
 
-DSH 通过插件连接 MCP。新增条目必须包在 `insert:` 下；裸条目会被当作补丁并跳过。
+DSH 通过插件连接 MCP。补丁文件**按 profile 分层**：`$DSH_HOME/profiles/<profile>/cordis.patch.yml`
+（如 `~/.dsh/profiles/tui/`、`~/.dsh/profiles/web/`、`~/.dsh/profiles/dsh-tui/` 各一份），
+在用哪个 profile 就改哪份；常用几个就都加上。新增条目必须包在 `insert:` 下；裸条目会被当作补丁并跳过。
 
 ```yaml
-# $DSH_HOME/cordis.patch.yml
-# DSH_HOME 未设置时通常是 ~/.dsh
+# $DSH_HOME/profiles/<profile>/cordis.patch.yml
+# 每个 profile 一份；DSH_HOME 未设置时为 ~/.dsh
 - insert:
   - id: mcp-bacmap
     name: '@deepseek-ai/dsh-mcp-client'

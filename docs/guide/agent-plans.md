@@ -270,12 +270,15 @@ connection.
 
 ### DeepSeek Harness (DSH)
 
-DSH connects over its MCP-client plugin. A new entry must be wrapped in `insert:`; a bare entry is
+DSH connects over its MCP-client plugin. The patch file is **per profile**:
+`$DSH_HOME/profiles/<profile>/cordis.patch.yml` (e.g. `~/.dsh/profiles/tui/`, `~/.dsh/profiles/web/`,
+and `~/.dsh/profiles/dsh-tui/` each carry their own copy) — edit the profile you use, or all of the
+ones you rely on. A new entry must be wrapped in `insert:`; a bare entry is
 treated as a patch and skipped.
 
 ```yaml
-# $DSH_HOME/cordis.patch.yml
-# DSH_HOME defaults to ~/.dsh
+# $DSH_HOME/profiles/<profile>/cordis.patch.yml
+# one file per profile; DSH_HOME defaults to ~/.dsh
 - insert:
   - id: mcp-bacmap
     name: '@deepseek-ai/dsh-mcp-client'
