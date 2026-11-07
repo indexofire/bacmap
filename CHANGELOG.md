@@ -5,6 +5,17 @@
 
 ## [未发布]
 
+### Research Web 工作台完善
+
+- 研究首页：run 下拉选择、Study 关联、Cohort/Plan 可选绑定、研究说明；创建 session 时
+  直接写入完整来源链。
+- Session 页：标准图/自定义图 gallery、FigureSpec 表、自定义图 provenance（renderer/
+  spec/data/code/output hash）、全部产物下载、研究说明、Study/Cohort/Plan 链接。
+- Study 页：关联 session 缩略图、STROBE 草案（met/partial/missing）、投稿包查看与 ZIP
+  下载。
+- 新增投稿包页面与 `/package.zip`；通用 artifact 下载路由。
+- 测试基线：1818 → 1824。
+
 ### 研究功能实测修正
 
 - `bacmap research create` 支持 `--study/--cohort/--plan`，session 可绑定完整来源链；
@@ -69,7 +80,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1818（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1824（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 

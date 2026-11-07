@@ -132,7 +132,7 @@ class ResearchService:
                 study_id=request.study_id,
                 cohort_id=request.cohort_id,
                 plan_id=request.plan_id,
-                payload={"p1": True},
+                payload={"p1": True, "note": request.note},
             )
             report_path.write_text(render_report_markdown(session, stat), encoding="utf-8")
             manuscript_path.write_text(

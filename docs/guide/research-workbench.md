@@ -81,12 +81,21 @@ returns each gate's blockers; `ready=true` still requires human review.
 
 ## 4. Web
 
-Run `bacmap start web` and open **研究 / Research**:
+Run `bacmap start web` and open **研究 / Research**. The Web is the primary review surface:
 
-1. enter `run_id`, gene and test name;
-2. choose a governance profile;
-3. open the session to see the 2×2 table, diagnostics, figure, report and manuscript;
-4. artifacts expose their SHA-256 and path for traceability.
+1. choose a run from the dropdown (or type a `run_id` when no runs exist);
+2. enter gene/phenotype, choose a governance profile, optionally link a Study/Cohort/Plan and
+   add a research note;
+3. the session page shows the 2×2 table, diagnostics, the standard and custom figures, the
+   `FigureSpec`, the custom-figure provenance manifest and downloadable artifacts with SHA-256;
+4. the Study page shows G0–G3, linked sessions with figure thumbnails, the STROBE draft
+   (met/partial/missing) and links to the submission package;
+5. the package page shows the manifest, checklist, files and data/code availability, and offers
+   a ZIP download.
+
+Natural-language research instructions are handled by an external agent over MCP (Pi/Hermes/
+DSH); the agent can read research objects and propose next steps, while writes currently stay in
+the Web/CLI/API. The Web remains the human review and result-viewing surface.
 
 ## 5. JSON API
 

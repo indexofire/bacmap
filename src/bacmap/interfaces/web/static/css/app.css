@@ -875,3 +875,42 @@ code {
 /* 顶栏登出入口（cookie 鉴权模式） */
 .topbar__logout { margin-left: auto; }
 .topbar__logout .btn { padding: 3px 10px; }
+
+/* ---------- Research figures / checklist ---------- */
+.figuregrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--sp-4);
+  margin-top: var(--sp-3);
+}
+
+.figurecard {
+  margin: 0;
+  padding: var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.figurecard img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+  border-radius: 6px;
+}
+
+.figurecard figcaption {
+  margin-top: var(--sp-2);
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+}
+
+.card__head .card__lead {
+  margin: 0;
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  flex-wrap: wrap;
+}

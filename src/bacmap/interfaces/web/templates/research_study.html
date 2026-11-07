@@ -16,6 +16,55 @@
 </section>
 
 <section class="card">
+  <div class="card__head">
+    <h2 class="card__title">研究结果</h2>
+    <p class="card__lead">
+      <a class="btn" href="/research/studies/{{ study.study_id }}/package">查看投稿包</a>
+      <a class="btn btn--primary" href="/research/studies/{{ study.study_id }}/package.zip">下载 ZIP</a>
+    </p>
+  </div>
+  {% if sessions %}
+  <div class="figuregrid">
+    {% for item in sessions %}
+    <figure class="figurecard">
+      {% if item.figure %}
+      <a href="/research/{{ item.session.session_id }}">
+        <img src="/research/{{ item.session.session_id }}/artifact/figure" alt="{{ item.session.gene }} × {{ item.session.test_name }}">
+      </a>
+      {% endif %}
+      <figcaption>
+        <a href="/research/{{ item.session.session_id }}">{{ item.session.session_id }}</a><br>
+        {{ item.session.gene }} × {{ item.session.test_name }} · {{ item.session.status.value }}
+        {% if item.custom %} · 自定义图{% endif %}
+      </figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+  {% else %}<p class="card__lead">暂无关联的 Research session。可在研究首页创建并关联本 Study。</p>{% endif %}
+</section>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">STROBE 草案</h2></div>
+  {% if checklist %}
+  <p class="card__lead">met={{ checklist.met }} · partial={{ checklist.partial }} · missing={{ checklist.missing }} · 人工必须补齐 missing 项。</p>
+  <table class="table">
+    <thead><tr><th>item</th><th>section</th><th>requirement</th><th>status</th><th>evidence</th></tr></thead>
+    <tbody>
+    {% for item in checklist.items %}
+      <tr>
+        <td class="mono">{{ item.item_id }}</td>
+        <td>{{ item.section }}</td>
+        <td>{{ item.requirement }}</td>
+        <td><code>{{ item.status }}</code></td>
+        <td>{{ item.evidence | join('; ') if item.evidence else item.note }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="card__lead">暂无 checklist。</p>{% endif %}
+</section>
+
+<section class="card">
   <div class="card__head"><h2 class="card__title">Cohorts</h2></div>
   <table class="table"><thead><tr><th>id</th><th>name</th><th>status</th><th>members</th><th>snapshot</th><th></th></tr></thead>
   <tbody>{% for c in cohorts %}<tr><td class="mono">{{ c.cohort_id }}</td><td>{{ c.name }}</td><td>{{ c.status.value }}</td><td>{{ c.members|length }}</td><td class="mono-dim">{{ c.snapshot_hash[:16] }}…</td><td>{% if c.status.value == 'draft' %}<form method="post" action="/research/cohorts/{{ c.cohort_id }}/freeze"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn" type="submit">冻结</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table>

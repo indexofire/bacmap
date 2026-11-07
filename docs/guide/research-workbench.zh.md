@@ -79,12 +79,18 @@ blockers；`ready=true` 仍需人工评审。
 
 ## 4. Web
 
-运行 `bacmap start web` 后打开 **研究 / Research**：
+运行 `bacmap start web` 后打开 **研究 / Research**。Web 是主要的结果查看界面：
 
-1. 填 `run_id`、基因、检测名；
-2. 选择治理 Profile；
-3. 查看 2×2 表、诊断、图、报告和论文草案；
-4. 产物显示 SHA-256 与路径，便于追溯。
+1. 从下拉框选择 run（没有 run 时才手填 `run_id`）；
+2. 填基因/表型、选择治理 Profile，可选关联 Study/Cohort/Plan，并填写研究说明；
+3. session 页显示 2×2 表、诊断、标准图与自定义图、`FigureSpec`、自定义图 provenance
+   manifest，以及带 SHA-256 的可下载产物；
+4. Study 页显示 G0–G3、带缩略图的关联 session、STROBE 草案（met/partial/missing）和
+   投稿包入口；
+5. 投稿包页显示 manifest、checklist、文件与数据/代码可用性，并提供 ZIP 下载。
+
+自然语言研究指令由外部 agent 经 MCP 处理（Pi/Hermes/DSH）；agent 可读取研究对象并提议
+下一步，写入目前仍在 Web/CLI/API。Web 保持为人工审核与结果查看界面。
 
 ## 5. JSON API
 

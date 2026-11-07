@@ -11,7 +11,14 @@
   <form class="form" method="post" action="/research/sessions">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="field"><label class="field__label" for="r-run">run_id</label>
-      <input class="field__control" id="r-run" name="run_id" required placeholder="例如 9a31..."></div>
+      {% if runs %}
+      <select class="field__control" id="r-run" name="run_id" required>
+        {% for r in runs %}<option value="{{ r.run_id }}">{{ r.run_id }} · {{ r.started_at[:19] }} · {{ r.strain_ids|length }} strains</option>{% endfor %}
+      </select>
+      {% else %}
+      <input class="field__control" id="r-run" name="run_id" required placeholder="例如 9a31...">
+      {% endif %}
+    </div>
     <div class="field"><label class="field__label" for="r-gene">基因</label>
       <input class="field__control" id="r-gene" name="gene" required placeholder="例如 blaKPC-33"></div>
     <div class="field"><label class="field__label" for="r-test">表型检测</label>
@@ -20,6 +27,18 @@
       <select class="field__control" id="r-profile" name="profile">
         {% for p in profiles %}<option value="{{ p }}" {% if p == default_profile %}selected{% endif %}>{{ p }}</option>{% endfor %}
       </select></div>
+    <div class="field"><label class="field__label" for="r-study">关联 Study（可选）</label>
+      <select class="field__control" id="r-study" name="study_id">
+        <option value="">不关联</option>
+        {% for s in studies %}<option value="{{ s.study_id }}">{{ s.study_id }} · {{ s.question }}</option>{% endfor %}
+      </select></div>
+    <div class="field"><label class="field__label" for="r-cohort">Cohort ID（可选）</label>
+      <input class="field__control" id="r-cohort" name="cohort_id" placeholder="cohort-..."></div>
+    <div class="field"><label class="field__label" for="r-plan">AnalysisPlan ID（可选）</label>
+      <input class="field__control" id="r-plan" name="plan_id" placeholder="plan-..."></div>
+    <div class="field"><label class="field__label" for="r-note">研究说明（可选）</label>
+      <textarea class="field__control" id="r-note" name="note" rows="3"
+                placeholder="例如：比较 blaKPC-33 与 meropenem 耐药，需校正 lineage"></textarea></div>
     <div class="form__actions"><button class="btn btn--primary" type="submit">生成草案</button></div>
   </form>
 </section>

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}投稿包 · {{ study.study_id }} · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/research">研究</a><span class="crumbs__sep">/</span><a class="crumbs__link" href="/research/studies/{{ study.study_id }}">{{ study.study_id }}</a><span class="crumbs__sep">/</span><span class="crumbs__here">投稿包</span></nav>
+<header class="detailhead">
+  <h1 class="detailhead__title">投稿包</h1>
+  <p class="detailhead__lead">{{ study.question }}</p>
+  <p class="detailhead__id mono">{{ study.study_id }} · {{ package.generated_at[:19] }}</p>
+  <p class="card__lead">
+    <a class="btn btn--primary" href="/research/studies/{{ study.study_id }}/package.zip">下载 ZIP</a>
+    <a class="btn" href="/research/studies/{{ study.study_id }}">返回 Study</a>
+  </p>
+</header>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">发表门与 blocker</h2></div>
+  <p class="card__lead">ready = <strong>{{ 'true' if package.readiness.ready else 'false' }}</strong> · 过门仍需人工评审。</p>
+  {% if package.blockers %}
+  <ul>{% for blocker in package.blockers %}<li>{{ blocker }}</li>{% endfor %}</ul>
+  {% else %}<p class="card__lead">没有 blocker。</p>{% endif %}
+</section>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">STROBE 草案</h2></div>
+  <p class="card__lead">met={{ package.checklist.met }} · partial={{ package.checklist.partial }} · missing={{ package.checklist.missing }}</p>
+  <table class="table">
+    <thead><tr><th>item</th><th>section</th><th>status</th><th>requirement</th></tr></thead>
+    <tbody>
+    {% for item in package.checklist.items %}
+      <tr><td class="mono">{{ item.item_id }}</td><td>{{ item.section }}</td><td><code>{{ item.status }}</code></td><td>{{ item.requirement }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">文件</h2></div>
+  <table class="table">
+    <thead><tr><th>kind</th><th>sha256</th><th>path</th></tr></thead>
+    <tbody>
+    {% for f in package.files %}
+      <tr><td>{{ f.kind }}</td><td class="mono-dim">{{ f.sha256[:16] }}…</td><td class="mono-dim">{{ f.path }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="card__lead">数据可用性：{{ package.data_availability }}</p>
+  <p class="card__lead">代码可用性：{{ package.code_availability }}</p>
+</section>
+{% endblock %}

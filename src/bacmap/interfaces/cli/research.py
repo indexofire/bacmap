@@ -67,6 +67,7 @@ def run_create(args: argparse.Namespace) -> None:
                 study_id=args.study_id,
                 cohort_id=args.cohort_id,
                 plan_id=args.plan_id,
+                note=args.note,
             ),
             actor=args.by,
             profile=p,
@@ -761,6 +762,7 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
         default="",
         help=T("link an AnalysisPlan", "关联 AnalysisPlan"),
     )
+    create.add_argument("--note", default="", help=T("research note", "研究说明"))
     create.add_argument("--by", default="cli")
     add_home(create)
     add_json(create)

@@ -6,6 +6,13 @@
   <h1 class="detailhead__title">{{ session.gene }} × {{ session.test_name }}</h1>
   <p class="detailhead__id mono">{{ session.session_id }} · run {{ session.run_id }}</p>
   <p class="card__lead"><strong>{{ session.label }}</strong> · {{ session.status.value }} · profile {{ session.profile.value }} · D{{ session.data_class }}</p>
+  {% if study %}
+  <p class="card__lead">Study: <a href="/research/studies/{{ study.study_id }}">{{ study.study_id }}</a>
+    {% if session.cohort_id %} · Cohort <span class="mono">{{ session.cohort_id }}</span>{% endif %}
+    {% if session.plan_id %} · Plan <span class="mono">{{ session.plan_id }}</span>{% endif %}
+  </p>
+  {% endif %}
+  {% if note %}<p class="card__lead">研究说明：{{ note }}</p>{% endif %}
 </header>
 
 {% if view.stat %}
@@ -20,24 +27,85 @@
       <tr><td>gene- / susceptible</td><td>{{ view.stat.table.gene_neg_susceptible }}</td></tr>
     </tbody>
   </table>
-  <p class="card__lead">n={{ view.stat.n }} · OR={{ view.stat.odds_ratio }} (95% CI {{ view.stat.ci_low }}–{{ view.stat.ci_high }}) · p={{ view.stat.p_value }}</p>
+  <p class="card__lead">
+    n={{ view.stat.n }} ·
+    OR={% if view.stat.odds_ratio is not none %}{{ '%.3g'|format(view.stat.odds_ratio) }}{% else %}NA{% endif %}
+    {% if view.stat.ci_low is not none and view.stat.ci_high is not none %}
+      (95% CI {{ '%.3g'|format(view.stat.ci_low) }}–{{ '%.3g'|format(view.stat.ci_high) }})
+    {% endif %} ·
+    p={% if view.stat.p_value is not none %}{{ '%.3g'|format(view.stat.p_value) }}{% else %}NA{% endif %}
+  </p>
   {% if view.stat.diagnostics %}<p class="card__lead">诊断：{{ view.stat.diagnostics | join('; ') }}</p>{% endif %}
 </section>
 
 <section class="card">
   <div class="card__head"><h2 class="card__title">图与产物</h2></div>
-  <img src="/research/{{ session.session_id }}/figure.svg" alt="AMR association figure" style="max-width:100%;border:1px solid #ddd;border-radius:6px">
+  <div class="figuregrid">
+    <figure class="figurecard">
+      <img src="/research/{{ session.session_id }}/artifact/figure" alt="标准关联图">
+      <figcaption>标准图（{{ spec.recipe_id if spec else 'association_bar' }}）</figcaption>
+    </figure>
+    {% if artifacts.get('figure_custom') %}
+    <figure class="figurecard">
+      <img src="/research/{{ session.session_id }}/artifact/figure_custom" alt="自定义图">
+      <figcaption>自定义图（{{ manifest.recipe_id if manifest else 'custom' }}）</figcaption>
+    </figure>
+    {% endif %}
+  </div>
   <p class="card__lead">
-    <a href="/research/{{ session.session_id }}/report.md">报告 Markdown</a> ·
-    <a href="/research/{{ session.session_id }}/manuscript.md">论文草案 Markdown</a>
+    <a href="/research/{{ session.session_id }}/artifact/report">报告 Markdown</a> ·
+    <a href="/research/{{ session.session_id }}/artifact/manuscript">论文草案 Markdown</a> ·
+    <a href="/research/{{ session.session_id }}/artifact/figure_spec">FigureSpec JSON</a>
+    {% if artifacts.get('figure_manifest') %} · <a href="/research/{{ session.session_id }}/artifact/figure_manifest">Figure manifest</a>{% endif %}
   </p>
+</section>
+
+{% if spec %}
+<section class="card">
+  <div class="card__head"><h2 class="card__title">FigureSpec</h2></div>
+  <table class="table">
+    <tbody>
+      <tr><th>recipe</th><td class="mono">{{ spec.recipe_id }}</td></tr>
+      <tr><th>kind</th><td>{{ spec.kind }}</td></tr>
+      <tr><th>尺寸 / DPI</th><td>{{ spec.style.width_mm }}×{{ spec.style.height_mm }} mm · {{ spec.style.dpi }} dpi</td></tr>
+      <tr><th>格式</th><td>{{ spec.style.formats | join(', ') }}</td></tr>
+      <tr><th>来源</th><td class="mono">session={{ spec.source.session_id }} · run={{ spec.source.run_id }} · stat={{ spec.source.stat_sha256[:16] }}…</td></tr>
+      <tr><th>约束</th><td>{{ spec.constraints | join('; ') }}</td></tr>
+    </tbody>
+  </table>
 </section>
 {% endif %}
 
+{% if manifest %}
 <section class="card">
-  <div class="card__head"><h2 class="card__title">产物哈希</h2></div>
-  {% for a in view.artifacts %}
-    <p class="mono-dim">{{ a.kind.value }} · {{ a.sha256[:16] }}… · {{ a.path }}</p>
-  {% endfor %}
+  <div class="card__head"><h2 class="card__title">自定义图 provenance</h2></div>
+  <table class="table">
+    <tbody>
+      <tr><th>renderer</th><td>{{ manifest.renderer }}</td></tr>
+      <tr><th>recipe</th><td class="mono">{{ manifest.recipe_id }}</td></tr>
+      <tr><th>output sha256</th><td class="mono">{{ manifest.output_sha256 }}</td></tr>
+      <tr><th>spec sha256</th><td class="mono">{{ manifest.spec_sha256 }}</td></tr>
+      <tr><th>code sha256</th><td class="mono">{{ manifest.code_sha256 or '—' }}</td></tr>
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endif %}
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">全部产物</h2></div>
+  <table class="table">
+    <thead><tr><th>kind</th><th>sha256</th><th>路径</th><th>下载</th></tr></thead>
+    <tbody>
+    {% for a in view.artifacts %}
+      <tr>
+        <td>{{ a.kind.value }}</td>
+        <td class="mono-dim">{{ a.sha256[:16] }}…</td>
+        <td class="mono-dim">{{ a.path }}</td>
+        <td><a href="/research/{{ session.session_id }}/artifact/{{ a.kind.value }}">下载</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
 </section>
 {% endblock %}

@@ -46,6 +46,7 @@ class AnalysisSession(BaseModel):
     study_id: str = ""
     cohort_id: str = ""
     plan_id: str = ""
+    note: str = Field(default="", max_length=2000)
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -84,6 +85,7 @@ class CreateSessionRequest(BaseModel):
     study_id: str = ""
     cohort_id: str = ""
     plan_id: str = ""
+    note: str = Field(default="", max_length=2000)
 
 
 class SessionView(BaseModel):

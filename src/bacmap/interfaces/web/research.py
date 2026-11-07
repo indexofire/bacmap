@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import mimetypes
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -11,8 +13,16 @@ from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Red
 from fastapi.templating import Jinja2Templates
 
 from bacmap.interfaces.web.auth import verify_csrf
-from bacmap.research.models import CreateSessionRequest, ResearchError, ResearchProfile
+from bacmap.research import reporting
+from bacmap.research.models import (
+    ArtifactKind,
+    CreateSessionRequest,
+    ResearchError,
+    ResearchProfile,
+)
 from bacmap.research.service import ResearchObjectService, ResearchService, default_profile
+from bacmap.research.store import ResearchStore
+from bacmap.store import runs as runs_store
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 
 _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -24,6 +34,90 @@ def _status(code: str) -> int:
 
 def _raise(exc: ResearchError) -> None:
     raise HTTPException(_status(exc.code), exc.message)
+
+
+def _study_context(
+    engine: DbosTaskEngine, objects: ResearchObjectService, study_id: str
+) -> dict[str, Any]:
+    from bacmap.research.store import ResearchObjectStore
+
+    try:
+        study = objects.get_study(study_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    with ResearchObjectStore(engine.home) as store:
+        cohorts = store.list_cohorts(study_id)
+        plans = store.list_plans(study_id)
+        claims = store.list_claims(study_id)
+        experiments = store.list_experiments(study_id=study_id)
+        sessions = store.list_sessions_by_study(study_id)
+    session_rows = []
+    with ResearchStore(engine.home) as research:
+        for session in sessions:
+            artifacts = {
+                artifact.kind.value: artifact
+                for artifact in research.list_artifacts(session.session_id)
+            }
+            session_rows.append(
+                {
+                    "session": session,
+                    "figure": artifacts.get(ArtifactKind.FIGURE.value),
+                    "custom": artifacts.get(ArtifactKind.FIGURE_CUSTOM.value),
+                }
+            )
+    try:
+        checklist = reporting.checklist_for_study(engine.home, study_id)
+    except ValueError:
+        checklist = None
+    return {
+        "study": study,
+        "cohorts": cohorts,
+        "plans": plans,
+        "claims": claims,
+        "experiments": experiments,
+        "sessions": session_rows,
+        "checklist": checklist,
+        "readiness": objects.publication_readiness(study_id),
+    }
+
+
+def _session_context(
+    service: ResearchService, objects: ResearchObjectService, session_id: str
+) -> dict[str, Any]:
+    try:
+        view = service.get_session(session_id)
+    except ResearchError as exc:
+        _raise(exc)
+        raise  # pragma: no cover
+    artifacts = {artifact.kind.value: artifact for artifact in view.artifacts}
+    spec = None
+    manifest = None
+    if view.stat is not None:
+        try:
+            spec = service.figure_spec(session_id)
+        except ResearchError:
+            spec = None
+    manifest_artifact = artifacts.get(ArtifactKind.FIGURE_MANIFEST.value)
+    if manifest_artifact is not None:
+        try:
+            manifest = json.loads(Path(manifest_artifact.path).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            manifest = None
+    study = None
+    if view.session.study_id:
+        try:
+            study = objects.get_study(view.session.study_id)
+        except KeyError:
+            study = None
+    return {
+        "view": view,
+        "session": view.session,
+        "artifacts": artifacts,
+        "spec": spec,
+        "manifest": manifest,
+        "study": study,
+        "note": str(view.session.payload.get("note") or ""),
+    }
 
 
 def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
@@ -40,6 +134,7 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
                 "sessions": service.list_sessions(50),
                 "studies": objects.list_studies(20),
                 "claims": _claims(objects),
+                "runs": runs_store.list_runs(engine.home / "runs.sqlite", 50),
                 "default_profile": default_profile().value,
                 "profiles": [p.value for p in ResearchProfile],
             },
@@ -47,28 +142,8 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
 
     @app.get("/research/studies/{study_id}", response_class=HTMLResponse)
     def study_detail(request: Request, study_id: str) -> HTMLResponse:
-        from bacmap.research.store import ResearchObjectStore
-
-        try:
-            study = objects.get_study(study_id)
-        except KeyError as exc:
-            raise HTTPException(404, str(exc)) from exc
-        with ResearchObjectStore(engine.home) as store:
-            cohorts = store.list_cohorts(study_id)
-            plans = store.list_plans(study_id)
-            claims = store.list_claims(study_id)
-            experiments = store.list_experiments(study_id=study_id)
         return _TEMPLATES.TemplateResponse(
-            request,
-            "research_study.html",
-            {
-                "study": study,
-                "cohorts": cohorts,
-                "plans": plans,
-                "claims": claims,
-                "experiments": experiments,
-                "readiness": objects.publication_readiness(study_id),
-            },
+            request, "research_study.html", _study_context(engine, objects, study_id)
         )
 
     @app.post("/research/sessions")
@@ -78,6 +153,10 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
         gene: str = Form(...),
         test_name: str = Form(...),
         profile: str = Form(""),
+        study_id: str = Form(""),
+        cohort_id: str = Form(""),
+        plan_id: str = Form(""),
+        note: str = Form(""),
         csrf: str = Form(""),
     ) -> Any:
         if not verify_csrf(request, csrf):
@@ -89,7 +168,14 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
         try:
             view = service.create_session(
                 CreateSessionRequest(
-                    run_id=run_id, gene=gene, test_name=test_name, profile=p
+                    run_id=run_id,
+                    gene=gene,
+                    test_name=test_name,
+                    profile=p,
+                    study_id=study_id,
+                    cohort_id=cohort_id,
+                    plan_id=plan_id,
+                    note=note,
                 ),
                 actor="web",
                 profile=p,
@@ -101,17 +187,15 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
 
     @app.get("/research/{session_id}", response_class=HTMLResponse)
     def research_detail(request: Request, session_id: str) -> HTMLResponse:
-        try:
-            view = service.get_session(session_id)
-        except ResearchError as exc:
-            _raise(exc)
-            raise  # pragma: no cover
         return _TEMPLATES.TemplateResponse(
-            request, "research_detail.html", {"view": view, "session": view.session}
+            request,
+            "research_detail.html",
+            _session_context(service, objects, session_id),
         )
 
     _object_form_routes(app, objects)
     _artifact_routes(app, service)
+    _package_routes(app, engine, objects)
 
 
 def _json_field(raw: str, what: str) -> Any:
@@ -294,6 +378,58 @@ def _artifact_routes(app: FastAPI, service: ResearchService) -> None:
             raise  # pragma: no cover
         return PlainTextResponse(path.read_text(encoding="utf-8"), media_type="text/markdown")
 
+    @app.get("/research/{session_id}/artifact/{kind}")
+    def research_artifact(session_id: str, kind: str) -> FileResponse:
+        allowed = {item.value for item in ArtifactKind}
+        if kind not in allowed:
+            raise HTTPException(404, f"unknown artifact kind: {kind}")
+        try:
+            path = service.read_artifact(session_id, kind)
+        except ResearchError as exc:
+            _raise(exc)
+            raise  # pragma: no cover
+        media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        return FileResponse(path, media_type=media_type, filename=path.name)
+
+
+def _package_routes(
+    app: FastAPI, engine: DbosTaskEngine, objects: ResearchObjectService
+) -> None:
+    def _package_dir(study_id: str) -> Path:
+        return engine.home / "research" / "packages" / study_id
+
+    @app.get("/research/studies/{study_id}/package", response_class=HTMLResponse)
+    def research_package_page(request: Request, study_id: str) -> HTMLResponse:
+        try:
+            study = objects.get_study(study_id)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        target = _package_dir(study_id)
+        shutil.rmtree(target, ignore_errors=True)
+        try:
+            package = reporting.build_submission_package(engine.home, study_id, target)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "research_package.html",
+            {"study": study, "package": package, "checklist": package.checklist},
+        )
+
+    @app.get("/research/studies/{study_id}/package.zip")
+    def research_package_zip(study_id: str) -> FileResponse:
+        target = _package_dir(study_id)
+        shutil.rmtree(target, ignore_errors=True)
+        try:
+            reporting.build_submission_package(engine.home, study_id, target)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        archive = Path(shutil.make_archive(str(target), "zip", root_dir=target))
+        return FileResponse(
+            archive,
+            media_type="application/zip",
+            filename=f"{study_id}_submission.zip",
+        )
 
 
 def _claims(objects: ResearchObjectService) -> list:
