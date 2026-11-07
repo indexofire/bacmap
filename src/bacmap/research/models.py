@@ -303,3 +303,25 @@ class ResearchRequest(BaseModel):
     cohort_id: str = ""
     plan_id: str = ""
     session_id: str = ""
+
+
+class FigureDraftStatus(StrEnum):
+    DRAFT = "draft"
+    FINAL = "final"
+    REJECTED = "rejected"
+
+
+class FigureDraft(BaseModel):
+    """Intermediate figure draft with human feedback and finalization state."""
+
+    draft_id: str
+    session_id: str
+    path: str
+    sha256: str
+    note: str = Field(default="", max_length=2000)
+    feedback: str = Field(default="", max_length=2000)
+    status: FigureDraftStatus = FigureDraftStatus.DRAFT
+    created_by: str = ""
+    created_at: str = ""
+    reviewed_by: str = ""
+    reviewed_at: str = ""

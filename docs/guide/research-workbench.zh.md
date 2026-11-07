@@ -91,7 +91,8 @@ blockers；`ready=true` 仍需人工评审。
    IQ-TREE 命令）与 **Logistic 回归**（`/research/stats`：CSV/TSV → OR/CI/p 表）；
 6. Study 页还提供 **Cohort builder**：用复选框选择 run/样本，预览重复 isolate/dataset 与
    缺失 run，然后直接创建 cohort，不必手写 members JSON；
-7. 投稿包页显示 manifest、checklist、文件与数据/代码可用性，并提供 ZIP 下载。
+7. session 页还有 **Figure 迭代** gallery：上传草稿、保存反馈、最终 attach 或拒绝；
+8. 投稿包页显示 manifest、checklist、文件与数据/代码可用性，并提供 ZIP 下载。
 
 自然语言研究指令由外部 agent 经 MCP 处理（Pi/Hermes/DSH）；agent 可读取研究对象并提议
 下一步，写入目前仍在 Web/CLI/API。Web 保持为人工审核与结果查看界面。
@@ -442,3 +443,26 @@ bacmap research request reject <request_id> --note "not needed"
 ```
 
 MCP（D2+，local-trusted）：`bacmap_research_request`、`bacmap_research_requests`。
+
+
+## 14. 图片迭代
+
+草稿是一等对象，带反馈与最终确认门：
+
+1. 在 session 页上传 SVG/PNG/PDF 草稿（≤10 MiB），填写说明；
+2. **Figure 迭代** gallery 显示草稿、SHA-256、作者与状态；
+3. 每个草稿可保存反馈；草稿保持 `draft`；
+4. **最终 attach** 把草稿转为自定义图（`figure_custom` + provenance manifest）；
+   **拒绝** 标记为 rejected。
+
+只有 final 的草稿进入投稿包。草稿上传仅 Web；Agent 可经 MCP
+（`bacmap_research_figure_drafts`）列出草稿与反馈，但不能最终确认。
+
+CLI 兜底：
+
+```bash
+bacmap research figure drafts <session_id>
+bacmap research figure feedback <draft_id> --text "use colorblind palette"
+bacmap research figure finalize <draft_id> --recipe custom [--code plot.py]
+bacmap research figure reject <draft_id> --note "wrong layout"
+```

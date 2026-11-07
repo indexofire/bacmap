@@ -363,3 +363,50 @@ def test_stats_web_invalid_table(web):
     )
     assert response.status_code == 200
     assert "table not found" in response.text
+
+
+def test_figure_draft_upload_feedback_finalize(web):
+    client, session_id, _, home = web
+    upload = client.post(
+        f"/research/{session_id}/drafts",
+        files={
+            "file": (
+                "draft.svg",
+                b"<svg xmlns='http://www.w3.org/2000/svg'><text>draft</text></svg>",
+                "image/svg+xml",
+            )
+        },
+        data={"note": "web draft"},
+        follow_redirects=False,
+    )
+    assert upload.status_code == 303
+    page = client.get(f"/research/{session_id}").text
+    assert "Figure 迭代" in page
+    assert "web draft" in page
+    drafts = ResearchService(home).list_drafts(session_id)
+    draft = next(item for item in drafts if item.note == "web draft")
+    feedback = client.post(
+        f"/research/drafts/{draft.draft_id}/feedback",
+        data={"feedback": "colorblind palette"},
+        follow_redirects=False,
+    )
+    assert feedback.status_code == 303
+    assert "colorblind palette" in client.get(f"/research/{session_id}").text
+    finalize = client.post(
+        f"/research/drafts/{draft.draft_id}/finalize",
+        data={"recipe_id": "custom", "code_path": ""},
+        follow_redirects=False,
+    )
+    assert finalize.status_code == 303
+    assert ResearchService(home).get_draft(draft.draft_id).status.value == "final"
+
+
+def test_figure_draft_rejects_unsupported_type(web):
+    client, session_id, _, _ = web
+    response = client.post(
+        f"/research/{session_id}/drafts",
+        files={"file": ("draft.txt", b"not a figure", "text/plain")},
+        data={"note": "bad"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 400

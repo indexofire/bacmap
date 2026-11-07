@@ -5,6 +5,15 @@
 
 ## [未发布]
 
+### Figure 迭代（Web）
+
+- Session 页新增 **Figure 迭代** gallery：上传 SVG/PNG/PDF 草稿（≤10 MiB）、保存反馈、
+  最终 attach 或拒绝；草稿记录 SHA-256、作者与状态（migration 6）。
+- 只有 final 草稿进入投稿包；最终 attach 复用 `figure_custom` + provenance manifest。
+- CLI：`research figure drafts|feedback|finalize|reject`；MCP 只读
+  `bacmap_research_figure_drafts`（D2）。
+- 测试基线：1838 → 1843 passed（1 skipped：gapit live smoke；当前环境已切 gspec）。
+
 ### Web Phylo / Logistic 页面
 
 - 新增 `/research/phylo`：alignment profile → PhyloPlan → 校验 → BEAST2 XML 下载 /
@@ -108,7 +117,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1834（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1843（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 

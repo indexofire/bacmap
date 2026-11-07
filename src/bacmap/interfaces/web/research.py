@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -33,6 +33,7 @@ from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 
 _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 _EMPTY_MEMBER_FORM = Form(default=[])
+_DRAFT_FILE_FORM = File(...)
 
 
 def _status(code: str) -> int:
@@ -123,6 +124,7 @@ def _session_context(
         "spec": spec,
         "manifest": manifest,
         "study": study,
+        "drafts": service.list_drafts(session_id),
         "note": str(view.session.payload.get("note") or ""),
     }
 
@@ -211,6 +213,8 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     _package_routes(app, engine, objects)
     _request_routes(app, requests)
     _cohort_builder_routes(app, engine, objects)
+    _draft_upload_routes(app, engine, service)
+    _draft_routes(app, engine, service)
 
 
 def _json_field(raw: str, what: str) -> Any:
@@ -597,6 +601,111 @@ def _stats_routes(app: FastAPI) -> None:
         except ValueError as exc:
             context["error"] = str(exc)
         return _TEMPLATES.TemplateResponse(request, "research_stats.html", context)
+
+
+def _draft_upload_routes(
+    app: FastAPI, engine: DbosTaskEngine, service: ResearchService
+) -> None:
+    upload_dir = engine.home / "research" / "uploads"
+
+    @app.post("/research/{session_id}/drafts")
+    async def upload_draft(
+        request: Request,
+        session_id: str,
+        file: UploadFile = _DRAFT_FILE_FORM,
+        note: str = Form(""),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        suffix = Path(file.filename or "").suffix.lower()
+        if suffix not in {".svg", ".png", ".pdf"}:
+            raise HTTPException(400, "draft must be SVG, PNG or PDF")
+        data = await file.read()
+        if len(data) > 10 * 1024 * 1024:
+            raise HTTPException(400, "draft exceeds 10 MiB")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        temp = upload_dir / f"{uuid4().hex}{suffix}"
+        temp.write_bytes(data)
+        try:
+            service.create_draft(session_id, temp, note=note, actor="web")
+        except ResearchError as exc:
+            _raise(exc)
+        finally:
+            temp.unlink(missing_ok=True)
+        return RedirectResponse(f"/research/{session_id}", status_code=303)
+
+
+def _draft_routes(
+    app: FastAPI, engine: DbosTaskEngine, service: ResearchService
+) -> None:
+    @app.get("/research/drafts/{draft_id}/file")
+    def draft_file(draft_id: str) -> FileResponse:
+        try:
+            draft = service.get_draft(draft_id)
+        except ResearchError as exc:
+            _raise(exc)
+            raise  # pragma: no cover
+        path = Path(draft.path)
+        if not path.is_file():
+            raise HTTPException(404, "draft file not found")
+        media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        return FileResponse(path, media_type=media_type, filename=path.name)
+
+    @app.post("/research/drafts/{draft_id}/feedback")
+    def draft_feedback(
+        request: Request,
+        draft_id: str,
+        feedback: str = Form(""),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        try:
+            draft = service.add_draft_feedback(draft_id, feedback, actor="web")
+        except ResearchError as exc:
+            _raise(exc)
+            raise  # pragma: no cover
+        return RedirectResponse(f"/research/{draft.session_id}", status_code=303)
+
+    @app.post("/research/drafts/{draft_id}/finalize")
+    def draft_finalize(
+        request: Request,
+        draft_id: str,
+        recipe_id: str = Form("custom"),
+        code_path: str = Form(""),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        try:
+            draft = service.get_draft(draft_id)
+            service.finalize_draft(
+                draft_id,
+                recipe_id=recipe_id or "custom",
+                code_path=code_path or None,
+                actor="web",
+            )
+        except ResearchError as exc:
+            _raise(exc)
+            raise  # pragma: no cover
+        return RedirectResponse(f"/research/{draft.session_id}", status_code=303)
+
+    @app.post("/research/drafts/{draft_id}/reject")
+    def draft_reject(
+        request: Request,
+        draft_id: str,
+        note: str = Form(""),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        try:
+            draft = service.reject_draft(draft_id, note=note, actor="web")
+        except ResearchError as exc:
+            _raise(exc)
+            raise  # pragma: no cover
+        return RedirectResponse(f"/research/{draft.session_id}", status_code=303)
 
 
 def _members_from_form(values: list[str]) -> list[dict[str, str]]:

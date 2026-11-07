@@ -96,7 +96,9 @@ Run `bacmap start web` and open **研究 / Research**. The Web is the primary re
 6. the Study page also links to the **Cohort builder**: select runs/samples with checkboxes,
    preview duplicate isolates/datasets and missing runs, then create the cohort without hand-
    writing members JSON;
-7. the package page shows the manifest, checklist, files and data/code availability, and offers
+7. the session page also has a **Figure 迭代** gallery for uploading drafts, saving feedback and
+   finalizing/rejecting them;
+8. the package page shows the manifest, checklist, files and data/code availability, and offers
    a ZIP download.
 
 Natural-language research instructions are handled by an external agent over MCP (Pi/Hermes/
@@ -471,3 +473,26 @@ bacmap research request reject <request_id> --note "not needed"
 ```
 
 MCP (D2+, local-trusted): `bacmap_research_request`, `bacmap_research_requests`.
+
+
+## 14. Figure iteration
+
+Drafts are first-class objects with feedback and a finalization gate:
+
+1. upload an SVG/PNG/PDF draft on the session page (≤10 MiB), with a note;
+2. the **Figure 迭代** gallery lists drafts, SHA-256, author and status;
+3. add feedback per draft; the draft stays `draft`;
+4. **最终 attach** finalizes it as the custom figure (`figure_custom` + provenance manifest);
+   **拒绝** marks it rejected.
+
+Only finalized drafts enter the submission package. Draft upload is Web-only; agents can list
+drafts and feedback over MCP (`bacmap_research_figure_drafts`) but cannot finalize them.
+
+CLI fallback:
+
+```bash
+bacmap research figure drafts <session_id>
+bacmap research figure feedback <draft_id> --text "use colorblind palette"
+bacmap research figure finalize <draft_id> --recipe custom [--code plot.py]
+bacmap research figure reject <draft_id> --note "wrong layout"
+```

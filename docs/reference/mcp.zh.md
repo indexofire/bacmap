@@ -142,6 +142,7 @@ bacmap start mcp --profile local-trusted  # 要求 [mcp] allow_local_trusted = t
 | `bacmap_research_session` | `session_id` | D2；统计表、诊断与产物路径 |
 | `bacmap_research_figure_spec` | `session_id` | D2；精确图片契约（数据、统计量、来源 ID、样式） |
 | `bacmap_research_figure_recipes` | `executable_only?` | D2；版本化图片 recipe 及其状态 |
+| `bacmap_research_figure_drafts` | `session_id` | D2；图片草稿、说明、反馈与状态（只读） |
 | `bacmap_research_phylo_profile` | `alignment`、`dates_file?` | D3；仅 local-trusted；比对摘要 |
 | `bacmap_research_phylo_plan` | `alignment`、`goal?`、`dates_file?` | D3；仅 local-trusted；类型化 ML/BEAST2 计划 |
 | `bacmap_research_logistic` | `data_path`、`outcome`、`predictors` | D3；仅 local-trusted；多变量 logistic 回归 |

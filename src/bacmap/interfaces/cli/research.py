@@ -183,6 +183,72 @@ def run_figure_draft(args: argparse.Namespace) -> None:
     print(f"  sha256: {draft['sha256']}")
 
 
+def run_figure_drafts(args: argparse.Namespace) -> None:
+    items = _service(args).list_drafts(args.session_id)
+    if args.json:
+        print(
+            json.dumps(
+                [item.model_dump(mode="json") for item in items],
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    for item in items:
+        print(
+            f"{item.draft_id}  {item.status.value:<8} {item.sha256[:12]}…  "
+            f"{item.note or ''}"
+        )
+
+
+def run_figure_feedback(args: argparse.Namespace) -> None:
+    try:
+        draft = _service(args).add_draft_feedback(
+            args.draft_id, args.text, actor=args.by
+        )
+    except ResearchError as exc:
+        raise SystemExit(f"[{exc.code}] {exc.message}") from exc
+    if args.json:
+        print(json.dumps(draft.model_dump(mode="json"), ensure_ascii=False, indent=2))
+        return
+    print(f"{draft.draft_id}  feedback saved")
+
+
+def run_figure_finalize(args: argparse.Namespace) -> None:
+    try:
+        artifact = _service(args).finalize_draft(
+            args.draft_id,
+            recipe_id=args.recipe or "custom",
+            code_path=args.code or None,
+            actor=args.by,
+        )
+    except ResearchError as exc:
+        raise SystemExit(f"[{exc.code}] {exc.message}") from exc
+    if args.json:
+        print(
+            json.dumps(
+                artifact.model_dump(mode="json", by_alias=True),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    print(f"finalized {artifact.output}  recipe={artifact.recipe_id}")
+
+
+def run_figure_reject(args: argparse.Namespace) -> None:
+    try:
+        draft = _service(args).reject_draft(
+            args.draft_id, note=args.note, actor=args.by
+        )
+    except ResearchError as exc:
+        raise SystemExit(f"[{exc.code}] {exc.message}") from exc
+    if args.json:
+        print(json.dumps(draft.model_dump(mode="json"), ensure_ascii=False, indent=2))
+        return
+    print(f"{draft.draft_id}  {draft.status.value}")
+
+
 def run_figure_attach(args: argparse.Namespace) -> None:
     try:
         artifact = _service(args).attach_figure(
@@ -902,6 +968,41 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(fig_draft)
     add_json(fig_draft)
     fig_draft.set_defaults(func=run_figure_draft)
+    fig_drafts = fig_sub.add_parser(
+        "drafts", help=T("list figure drafts", "列出图片草稿")
+    )
+    fig_drafts.add_argument("session_id")
+    add_home(fig_drafts)
+    add_json(fig_drafts)
+    fig_drafts.set_defaults(func=run_figure_drafts)
+    fig_feedback = fig_sub.add_parser(
+        "feedback", help=T("save feedback for a draft", "保存草稿反馈")
+    )
+    fig_feedback.add_argument("draft_id")
+    fig_feedback.add_argument("--text", required=True)
+    fig_feedback.add_argument("--by", default="cli")
+    add_home(fig_feedback)
+    add_json(fig_feedback)
+    fig_feedback.set_defaults(func=run_figure_feedback)
+    fig_final = fig_sub.add_parser(
+        "finalize", help=T("attach a draft as the final custom figure", "草稿转最终图")
+    )
+    fig_final.add_argument("draft_id")
+    fig_final.add_argument("--recipe", default="custom")
+    fig_final.add_argument("--code", default="")
+    fig_final.add_argument("--by", default="cli")
+    add_home(fig_final)
+    add_json(fig_final)
+    fig_final.set_defaults(func=run_figure_finalize)
+    fig_reject = fig_sub.add_parser(
+        "reject", help=T("reject a draft", "拒绝草稿")
+    )
+    fig_reject.add_argument("draft_id")
+    fig_reject.add_argument("--note", default="")
+    fig_reject.add_argument("--by", default="cli")
+    add_home(fig_reject)
+    add_json(fig_reject)
+    fig_reject.set_defaults(func=run_figure_reject)
     fig_att = fig_sub.add_parser(
         "attach",
         help=T(

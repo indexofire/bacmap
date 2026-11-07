@@ -25,6 +25,8 @@ from bacmap.research.models import (
     Artifact,
     ArtifactKind,
     CreateSessionRequest,
+    FigureDraft,
+    FigureDraftStatus,
     ResearchCapabilities,
     ResearchError,
     ResearchProfile,
@@ -322,15 +324,15 @@ class ResearchService:
             )
         return artifact
 
-    def attach_draft(
+    def create_draft(
         self,
         session_id: str,
         output: str | Path,
         *,
         note: str = "",
         actor: str = "cli",
-    ) -> dict[str, str]:
-        """Record an intermediate figure draft; final approval uses ``attach_figure``."""
+    ) -> FigureDraft:
+        """Record an intermediate figure draft with its hash and note."""
         view = self.get_session(session_id)
         source = Path(output).expanduser().resolve()
         if not source.is_file():
@@ -341,20 +343,116 @@ class ResearchService:
         dest = outdir / f"draft-{digest[:8]}{source.suffix.lower()}"
         if source != dest:
             shutil.copy2(source, dest)
+        draft = FigureDraft(
+            draft_id=f"fd-{uuid4().hex[:12]}",
+            session_id=session_id,
+            path=str(dest),
+            sha256=digest,
+            note=note,
+            status=FigureDraftStatus.DRAFT,
+            created_by=actor,
+            created_at=datetime.now(UTC).isoformat(),
+        )
         with ResearchStore(self.home) as store:
+            store.create_draft(draft)
             store.ledger(
                 session_id,
                 "figure.draft",
                 actor,
                 {
                     "session_id": session_id,
+                    "draft_id": draft.draft_id,
                     "path": str(dest),
                     "sha256": digest,
                     "note": note,
                     "run_id": view.session.run_id,
                 },
             )
-        return {"session_id": session_id, "path": str(dest), "sha256": digest, "note": note}
+        return draft
+
+    def attach_draft(
+        self,
+        session_id: str,
+        output: str | Path,
+        *,
+        note: str = "",
+        actor: str = "cli",
+    ) -> dict[str, str]:
+        """Backward-compatible dict form of :meth:`create_draft`."""
+        draft = self.create_draft(session_id, output, note=note, actor=actor)
+        return {
+            "draft_id": draft.draft_id,
+            "session_id": draft.session_id,
+            "path": draft.path,
+            "sha256": draft.sha256,
+            "note": draft.note,
+            "status": draft.status.value,
+        }
+
+    def get_draft(self, draft_id: str) -> FigureDraft:
+        try:
+            with ResearchStore(self.home) as store:
+                return store.get_draft(draft_id)
+        except KeyError as exc:
+            raise ResearchError("not_found", str(exc)) from exc
+
+    def list_drafts(self, session_id: str, limit: int = 100) -> list[FigureDraft]:
+        with ResearchStore(self.home) as store:
+            return store.list_drafts(session_id, limit=limit)
+
+    def add_draft_feedback(
+        self, draft_id: str, feedback: str, *, actor: str = "cli"
+    ) -> FigureDraft:
+        try:
+            with ResearchStore(self.home) as store:
+                return store.update_draft(draft_id, feedback=feedback, actor=actor)
+        except KeyError as exc:
+            raise ResearchError("not_found", str(exc)) from exc
+
+    def finalize_draft(
+        self,
+        draft_id: str,
+        *,
+        recipe_id: str = "custom",
+        code_path: str | Path | None = None,
+        actor: str = "cli",
+    ) -> FigureArtifact:
+        try:
+            with ResearchStore(self.home) as store:
+                draft = store.get_draft(draft_id)
+        except KeyError as exc:
+            raise ResearchError("not_found", str(exc)) from exc
+        if draft.status is not FigureDraftStatus.DRAFT:
+            raise ResearchError(
+                "conflict", f"draft {draft_id} is already {draft.status.value}"
+            )
+        artifact = self.attach_figure(
+            draft.session_id,
+            draft.path,
+            code=code_path,
+            renderer="agent-script",
+            recipe_id=recipe_id or "custom",
+            actor=actor,
+        )
+        with ResearchStore(self.home) as store:
+            store.update_draft(
+                draft_id, status=FigureDraftStatus.FINAL, actor=actor
+            )
+        return artifact
+
+    def reject_draft(
+        self, draft_id: str, *, note: str = "", actor: str = "cli"
+    ) -> FigureDraft:
+        try:
+            with ResearchStore(self.home) as store:
+                return store.update_draft(
+                    draft_id,
+                    status=FigureDraftStatus.REJECTED,
+                    feedback=note,
+                    actor=actor,
+                )
+        except KeyError as exc:
+            raise ResearchError("not_found", str(exc)) from exc
 
     def ledger(self, session_id: str) -> list[dict]:
         with ResearchStore(self.home) as store:
