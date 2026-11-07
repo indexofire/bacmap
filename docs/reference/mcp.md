@@ -147,6 +147,8 @@ The call returns `{"task_id": "...", "kind": "...", "state": "running"}`. Follow
 | `bacmap_research_phylo_plan` | `alignment`, `goal?`, `dates_file?` | D3; local-trusted only; typed ML/BEAST2 plan |
 | `bacmap_research_logistic` | `data_path`, `outcome`, `predictors` | D3; local-trusted only; multivariable logistic regression |
 | `bacmap_research_reporting_checklist` | `study_id` | D2; deterministic STROBE draft |
+| `bacmap_research_request` | question, run_ids?, gene?, test_name?, analysis?, ... | D2+; writes a draft request only; human approves in Web |
+| `bacmap_research_requests` | `status?`, `limit?` | D2+; list request drafts |
 
 Research creation and custom figure attachment are CLI/Web/API only; MCP is read-only for
 research sessions. Custom figures are attached with `bacmap research figure attach` after the

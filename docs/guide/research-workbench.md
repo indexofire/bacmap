@@ -439,3 +439,29 @@ limitations, generalisability, funding/conflicts) remain `missing` until a human
 Gate pass is necessary, not sufficient.
 
 Over MCP (D2, read-only): `bacmap_research_reporting_checklist`.
+
+
+## 13. Research requests (agent → human)
+
+Natural-language instructions can start as a **draft request**, not an execution:
+
+1. the agent calls MCP `bacmap_research_request` with the question, run IDs,
+   gene/phenotype, analysis type, optional members/plan spec and a note. This writes only a
+   draft to `research.sqlite`; it creates no Study/Cohort/Plan and runs nothing;
+2. the Web **研究请求收件箱** lists proposed requests; the human reviews/edits the members and
+   plan spec and clicks **确认并创建**;
+3. bacmap creates Study → frozen Cohort → frozen Plan → optional session, and records the IDs
+   on the request;
+4. **拒绝** marks the request rejected with a note.
+
+CLI fallback:
+
+```bash
+bacmap research request create --question "..." --run-id run-1 \
+  --gene blaKPC-33 --test-name meropenem --analysis association
+bacmap research request list
+bacmap research request approve <request_id> --note "approved"
+bacmap research request reject <request_id> --note "not needed"
+```
+
+MCP (D2+, local-trusted): `bacmap_research_request`, `bacmap_research_requests`.

@@ -271,3 +271,35 @@ class ClaimCreate(BaseModel):
 class ClaimReview(BaseModel):
     decision: Literal["support", "challenge", "reject", "approve"]
     message: str = Field(default="", max_length=500)
+
+
+class ResearchRequestStatus(StrEnum):
+    PROPOSED = "proposed"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class ResearchRequest(BaseModel):
+    """Agent-proposed research request; a human approves it in the Web console."""
+
+    request_id: str
+    question: str = Field(min_length=1, max_length=2000)
+    pathogen_scope: str = Field(default="", max_length=256)
+    data_class: int = Field(default=2, ge=0, le=4)
+    run_ids: list[str] = Field(default_factory=list)
+    gene: str = Field(default="", max_length=128)
+    test_name: str = Field(default="", max_length=128)
+    analysis: Literal["association", "logistic", "phylo", "figure"] = "association"
+    members: list[dict[str, Any]] = Field(default_factory=list)
+    plan_spec: dict[str, Any] = Field(default_factory=dict)
+    note: str = Field(default="", max_length=2000)
+    status: ResearchRequestStatus = ResearchRequestStatus.PROPOSED
+    proposed_by: str = ""
+    created_at: str = ""
+    reviewed_by: str = ""
+    reviewed_at: str = ""
+    review_note: str = ""
+    study_id: str = ""
+    cohort_id: str = ""
+    plan_id: str = ""
+    session_id: str = ""

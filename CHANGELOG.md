@@ -5,6 +5,17 @@
 
 ## [未发布]
 
+### 研究请求（Agent → 人）与 Web 收件箱
+
+- 新增 `bacmap.research_request` 草案：MCP `bacmap_research_request` 只写
+  `research.sqlite`，不创建 Study/Cohort/Plan、不执行分析；`bacmap_research_requests`
+  只读列出。
+- Web 研究首页新增“研究请求收件箱”：人工可编辑 members/plan spec 后“确认并创建”，
+  自动创建 Study → 冻结 Cohort → 冻结 Plan → 可选 session；也可拒绝并记录原因。
+- CLI：`bacmap research request create|list|show|approve|reject`。
+- 冻结设计新增 v1.10.9：MCP 只提议草案，执行/写对象仍由人工在 Web 确认。
+- 测试基线：1824 → 1831。
+
 ### Research Web 工作台完善
 
 - 研究首页：run 下拉选择、Study 关联、Cohort/Plan 可选绑定、研究说明；创建 session 时
@@ -80,7 +91,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1824（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1831（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 

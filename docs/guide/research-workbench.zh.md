@@ -413,3 +413,28 @@ bacmap research package <study_id> --out ./submission --json
 人工完成前保持 `missing`。门通过是必要条件，不是充分条件。
 
 MCP（D2，只读）：`bacmap_research_reporting_checklist`。
+
+
+## 13. 研究请求（Agent → 人）
+
+自然语言指令可以先落成**草案请求**，而不是直接执行：
+
+1. Agent 调用 MCP `bacmap_research_request`，提交问题、run ID、基因/表型、分析类型、
+   可选 members/plan spec 与说明。它只写 `research.sqlite` 的草案，不创建
+   Study/Cohort/Plan，也不执行任何分析；
+2. Web **研究请求收件箱** 列出 proposed 请求；人工检查/修改 members 与 plan spec，
+   点击 **确认并创建**；
+3. bacmap 创建 Study → 冻结 Cohort → 冻结 Plan → 可选 session，并把 ID 回写到请求；
+4. **拒绝** 把请求标记为 rejected 并记录原因。
+
+CLI 兜底：
+
+```bash
+bacmap research request create --question "..." --run-id run-1 \
+  --gene blaKPC-33 --test-name meropenem --analysis association
+bacmap research request list
+bacmap research request approve <request_id> --note "approved"
+bacmap research request reject <request_id> --note "not needed"
+```
+
+MCP（D2+，local-trusted）：`bacmap_research_request`、`bacmap_research_requests`。

@@ -8,6 +8,7 @@ import os
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from bacmap.research.figures import (
@@ -27,6 +28,8 @@ from bacmap.research.models import (
     ResearchCapabilities,
     ResearchError,
     ResearchProfile,
+    ResearchRequest,
+    ResearchRequestStatus,
     SessionStatus,
     SessionView,
 )
@@ -36,7 +39,7 @@ from bacmap.research.render import (
     render_report_markdown,
 )
 from bacmap.research.stats import analyze_amr_association
-from bacmap.research.store import ResearchStore
+from bacmap.research.store import ResearchObjectStore, ResearchStore
 from bacmap.tools.spec import DataClass
 
 
@@ -638,3 +641,164 @@ class ResearchObjectService:
                 {"session_id": view.session.session_id},
             )
             return view
+
+
+class ResearchRequestService:
+    """Agent-proposed research requests; humans approve them in the Web console."""
+
+    def __init__(self, home: Path | str) -> None:
+        self.home = Path(home)
+
+    def propose_request(
+        self,
+        question: str,
+        *,
+        pathogen_scope: str = "",
+        data_class: int = 2,
+        run_ids: list[str] | None = None,
+        gene: str = "",
+        test_name: str = "",
+        analysis: Literal["association", "logistic", "phylo", "figure"] = "association",
+        members: list[dict] | None = None,
+        plan_spec: dict | None = None,
+        note: str = "",
+        actor: str = "agent",
+    ) -> ResearchRequest:
+        request = ResearchRequest(
+            request_id=f"rr-{uuid4().hex[:12]}",
+            question=question,
+            pathogen_scope=pathogen_scope,
+            data_class=data_class,
+            run_ids=list(run_ids or []),
+            gene=gene,
+            test_name=test_name,
+            analysis=analysis,
+            members=list(members or []),
+            plan_spec=dict(plan_spec or {}),
+            note=note,
+            proposed_by=actor,
+            created_at=datetime.now(UTC).isoformat(),
+        )
+        with ResearchObjectStore(self.home) as store:
+            return store.create_request(request)
+
+    def list_requests(
+        self, status: str | None = None, limit: int = 100
+    ) -> list[ResearchRequest]:
+        with ResearchObjectStore(self.home) as store:
+            return store.list_requests(status=status, limit=limit)
+
+    def get_request(self, request_id: str) -> ResearchRequest:
+        with ResearchObjectStore(self.home) as store:
+            try:
+                return store.get_request(request_id)
+            except KeyError as exc:
+                raise ResearchError("not_found", str(exc)) from exc
+
+    def approve_request(
+        self,
+        request_id: str,
+        *,
+        members: list[dict] | None = None,
+        plan_spec: dict | None = None,
+        actor: str = "web",
+        note: str = "",
+    ) -> ResearchRequest:
+        request = self.get_request(request_id)
+        if request.status is not ResearchRequestStatus.PROPOSED:
+            raise ResearchError(
+                "conflict", f"request {request_id} is already {request.status.value}"
+            )
+        effective_members = list(members) if members is not None else list(request.members)
+        if not effective_members and request.run_ids:
+            effective_members = self._members_from_runs(request.run_ids)
+        effective_spec = dict(plan_spec) if plan_spec is not None else dict(request.plan_spec)
+        if not effective_spec and request.gene and request.test_name and request.run_ids:
+            effective_spec = {
+                "run_id": request.run_ids[0],
+                "gene": request.gene,
+                "test_name": request.test_name,
+            }
+        if effective_spec and not effective_members:
+            raise ResearchError("validation_error", "an analysis plan requires cohort members")
+        if request.analysis in {"association", "logistic"} and not (
+            request.gene and request.test_name
+        ):
+            raise ResearchError(
+                "validation_error",
+                f"{request.analysis} request requires gene and test_name",
+            )
+
+        objects = ResearchObjectService(self.home)
+        study = objects.create_study(
+            request.question, request.pathogen_scope, request.data_class, actor
+        )
+        cohort_id = ""
+        if effective_members:
+            cohort = objects.create_cohort(
+                study.study_id, effective_members, name="discovery", actor=actor
+            )
+            objects.freeze_cohort(cohort.cohort_id, actor)
+            cohort_id = cohort.cohort_id
+        plan_id = ""
+        if effective_spec:
+            plan = objects.create_plan(study.study_id, cohort_id, effective_spec, actor)
+            objects.freeze_plan(plan.plan_id, actor)
+            plan_id = plan.plan_id
+        session_id = ""
+        if request.gene and request.test_name and request.run_ids:
+            view = ResearchService(self.home).create_session(
+                CreateSessionRequest(
+                    run_id=request.run_ids[0],
+                    gene=request.gene,
+                    test_name=request.test_name,
+                    profile=ResearchProfile.RESEARCH,
+                    study_id=study.study_id,
+                    cohort_id=cohort_id,
+                    plan_id=plan_id,
+                    note=request.note,
+                ),
+                actor=actor,
+            )
+            session_id = view.session.session_id
+        with ResearchObjectStore(self.home) as store:
+            return store.review_request(
+                request_id,
+                status=ResearchRequestStatus.APPROVED,
+                actor=actor,
+                note=note,
+                study_id=study.study_id,
+                cohort_id=cohort_id,
+                plan_id=plan_id,
+                session_id=session_id,
+            )
+
+    def reject_request(
+        self, request_id: str, *, actor: str = "web", note: str = ""
+    ) -> ResearchRequest:
+        request = self.get_request(request_id)
+        if request.status is not ResearchRequestStatus.PROPOSED:
+            raise ResearchError(
+                "conflict", f"request {request_id} is already {request.status.value}"
+            )
+        with ResearchObjectStore(self.home) as store:
+            return store.review_request(
+                request_id,
+                status=ResearchRequestStatus.REJECTED,
+                actor=actor,
+                note=note,
+            )
+
+    def _members_from_runs(self, run_ids: list[str]) -> list[dict]:
+        from bacmap.store import runs as runs_store
+
+        rows = runs_store.list_runs(self.home / "runs.sqlite", 500)
+        by_id = {str(row.get("run_id") or ""): row for row in rows}
+        members: list[dict] = []
+        for run_id in run_ids:
+            row = by_id.get(run_id)
+            if row is None:
+                raise ResearchError("not_found", f"no such run: {run_id}")
+            for strain_id in row.get("strain_ids") or []:
+                members.append({"isolate_id": str(strain_id), "run_id": run_id})
+        return members

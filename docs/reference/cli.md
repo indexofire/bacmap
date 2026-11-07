@@ -165,6 +165,13 @@ bacmap research phylo iqtree --plan FILE --alignment FILE [--prefix P]
 bacmap research stats logistic --data FILE --outcome COL --predictors A,B
 bacmap research package <study_id> --out DIR
 
+bacmap research request create --question TEXT [--run-id ID]... [--gene NAME]
+                              [--test-name NAME] [--analysis association|logistic|phylo|figure]
+bacmap research request list [--status proposed|approved|rejected]
+bacmap research request show <request_id>
+bacmap research request approve <request_id> [--members JSON] [--spec JSON]
+bacmap research request reject <request_id> [--note TEXT]
+
 bacmap research study create --question TEXT [--pathogen SCOPE] [--data-class 0-4]
 bacmap research study ls|list [--limit N]
 bacmap research study show <study_id>

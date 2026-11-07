@@ -681,7 +681,87 @@ def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpe
             checklist.model_dump(mode="json", by_alias=True), ensure_ascii=False
         )
 
+    _register_request_tools(server, engine, profile)
     _register_phylo_tools(server, profile)
+
+
+def _register_request_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -> None:
+    """D2+ research request drafts; writes only a request, never research objects."""
+    from pathlib import Path as _Path
+
+    from bacmap.research.models import ResearchError
+
+    @server.tool(
+        name="bacmap_research_request",
+        description=(
+            "Propose a research request draft (question, runs, gene/phenotype, analysis "
+            "type, optional members/plan spec). This does NOT create Study/Cohort/Plan or "
+            "run analysis: a human approves the request in the bacmap Web console. D2+."
+        ),
+    )
+    def research_request(
+        question: str,
+        pathogen_scope: str = "",
+        data_class: int = 2,
+        run_ids: list[str] | None = None,
+        gene: str = "",
+        test_name: str = "",
+        analysis: str = "association",
+        members: list[dict[str, Any]] | None = None,
+        plan_spec: dict[str, Any] | None = None,
+        note: str = "",
+    ) -> str:
+        from bacmap.research.service import ResearchRequestService
+
+        analyses: dict[str, Any] = {
+            "association": "association",
+            "logistic": "logistic",
+            "phylo": "phylo",
+            "figure": "figure",
+        }
+        if analysis not in analyses:
+            return json.dumps(
+                {"error": f"unknown analysis: {analysis!r}"}, ensure_ascii=False
+            )
+        try:
+            request_obj = ResearchRequestService(_Path(engine.home)).propose_request(
+                question,
+                pathogen_scope=pathogen_scope,
+                data_class=data_class,
+                run_ids=list(run_ids or []),
+                gene=gene,
+                test_name=test_name,
+                analysis=analyses[analysis],
+                members=list(members or []),
+                plan_spec=dict(plan_spec or {}),
+                note=note,
+                actor=profile.actor,
+            )
+        except (ValueError, ResearchError) as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(
+            request_obj.model_dump(mode="json"), ensure_ascii=False
+        )
+
+    @server.tool(
+        name="bacmap_research_requests",
+        description=(
+            "List research request drafts (default: proposed). Read-only; use "
+            "bacmap_research_request to propose a new one. D2+."
+        ),
+    )
+    def research_requests(status: str = "proposed", limit: int = 20) -> str:
+        from bacmap.research.service import ResearchRequestService
+
+        try:
+            items = ResearchRequestService(_Path(engine.home)).list_requests(
+                status=status or None, limit=max(1, min(limit, 100))
+            )
+        except (ValueError, ResearchError) as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(
+            [item.model_dump(mode="json") for item in items], ensure_ascii=False
+        )
 
 
 def _register_phylo_tools(server: MCPServer, profile: ProfileSpec) -> None:

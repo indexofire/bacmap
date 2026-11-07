@@ -24,6 +24,8 @@ from bacmap.research.models import (
     ExperimentStatus,
     PlanStatus,
     ResearchProfile,
+    ResearchRequest,
+    ResearchRequestStatus,
     SessionStatus,
     StatResult,
     Study,
@@ -158,6 +160,32 @@ CREATE TABLE IF NOT EXISTS evidence_edges (
 )
 """
 
+REQUESTS_DDL = """
+CREATE TABLE IF NOT EXISTS research_requests (
+    request_id     TEXT PRIMARY KEY,
+    question       TEXT NOT NULL,
+    pathogen_scope TEXT NOT NULL DEFAULT '',
+    data_class     INTEGER NOT NULL DEFAULT 2,
+    run_ids_json   TEXT NOT NULL DEFAULT '[]',
+    gene           TEXT NOT NULL DEFAULT '',
+    test_name      TEXT NOT NULL DEFAULT '',
+    analysis       TEXT NOT NULL DEFAULT 'association',
+    members_json   TEXT NOT NULL DEFAULT '[]',
+    plan_spec_json TEXT NOT NULL DEFAULT '{}',
+    note           TEXT NOT NULL DEFAULT '',
+    status         TEXT NOT NULL,
+    proposed_by    TEXT NOT NULL DEFAULT '',
+    created_at     TEXT NOT NULL,
+    reviewed_by    TEXT NOT NULL DEFAULT '',
+    reviewed_at    TEXT NOT NULL DEFAULT '',
+    review_note    TEXT NOT NULL DEFAULT '',
+    study_id       TEXT NOT NULL DEFAULT '',
+    cohort_id      TEXT NOT NULL DEFAULT '',
+    plan_id        TEXT NOT NULL DEFAULT '',
+    session_id     TEXT NOT NULL DEFAULT ''
+)
+"""
+
 EXPERIMENTS_DDL = """
 CREATE TABLE IF NOT EXISTS experiments (
     experiment_id TEXT PRIMARY KEY,
@@ -203,6 +231,11 @@ RESEARCH_MIGRATIONS: tuple[Migration, ...] = (
         4,
         "research: experiment ledger (success/failure/negative/deviation)",
         (EXPERIMENTS_DDL,),
+    ),
+    Migration(
+        5,
+        "research: agent-proposed research requests",
+        (REQUESTS_DDL,),
     ),
 )
 
@@ -774,6 +807,111 @@ class ResearchObjectStore:
             for r in rows
         ]
 
+    def create_request(self, request: ResearchRequest) -> ResearchRequest:
+        self._conn.execute(
+            "INSERT INTO research_requests"
+            " (request_id, question, pathogen_scope, data_class, run_ids_json, gene,"
+            "  test_name, analysis, members_json, plan_spec_json, note, status,"
+            "  proposed_by, created_at, reviewed_by, reviewed_at, review_note,"
+            "  study_id, cohort_id, plan_id, session_id)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                request.request_id,
+                request.question,
+                request.pathogen_scope,
+                request.data_class,
+                json.dumps(request.run_ids, ensure_ascii=False),
+                request.gene,
+                request.test_name,
+                request.analysis,
+                json.dumps(request.members, ensure_ascii=False),
+                json.dumps(request.plan_spec, ensure_ascii=False),
+                request.note,
+                request.status.value,
+                request.proposed_by,
+                request.created_at or _now(),
+                request.reviewed_by,
+                request.reviewed_at,
+                request.review_note,
+                request.study_id,
+                request.cohort_id,
+                request.plan_id,
+                request.session_id,
+            ),
+        )
+        self._ledger(
+            "request",
+            request.request_id,
+            "request.proposed",
+            request.proposed_by,
+            {"question": request.question, "analysis": request.analysis},
+        )
+        return self.get_request(request.request_id)
+
+    def get_request(self, request_id: str) -> ResearchRequest:
+        row = self._conn.execute(
+            "SELECT * FROM research_requests WHERE request_id = ?", (request_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"no such research request: {request_id}")
+        return _row_to_request(row)
+
+    def list_requests(
+        self, status: str | None = None, limit: int = 100
+    ) -> list[ResearchRequest]:
+        sql = "SELECT * FROM research_requests"
+        params: list[object] = []
+        if status:
+            sql += " WHERE status = ?"
+            params.append(status)
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        params.append(max(1, min(limit, 500)))
+        rows = self._conn.execute(sql, params).fetchall()
+        return [_row_to_request(row) for row in rows]
+
+    def review_request(
+        self,
+        request_id: str,
+        *,
+        status: ResearchRequestStatus,
+        actor: str,
+        note: str = "",
+        study_id: str = "",
+        cohort_id: str = "",
+        plan_id: str = "",
+        session_id: str = "",
+    ) -> ResearchRequest:
+        self._conn.execute(
+            "UPDATE research_requests SET status=?, reviewed_by=?, reviewed_at=?,"
+            " review_note=?, study_id=?, cohort_id=?, plan_id=?, session_id=?"
+            " WHERE request_id=?",
+            (
+                status.value,
+                actor,
+                _now(),
+                note,
+                study_id,
+                cohort_id,
+                plan_id,
+                session_id,
+                request_id,
+            ),
+        )
+        self._ledger(
+            "request",
+            request_id,
+            f"request.{status.value}",
+            actor,
+            {
+                "note": note,
+                "study_id": study_id,
+                "cohort_id": cohort_id,
+                "plan_id": plan_id,
+                "session_id": session_id,
+            },
+        )
+        return self.get_request(request_id)
+
     def _ledger(
         self,
         object_type: str,
@@ -844,4 +982,30 @@ def _row_to_experiment(row: sqlite3.Row) -> Experiment:
         run_ids=list(json.loads(row["run_ids_json"])),
         outcome=json.loads(row["outcome_json"]), deviation=row["deviation"],
         created_by=row["created_by"], created_at=row["created_at"],
+    )
+
+
+def _row_to_request(row: sqlite3.Row) -> ResearchRequest:
+    return ResearchRequest(
+        request_id=row["request_id"],
+        question=row["question"],
+        pathogen_scope=row["pathogen_scope"],
+        data_class=int(row["data_class"]),
+        run_ids=list(json.loads(row["run_ids_json"])),
+        gene=row["gene"],
+        test_name=row["test_name"],
+        analysis=row["analysis"],
+        members=list(json.loads(row["members_json"])),
+        plan_spec=dict(json.loads(row["plan_spec_json"])),
+        note=row["note"],
+        status=ResearchRequestStatus(row["status"]),
+        proposed_by=row["proposed_by"],
+        created_at=row["created_at"],
+        reviewed_by=row["reviewed_by"],
+        reviewed_at=row["reviewed_at"],
+        review_note=row["review_note"],
+        study_id=row["study_id"],
+        cohort_id=row["cohort_id"],
+        plan_id=row["plan_id"],
+        session_id=row["session_id"],
     )

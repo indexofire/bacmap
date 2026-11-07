@@ -16,7 +16,11 @@ from bacmap.research.models import (
     ResearchError,
     ResearchProfile,
 )
-from bacmap.research.service import ResearchService, default_profile
+from bacmap.research.service import (
+    ResearchRequestService,
+    ResearchService,
+    default_profile,
+)
 
 
 def _service(args: argparse.Namespace) -> ResearchService:
@@ -382,6 +386,89 @@ def run_package(args: argparse.Namespace) -> None:
     print(f"  files: {len(package.files)}")
     for blocker in package.blockers:
         print(f"  blocker: {blocker}")
+
+
+def _request_service(args: argparse.Namespace) -> ResearchRequestService:
+    return ResearchRequestService(Path(args.home))
+
+
+def run_request_create(args: argparse.Namespace) -> None:
+    try:
+        request = _request_service(args).propose_request(
+            args.question,
+            pathogen_scope=args.pathogen,
+            data_class=args.data_class,
+            run_ids=args.run_id,
+            gene=args.gene,
+            test_name=args.test_name,
+            analysis=args.analysis,
+            members=_load_json_arg(args.members, "members") if args.members else None,
+            plan_spec=_load_json_arg(args.spec, "spec") if args.spec else None,
+            note=args.note,
+            actor=args.by,
+        )
+    except (ValueError, ResearchError) as exc:
+        raise SystemExit(str(exc)) from exc
+    if args.json:
+        print(json.dumps(request.model_dump(mode="json"), ensure_ascii=False, indent=2))
+        return
+    print(f"{request.request_id}  {request.status.value}  {request.question}")
+
+
+def run_request_list(args: argparse.Namespace) -> None:
+    items = _request_service(args).list_requests(status=args.status or None, limit=args.limit)
+    if args.json:
+        print(
+            json.dumps(
+                [item.model_dump(mode="json") for item in items],
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    for item in items:
+        print(f"{item.request_id}  {item.status.value:<10} {item.analysis:<12} {item.question}")
+
+
+def run_request_show(args: argparse.Namespace) -> None:
+    try:
+        request = _request_service(args).get_request(args.request_id)
+    except ResearchError as exc:
+        raise SystemExit(f"[{exc.code}] {exc.message}") from exc
+    print(json.dumps(request.model_dump(mode="json"), ensure_ascii=False, indent=2))
+
+
+def run_request_approve(args: argparse.Namespace) -> None:
+    try:
+        request = _request_service(args).approve_request(
+            args.request_id,
+            members=_load_json_arg(args.members, "members") if args.members else None,
+            plan_spec=_load_json_arg(args.spec, "spec") if args.spec else None,
+            actor=args.by,
+            note=args.note,
+        )
+    except (ValueError, ResearchError) as exc:
+        raise SystemExit(str(exc)) from exc
+    if args.json:
+        print(json.dumps(request.model_dump(mode="json"), ensure_ascii=False, indent=2))
+        return
+    print(
+        f"{request.request_id}  {request.status.value}  study={request.study_id} "
+        f"cohort={request.cohort_id} plan={request.plan_id} session={request.session_id}"
+    )
+
+
+def run_request_reject(args: argparse.Namespace) -> None:
+    try:
+        request = _request_service(args).reject_request(
+            args.request_id, actor=args.by, note=args.note
+        )
+    except ResearchError as exc:
+        raise SystemExit(f"[{exc.code}] {exc.message}") from exc
+    if args.json:
+        print(json.dumps(request.model_dump(mode="json"), ensure_ascii=False, indent=2))
+        return
+    print(f"{request.request_id}  {request.status.value}")
 
 
 def _object_service(args: argparse.Namespace):
@@ -930,6 +1017,59 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(package)
     add_json(package)
     package.set_defaults(func=run_package)
+
+    request_p = s.add_parser(
+        "request", help=T("Research request inbox", "研究请求收件箱")
+    )
+    request_sub = request_p.add_subparsers(dest="request_command", required=True)
+    req_create = request_sub.add_parser(
+        "create", help=T("propose a research request", "提交研究请求草案")
+    )
+    req_create.add_argument("--question", required=True)
+    req_create.add_argument("--pathogen", default="")
+    req_create.add_argument("--data-class", type=int, choices=[0, 1, 2, 3, 4], default=2)
+    req_create.add_argument("--run-id", action="append", default=[])
+    req_create.add_argument("--gene", default="")
+    req_create.add_argument("--test-name", default="")
+    req_create.add_argument(
+        "--analysis", choices=["association", "logistic", "phylo", "figure"], default="association"
+    )
+    req_create.add_argument("--members", default="")
+    req_create.add_argument("--spec", default="")
+    req_create.add_argument("--note", default="")
+    req_create.add_argument("--by", default="cli")
+    add_home(req_create)
+    add_json(req_create)
+    req_create.set_defaults(func=run_request_create)
+    req_list = request_sub.add_parser("list", aliases=["ls"], help=T("list requests", "列出请求"))
+    req_list.add_argument("--status", default="proposed")
+    req_list.add_argument("--limit", type=int, default=50)
+    add_home(req_list)
+    add_json(req_list)
+    req_list.set_defaults(func=run_request_list)
+    req_show = request_sub.add_parser("show", help=T("show a request", "查看请求"))
+    req_show.add_argument("request_id")
+    add_home(req_show)
+    add_json(req_show)
+    req_show.set_defaults(func=run_request_show)
+    req_approve = request_sub.add_parser(
+        "approve", help=T("approve and create research objects", "确认并创建研究对象")
+    )
+    req_approve.add_argument("request_id")
+    req_approve.add_argument("--members", default="")
+    req_approve.add_argument("--spec", default="")
+    req_approve.add_argument("--note", default="")
+    req_approve.add_argument("--by", default="cli")
+    add_home(req_approve)
+    add_json(req_approve)
+    req_approve.set_defaults(func=run_request_approve)
+    req_reject = request_sub.add_parser("reject", help=T("reject a request", "拒绝请求"))
+    req_reject.add_argument("request_id")
+    req_reject.add_argument("--note", default="")
+    req_reject.add_argument("--by", default="cli")
+    add_home(req_reject)
+    add_json(req_reject)
+    req_reject.set_defaults(func=run_request_reject)
 
     study = s.add_parser("study", help=T("Study object", "Study 对象"))
     study_sub = study.add_subparsers(dest="study_command", required=True)

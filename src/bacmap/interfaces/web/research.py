@@ -20,7 +20,12 @@ from bacmap.research.models import (
     ResearchError,
     ResearchProfile,
 )
-from bacmap.research.service import ResearchObjectService, ResearchService, default_profile
+from bacmap.research.service import (
+    ResearchObjectService,
+    ResearchRequestService,
+    ResearchService,
+    default_profile,
+)
 from bacmap.research.store import ResearchStore
 from bacmap.store import runs as runs_store
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
@@ -122,8 +127,8 @@ def _session_context(
 
 def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     service = ResearchService(engine.home)
-
     objects = ResearchObjectService(engine.home)
+    requests = ResearchRequestService(engine.home)
 
     @app.get("/research", response_class=HTMLResponse)
     def research_page(request: Request) -> HTMLResponse:
@@ -134,6 +139,9 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
                 "sessions": service.list_sessions(50),
                 "studies": objects.list_studies(20),
                 "claims": _claims(objects),
+                "requests": _request_rows(
+                    requests.list_requests(status="proposed", limit=20)
+                ),
                 "runs": runs_store.list_runs(engine.home / "runs.sqlite", 50),
                 "default_profile": default_profile().value,
                 "profiles": [p.value for p in ResearchProfile],
@@ -196,6 +204,7 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     _object_form_routes(app, objects)
     _artifact_routes(app, service)
     _package_routes(app, engine, objects)
+    _request_routes(app, requests)
 
 
 def _json_field(raw: str, what: str) -> Any:
@@ -430,6 +439,61 @@ def _package_routes(
             media_type="application/zip",
             filename=f"{study_id}_submission.zip",
         )
+
+
+def _request_routes(app: FastAPI, requests: ResearchRequestService) -> None:
+    @app.post("/research/requests/{request_id}/approve")
+    def approve_request_form(
+        request: Request,
+        request_id: str,
+        members: str = Form(""),
+        plan_spec: str = Form(""),
+        note: str = Form(""),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        try:
+            reviewed = requests.approve_request(
+                request_id,
+                members=_json_field(members, "members") if members.strip() else None,
+                plan_spec=_json_field(plan_spec, "plan_spec") if plan_spec.strip() else None,
+                actor="web",
+                note=note,
+            )
+        except (ResearchError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if reviewed.study_id:
+            return RedirectResponse(
+                f"/research/studies/{reviewed.study_id}", status_code=303
+            )
+        return RedirectResponse("/research", status_code=303)
+
+    @app.post("/research/requests/{request_id}/reject")
+    def reject_request_form(
+        request: Request,
+        request_id: str,
+        note: str = Form(""),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        try:
+            requests.reject_request(request_id, actor="web", note=note)
+        except (ResearchError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return RedirectResponse("/research", status_code=303)
+
+
+def _request_rows(items: list[Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "request": item,
+            "members_json": json.dumps(item.members, ensure_ascii=False),
+            "plan_spec_json": json.dumps(item.plan_spec, ensure_ascii=False),
+        }
+        for item in items
+    ]
 
 
 def _claims(objects: ResearchObjectService) -> list:

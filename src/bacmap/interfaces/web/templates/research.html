@@ -6,6 +6,47 @@
   <p class="detailhead__lead">从既有 run 生成确定性的 AMR 关联统计、图、报告和论文草案。P1 薄链路：不做因果/机制推断。</p>
 </header>
 
+<section class="card" aria-labelledby="research-requests">
+  <div class="card__head"><h2 class="card__title" id="research-requests">研究请求收件箱</h2></div>
+  <p class="card__lead">Agent 通过 MCP 提交的草案；只有人工在这里确认后才会创建 Study/Cohort/Plan/session。</p>
+  {% if requests %}
+    {% for item in requests %}
+    <article class="requestcard">
+      <header class="requestcard__head">
+        <strong>{{ item.request.question }}</strong>
+        <span class="mono-dim">{{ item.request.request_id }} · {{ item.request.analysis }} · {{ item.request.proposed_by }}</span>
+      </header>
+      <p class="card__lead">
+        {% if item.request.pathogen_scope %}pathogen={{ item.request.pathogen_scope }} · {% endif %}
+        {% if item.request.run_ids %}runs={{ item.request.run_ids | join(', ') }} · {% endif %}
+        {% if item.request.gene %}{{ item.request.gene }} × {{ item.request.test_name }} · {% endif %}
+        D{{ item.request.data_class }}
+      </p>
+      {% if item.request.note %}<p class="card__lead">{{ item.request.note }}</p>{% endif %}
+      <details>
+        <summary>确认并创建</summary>
+        <form class="form" method="post" action="/research/requests/{{ item.request.request_id }}/approve">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <div class="field"><label class="field__label" for="rq-members-{{ item.request.request_id }}">members JSON</label>
+            <textarea class="field__control" id="rq-members-{{ item.request.request_id }}" name="members" rows="4">{{ item.members_json }}</textarea></div>
+          <div class="field"><label class="field__label" for="rq-spec-{{ item.request.request_id }}">plan spec JSON</label>
+            <textarea class="field__control" id="rq-spec-{{ item.request.request_id }}" name="plan_spec" rows="3">{{ item.plan_spec_json }}</textarea></div>
+          <div class="field"><label class="field__label" for="rq-note-{{ item.request.request_id }}">确认说明</label>
+            <input class="field__control" id="rq-note-{{ item.request.request_id }}" name="note" placeholder="可留空"></div>
+          <div class="form__actions"><button class="btn btn--primary" type="submit">确认并创建</button></div>
+        </form>
+      </details>
+      <form class="form" method="post" action="/research/requests/{{ item.request.request_id }}/reject">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field"><label class="field__label" for="rq-reject-{{ item.request.request_id }}">拒绝原因</label>
+          <input class="field__control" id="rq-reject-{{ item.request.request_id }}" name="note" placeholder="可选"></div>
+        <div class="form__actions"><button class="btn" type="submit">拒绝</button></div>
+      </form>
+    </article>
+    {% endfor %}
+  {% else %}<p class="card__lead">暂无待确认的研究请求。</p>{% endif %}
+</section>
+
 <section class="card card--form" aria-labelledby="research-create">
   <div class="card__head"><h2 class="card__title" id="research-create">新建研究会话</h2></div>
   <form class="form" method="post" action="/research/sessions">
