@@ -147,6 +147,7 @@ bacmap start mcp --profile local-trusted  # 要求 [mcp] allow_local_trusted = t
 | `bacmap_research_phylo_plan` | `alignment`、`goal?`、`dates_file?` | D3；仅 local-trusted；类型化 ML/BEAST2 计划 |
 | `bacmap_research_logistic` | `data_path`、`outcome`、`predictors` | D3；仅 local-trusted；多变量 logistic 回归 |
 | `bacmap_research_iptw` | `data_path`、`treatment`、`outcome`、`covariates`、`weight?` | D3；仅 local-trusted；倾向评分加权 |
+| `bacmap_research_match` | `data_path`、`treatment`、`outcome`、`covariates`、`caliper?` | D3；仅 local-trusted；1:1 倾向匹配 |
 | `bacmap_research_survival` | `data_path`、`time`、`event`、`group` | D3；仅 local-trusted；Kaplan-Meier/log-rank |
 | `bacmap_research_reporting_checklist` | `study_id` | D2；确定性 STROBE 草案 |
 | `bacmap_research_request` | question、run_ids?、gene?、test_name?、analysis? 等 | D2+；只写请求草案，由 Web 人工确认 |

@@ -464,6 +464,43 @@ def run_stats_iptw(args: argparse.Namespace) -> None:
         print(f"  warning: {warning}")
 
 
+def run_stats_match(args: argparse.Namespace) -> None:
+    covariates = [name.strip() for name in args.covariates.split(",") if name.strip()]
+    if not covariates:
+        raise SystemExit("--covariates is empty")
+    try:
+        rows, dropped = regression.load_columns(
+            args.data, [args.treatment, args.outcome, *covariates]
+        )
+        result = advanced_stats.fit_match(
+            [int(row[args.treatment]) for row in rows],
+            [int(row[args.outcome]) for row in rows],
+            [[row[name] for name in covariates] for row in rows],
+            covariates,
+            caliper=args.caliper,
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    payload = {
+        "schema": "bacmap.match/1",
+        "n": result.n,
+        "dropped": dropped,
+        "result": result.model_dump(mode="json"),
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    print(
+        f"n={result.n} treated={result.treated} control={result.control} "
+        f"matched={result.matched_pairs} unmatched_treated={result.unmatched_treated}"
+    )
+    print(f"  effect={result.effect:+.4f} (95% CI {result.ci_low:+.4f}–{result.ci_high:+.4f})")
+    for row in result.balance:
+        print(f"  {row.covariate:<20} SMD {row.smd_before:.3f} -> {row.smd_after:.3f}")
+    for warning in result.warnings:
+        print(f"  warning: {warning}")
+
+
 def run_stats_survival(args: argparse.Namespace) -> None:
     try:
         times, events, groups, dropped = regression.load_survival_table(
@@ -1176,6 +1213,16 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     iptw.add_argument("--weight", choices=["ate", "att"], default="ate")
     add_json(iptw)
     iptw.set_defaults(func=run_stats_iptw)
+    match = stats_sub.add_parser(
+        "match", help=T("1:1 propensity-score matching", "1:1 倾向评分匹配")
+    )
+    match.add_argument("--data", required=True)
+    match.add_argument("--treatment", required=True)
+    match.add_argument("--outcome", required=True)
+    match.add_argument("--covariates", required=True)
+    match.add_argument("--caliper", type=float, default=0.05)
+    add_json(match)
+    match.set_defaults(func=run_stats_match)
     survival = stats_sub.add_parser(
         "survival",
         help=T(

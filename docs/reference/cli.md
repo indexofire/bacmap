@@ -168,6 +168,7 @@ bacmap research phylo iqtree --plan FILE --alignment FILE [--prefix P]
 
 bacmap research stats logistic --data FILE --outcome COL --predictors A,B
 bacmap research stats iptw --data FILE --treatment COL --outcome COL --covariates A,B
+bacmap research stats match --data FILE --treatment COL --outcome COL --covariates A,B [--caliper 0.05]
 bacmap research stats survival --data FILE --time COL --event COL --group COL
 bacmap research package <study_id> --out DIR
 

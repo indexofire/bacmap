@@ -913,6 +913,46 @@ def _register_advanced_stats_tools(server: MCPServer, profile: ProfileSpec) -> N
         )
 
     @server.tool(
+        name="bacmap_research_match",
+        description=(
+            "1:1 nearest-neighbour propensity-score matching (no replacement, caliper) "
+            "from a CSV/TSV table. Returns matched pairs, matched risk difference, 95% CI "
+            "and covariate SMD before/after. D3; local-trusted."
+        ),
+    )
+    def research_match(
+        data_path: str,
+        treatment: str,
+        outcome: str,
+        covariates: list[str],
+        caliper: float = 0.05,
+    ) -> str:
+        from bacmap.research import advanced_stats, regression
+
+        try:
+            rows, dropped = regression.load_columns(
+                data_path, [treatment, outcome, *covariates]
+            )
+            result = advanced_stats.fit_match(
+                [int(row[treatment]) for row in rows],
+                [int(row[outcome]) for row in rows],
+                [[row[name] for name in covariates] for row in rows],
+                covariates,
+                caliper=caliper,
+            )
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(
+            {
+                "schema": "bacmap.match/1",
+                "n": result.n,
+                "dropped": dropped,
+                "result": result.model_dump(mode="json"),
+            },
+            ensure_ascii=False,
+        )
+
+    @server.tool(
         name="bacmap_research_survival",
         description=(
             "Kaplan-Meier curves and a two-group log-rank test from a CSV/TSV table "

@@ -686,6 +686,59 @@ def _advanced_stats_routes(app: FastAPI) -> None:
             context["error"] = str(exc)
         return _TEMPLATES.TemplateResponse(request, "research_iptw.html", context)
 
+    @app.get("/research/stats/match", response_class=HTMLResponse)
+    def match_page(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "research_match.html",
+            {
+                "data_path": "",
+                "treatment": "",
+                "outcome": "",
+                "covariates": "",
+                "caliper": "0.05",
+                "error": "",
+            },
+        )
+
+    @app.post("/research/stats/match", response_class=HTMLResponse)
+    def match_submit(
+        request: Request,
+        data_path: str = Form(""),
+        treatment: str = Form(""),
+        outcome: str = Form(""),
+        covariates: str = Form(""),
+        caliper: str = Form("0.05"),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        names = [name.strip() for name in covariates.split(",") if name.strip()]
+        context: dict[str, Any] = {
+            "data_path": data_path,
+            "treatment": treatment,
+            "outcome": outcome,
+            "covariates": covariates,
+            "caliper": caliper,
+            "error": "",
+        }
+        try:
+            rows, dropped = regression.load_columns(
+                data_path, [treatment, outcome, *names]
+            )
+            result = advanced_stats.fit_match(
+                [int(row[treatment]) for row in rows],
+                [int(row[outcome]) for row in rows],
+                [[row[name] for name in names] for row in rows],
+                names,
+                caliper=float(caliper),
+            )
+            context["result"] = result
+            context["dropped"] = dropped
+        except ValueError as exc:
+            context["error"] = str(exc)
+        return _TEMPLATES.TemplateResponse(request, "research_match.html", context)
+
     @app.get("/research/stats/survival", response_class=HTMLResponse)
     def survival_page(request: Request) -> HTMLResponse:
         return _TEMPLATES.TemplateResponse(

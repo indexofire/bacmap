@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Propensity matching · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/research">研究</a><span class="crumbs__sep">/</span><a class="crumbs__link" href="/research/stats">统计</a><span class="crumbs__sep">/</span><span class="crumbs__here">Propensity matching</span></nav>
+<header class="detailhead">
+  <h1 class="detailhead__title">倾向评分匹配（1:1）</h1>
+  <p class="detailhead__lead">logistic propensity + 最近邻匹配（无放回，caliper 限制）；输出匹配后风险差与平衡诊断。</p>
+</header>
+
+{% if error %}<p class="card__lead" role="alert"><strong>{{ error }}</strong></p>{% endif %}
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">输入</h2></div>
+  <form class="form" method="post" action="/research/stats/match">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label class="field__label" for="mt-data">CSV/TSV 绝对路径</label>
+      <input class="field__control" id="mt-data" name="data_path" required value="{{ data_path }}"></div>
+    <div class="field"><label class="field__label" for="mt-treat">treatment 列（0/1）</label>
+      <input class="field__control" id="mt-treat" name="treatment" required value="{{ treatment }}"></div>
+    <div class="field"><label class="field__label" for="mt-out">outcome 列（0/1）</label>
+      <input class="field__control" id="mt-out" name="outcome" required value="{{ outcome }}"></div>
+    <div class="field"><label class="field__label" for="mt-cov">covariates（逗号分隔）</label>
+      <input class="field__control" id="mt-cov" name="covariates" required value="{{ covariates }}"></div>
+    <div class="field"><label class="field__label" for="mt-cal">caliper（PS 绝对差）</label>
+      <input class="field__control" id="mt-cal" name="caliper" value="{{ caliper }}"></div>
+    <div class="form__actions"><button class="btn btn--primary" type="submit">运行匹配</button></div>
+  </form>
+</section>
+
+{% if result %}
+<section class="card">
+  <div class="card__head"><h2 class="card__title">结果</h2></div>
+  <p class="card__lead">n={{ result.n }} · treated={{ result.treated }} · control={{ result.control }} · matched pairs={{ result.matched_pairs }} · unmatched treated={{ result.unmatched_treated }} · dropped={{ dropped }}</p>
+  <p class="card__lead">matched risk difference = <strong>{{ '%.4f'|format(result.effect) }}</strong> (95% CI {{ '%.4f'|format(result.ci_low) }}–{{ '%.4f'|format(result.ci_high) }})</p>
+  <table class="table">
+    <thead><tr><th>covariate</th><th>SMD before</th><th>SMD after</th></tr></thead>
+    <tbody>{% for row in result.balance %}<tr><td class="mono">{{ row.covariate }}</td><td>{{ '%.3f'|format(row.smd_before) }}</td><td>{{ '%.3f'|format(row.smd_after) }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% if result.warnings %}<p class="card__lead">诊断：{{ result.warnings | join('; ') }}</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

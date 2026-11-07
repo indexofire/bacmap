@@ -515,6 +515,17 @@ bacmap research stats iptw --data cohort.csv --treatment exposed --outcome resis
 拟合 logistic 倾向模型，计算 ATE/ATT 权重、加权风险差与 95% CI、倾向评分范围/最大权重，
 以及协变量平衡（SMD before/after）。诊断会提示极端权重、重叠不足与事件稀疏。
 
+### 倾向评分匹配
+
+```bash
+bacmap research stats match --data cohort.csv --treatment exposed --outcome resistant \
+  --covariates age,lineage --caliper 0.05
+```
+
+1:1 最近邻匹配（无放回），用 PS 绝对差 caliper 限制。输出匹配对数、未匹配 treated、
+匹配后风险差 + 95% CI、协变量 SMD before/after。caliper 太窄会报
+“fewer than 2 matched pairs”。
+
 ### Kaplan-Meier / log-rank
 
 ```bash
@@ -524,5 +535,5 @@ bacmap research stats survival --data survival.csv --time days --event died --gr
 返回两组 Kaplan-Meier 曲线（时间、生存率、at risk、events）、中位生存与两组 log-rank
 卡方/p 值。本切片要求恰好两组。
 
-Web：`/research/stats/iptw` 与 `/research/stats/survival`（D3 MCP 工具
+Web：`/research/stats/iptw`、`/research/stats/match` 与 `/research/stats/survival`（D3 MCP 工具
 `bacmap_research_iptw`、`bacmap_research_survival`）。混合效应、匹配与因果推断仍不在范围内。

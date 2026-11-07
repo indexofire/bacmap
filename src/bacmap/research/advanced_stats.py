@@ -38,6 +38,22 @@ class IptwResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class MatchResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    n: int
+    treated: int
+    control: int
+    matched_pairs: int
+    unmatched_treated: int
+    caliper: float
+    effect: float
+    ci_low: float
+    ci_high: float
+    balance: list[BalanceRow]
+    warnings: list[str] = Field(default_factory=list)
+
+
 class SurvivalPoint(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -94,6 +110,16 @@ def _smd(
     return abs(mean(treated, weights_t) - mean(control, weights_c)) / pooled
 
 
+def fit_propensity(
+    treatment: list[int], covariates: list[list[float]], names: list[str]
+) -> np.ndarray:
+    """Logistic propensity scores for a binary treatment."""
+    model = fit_logistic(covariates, treatment, names)
+    beta = np.asarray(model.coefficients, dtype=float)
+    x = np.asarray(covariates, dtype=float)
+    return np.clip(_sigmoid(beta[0] + x @ beta[1:]), 1e-6, 1 - 1e-6)
+
+
 def fit_iptw(
     treatment: list[int],
     outcome: list[int],
@@ -117,10 +143,7 @@ def fit_iptw(
     if int(np.sum(t)) < 2 or int(np.sum(1 - t)) < 2:
         raise ValueError("need at least two treated and two control rows")
 
-    model = fit_logistic(covariates, treatment, names)
-    beta = np.asarray(model.coefficients, dtype=float)
-    ps = _sigmoid(beta[0] + x @ beta[1:])
-    ps = np.clip(ps, 1e-6, 1 - 1e-6)
+    ps = fit_propensity(treatment, covariates, names)
     if weight_type == "ate":
         weights = np.where(t == 1, 1.0 / ps, 1.0 / (1.0 - ps))
     else:
@@ -175,6 +198,86 @@ def fit_iptw(
         ps_min=float(np.min(ps)),
         ps_max=float(np.max(ps)),
         max_weight=float(np.max(weights)),
+        balance=balance,
+        warnings=warnings,
+    )
+
+
+def fit_match(
+    treatment: list[int],
+    outcome: list[int],
+    covariates: list[list[float]],
+    names: list[str],
+    *,
+    caliper: float = 0.05,
+) -> MatchResult:
+    """1:1 nearest-neighbour propensity matching without replacement."""
+    if len(treatment) != len(outcome) or len(treatment) != len(covariates):
+        raise ValueError("treatment, outcome and covariates must have the same length")
+    if not treatment:
+        raise ValueError("at least one row is required")
+    if len(names) != len(covariates[0]):
+        raise ValueError("names must match the covariate columns")
+    if caliper <= 0:
+        raise ValueError("caliper must be > 0")
+    t = np.asarray(treatment, dtype=float)
+    y = np.asarray(outcome, dtype=float)
+    x = np.asarray(covariates, dtype=float)
+    if not np.isin(t, [0.0, 1.0]).all() or not np.isin(y, [0.0, 1.0]).all():
+        raise ValueError("treatment and outcome must be 0/1")
+    if int(np.sum(t)) < 2 or int(np.sum(1 - t)) < 2:
+        raise ValueError("need at least two treated and two control rows")
+
+    ps = fit_propensity(treatment, covariates, names)
+    treated_idx = [i for i in range(len(t)) if t[i] == 1]
+    available = {i for i in range(len(t)) if t[i] == 0}
+    pairs: list[tuple[int, int]] = []
+    for ti in sorted(treated_idx, key=lambda i: (-ps[i], i)):
+        candidates = [
+            ci for ci in available if abs(ps[ti] - ps[ci]) <= caliper
+        ]
+        if not candidates:
+            continue
+        ci = min(candidates, key=lambda c: (abs(ps[ti] - ps[c]), c))
+        pairs.append((ti, ci))
+        available.remove(ci)
+    if len(pairs) < 2:
+        raise ValueError(
+            f"fewer than 2 matched pairs within caliper {caliper}; widen the caliper"
+        )
+    matched_t = [pair[0] for pair in pairs]
+    matched_c = [pair[1] for pair in pairs]
+    y_t = y[matched_t]
+    y_c = y[matched_c]
+    effect = float(np.mean(y_t) - np.mean(y_c))
+    se = math.sqrt(
+        float(np.var(y_t, ddof=1)) / len(y_t)
+        + float(np.var(y_c, ddof=1)) / len(y_c)
+    )
+    balance = [
+        BalanceRow(
+            covariate=name,
+            smd_before=_smd(x[t == 1, i], x[t == 0, i]),
+            smd_after=_smd(x[matched_t, i], x[matched_c, i]),
+        )
+        for i, name in enumerate(names)
+    ]
+    warnings: list[str] = []
+    unmatched = len(treated_idx) - len(pairs)
+    if unmatched:
+        warnings.append(f"{unmatched} treated rows left unmatched")
+    if len(pairs) < 5:
+        warnings.append("fewer than 5 matched pairs; estimates are unstable")
+    return MatchResult(
+        n=len(treatment),
+        treated=int(np.sum(t)),
+        control=int(np.sum(1 - t)),
+        matched_pairs=len(pairs),
+        unmatched_treated=unmatched,
+        caliper=caliper,
+        effect=effect,
+        ci_low=effect - 1.96 * se,
+        ci_high=effect + 1.96 * se,
         balance=balance,
         warnings=warnings,
     )

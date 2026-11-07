@@ -137,6 +137,13 @@ def web(tmp_path: Path, monkeypatch):
         group = "A" if i < 10 else "B"
         survival_rows.append(f"{1 + (i % 10)},{1 if i % 3 != 0 else 0},{group}")
     (tmp_path / "survival.csv").write_text("\n".join(survival_rows) + "\n", encoding="utf-8")
+    match_rows = ["treatment,outcome,age,lineage"]
+    for i in range(60):
+        age = 20 + (i % 40)
+        treatment = 1 if (age > 40 and i % 5 != 0) or (age <= 40 and i % 7 == 0) else 0
+        outcome = 1 if (treatment == 1 and i % 3 != 0) or (age > 50 and i % 2 == 0) else 0
+        match_rows.append(f"{treatment},{outcome},{age},{i % 3}")
+    (tmp_path / "match.csv").write_text("\n".join(match_rows) + "\n", encoding="utf-8")
     monkeypatch.setattr(eng, "_run_snakemake", lambda p: object())
     engine = eng.DbosTaskEngine(tmp_path)
     client = TestClient(create_app(engine))
@@ -510,3 +517,20 @@ def test_iptw_and_survival_web(web):
     assert survival.status_code == 200
     assert "log-rank" in survival.text
     assert "median survival" in survival.text
+
+
+def test_match_web(web):
+    client, _, _, home = web
+    response = client.post(
+        "/research/stats/match",
+        data={
+            "data_path": str(home / "match.csv"),
+            "treatment": "treatment",
+            "outcome": "outcome",
+            "covariates": "age,lineage",
+            "caliper": "0.2",
+        },
+    )
+    assert response.status_code == 200
+    assert "matched risk difference" in response.text
+    assert "matched pairs" in response.text

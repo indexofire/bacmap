@@ -549,6 +549,17 @@ Fits a logistic propensity model, computes ATE/ATT weights, weighted risk differ
 95% CI, propensity range/max weight and covariate balance (SMD before/after). Diagnostics flag
 extreme weights, limited overlap and sparse events.
 
+### Propensity matching
+
+```bash
+bacmap research stats match --data cohort.csv --treatment exposed --outcome resistant \
+  --covariates age,lineage --caliper 0.05
+```
+
+1:1 nearest-neighbour matching without replacement, restricted by an absolute propensity-score
+caliper. Returns matched pairs, unmatched treated, matched risk difference with 95% CI and
+covariate SMD before/after. A narrow caliper can fail with "fewer than 2 matched pairs".
+
 ### Kaplan-Meier / log-rank
 
 ```bash
@@ -558,6 +569,6 @@ bacmap research stats survival --data survival.csv --time days --event died --gr
 Returns two-group Kaplan-Meier curves (time, survival, at-risk, events), median survival and a
 two-group log-rank chi-square/p-value. Exactly two groups are required in this slice.
 
-Web: `/research/stats/iptw` and `/research/stats/survival` (D3 MCP tools
+Web: `/research/stats/iptw`, `/research/stats/match` and `/research/stats/survival` (D3 MCP tools
 `bacmap_research_iptw`, `bacmap_research_survival`). Mixed-effects, matching and causal
 inference are still out of scope.

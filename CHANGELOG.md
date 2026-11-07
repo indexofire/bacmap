@@ -5,6 +5,13 @@
 
 ## [未发布]
 
+### 倾向评分匹配
+
+- `bacmap research stats match`：logistic propensity + 1:1 最近邻匹配（无放回，
+  caliper 限制）；输出匹配对数、未匹配 treated、匹配后风险差 + 95% CI、SMD before/after。
+- Web `/research/stats/match`；MCP D3 工具 `bacmap_research_match`。
+- 测试基线：1862 → 1865（1 skipped：gapit live smoke）。
+
 ### 高级统计：IPTW 与 Kaplan-Meier
 
 - `bacmap research stats iptw`：logistic 倾向评分、ATE/ATT 权重、加权风险差 + 95% CI、
@@ -141,7 +148,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1862（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1865（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 

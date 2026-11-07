@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from bacmap.research.advanced_stats import fit_iptw, kaplan_meier
+from bacmap.research.advanced_stats import fit_iptw, fit_match, kaplan_meier
 
 
 def _iptw_data():
@@ -57,3 +57,37 @@ def test_kaplan_meier_requires_two_groups():
         kaplan_meier([1, 2], [1, 0], ["A", "A"])
     with pytest.raises(ValueError, match="0/1"):
         kaplan_meier([1, 2], [1, 2], ["A", "B"])
+
+
+def test_match_effect_and_balance():
+    treatment = []
+    outcome = []
+    age = []
+    lineage = []
+    for i in range(60):
+        a = 20 + (i % 40)
+        t = 1 if (a > 40 and i % 5 != 0) or (a <= 40 and i % 7 == 0) else 0
+        y = 1 if (t == 1 and i % 3 != 0) or (a > 50 and i % 2 == 0) else 0
+        treatment.append(t)
+        outcome.append(y)
+        age.append(float(a))
+        lineage.append(float(i % 3))
+    result = fit_match(
+        treatment,
+        outcome,
+        [[age[i], lineage[i]] for i in range(60)],
+        ["age", "lineage"],
+        caliper=0.2,
+    )
+    assert result.matched_pairs >= 2
+    age_row = next(row for row in result.balance if row.covariate == "age")
+    assert age_row.smd_after < age_row.smd_before
+    assert result.ci_low < result.effect < result.ci_high
+
+
+def test_match_caliper_too_small():
+    treatment = [1, 1, 0, 0]
+    outcome = [1, 0, 0, 1]
+    covariates = [[10.0], [20.0], [30.0], [40.0]]
+    with pytest.raises(ValueError, match="fewer than 2 matched pairs"):
+        fit_match(treatment, outcome, covariates, ["x"], caliper=0.0001)
