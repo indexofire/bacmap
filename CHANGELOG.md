@@ -5,6 +5,15 @@
 
 ## [未发布]
 
+### 高级统计：IPTW 与 Kaplan-Meier
+
+- `bacmap research stats iptw`：logistic 倾向评分、ATE/ATT 权重、加权风险差 + 95% CI、
+  propensity 范围/最大权重、协变量 SMD before/after 与诊断。
+- `bacmap research stats survival`：两组 Kaplan-Meier 曲线、中位生存、log-rank 卡方/p。
+- Web：`/research/stats/iptw`、`/research/stats/survival`；MCP D3 工具
+  `bacmap_research_iptw`、`bacmap_research_survival`。
+- 测试基线：1857 → 1862（1 skipped：gapit live smoke）。
+
 ### Checklist 编辑与签字
 
 - Study 页新增 STROBE checklist 编辑器：逐项 status/evidence/note、保存草稿、签字确认、
@@ -132,7 +141,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1857（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1862（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 

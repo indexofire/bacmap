@@ -96,7 +96,8 @@ blockers；`ready=true` 仍需人工评审。
 9. Study 页与 `/research/studies/{id}/packages` 保存**投稿包历史**：每次构建记录
    package_id、label、created_at、文件数、blockers 与 manifest SHA-256；可查看
    manifest/checklist 或下载 ZIP；
-10. Study 页提供 **STROBE checklist 编辑器**：逐项编辑 status/evidence/note，保存草稿或
+10. `/research/stats/iptw` 与 `/research/stats/survival` 提供倾向评分加权与
+    Kaplan-Meier/log-rank；Study 页提供 **STROBE checklist 编辑器**：逐项编辑 status/evidence/note，保存草稿或
     签字（签字要求没有 `missing` 项）；
 11. 投稿包页显示 manifest、checklist、文件与数据/代码可用性，并提供 ZIP 下载。
 
@@ -500,3 +501,28 @@ Session 页用安全 Markdown 子集渲染 `report.md` 与 `manuscript.md`（标
 
 构建投稿包时会合并当前 overrides，manifest 携带编辑后的 checklist 与
 `checklist_review` 状态。签字是报告辅助，不替代 G0–G3 或人工发表评审。
+
+
+## 17. 高级统计（IPTW 与 Kaplan-Meier）
+
+### IPTW
+
+```bash
+bacmap research stats iptw --data cohort.csv --treatment exposed --outcome resistant \
+  --covariates age,lineage --weight ate
+```
+
+拟合 logistic 倾向模型，计算 ATE/ATT 权重、加权风险差与 95% CI、倾向评分范围/最大权重，
+以及协变量平衡（SMD before/after）。诊断会提示极端权重、重叠不足与事件稀疏。
+
+### Kaplan-Meier / log-rank
+
+```bash
+bacmap research stats survival --data survival.csv --time days --event died --group arm
+```
+
+返回两组 Kaplan-Meier 曲线（时间、生存率、at risk、events）、中位生存与两组 log-rank
+卡方/p 值。本切片要求恰好两组。
+
+Web：`/research/stats/iptw` 与 `/research/stats/survival`（D3 MCP 工具
+`bacmap_research_iptw`、`bacmap_research_survival`）。混合效应、匹配与因果推断仍不在范围内。

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Kaplan-Meier · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/research">研究</a><span class="crumbs__sep">/</span><a class="crumbs__link" href="/research/stats">统计</a><span class="crumbs__sep">/</span><span class="crumbs__here">Kaplan-Meier</span></nav>
+<header class="detailhead">
+  <h1 class="detailhead__title">Kaplan-Meier / log-rank</h1>
+  <p class="detailhead__lead">两组生存曲线、中位生存与 log-rank 检验。事件列 0/1，group 列必须恰好两组。</p>
+</header>
+
+{% if error %}<p class="card__lead" role="alert"><strong>{{ error }}</strong></p>{% endif %}
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">输入</h2></div>
+  <form class="form" method="post" action="/research/stats/survival">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label class="field__label" for="sv-data">CSV/TSV 绝对路径</label>
+      <input class="field__control" id="sv-data" name="data_path" required value="{{ data_path }}"></div>
+    <div class="field"><label class="field__label" for="sv-time">time 列</label>
+      <input class="field__control" id="sv-time" name="time" required value="{{ time }}"></div>
+    <div class="field"><label class="field__label" for="sv-event">event 列（0/1）</label>
+      <input class="field__control" id="sv-event" name="event" required value="{{ event }}"></div>
+    <div class="field"><label class="field__label" for="sv-group">group 列（两组）</label>
+      <input class="field__control" id="sv-group" name="group" required value="{{ group }}"></div>
+    <div class="form__actions"><button class="btn btn--primary" type="submit">运行生存分析</button></div>
+  </form>
+</section>
+
+{% if result %}
+<section class="card">
+  <div class="card__head"><h2 class="card__title">结果</h2></div>
+  <p class="card__lead">n={{ result.groups[0].n + result.groups[1].n }} · dropped={{ dropped }} · log-rank chi2={{ '%.3f'|format(result.logrank_chi2) }} · p={{ '%.4g'|format(result.p_value) }}</p>
+  <table class="table">
+    <thead><tr><th>group</th><th>n</th><th>events</th><th>median survival</th></tr></thead>
+    <tbody>{% for curve in result.groups %}<tr><td class="mono">{{ curve.group }}</td><td>{{ curve.n }}</td><td>{{ curve.events }}</td><td>{{ curve.median if curve.median is not none else '—' }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% for curve in result.groups %}
+  <details><summary>{{ curve.group }} 曲线点</summary>
+    <table class="table"><thead><tr><th>time</th><th>survival</th><th>at risk</th><th>events</th></tr></thead>
+    <tbody>{% for point in curve.points %}<tr><td>{{ point.time }}</td><td>{{ '%.4f'|format(point.survival) }}</td><td>{{ point.at_risk }}</td><td>{{ point.events }}</td></tr>{% endfor %}</tbody></table>
+  </details>
+  {% endfor %}
+  {% if result.warnings %}<p class="card__lead">诊断：{{ result.warnings | join('; ') }}</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

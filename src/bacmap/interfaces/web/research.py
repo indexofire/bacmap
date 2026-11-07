@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 
 from bacmap.interfaces.web.auth import verify_csrf
 from bacmap.interfaces.web.markdown import render_markdown
-from bacmap.research import phylo, regression, reporting
+from bacmap.research import advanced_stats, phylo, regression, reporting
 from bacmap.research.checklist import ChecklistService
 from bacmap.research.models import (
     ArtifactKind,
@@ -225,6 +225,7 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
 
     _phylo_routes(app, engine)
     _stats_routes(app)
+    _advanced_stats_routes(app)
 
     @app.get("/research/{session_id}", response_class=HTMLResponse)
     def research_detail(request: Request, session_id: str) -> HTMLResponse:
@@ -629,6 +630,97 @@ def _stats_routes(app: FastAPI) -> None:
         except ValueError as exc:
             context["error"] = str(exc)
         return _TEMPLATES.TemplateResponse(request, "research_stats.html", context)
+
+
+def _advanced_stats_routes(app: FastAPI) -> None:
+    @app.get("/research/stats/iptw", response_class=HTMLResponse)
+    def iptw_page(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "research_iptw.html",
+            {
+                "data_path": "",
+                "treatment": "",
+                "outcome": "",
+                "covariates": "",
+                "weight": "ate",
+                "error": "",
+            },
+        )
+
+    @app.post("/research/stats/iptw", response_class=HTMLResponse)
+    def iptw_submit(
+        request: Request,
+        data_path: str = Form(""),
+        treatment: str = Form(""),
+        outcome: str = Form(""),
+        covariates: str = Form(""),
+        weight: str = Form("ate"),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        names = [name.strip() for name in covariates.split(",") if name.strip()]
+        context: dict[str, Any] = {
+            "data_path": data_path,
+            "treatment": treatment,
+            "outcome": outcome,
+            "covariates": covariates,
+            "weight": weight,
+            "error": "",
+        }
+        try:
+            rows, dropped = regression.load_columns(
+                data_path, [treatment, outcome, *names]
+            )
+            result = advanced_stats.fit_iptw(
+                [int(row[treatment]) for row in rows],
+                [int(row[outcome]) for row in rows],
+                [[row[name] for name in names] for row in rows],
+                names,
+                weight_type="att" if weight == "att" else "ate",
+            )
+            context["result"] = result
+            context["dropped"] = dropped
+        except ValueError as exc:
+            context["error"] = str(exc)
+        return _TEMPLATES.TemplateResponse(request, "research_iptw.html", context)
+
+    @app.get("/research/stats/survival", response_class=HTMLResponse)
+    def survival_page(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "research_survival.html",
+            {"data_path": "", "time": "", "event": "", "group": "", "error": ""},
+        )
+
+    @app.post("/research/stats/survival", response_class=HTMLResponse)
+    def survival_submit(
+        request: Request,
+        data_path: str = Form(""),
+        time: str = Form(""),
+        event: str = Form(""),
+        group: str = Form(""),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        context: dict[str, Any] = {
+            "data_path": data_path,
+            "time": time,
+            "event": event,
+            "group": group,
+            "error": "",
+        }
+        try:
+            times, events, groups, dropped = regression.load_survival_table(
+                data_path, time, event, group
+            )
+            context["result"] = advanced_stats.kaplan_meier(times, events, groups)
+            context["dropped"] = dropped
+        except ValueError as exc:
+            context["error"] = str(exc)
+        return _TEMPLATES.TemplateResponse(request, "research_survival.html", context)
 
 
 def _draft_upload_routes(

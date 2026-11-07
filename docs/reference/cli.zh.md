@@ -166,6 +166,8 @@ bacmap research phylo xml --profile FILE --plan FILE --alignment FILE -o XML [--
 bacmap research phylo iqtree --plan FILE --alignment FILE [--prefix P]
 
 bacmap research stats logistic --data FILE --outcome COL --predictors A,B
+bacmap research stats iptw --data FILE --treatment COL --outcome COL --covariates A,B
+bacmap research stats survival --data FILE --time COL --event COL --group COL
 bacmap research package <study_id> --out DIR
 
 bacmap research request create --question TEXT [--run-id ID]... [--gene NAME]

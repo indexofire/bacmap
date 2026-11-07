@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}IPTW · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/research">研究</a><span class="crumbs__sep">/</span><a class="crumbs__link" href="/research/stats">统计</a><span class="crumbs__sep">/</span><span class="crumbs__here">IPTW</span></nav>
+<header class="detailhead">
+  <h1 class="detailhead__title">倾向评分加权（IPTW）</h1>
+  <p class="detailhead__lead">二分类 treatment/outcome；logistic propensity + ATE/ATT 权重 + 加权风险差与平衡诊断。</p>
+</header>
+
+{% if error %}<p class="card__lead" role="alert"><strong>{{ error }}</strong></p>{% endif %}
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">输入</h2></div>
+  <form class="form" method="post" action="/research/stats/iptw">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label class="field__label" for="ip-data">CSV/TSV 绝对路径</label>
+      <input class="field__control" id="ip-data" name="data_path" required value="{{ data_path }}"></div>
+    <div class="field"><label class="field__label" for="ip-treat">treatment 列（0/1）</label>
+      <input class="field__control" id="ip-treat" name="treatment" required value="{{ treatment }}"></div>
+    <div class="field"><label class="field__label" for="ip-out">outcome 列（0/1）</label>
+      <input class="field__control" id="ip-out" name="outcome" required value="{{ outcome }}"></div>
+    <div class="field"><label class="field__label" for="ip-cov">covariates（逗号分隔）</label>
+      <input class="field__control" id="ip-cov" name="covariates" required value="{{ covariates }}"></div>
+    <div class="field"><label class="field__label" for="ip-weight">权重</label>
+      <select class="field__control" id="ip-weight" name="weight">
+        <option value="ate" {% if weight == 'ate' %}selected{% endif %}>ATE</option>
+        <option value="att" {% if weight == 'att' %}selected{% endif %}>ATT</option>
+      </select></div>
+    <div class="form__actions"><button class="btn btn--primary" type="submit">运行 IPTW</button></div>
+  </form>
+</section>
+
+{% if result %}
+<section class="card">
+  <div class="card__head"><h2 class="card__title">结果</h2></div>
+  <p class="card__lead">n={{ result.n }} · treated={{ result.treated }} · control={{ result.control }} · dropped={{ dropped }} · weights={{ result.weight_type }}</p>
+  <p class="card__lead">weighted risk difference = <strong>{{ '%.4f'|format(result.effect) }}</strong> (95% CI {{ '%.4f'|format(result.ci_low) }}–{{ '%.4f'|format(result.ci_high) }})</p>
+  <p class="card__lead">PS range {{ '%.4g'|format(result.ps_min) }}–{{ '%.4g'|format(result.ps_max) }} · max weight {{ '%.3g'|format(result.max_weight) }}</p>
+  <table class="table">
+    <thead><tr><th>covariate</th><th>SMD before</th><th>SMD after</th></tr></thead>
+    <tbody>{% for row in result.balance %}<tr><td class="mono">{{ row.covariate }}</td><td>{{ '%.3f'|format(row.smd_before) }}</td><td>{{ '%.3f'|format(row.smd_after) }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% if result.warnings %}<p class="card__lead">诊断：{{ result.warnings | join('; ') }}</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

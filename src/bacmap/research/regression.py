@@ -121,6 +121,75 @@ def fit_logistic(
     )
 
 
+def load_columns(
+    path: str | Path, columns: list[str]
+) -> tuple[list[dict[str, float]], int]:
+    """Read a CSV/TSV table and return complete numeric rows plus dropped count."""
+    source = Path(path).expanduser().resolve()
+    if not source.is_file():
+        raise ValueError(f"table not found: {source}")
+    delimiter = "\t" if source.suffix.lower() in {".tsv", ".tab"} else ","
+    with source.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter=delimiter)
+        if reader.fieldnames is None:
+            raise ValueError("table has no header")
+        missing = [name for name in columns if name not in reader.fieldnames]
+        if missing:
+            raise ValueError(f"missing column(s): {', '.join(missing)}")
+        rows: list[dict[str, float]] = []
+        dropped = 0
+        for record in reader:
+            try:
+                rows.append({name: float(record[name]) for name in columns})
+            except (TypeError, ValueError):
+                dropped += 1
+    if not rows:
+        raise ValueError("no complete rows after dropping missing/invalid values")
+    return rows, dropped
+
+
+def load_survival_table(
+    path: str | Path, time_col: str, event_col: str, group_col: str
+) -> tuple[list[float], list[int], list[str], int]:
+    """Read time/event/group rows; group stays a string."""
+    source = Path(path).expanduser().resolve()
+    if not source.is_file():
+        raise ValueError(f"table not found: {source}")
+    delimiter = "\t" if source.suffix.lower() in {".tsv", ".tab"} else ","
+    with source.open(encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter=delimiter)
+        if reader.fieldnames is None:
+            raise ValueError("table has no header")
+        missing = [
+            name
+            for name in (time_col, event_col, group_col)
+            if name not in reader.fieldnames
+        ]
+        if missing:
+            raise ValueError(f"missing column(s): {', '.join(missing)}")
+        times: list[float] = []
+        events: list[int] = []
+        groups: list[str] = []
+        dropped = 0
+        for record in reader:
+            try:
+                time_value = float(record[time_col])
+                event_value = int(float(record[event_col]))
+            except (TypeError, ValueError):
+                dropped += 1
+                continue
+            group = str(record[group_col] or "").strip()
+            if time_value < 0 or event_value not in {0, 1} or not group:
+                dropped += 1
+                continue
+            times.append(time_value)
+            events.append(event_value)
+            groups.append(group)
+    if not times:
+        raise ValueError("no complete rows after dropping missing/invalid values")
+    return times, events, groups, dropped
+
+
 def load_table(
     path: str | Path, outcome: str, predictors: list[str]
 ) -> tuple[list[list[float]], list[int], int]:

@@ -102,7 +102,8 @@ Run `bacmap start web` and open **研究 / Research**. The Web is the primary re
 9. the Study page and `/research/studies/{id}/packages` keep a **package history**: each build
    records package_id, label, created_at, file count, blockers and manifest SHA-256; open a
    package to view its manifest/checklist or download a ZIP;
-10. the Study page links to a **STROBE checklist editor**: edit status/evidence/note per item,
+10. `/research/stats/iptw` and `/research/stats/survival` add propensity-score weighting and
+    Kaplan-Meier/log-rank; the Study page links to a **STROBE checklist editor**: edit status/evidence/note per item,
     save a draft or sign off (signing requires no `missing` items);
 11. the package page shows the manifest, checklist, files and data/code availability, and offers
    a ZIP download.
@@ -533,3 +534,30 @@ The older `/research/studies/{study_id}/package` route remains as a quick rebuil
 Package builds merge the current overrides, so the manifest carries the edited checklist and
 `checklist_review` status. Sign-off is a reporting aid, not a replacement for G0–G3 or human
 publication review.
+
+
+## 17. Advanced statistics (IPTW and Kaplan-Meier)
+
+### IPTW
+
+```bash
+bacmap research stats iptw --data cohort.csv --treatment exposed --outcome resistant \
+  --covariates age,lineage --weight ate
+```
+
+Fits a logistic propensity model, computes ATE/ATT weights, weighted risk difference with a
+95% CI, propensity range/max weight and covariate balance (SMD before/after). Diagnostics flag
+extreme weights, limited overlap and sparse events.
+
+### Kaplan-Meier / log-rank
+
+```bash
+bacmap research stats survival --data survival.csv --time days --event died --group arm
+```
+
+Returns two-group Kaplan-Meier curves (time, survival, at-risk, events), median survival and a
+two-group log-rank chi-square/p-value. Exactly two groups are required in this slice.
+
+Web: `/research/stats/iptw` and `/research/stats/survival` (D3 MCP tools
+`bacmap_research_iptw`, `bacmap_research_survival`). Mixed-effects, matching and causal
+inference are still out of scope.

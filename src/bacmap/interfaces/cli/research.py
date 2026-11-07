@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from bacmap.interfaces.i18n import T
-from bacmap.research import phylo, recipes, regression, reporting
+from bacmap.research import advanced_stats, phylo, recipes, regression, reporting
 from bacmap.research.models import (
     ArtifactKind,
     CreateSessionRequest,
@@ -426,6 +426,64 @@ def run_stats_logistic(args: argparse.Namespace) -> None:
         strict=True,
     ):
         print(f"  {name:<20} beta={beta:+.4f} OR={odds:.3f} ({low:.3f}-{high:.3f}) p={p:.4g}")
+    for warning in result.warnings:
+        print(f"  warning: {warning}")
+
+
+def run_stats_iptw(args: argparse.Namespace) -> None:
+    covariates = [name.strip() for name in args.covariates.split(",") if name.strip()]
+    if not covariates:
+        raise SystemExit("--covariates is empty")
+    try:
+        rows, dropped = regression.load_columns(
+            args.data, [args.treatment, args.outcome, *covariates]
+        )
+        result = advanced_stats.fit_iptw(
+            [int(row[args.treatment]) for row in rows],
+            [int(row[args.outcome]) for row in rows],
+            [[row[name] for name in covariates] for row in rows],
+            covariates,
+            weight_type=args.weight,
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    payload = {
+        "schema": "bacmap.iptw/1",
+        "n": result.n,
+        "dropped": dropped,
+        "result": result.model_dump(mode="json"),
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    print(f"n={result.n} treated={result.treated} control={result.control} dropped={dropped}")
+    print(f"  effect={result.effect:+.4f} (95% CI {result.ci_low:+.4f}–{result.ci_high:+.4f})")
+    for row in result.balance:
+        print(f"  {row.covariate:<20} SMD {row.smd_before:.3f} -> {row.smd_after:.3f}")
+    for warning in result.warnings:
+        print(f"  warning: {warning}")
+
+
+def run_stats_survival(args: argparse.Namespace) -> None:
+    try:
+        times, events, groups, dropped = regression.load_survival_table(
+            args.data, args.time, args.event, args.group
+        )
+        result = advanced_stats.kaplan_meier(times, events, groups)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    payload = {
+        "schema": "bacmap.survival/1",
+        "n": len(times),
+        "dropped": dropped,
+        "result": result.model_dump(mode="json"),
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    for curve in result.groups:
+        print(f"{curve.group}: n={curve.n} events={curve.events} median={curve.median}")
+    print(f"  log-rank chi2={result.logrank_chi2:.3f} p={result.p_value:.4g}")
     for warning in result.warnings:
         print(f"  warning: {warning}")
 
@@ -1108,6 +1166,29 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     logistic.set_defaults(
         func=run_stats_logistic,
     )
+    iptw = stats_sub.add_parser(
+        "iptw", help=T("propensity-score weighting (ATE/ATT)", "倾向评分加权（ATE/ATT）")
+    )
+    iptw.add_argument("--data", required=True)
+    iptw.add_argument("--treatment", required=True)
+    iptw.add_argument("--outcome", required=True)
+    iptw.add_argument("--covariates", required=True)
+    iptw.add_argument("--weight", choices=["ate", "att"], default="ate")
+    add_json(iptw)
+    iptw.set_defaults(func=run_stats_iptw)
+    survival = stats_sub.add_parser(
+        "survival",
+        help=T(
+            "Kaplan-Meier and log-rank (two groups)",
+            "Kaplan-Meier 与 log-rank（两组）",
+        ),
+    )
+    survival.add_argument("--data", required=True)
+    survival.add_argument("--time", required=True)
+    survival.add_argument("--event", required=True)
+    survival.add_argument("--group", required=True)
+    add_json(survival)
+    survival.set_defaults(func=run_stats_survival)
 
     package = s.add_parser(
         "package",

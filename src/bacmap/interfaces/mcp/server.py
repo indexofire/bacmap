@@ -700,6 +700,7 @@ def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpe
 
     _register_request_tools(server, engine, profile)
     _register_phylo_tools(server, profile)
+    _register_advanced_stats_tools(server, profile)
 
 
 def _register_request_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -> None:
@@ -858,6 +859,83 @@ def _register_phylo_tools(server: MCPServer, profile: ProfileSpec) -> None:
                 "schema": "bacmap.logistic_regression/1",
                 "n": result.n,
                 "events": result.events,
+                "dropped": dropped,
+                "result": result.model_dump(mode="json"),
+            },
+            ensure_ascii=False,
+        )
+
+def _register_advanced_stats_tools(server: MCPServer, profile: ProfileSpec) -> None:
+    """D3 IPTW/survival tools; local-trusted only."""
+    if not profile.allows(DataClass.D3):
+        return
+
+    @server.tool(
+        name="bacmap_research_iptw",
+        description=(
+            "Fit propensity-score weighting (ATE/ATT) for a binary treatment and binary "
+            "outcome from a CSV/TSV table. Returns weighted risk difference, 95% CI, "
+            "propensity range and covariate balance (SMD before/after). D3; local-trusted."
+        ),
+    )
+    def research_iptw(
+        data_path: str,
+        treatment: str,
+        outcome: str,
+        covariates: list[str],
+        weight: str = "ate",
+    ) -> str:
+        from bacmap.research import advanced_stats, regression
+
+        if weight not in {"ate", "att"}:
+            return json.dumps({"error": f"unknown weight: {weight!r}"}, ensure_ascii=False)
+        try:
+            rows, dropped = regression.load_columns(
+                data_path, [treatment, outcome, *covariates]
+            )
+            result = advanced_stats.fit_iptw(
+                [int(row[treatment]) for row in rows],
+                [int(row[outcome]) for row in rows],
+                [[row[name] for name in covariates] for row in rows],
+                covariates,
+                weight_type="att" if weight == "att" else "ate",
+            )
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(
+            {
+                "schema": "bacmap.iptw/1",
+                "n": result.n,
+                "dropped": dropped,
+                "result": result.model_dump(mode="json"),
+            },
+            ensure_ascii=False,
+        )
+
+    @server.tool(
+        name="bacmap_research_survival",
+        description=(
+            "Kaplan-Meier curves and a two-group log-rank test from a CSV/TSV table "
+            "(time, event 0/1, group). Returns curves, median survival, chi-square and p. "
+            "D3; local-trusted."
+        ),
+    )
+    def research_survival(
+        data_path: str, time: str, event: str, group: str
+    ) -> str:
+        from bacmap.research import advanced_stats, regression
+
+        try:
+            times, events, groups, dropped = regression.load_survival_table(
+                data_path, time, event, group
+            )
+            result = advanced_stats.kaplan_meier(times, events, groups)
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(
+            {
+                "schema": "bacmap.survival/1",
+                "n": len(times),
                 "dropped": dropped,
                 "result": result.model_dump(mode="json"),
             },

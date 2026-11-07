@@ -147,6 +147,8 @@ The call returns `{"task_id": "...", "kind": "...", "state": "running"}`. Follow
 | `bacmap_research_phylo_profile` | `alignment`, `dates_file?` | D3; local-trusted only; alignment summary |
 | `bacmap_research_phylo_plan` | `alignment`, `goal?`, `dates_file?` | D3; local-trusted only; typed ML/BEAST2 plan |
 | `bacmap_research_logistic` | `data_path`, `outcome`, `predictors` | D3; local-trusted only; multivariable logistic regression |
+| `bacmap_research_iptw` | `data_path`, `treatment`, `outcome`, `covariates`, `weight?` | D3; local-trusted only; propensity-score weighting |
+| `bacmap_research_survival` | `data_path`, `time`, `event`, `group` | D3; local-trusted only; Kaplan-Meier/log-rank |
 | `bacmap_research_reporting_checklist` | `study_id` | D2; deterministic STROBE draft |
 | `bacmap_research_request` | question, run_ids?, gene?, test_name?, analysis?, ... | D2+; writes a draft request only; human approves in Web |
 | `bacmap_research_requests` | `status?`, `limit?` | D2+; list request drafts |

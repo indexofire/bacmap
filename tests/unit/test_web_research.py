@@ -125,6 +125,18 @@ def web(tmp_path: Path, monkeypatch):
         outcome = 1 if (i < 8 or i in {10, 13}) else 0
         csv_rows.append(f"{gene},{20 + i},{1 if i % 4 == 0 else 0},{outcome}")
     (tmp_path / "cohort.csv").write_text("\n".join(csv_rows) + "\n", encoding="utf-8")
+    iptw_rows = ["treatment,outcome,age,lineage"]
+    for i in range(40):
+        treatment = 1 if i % 2 == 0 else 0
+        age = 20 + (i % 20)
+        outcome = 1 if (treatment == 1 and i % 4 != 0) or (treatment == 0 and age > 32) else 0
+        iptw_rows.append(f"{treatment},{outcome},{age},{i % 3}")
+    (tmp_path / "iptw.csv").write_text("\n".join(iptw_rows) + "\n", encoding="utf-8")
+    survival_rows = ["time,event,group"]
+    for i in range(20):
+        group = "A" if i < 10 else "B"
+        survival_rows.append(f"{1 + (i % 10)},{1 if i % 3 != 0 else 0},{group}")
+    (tmp_path / "survival.csv").write_text("\n".join(survival_rows) + "\n", encoding="utf-8")
     monkeypatch.setattr(eng, "_run_snakemake", lambda p: object())
     engine = eng.DbosTaskEngine(tmp_path)
     client = TestClient(create_app(engine))
@@ -469,3 +481,32 @@ def test_checklist_edit_and_sign(web):
     assert review.status.value == "signed"
     assert review.reviewed_by == "web"
     assert "signed" in client.get(f"/research/studies/{study_id}").text
+
+
+def test_iptw_and_survival_web(web):
+    client, _, _, home = web
+    iptw = client.post(
+        "/research/stats/iptw",
+        data={
+            "data_path": str(home / "iptw.csv"),
+            "treatment": "treatment",
+            "outcome": "outcome",
+            "covariates": "age,lineage",
+            "weight": "ate",
+        },
+    )
+    assert iptw.status_code == 200
+    assert "weighted risk difference" in iptw.text
+    assert "SMD before" in iptw.text
+    survival = client.post(
+        "/research/stats/survival",
+        data={
+            "data_path": str(home / "survival.csv"),
+            "time": "time",
+            "event": "event",
+            "group": "group",
+        },
+    )
+    assert survival.status_code == 200
+    assert "log-rank" in survival.text
+    assert "median survival" in survival.text
