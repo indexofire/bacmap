@@ -92,6 +92,26 @@
 </section>
 
 <section class="card">
+  <div class="card__head"><h2 class="card__title">证据链</h2></div>
+  {% if edges %}
+  <table class="table">
+    <thead><tr><th>source</th><th>edge</th><th>target</th><th>reason</th><th>created</th></tr></thead>
+    <tbody>
+    {% for edge in edges %}
+      <tr>
+        <td class="mono">{{ edge.src_type }}:{{ edge.src_id }}</td>
+        <td>{{ edge.edge_type }}</td>
+        <td class="mono">{{ edge.dst_type }}:{{ edge.dst_id }}</td>
+        <td>{{ edge.reason }}</td>
+        <td class="mono-dim">{{ edge.created_at[:19] }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="card__lead">暂无 evidence edge。</p>{% endif %}
+</section>
+
+<section class="card">
   <div class="card__head"><h2 class="card__title">Cohorts</h2><p class="card__lead"><a class="btn" href="/research/studies/{{ study.study_id }}/cohorts/builder">Cohort builder</a></p></div>
   <table class="table"><thead><tr><th>id</th><th>name</th><th>status</th><th>members</th><th>snapshot</th><th></th></tr></thead>
   <tbody>{% for c in cohorts %}<tr><td class="mono">{{ c.cohort_id }}</td><td>{{ c.name }}</td><td>{{ c.status.value }}</td><td>{{ c.members|length }}</td><td class="mono-dim">{{ c.snapshot_hash[:16] }}…</td><td>{% if c.status.value == 'draft' %}<form method="post" action="/research/cohorts/{{ c.cohort_id }}/freeze"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn" type="submit">冻结</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table>

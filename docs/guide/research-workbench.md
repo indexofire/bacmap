@@ -102,7 +102,8 @@ Run `bacmap start web` and open **研究 / Research**. The Web is the primary re
 9. the Study page and `/research/studies/{id}/packages` keep a **package history**: each build
    records package_id, label, created_at, file count, blockers and manifest SHA-256; open a
    package to view its manifest/checklist or download a ZIP;
-10. `/research/stats/iptw` and `/research/stats/survival` add propensity-score weighting and
+10. Study/Session pages show the **evidence graph** (`evidence_edges`);
+11. `/research/stats/iptw` and `/research/stats/survival` add propensity-score weighting and
     Kaplan-Meier/log-rank; the Study page links to a **STROBE checklist editor**: edit status/evidence/note per item,
     save a draft or sign off (signing requires no `missing` items);
 11. the package page shows the manifest, checklist, files and data/code availability, and offers
@@ -572,3 +573,22 @@ two-group log-rank chi-square/p-value. Exactly two groups are required in this s
 Web: `/research/stats/iptw`, `/research/stats/match` and `/research/stats/survival` (D3 MCP tools
 `bacmap_research_iptw`, `bacmap_research_survival`). Mixed-effects, matching and causal
 inference are still out of scope.
+
+
+## 18. Evidence graph
+
+Research objects are linked automatically in `evidence_edges`:
+
+| Edge | Meaning |
+|---|---|
+| `cohort --COHORT_OF--> study` | cohort belongs to a study |
+| `plan --PLAN_OF--> study` / `plan --PLANS_COHORT--> cohort` | plan provenance |
+| `session --PART_OF--> study` / `USES_COHORT` / `GENERATED_BY` | session provenance |
+| `claim --CLAIM_OF--> study` / `SUPPORTED_BY--> session` | claim evidence |
+| `experiment --EXPERIMENT_OF--> study` / `TESTS--> plan` | execution ledger |
+| `checklist --CHECKLIST_OF--> study` | checklist edit/sign-off |
+| `package --PACKAGE_OF--> study` | submission package |
+| `request --REQUEST_OF--> study` | approved research request |
+
+Edges are idempotent (`ensure_edge`), shown on the Study and Session pages, and readable over
+MCP with `bacmap_research_evidence` or CLI `bacmap research evidence <identifier>`.

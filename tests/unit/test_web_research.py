@@ -534,3 +534,13 @@ def test_match_web(web):
     assert response.status_code == 200
     assert "matched risk difference" in response.text
     assert "matched pairs" in response.text
+
+
+def test_evidence_graph_on_study_and_session(web):
+    client, session_id, study_id, _ = web
+    study_page = client.get(f"/research/studies/{study_id}").text
+    assert "证据链" in study_page
+    assert "PART_OF" in study_page
+    session_page = client.get(f"/research/{session_id}").text
+    assert "证据链" in session_page
+    assert "GENERATED_BY" in session_page

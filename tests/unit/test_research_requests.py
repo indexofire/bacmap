@@ -136,10 +136,10 @@ def test_mcp_request_tool_proposes_draft(home: Path):
     import asyncio
     import json
 
-    import bacmap.tasks.engine.dbos_engine as eng
+    from types import SimpleNamespace
+
     from bacmap.interfaces.mcp.profiles import McpProfile, ProfileSpec
     from bacmap.interfaces.mcp.server import build_server
-    from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
     from bacmap.tools.spec import DataClass
 
     profile = ProfileSpec(
@@ -147,7 +147,7 @@ def test_mcp_request_tool_proposes_draft(home: Path):
         max_data_class=DataClass.D4,
         actor="mcp-test",
     )
-    engine = DbosTaskEngine(home)
+    engine = SimpleNamespace(home=home, db=home / "tasks.sqlite")
     server = build_server(engine, profile)
     names = {tool.name for tool in asyncio.run(server.list_tools())}
     assert "bacmap_research_request" in names
@@ -170,4 +170,3 @@ def test_mcp_request_tool_proposes_draft(home: Path):
     listed = asyncio.run(server.call_tool("bacmap_research_requests", {}))
     items = json.loads(listed.content[0].text)
     assert items[0]["request_id"] == payload["request_id"]
-    eng.shutdown_dbos()

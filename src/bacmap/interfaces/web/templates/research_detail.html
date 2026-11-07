@@ -169,6 +169,26 @@
 </section>
 
 <section class="card">
+  <div class="card__head"><h2 class="card__title">证据链</h2></div>
+  {% if edges %}
+  <table class="table">
+    <thead><tr><th>source</th><th>edge</th><th>target</th><th>reason</th><th>created</th></tr></thead>
+    <tbody>
+    {% for edge in edges %}
+      <tr>
+        <td class="mono">{{ edge.src_type }}:{{ edge.src_id }}</td>
+        <td>{{ edge.edge_type }}</td>
+        <td class="mono">{{ edge.dst_type }}:{{ edge.dst_id }}</td>
+        <td>{{ edge.reason }}</td>
+        <td class="mono-dim">{{ edge.created_at[:19] }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="card__lead">暂无 evidence edge。</p>{% endif %}
+</section>
+
+<section class="card">
   <div class="card__head"><h2 class="card__title">全部产物</h2></div>
   <table class="table">
     <thead><tr><th>kind</th><th>sha256</th><th>路径</th><th>下载</th></tr></thead>

@@ -5,6 +5,14 @@
 
 ## [未发布]
 
+### Research 证据链
+
+- 研究对象自动写入 `evidence_edges`：cohort/plan/session/claim/experiment/checklist/package/
+  request 与 study 的关系；session 的 cohort/plan 来源；experiment 与 plan 的关系。
+- Edge 幂等；Study/Session 页面显示证据链表；MCP `bacmap_research_evidence` 与 CLI
+  `research evidence` 可读取。
+- 测试基线：1865 → 1868（1 skipped：gapit live smoke）。
+
 ### 倾向评分匹配
 
 - `bacmap research stats match`：logistic propensity + 1:1 最近邻匹配（无放回，
@@ -148,7 +156,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1865（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1868（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 
