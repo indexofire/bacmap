@@ -96,7 +96,9 @@ blockers；`ready=true` 仍需人工评审。
 9. Study 页与 `/research/studies/{id}/packages` 保存**投稿包历史**：每次构建记录
    package_id、label、created_at、文件数、blockers 与 manifest SHA-256；可查看
    manifest/checklist 或下载 ZIP；
-10. 投稿包页显示 manifest、checklist、文件与数据/代码可用性，并提供 ZIP 下载。
+10. Study 页提供 **STROBE checklist 编辑器**：逐项编辑 status/evidence/note，保存草稿或
+    签字（签字要求没有 `missing` 项）；
+11. 投稿包页显示 manifest、checklist、文件与数据/代码可用性，并提供 ZIP 下载。
 
 自然语言研究指令由外部 agent 经 MCP 处理（Pi/Hermes/DSH）；agent 可读取研究对象并提议
 下一步，写入目前仍在 Web/CLI/API。Web 保持为人工审核与结果查看界面。
@@ -485,3 +487,16 @@ Session 页用安全 Markdown 子集渲染 `report.md` 与 `manuscript.md`（标
 - `GET /research/packages/{package_id}/download.zip`——ZIP 下载。
 
 旧的 `/research/studies/{study_id}/package` 保留为快速重建视图。
+
+
+## 16. Checklist 编辑与签字
+
+`/research/studies/{study_id}/checklist` 允许人工编辑确定性 STROBE 草案：
+
+- 逐项 status（`met`/`partial`/`missing`/`not_applicable`）、evidence、note；
+- **保存草稿** 把 overrides 写入 `checklist_reviews`（migration 8）；
+- **签字确认** 要求没有 `missing` 项，并记录 reviewer/time/note；
+- **重置** 删除 overrides，回到自动草案。
+
+构建投稿包时会合并当前 overrides，manifest 携带编辑后的 checklist 与
+`checklist_review` 状态。签字是报告辅助，不替代 G0–G3 或人工发表评审。

@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 import bacmap.tasks.engine.dbos_engine as eng
 from bacmap.interfaces.web import create_app
+from bacmap.research.checklist import ChecklistService
 from bacmap.research.models import CreateSessionRequest, ResearchProfile
 from bacmap.research.service import (
     ResearchObjectService,
@@ -439,3 +440,32 @@ def test_markdown_rendered_on_session(web):
     page = client.get(f"/research/{session_id}").text
     assert '<div class="markdown">' in page
     assert "<table>" in page or "<h1>" in page
+
+
+def test_checklist_edit_and_sign(web):
+    client, _, study_id, home = web
+    base = ChecklistService(home).base(study_id)
+    data = {
+        f"status:{item.item_id}": "partial" for item in base.items
+    }
+    data["note"] = "reviewed in web"
+    page = client.get(f"/research/studies/{study_id}/checklist")
+    assert page.status_code == 200
+    assert "STROBE checklist" in page.text
+    saved = client.post(
+        f"/research/studies/{study_id}/checklist",
+        data={**data, "action": "save"},
+        follow_redirects=False,
+    )
+    assert saved.status_code == 303
+    assert ChecklistService(home).get_review(study_id).status.value == "draft"
+    signed = client.post(
+        f"/research/studies/{study_id}/checklist",
+        data={**data, "action": "sign"},
+        follow_redirects=False,
+    )
+    assert signed.status_code == 303
+    review = ChecklistService(home).get_review(study_id)
+    assert review.status.value == "signed"
+    assert review.reviewed_by == "web"
+    assert "signed" in client.get(f"/research/studies/{study_id}").text

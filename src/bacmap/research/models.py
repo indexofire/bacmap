@@ -339,3 +339,27 @@ class SubmissionPackageRecord(BaseModel):
     manifest_sha256: str = ""
     n_files: int = 0
     blockers: list[str] = Field(default_factory=list)
+
+
+class ChecklistOverride(BaseModel):
+    """Human edit for one STROBE item (applied over the deterministic draft)."""
+
+    item_id: str
+    status: Literal["met", "partial", "missing", "not_applicable"] | None = None
+    evidence: list[str] | None = None
+    note: str | None = None
+
+
+class ChecklistReviewStatus(StrEnum):
+    DRAFT = "draft"
+    SIGNED = "signed"
+
+
+class ChecklistReview(BaseModel):
+    study_id: str
+    overrides: list[ChecklistOverride] = Field(default_factory=list)
+    status: ChecklistReviewStatus = ChecklistReviewStatus.DRAFT
+    reviewed_by: str = ""
+    reviewed_at: str = ""
+    note: str = Field(default="", max_length=4000)
+    updated_at: str = ""

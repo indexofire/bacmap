@@ -43,9 +43,10 @@
 </section>
 
 <section class="card">
-  <div class="card__head"><h2 class="card__title">STROBE 草案</h2></div>
+  <div class="card__head"><h2 class="card__title">STROBE 草案</h2>
+    <p class="card__lead"><a class="btn" href="/research/studies/{{ study.study_id }}/checklist">编辑 / 签字</a></p></div>
   {% if checklist %}
-  <p class="card__lead">met={{ checklist.met }} · partial={{ checklist.partial }} · missing={{ checklist.missing }} · 人工必须补齐 missing 项。</p>
+  <p class="card__lead">met={{ checklist.met }} · partial={{ checklist.partial }} · missing={{ checklist.missing }}{% if checklist_review %} · 状态 <strong>{{ checklist_review.status.value }}</strong>{% endif %} · 人工必须补齐 missing 项。</p>
   <table class="table">
     <thead><tr><th>item</th><th>section</th><th>requirement</th><th>status</th><th>evidence</th></tr></thead>
     <tbody>

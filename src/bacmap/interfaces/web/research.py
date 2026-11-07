@@ -6,7 +6,7 @@ import json
 import mimetypes
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -16,8 +16,10 @@ from fastapi.templating import Jinja2Templates
 from bacmap.interfaces.web.auth import verify_csrf
 from bacmap.interfaces.web.markdown import render_markdown
 from bacmap.research import phylo, regression, reporting
+from bacmap.research.checklist import ChecklistService
 from bacmap.research.models import (
     ArtifactKind,
+    ChecklistOverride,
     CreateSessionRequest,
     ResearchError,
     ResearchProfile,
@@ -75,10 +77,13 @@ def _study_context(
                     "custom": artifacts.get(ArtifactKind.FIGURE_CUSTOM.value),
                 }
             )
+    checklist_service = ChecklistService(engine.home)
     try:
-        checklist = reporting.checklist_for_study(engine.home, study_id)
+        checklist = checklist_service.merged(study_id)
+        checklist_review = checklist_service.get_review(study_id)
     except ValueError:
         checklist = None
+        checklist_review = None
     return {
         "study": study,
         "cohorts": cohorts,
@@ -87,6 +92,7 @@ def _study_context(
         "experiments": experiments,
         "sessions": session_rows,
         "checklist": checklist,
+        "checklist_review": checklist_review,
         "readiness": objects.publication_readiness(study_id),
     }
 
@@ -232,6 +238,7 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     _artifact_routes(app, service)
     _package_routes(app, engine, objects)
     _package_history_routes(app, packages, objects)
+    _checklist_routes(app, engine, objects)
     _request_routes(app, requests)
     _cohort_builder_routes(app, engine, objects)
     _draft_upload_routes(app, engine, service)
@@ -961,6 +968,80 @@ def _package_history_routes(
             archive,
             media_type="application/zip",
             filename=f"{package_id}.zip",
+        )
+
+
+def _checklist_routes(
+    app: FastAPI, engine: DbosTaskEngine, objects: ResearchObjectService
+) -> None:
+    service = ChecklistService(engine.home)
+
+    def _context(study_id: str, error: str = "") -> dict[str, Any]:
+        study = objects.get_study(study_id)
+        return {
+            "study": study,
+            "checklist": service.merged(study_id),
+            "review": service.get_review(study_id),
+            "error": error,
+        }
+
+    @app.get(
+        "/research/studies/{study_id}/checklist", response_class=HTMLResponse
+    )
+    def checklist_page(request: Request, study_id: str) -> HTMLResponse:
+        try:
+            context = _context(study_id)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return _TEMPLATES.TemplateResponse(request, "research_checklist.html", context)
+
+    @app.post(
+        "/research/studies/{study_id}/checklist", response_class=HTMLResponse
+    )
+    async def checklist_submit(request: Request, study_id: str) -> Any:
+        form = await request.form()
+        if not verify_csrf(request, str(form.get("csrf", ""))):
+            raise HTTPException(403, "CSRF 校验失败")
+        action = str(form.get("action", "save"))
+        try:
+            base = service.base(study_id)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        statuses: dict[str, Literal["met", "partial", "missing", "not_applicable"]] = {
+            "met": "met",
+            "partial": "partial",
+            "missing": "missing",
+            "not_applicable": "not_applicable",
+        }
+        overrides: list[ChecklistOverride] = []
+        for item in base.items:
+            raw_status = str(form.get(f"status:{item.item_id}", item.status))
+            status = statuses.get(raw_status, item.status)
+            evidence = str(form.get(f"evidence:{item.item_id}", "; ".join(item.evidence)))
+            note = str(form.get(f"note:{item.item_id}", item.note))
+            overrides.append(
+                ChecklistOverride(
+                    item_id=item.item_id,
+                    status=status,
+                    evidence=[part.strip() for part in evidence.split(";") if part.strip()],
+                    note=note,
+                )
+            )
+        try:
+            if action == "reset":
+                service.reset(study_id, actor="web")
+            elif action == "sign":
+                service.sign(study_id, overrides, actor="web", note=str(form.get("note", "")))
+            else:
+                service.save(study_id, overrides, actor="web", note=str(form.get("note", "")))
+        except ValueError as exc:
+            return _TEMPLATES.TemplateResponse(
+                request,
+                "research_checklist.html",
+                {**_context(study_id), "error": str(exc)},
+            )
+        return RedirectResponse(
+            f"/research/studies/{study_id}/checklist", status_code=303
         )
 
 

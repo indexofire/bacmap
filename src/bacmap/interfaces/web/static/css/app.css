@@ -1004,3 +1004,17 @@ code {
   color: var(--text-3);
 }
 .markdown a { color: var(--link); }
+
+.checklist-table textarea,
+.checklist-table select {
+  width: 100%;
+  min-width: 120px;
+  background: var(--panel);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: var(--sp-1) var(--sp-2);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+}
+.checklist-table textarea { resize: vertical; }

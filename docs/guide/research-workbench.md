@@ -102,7 +102,9 @@ Run `bacmap start web` and open **研究 / Research**. The Web is the primary re
 9. the Study page and `/research/studies/{id}/packages` keep a **package history**: each build
    records package_id, label, created_at, file count, blockers and manifest SHA-256; open a
    package to view its manifest/checklist or download a ZIP;
-10. the package page shows the manifest, checklist, files and data/code availability, and offers
+10. the Study page links to a **STROBE checklist editor**: edit status/evidence/note per item,
+    save a draft or sign off (signing requires no `missing` items);
+11. the package page shows the manifest, checklist, files and data/code availability, and offers
    a ZIP download.
 
 Natural-language research instructions are handled by an external agent over MCP (Pi/Hermes/
@@ -517,3 +519,17 @@ Package builds are versioned under `research/packages/<study_id>/<package_id>/` 
 - `GET /research/packages/{package_id}/download.zip` — ZIP download.
 
 The older `/research/studies/{study_id}/package` route remains as a quick rebuild view.
+
+
+## 16. Checklist editing and sign-off
+
+`/research/studies/{study_id}/checklist` lets a human edit the deterministic STROBE draft:
+
+- per-item status (`met`/`partial`/`missing`/`not_applicable`), evidence and note;
+- **保存草稿** stores overrides in `checklist_reviews` (migration 8);
+- **签字确认** requires no `missing` item and records reviewer/time/note;
+- **重置** removes overrides and returns to the automatic draft.
+
+Package builds merge the current overrides, so the manifest carries the edited checklist and
+`checklist_review` status. Sign-off is a reporting aid, not a replacement for G0–G3 or human
+publication review.
