@@ -645,3 +645,19 @@ def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpe
         except ResearchError as exc:
             return _err(exc)
         return json.dumps(spec.model_dump(mode="json", by_alias=True), ensure_ascii=False)
+
+    @server.tool(
+        name="bacmap_research_figure_recipes",
+        description=(
+            "List versioned figure recipes (standard plots, tree rendering, heatmaps, "
+            "PCA, volcano, flow diagrams, custom fallback) with language, packages and "
+            "status. Choose a stable recipe before writing custom plotting code. Read-only."
+        ),
+    )
+    def research_figure_recipes(executable_only: bool = False) -> str:
+        from bacmap.research import recipes
+
+        items = recipes.list_recipes(executable_only=executable_only)
+        return json.dumps(
+            [recipe.model_dump(mode="json") for recipe in items], ensure_ascii=False
+        )

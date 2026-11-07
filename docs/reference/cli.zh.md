@@ -146,7 +146,10 @@ bacmap research list|ls [--limit N] [--json]
 bacmap research show <session_id> [--json]
 bacmap research create --run-id ID --gene NAME --test-name NAME
                        [--profile open-test|research|publication] [--by ACTOR] [--json]
-bacmap research artifact <session_id> {figure|report|manuscript}
+bacmap research artifact <session_id> {figure|report|manuscript|figure_spec|figure_custom|figure_manifest}
+bacmap research figure recipes [--executable-only] [--json]
+bacmap research figure spec <session_id> [--json]
+bacmap research figure attach <session_id> --path FILE [--code FILE] [--spec FILE]
 
 bacmap research study create --question TEXT [--pathogen SCOPE] [--data-class 0-4]
 bacmap research study ls|list [--limit N]

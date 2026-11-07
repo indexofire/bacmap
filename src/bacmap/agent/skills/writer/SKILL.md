@@ -21,7 +21,8 @@ metadata:
 
 - 图中的每个数字必须来自 `bacmap_research_figure_spec`（或 `bacmap research figure spec`），
   不得自行计算、四舍五入或补造样本。
-- 优先使用 bacmap 的确定性标准图；只有标准图无法表达时才写自定义绘图脚本，并走 `mine`
+- 先用 `bacmap research figure recipes` 查版本化 recipe；有稳定 recipe 就选 recipe，
+  只有没有合适 recipe 时才写自定义绘图脚本，并走 `mine`
   沙箱（无网络、只读输入、挖掘门 + 人工签字）。
 - 遵守契约中的期刊约束：宽高、dpi、字体、色盲友好配色、输出格式；图注写清 n、统计量、
   来源（session/run/plan）和不确定性。

@@ -252,6 +252,34 @@ It does not change GOM, Snakemake, DBOS or the five task types.
 
 ## 10. Publication figures
 
+### Recipe library
+
+`bacmap research figure recipes` lists the versioned recipes. A recipe is executable only when
+its status is `stable`/`experimental` and it has an entrypoint; `planned` recipes document the
+roadmap and are never silently faked.
+
+| Recipe | Language | Status | Use |
+|---|---|---|---|
+| `association_bar` | SVG | stable | P1 2×2 association bars |
+| `forest` | Python/matplotlib | planned | effect estimates with 95% CI |
+| `heatmap` | Python/matplotlib+seaborn | planned | annotated matrices |
+| `pca` | Python/matplotlib | planned | ordination |
+| `volcano` | Python/matplotlib | planned | effect vs FDR |
+| `tree_rectangular` | R/ggtree | planned | render a Newick tree |
+| `strobe_flow` | SVG | planned | cohort flow |
+| `custom` | Python | experimental | agent-authored fallback in the `mine` sandbox |
+
+Rules:
+
+1. choose a stable recipe when one expresses the result;
+2. `tree_rectangular` only renders a tree — inference (IQ-TREE/Gubbins, model, bootstrap,
+   rooting) is a separate workflow step, never an AI-written script;
+3. planned recipes are not usable yet; do not pretend they ran;
+4. if no recipe fits, use `custom` in the sandbox and attach the result with hashes;
+5. do not copy figures from papers. A published figure can be a human-provided style reference;
+   translate the idea into a recipe/spec, never reproduce the image.
+
+
 Figures follow the same rule as statistics: the numbers come from bacmap; the narrative and a
 custom layout may come from an agent.
 

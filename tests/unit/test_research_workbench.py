@@ -748,6 +748,7 @@ class TestFigures:
         view = self._session(home)
         spec = ResearchService(home).figure_spec(view.session.session_id)
         assert spec.schema_name == "bacmap.figure_spec/1"
+        assert spec.recipe_id == "association_bar"
         assert spec.data["table"] == view.stat.table
         assert spec.data["odds_ratio"] == view.stat.odds_ratio
         assert spec.source.session_id == view.session.session_id

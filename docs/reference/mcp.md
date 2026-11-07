@@ -142,6 +142,7 @@ The call returns `{"task_id": "...", "kind": "...", "state": "running"}`. Follow
 | `bacmap_research_sessions` | `limit?` | D2; only if the profile allows D2 |
 | `bacmap_research_session` | `session_id` | D2; stat table, diagnostics and artifact paths |
 | `bacmap_research_figure_spec` | `session_id` | D2; exact figure contract (data, statistics, source IDs, style) |
+| `bacmap_research_figure_recipes` | `executable_only?` | D2; versioned figure recipes and their status |
 
 Research creation and custom figure attachment are CLI/Web/API only; MCP is read-only for
 research sessions. Custom figures are attached with `bacmap research figure attach` after the

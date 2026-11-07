@@ -242,6 +242,33 @@ P1 复用：
 
 ## 10. 发表级图片
 
+### Recipe 库
+
+`bacmap research figure recipes` 列出版本化 recipe。只有状态为 `stable`/`experimental`
+且带 entrypoint 的 recipe 才可执行；`planned` 只记录路线图，绝不假装已运行。
+
+| Recipe | 语言 | 状态 | 用途 |
+|---|---|---|---|
+| `association_bar` | SVG | stable | P1 2×2 关联条形图 |
+| `forest` | Python/matplotlib | planned | 效应量 + 95% CI |
+| `heatmap` | Python/matplotlib+seaborn | planned | 带注释矩阵 |
+| `pca` | Python/matplotlib | planned | 排序图 |
+| `volcano` | Python/matplotlib | planned | 效应 vs FDR |
+| `tree_rectangular` | R/ggtree | planned | 渲染 Newick 树 |
+| `strobe_flow` | SVG | planned | 队列流程图 |
+| `custom` | Python | experimental | 沙箱中的 agent 自定义兜底 |
+
+规则：
+
+1. 有稳定 recipe 能表达结果时，优先用 recipe；
+2. `tree_rectangular` 只负责渲染；建树（IQ-TREE/Gubbins、模型、bootstrap、生根）是独立的
+   工作流步骤，绝不是 AI 临时写脚本；
+3. `planned` recipe 尚不可用，不得假装已运行；
+4. 没有合适 recipe 时才用 `custom` 沙箱脚本，并按 hash 登记；
+5. 不要复制论文中的图。已发表图只能作为人工提供的风格参考；把想法翻译成 recipe/spec，
+   绝不复现原图。
+
+
 图片与统计遵循同一条规则：数字来自 bacmap；叙事与自定义版式可以来自 agent。
 
 | 档 | 谁生成 | 用途 | 来源记录 |

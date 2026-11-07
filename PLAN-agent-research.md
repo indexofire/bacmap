@@ -88,6 +88,7 @@ bacmap 不新增联网抓取；文献检索留在 agent，落库和引用判定�
 - [x] 会话创建时生成 `figure_spec.json` 并登记 artifact
 - [x] `bacmap research figure spec|attach`
 - [x] `bacmap_research_figure_spec` 只读 MCP 工具
+- [x] 版本化 recipe 注册表（`association_bar` stable；forest/heatmap/pca/volcano/tree 为 planned）
 - [ ] B 档脚本模板 + `mine` 任务示例（需要沙箱镜像带 matplotlib/R）
 - [ ] PDF/PNG 校验（字体嵌入、DPI、色彩空间）
 

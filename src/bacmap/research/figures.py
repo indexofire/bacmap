@@ -61,6 +61,7 @@ class FigureSpec(BaseModel):
 
     schema_name: Literal["bacmap.figure_spec/1"] = Field(default=SCHEMA, alias="schema")
     figure_id: str
+    recipe_id: str = "association_bar"
     kind: FigureKind
     title: str
     caption: str
@@ -81,6 +82,7 @@ class FigureArtifact(BaseModel):
         default=ARTIFACT_SCHEMA, alias="schema"
     )
     figure_id: str
+    recipe_id: str = ""
     renderer: Renderer
     output: str
     output_sha256: str
@@ -186,6 +188,7 @@ def build_artifact(
         raise ValueError(f"figure script not found: {code_path}")
     return FigureArtifact(
         figure_id=spec.figure_id,
+        recipe_id=spec.recipe_id,
         renderer=renderer,
         output=str(output_path),
         output_sha256=sha256_file(output_path),

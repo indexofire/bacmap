@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from bacmap.interfaces.i18n import T
+from bacmap.research import recipes
 from bacmap.research.models import (
     ArtifactKind,
     CreateSessionRequest,
@@ -86,6 +87,24 @@ def run_artifact(args: argparse.Namespace) -> None:
     except ResearchError as exc:
         raise SystemExit(f"[{exc.code}] {exc.message}") from exc
     print(path.read_text(encoding="utf-8"))
+
+
+def run_figure_recipes(args: argparse.Namespace) -> None:
+    items = recipes.list_recipes(executable_only=args.executable_only)
+    if args.json:
+        print(
+            json.dumps(
+                [recipe.model_dump(mode="json") for recipe in items],
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    for recipe in items:
+        print(
+            f"{recipe.recipe_id:<18} {recipe.version:<8} {recipe.language:<7} "
+            f"{recipe.status:<11} {recipe.title}"
+        )
 
 
 def run_figure_spec(args: argparse.Namespace) -> None:
@@ -515,6 +534,16 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
         ),
     )
     fig_sub = fig.add_subparsers(dest="figure_command", required=True)
+    fig_recipes = fig_sub.add_parser(
+        "recipes", help=T("list figure recipes", "列出图片 recipe")
+    )
+    fig_recipes.add_argument(
+        "--executable-only",
+        action="store_true",
+        help=T("only recipes with a working entrypoint", "只显示可执行 recipe"),
+    )
+    add_json(fig_recipes)
+    fig_recipes.set_defaults(func=run_figure_recipes)
     fig_spec = fig_sub.add_parser(
         "spec", help=T("print the machine-readable figure contract", "输出图片契约 JSON")
     )

@@ -202,3 +202,12 @@ def test_outbreak_sensitivity_and_explore_cli(tmp_path: Path, monkeypatch, capsy
     explore = json.loads(out)
     assert explore["role"] == "screening"
     assert explore["candidates"][0]["exposure"] == "KPC"
+
+
+def test_research_figure_recipes_cli(monkeypatch, capsys):
+    code, out, _ = _run(
+        monkeypatch, capsys, ["research", "figure", "recipes", "--json"]
+    )
+    assert code == 0
+    ids = {item["recipe_id"] for item in json.loads(out)}
+    assert {"association_bar", "tree_rectangular", "custom"} <= ids
