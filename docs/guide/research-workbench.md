@@ -294,6 +294,14 @@ redistributed by bacmap.
 
 ### Recipe library
 
+Link a session to its study/cohort/plan at creation time so the figure spec and package carry the
+full provenance chain:
+
+```bash
+bacmap research create --run-id run-1 --gene blaKPC-33 --test-name meropenem \
+  --profile research --study <study_id> --cohort <cohort_id> --plan <plan_id>
+```
+
 `bacmap research figure recipes` lists the versioned recipes. A recipe is executable only when
 its status is `stable`/`experimental` and it has an entrypoint; `planned` recipes document the
 roadmap and are never silently faked.

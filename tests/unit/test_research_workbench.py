@@ -768,7 +768,7 @@ class TestFigures:
         code = tmp_path / "plot.py"
         code.write_text("print('plot')\n", encoding="utf-8")
         art = ResearchService(home).attach_figure(
-            view.session.session_id, out, code=code, renderer="bacmap-deterministic"
+            view.session.session_id, out, code=code, renderer="agent-script"
         )
         assert len(art.output_sha256) == 64
         assert len(art.code_sha256) == 64
@@ -784,7 +784,8 @@ class TestFigures:
             .read_text(encoding="utf-8")
         )
         assert manifest["schema"] == "bacmap.figure_artifact/1"
-        assert manifest["renderer"] == "bacmap-deterministic"
+        assert manifest["renderer"] == "agent-script"
+        assert manifest["recipe_id"] == "custom"
 
     def test_attach_rejects_spec_from_another_session(self, home: Path, tmp_path: Path):
         first = self._session(home)
@@ -843,3 +844,74 @@ class TestSubmissionPackageWithArtifacts:
         assert copied
         assert Path(copied[0].path).is_file()
         assert len(copied[0].sha256) == 64
+
+
+class TestSessionLinking:
+    def _objects(self, home: Path):
+        from bacmap.research.service import ResearchObjectService
+
+        svc = ResearchObjectService(home)
+        study = svc.create_study("q", "KPN", 2, "t")
+        cohort = svc.create_cohort(
+            study.study_id,
+            [{"isolate_id": "S00", "run_id": "run-1"}],
+            name="discovery",
+            actor="t",
+        )
+        svc.freeze_cohort(cohort.cohort_id, "t")
+        plan = svc.create_plan(study.study_id, cohort.cohort_id, {"gene": "x"}, "t")
+        svc.freeze_plan(plan.plan_id, "t")
+        return study, cohort, plan
+
+    def test_service_links_study_cohort_plan(self, home: Path):
+        study, cohort, plan = self._objects(home)
+        view = ResearchService(home).create_session(
+            CreateSessionRequest(
+                run_id="run-1",
+                gene="blaKPC-33",
+                test_name="meropenem",
+                profile=ResearchProfile.RESEARCH,
+                study_id=study.study_id,
+                cohort_id=cohort.cohort_id,
+                plan_id=plan.plan_id,
+            ),
+            actor="t",
+        )
+        assert view.session.study_id == study.study_id
+        assert view.session.cohort_id == cohort.cohort_id
+        assert view.session.plan_id == plan.plan_id
+
+    def test_cli_links_study_cohort_plan(self, home: Path, capsys):
+        import json as _json
+
+        from bacmap.interfaces.cli.main import main
+
+        study, cohort, plan = self._objects(home)
+        main(
+            [
+                "research",
+                "create",
+                "--run-id",
+                "run-1",
+                "--gene",
+                "blaKPC-33",
+                "--test-name",
+                "meropenem",
+                "--profile",
+                "research",
+                "--study",
+                study.study_id,
+                "--cohort",
+                cohort.cohort_id,
+                "--plan",
+                plan.plan_id,
+                "--home",
+                str(home),
+                "--json",
+            ]
+        )
+        payload = _json.loads(capsys.readouterr().out)
+        session = payload["session"]
+        assert session["study_id"] == study.study_id
+        assert session["cohort_id"] == cohort.cohort_id
+        assert session["plan_id"] == plan.plan_id

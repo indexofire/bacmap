@@ -64,6 +64,9 @@ def run_create(args: argparse.Namespace) -> None:
                 gene=args.gene,
                 test_name=args.test_name,
                 profile=p,
+                study_id=args.study_id,
+                cohort_id=args.cohort_id,
+                plan_id=args.plan_id,
             ),
             actor=args.by,
             profile=p,
@@ -183,6 +186,7 @@ def run_figure_attach(args: argparse.Namespace) -> None:
             code=args.code or None,
             spec_path=args.spec or None,
             renderer=args.renderer,
+            recipe_id=args.recipe,
             actor=args.by,
         )
     except ResearchError as exc:
@@ -745,6 +749,18 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     create.add_argument("--gene", required=True)
     create.add_argument("--test-name", required=True)
     create.add_argument("--profile", choices=[x.value for x in ResearchProfile], default=None)
+    create.add_argument(
+        "--study", dest="study_id", default="", help=T("link a Study", "关联 Study")
+    )
+    create.add_argument(
+        "--cohort", dest="cohort_id", default="", help=T("link a Cohort", "关联 Cohort")
+    )
+    create.add_argument(
+        "--plan",
+        dest="plan_id",
+        default="",
+        help=T("link an AnalysisPlan", "关联 AnalysisPlan"),
+    )
     create.add_argument("--by", default="cli")
     add_home(create)
     add_json(create)
@@ -817,6 +833,14 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
         "--renderer",
         choices=["agent-script", "bacmap-deterministic"],
         default="agent-script",
+    )
+    fig_att.add_argument(
+        "--recipe",
+        default="",
+        help=T(
+            "recipe id (default: custom for agent scripts)",
+            "recipe id（agent 脚本默认 custom）",
+        ),
     )
     fig_att.add_argument("--by", default="cli")
     add_home(fig_att)

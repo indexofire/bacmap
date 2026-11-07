@@ -282,6 +282,13 @@ recipe 版本——绝不在运行时 `install.packages()`。
 
 ### Recipe 库
 
+创建 session 时关联 study/cohort/plan，figure spec 与投稿包才能带上完整来源链：
+
+```bash
+bacmap research create --run-id run-1 --gene blaKPC-33 --test-name meropenem \
+  --profile research --study <study_id> --cohort <cohort_id> --plan <plan_id>
+```
+
 `bacmap research figure recipes` 列出版本化 recipe。只有状态为 `stable`/`experimental`
 且带 entrypoint 的 recipe 才可执行；`planned` 只记录路线图，绝不假装已运行。
 

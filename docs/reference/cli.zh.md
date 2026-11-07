@@ -145,12 +145,15 @@ bacmap record knowledge-approve <entry_id>
 bacmap research list|ls [--limit N] [--json]
 bacmap research show <session_id> [--json]
 bacmap research create --run-id ID --gene NAME --test-name NAME
-                       [--profile open-test|research|publication] [--by ACTOR] [--json]
+                       [--profile open-test|research|publication]
+                       [--study ID] [--cohort ID] [--plan ID]
+                       [--by ACTOR] [--json]
 bacmap research artifact <session_id> {figure|report|manuscript|figure_spec|figure_custom|figure_manifest}
 bacmap research figure recipes [--executable-only] [--json]
 bacmap research figure spec <session_id> [--json]
 bacmap research figure draft <session_id> --path FILE [--note TEXT]
 bacmap research figure attach <session_id> --path FILE [--code FILE] [--spec FILE]
+                              [--renderer agent-script|bacmap-deterministic] [--recipe ID]
 
 bacmap research phylo profile --alignment FILE [--dates FILE] [--partitions A,B]
 bacmap research phylo plan --profile FILE [--goal ml|bayesian]

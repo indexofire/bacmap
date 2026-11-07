@@ -5,6 +5,15 @@
 
 ## [未发布]
 
+### 研究功能实测修正
+
+- `bacmap research create` 支持 `--study/--cohort/--plan`，session 可绑定完整来源链；
+  `figure attach` 支持 `--recipe`，agent 自定义图默认登记为 `custom`（此前会沿用
+  `association_bar`，provenance 不准确）。
+- 真实 Pi + Podman 研究链路通过：Study/Cohort/Plan/Claim/Experiment → G0–G3 →
+  FigureSpec/recipe/draft/attach → logistic → PhyloProfile/Plan/BEAST2 XML → 投稿包。
+- 测试基线：1816 → 1818。
+
 ### Podman 沙箱兼容性
 
 - Rootless Podman 在无可用 systemd 会话时，`mine` 沙箱自动以
@@ -60,7 +69,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1816（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1818（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 

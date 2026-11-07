@@ -235,6 +235,7 @@ class ResearchService:
         code: str | Path | None = None,
         spec_path: str | Path | None = None,
         renderer: Renderer = "agent-script",
+        recipe_id: str = "",
         actor: str = "cli",
     ) -> FigureArtifact:
         """Register a rendered custom figure with spec/data/code/output hashes."""
@@ -259,6 +260,12 @@ class ResearchService:
                 output,
                 renderer=renderer,
                 code=code,
+            )
+            artifact = artifact.model_copy(
+                update={
+                    "recipe_id": recipe_id
+                    or ("custom" if renderer == "agent-script" else spec.recipe_id)
+                }
             )
         except ValueError as exc:
             raise ResearchError("validation_error", str(exc)) from exc
