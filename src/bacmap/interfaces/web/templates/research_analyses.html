@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}分析结果 · {{ study.study_id }} · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/research">研究</a><span class="crumbs__sep">/</span><a class="crumbs__link" href="/research/studies/{{ study.study_id }}">{{ study.study_id }}</a><span class="crumbs__sep">/</span><span class="crumbs__here">分析结果</span></nav>
+<header class="detailhead">
+  <h1 class="detailhead__title">分析结果</h1>
+  <p class="detailhead__lead">{{ study.question }}</p>
+  <p class="detailhead__id mono">{{ study.study_id }}</p>
+</header>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">已保存分析</h2></div>
+  {% if analyses %}
+  <table class="table">
+    <thead><tr><th>analysis</th><th>type</th><th>title</th><th>result sha256</th><th>created</th></tr></thead>
+    <tbody>
+    {% for item in analyses %}
+      <tr>
+        <td class="mono"><a href="/research/analyses/{{ item.analysis_id }}">{{ item.analysis_id }}</a></td>
+        <td>{{ item.analysis_type }}</td>
+        <td>{{ item.title }}</td>
+        <td class="mono-dim">{{ item.result_sha256[:16] }}…</td>
+        <td class="mono-dim">{{ item.created_at[:19] }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="card__lead">暂无已保存分析。</p>{% endif %}
+</section>
+{% endblock %}

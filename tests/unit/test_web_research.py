@@ -544,3 +544,46 @@ def test_evidence_graph_on_study_and_session(web):
     session_page = client.get(f"/research/{session_id}").text
     assert "证据链" in session_page
     assert "GENERATED_BY" in session_page
+
+
+def test_analysis_result_saved_to_study(web):
+    client, _, study_id, home = web
+    response = client.post(
+        "/research/stats",
+        data={
+            "data_path": str(home / "cohort.csv"),
+            "outcome": "outcome",
+            "predictors": "gene_present,age,lineage",
+            "study_id": study_id,
+        },
+    )
+    assert response.status_code == 200
+    assert "已保存分析" in response.text
+    analyses = client.get(f"/research/studies/{study_id}/analyses")
+    assert analyses.status_code == 200
+    assert "分析结果" in analyses.text
+    import re
+
+    match = re.search(r"/research/analyses/(ana-[a-f0-9]+)", analyses.text)
+    assert match is not None
+    detail = client.get(f"/research/analyses/{match.group(1)}")
+    assert detail.status_code == 200
+    assert "result sha256" in detail.text
+    assert "gene_present" in detail.text
+
+
+def test_phylo_analysis_saved_to_study(web):
+    client, _, study_id, home = web
+    response = client.post(
+        "/research/phylo",
+        data={
+            "alignment": str(home / "alignment.fasta"),
+            "goal": "bayesian",
+            "action": "save",
+            "study_id": study_id,
+        },
+    )
+    assert response.status_code == 200
+    assert "已保存分析" in response.text
+    analyses = client.get(f"/research/studies/{study_id}/analyses").text
+    assert "phylo" in analyses

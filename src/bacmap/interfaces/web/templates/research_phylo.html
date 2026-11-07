@@ -8,6 +8,7 @@
 </header>
 
 {% if error %}<p class="card__lead" role="alert"><strong>{{ error }}</strong></p>{% endif %}
+{% if saved_analysis %}<p class="card__lead">已保存分析：<a href="/research/analyses/{{ saved_analysis.analysis_id }}">{{ saved_analysis.analysis_id }}</a></p>{% endif %}
 
 <section class="card">
   <div class="card__head"><h2 class="card__title">输入</h2></div>
@@ -29,11 +30,14 @@
         <option value="bayesian" {% if goal == 'bayesian' %}selected{% endif %}>BEAST2 Bayesian</option>
         <option value="ml" {% if goal == 'ml' %}selected{% endif %}>IQ-TREE ML</option>
       </select></div>
+    <div class="field"><label class="field__label" for="ph-study">关联 Study（保存时使用）</label>
+      <input class="field__control" id="ph-study" name="study_id" value="{{ study_id }}" placeholder="study-..."></div>
     <div class="form__actions">
       <button class="btn" type="submit" name="action" value="profile">生成 Profile</button>
       <button class="btn" type="submit" name="action" value="plan">生成 Plan</button>
       <button class="btn btn--primary" type="submit" name="action" value="xml">生成 BEAST2 XML</button>
       <button class="btn" type="submit" name="action" value="iqtree">生成 IQ-TREE 命令</button>
+      <button class="btn" type="submit" name="action" value="save">保存到 Study</button>
     </div>
     <label class="membercheck" style="margin-top:12px">
       <input type="checkbox" name="run_validation" value="1"> 生成 XML 后运行 `beast -validate`（若已安装）

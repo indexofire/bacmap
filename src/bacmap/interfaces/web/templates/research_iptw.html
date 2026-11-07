@@ -26,6 +26,8 @@
         <option value="ate" {% if weight == 'ate' %}selected{% endif %}>ATE</option>
         <option value="att" {% if weight == 'att' %}selected{% endif %}>ATT</option>
       </select></div>
+    <div class="field"><label class="field__label" for="ip-study">关联 Study（可选）</label>
+      <input class="field__control" id="ip-study" name="study_id" value="{{ study_id }}" placeholder="study-..."></div>
     <div class="form__actions"><button class="btn btn--primary" type="submit">运行 IPTW</button></div>
   </form>
 </section>
@@ -33,6 +35,7 @@
 {% if result %}
 <section class="card">
   <div class="card__head"><h2 class="card__title">结果</h2></div>
+  {% if saved_analysis %}<p class="card__lead">已保存分析：<a href="/research/analyses/{{ saved_analysis.analysis_id }}">{{ saved_analysis.analysis_id }}</a></p>{% endif %}
   <p class="card__lead">n={{ result.n }} · treated={{ result.treated }} · control={{ result.control }} · dropped={{ dropped }} · weights={{ result.weight_type }}</p>
   <p class="card__lead">weighted risk difference = <strong>{{ '%.4f'|format(result.effect) }}</strong> (95% CI {{ '%.4f'|format(result.ci_low) }}–{{ '%.4f'|format(result.ci_high) }})</p>
   <p class="card__lead">PS range {{ '%.4g'|format(result.ps_min) }}–{{ '%.4g'|format(result.ps_max) }} · max weight {{ '%.3g'|format(result.max_weight) }}</p>

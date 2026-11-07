@@ -9,6 +9,7 @@ from pathlib import Path
 
 from bacmap.research.models import (
     AnalysisPlan,
+    AnalysisRecord,
     AnalysisSession,
     Artifact,
     ArtifactKind,
@@ -166,6 +167,23 @@ CREATE TABLE IF NOT EXISTS evidence_edges (
 )
 """
 
+ANALYSES_DDL = """
+CREATE TABLE IF NOT EXISTS research_analyses (
+    analysis_id     TEXT PRIMARY KEY,
+    study_id        TEXT NOT NULL,
+    analysis_type   TEXT NOT NULL,
+    title           TEXT NOT NULL DEFAULT '',
+    input_paths_json TEXT NOT NULL DEFAULT '[]',
+    input_sha256_json TEXT NOT NULL DEFAULT '{}',
+    params_json     TEXT NOT NULL DEFAULT '{}',
+    result_json     TEXT NOT NULL DEFAULT '{}',
+    result_sha256   TEXT NOT NULL DEFAULT '',
+    note            TEXT NOT NULL DEFAULT '',
+    created_by      TEXT NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL
+)
+"""
+
 CHECKLISTS_DDL = """
 CREATE TABLE IF NOT EXISTS checklist_reviews (
     study_id      TEXT PRIMARY KEY,
@@ -299,6 +317,11 @@ RESEARCH_MIGRATIONS: tuple[Migration, ...] = (
         8,
         "research: checklist edits and sign-off",
         (CHECKLISTS_DDL,),
+    ),
+    Migration(
+        9,
+        "research: persisted analysis results",
+        (ANALYSES_DDL,),
     ),
 )
 
@@ -1171,6 +1194,59 @@ class ResearchObjectStore:
         )
         self._ledger("checklist", study_id, "checklist.reset", actor, {})
 
+    def create_analysis(self, record: AnalysisRecord) -> AnalysisRecord:
+        self._conn.execute(
+            "INSERT INTO research_analyses"
+            " (analysis_id, study_id, analysis_type, title, input_paths_json,"
+            "  input_sha256_json, params_json, result_json, result_sha256, note,"
+            "  created_by, created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                record.analysis_id,
+                record.study_id,
+                record.analysis_type,
+                record.title,
+                json.dumps(record.input_paths, ensure_ascii=False),
+                json.dumps(record.input_sha256, ensure_ascii=False),
+                json.dumps(record.params, ensure_ascii=False),
+                json.dumps(record.result, ensure_ascii=False),
+                record.result_sha256,
+                record.note,
+                record.created_by,
+                record.created_at,
+            ),
+        )
+        self.ensure_edge(
+            "analysis", record.analysis_id, "ANALYSIS_OF", "study",
+            record.study_id, f"{record.analysis_type} result", record.created_by,
+        )
+        self._ledger(
+            "analysis", record.analysis_id, "analysis.created",
+            record.created_by, {"study_id": record.study_id, "type": record.analysis_type},
+        )
+        return self.get_analysis(record.analysis_id)
+
+    def get_analysis(self, analysis_id: str) -> AnalysisRecord:
+        row = self._conn.execute(
+            "SELECT * FROM research_analyses WHERE analysis_id = ?", (analysis_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"no such analysis: {analysis_id}")
+        return _row_to_analysis(row)
+
+    def list_analyses(
+        self, study_id: str, analysis_type: str | None = None, limit: int = 100
+    ) -> list[AnalysisRecord]:
+        sql = "SELECT * FROM research_analyses WHERE study_id = ?"
+        params: list[object] = [study_id]
+        if analysis_type:
+            sql += " AND analysis_type = ?"
+            params.append(analysis_type)
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        params.append(max(1, min(limit, 500)))
+        rows = self._conn.execute(sql, params).fetchall()
+        return [_row_to_analysis(row) for row in rows]
+
     def _ledger(
         self,
         object_type: str,
@@ -1323,6 +1399,23 @@ def _row_to_edge(row: sqlite3.Row) -> EvidenceEdge:
         dst_type=row["dst_type"],
         dst_id=row["dst_id"],
         reason=row["reason"],
+        created_by=row["created_by"],
+        created_at=row["created_at"],
+    )
+
+
+def _row_to_analysis(row: sqlite3.Row) -> AnalysisRecord:
+    return AnalysisRecord(
+        analysis_id=row["analysis_id"],
+        study_id=row["study_id"],
+        analysis_type=row["analysis_type"],
+        title=row["title"],
+        input_paths=list(json.loads(row["input_paths_json"])),
+        input_sha256=dict(json.loads(row["input_sha256_json"])),
+        params=dict(json.loads(row["params_json"])),
+        result=dict(json.loads(row["result_json"])),
+        result_sha256=row["result_sha256"],
+        note=row["note"],
         created_by=row["created_by"],
         created_at=row["created_at"],
     )

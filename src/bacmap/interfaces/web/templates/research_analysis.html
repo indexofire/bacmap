@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ analysis.analysis_id }} · 分析结果 · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/research">研究</a><span class="crumbs__sep">/</span><a class="crumbs__link" href="/research/studies/{{ study.study_id }}">{{ study.study_id }}</a><span class="crumbs__sep">/</span><a class="crumbs__link" href="/research/studies/{{ study.study_id }}/analyses">分析结果</a><span class="crumbs__sep">/</span><span class="crumbs__here">{{ analysis.analysis_id }}</span></nav>
+<header class="detailhead">
+  <h1 class="detailhead__title">{{ analysis.analysis_type }}{% if analysis.title %} · {{ analysis.title }}{% endif %}</h1>
+  <p class="detailhead__id mono">{{ analysis.analysis_id }} · {{ analysis.created_at[:19] }} · {{ analysis.created_by }}</p>
+  <p class="card__lead">result sha256 <span class="mono">{{ analysis.result_sha256 }}</span></p>
+</header>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">输入</h2></div>
+  {% if analysis.input_paths %}
+  <table class="table"><thead><tr><th>path</th><th>sha256</th></tr></thead><tbody>
+  {% for path in analysis.input_paths %}<tr><td class="mono">{{ path }}</td><td class="mono-dim">{{ analysis.input_sha256.get(path, '—')[:16] }}…</td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}<p class="card__lead">无输入文件。</p>{% endif %}
+</section>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">参数</h2></div>
+  <pre class="mono">{{ params_json }}</pre>
+</section>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">结果</h2></div>
+  <pre class="mono">{{ result_json }}</pre>
+</section>
+{% endblock %}

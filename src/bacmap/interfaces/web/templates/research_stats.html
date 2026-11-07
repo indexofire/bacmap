@@ -23,6 +23,8 @@
     <div class="field"><label class="field__label" for="st-predictors">predictors（逗号分隔）</label>
       <input class="field__control" id="st-predictors" name="predictors" required
              value="{{ predictors }}" placeholder="gene_present,age,lineage"></div>
+    <div class="field"><label class="field__label" for="st-study">关联 Study（可选）</label>
+      <input class="field__control" id="st-study" name="study_id" value="{{ study_id }}" placeholder="study-..."></div>
     <div class="form__actions"><button class="btn btn--primary" type="submit">运行回归</button></div>
   </form>
 </section>
@@ -30,6 +32,7 @@
 {% if result %}
 <section class="card">
   <div class="card__head"><h2 class="card__title">结果</h2></div>
+  {% if saved_analysis %}<p class="card__lead">已保存分析：<a href="/research/analyses/{{ saved_analysis.analysis_id }}">{{ saved_analysis.analysis_id }}</a></p>{% endif %}
   <p class="card__lead">n={{ result.n }} · events={{ result.events }} · dropped={{ dropped }} · converged={{ result.converged }} · iterations={{ result.iterations }}</p>
   <table class="table">
     <thead><tr><th>term</th><th>beta</th><th>OR</th><th>95% CI</th><th>p</th></tr></thead>

@@ -96,7 +96,8 @@ blockers；`ready=true` 仍需人工评审。
 9. Study 页与 `/research/studies/{id}/packages` 保存**投稿包历史**：每次构建记录
    package_id、label、created_at、文件数、blockers 与 manifest SHA-256；可查看
    manifest/checklist 或下载 ZIP；
-10. Study/Session 页显示 **证据链**（`evidence_edges`）；
+10. stats/phylo 结果可保存为 **analysis 对象**并按 Study 列出；
+11. Study/Session 页显示 **证据链**（`evidence_edges`）；
 11. `/research/stats/iptw` 与 `/research/stats/survival` 提供倾向评分加权与
     Kaplan-Meier/log-rank；Study 页提供 **STROBE checklist 编辑器**：逐项编辑 status/evidence/note，保存草稿或
     签字（签字要求没有 `missing` 项）；
@@ -557,3 +558,25 @@ Web：`/research/stats/iptw`、`/research/stats/match` 与 `/research/stats/surv
 
 Edge 幂等（`ensure_edge`），在 Study/Session 页面显示，并可经 MCP
 `bacmap_research_evidence` 或 CLI `bacmap research evidence <identifier>` 读取。
+
+
+## 19. 持久化分析结果
+
+确定性结果可以保存为一等对象并关联 Study：
+
+- logistic / IPTW / matching / Kaplan-Meier（Web 表单可填 Study 自动保存；CLI 支持
+  `--study`）；
+- 系统发育 profile/plan/XML（Web 的“保存到 Study”动作；CLI 通用保存）。
+
+每条记录包含 `analysis_id`、类型、标题、输入路径 + SHA-256、params、result JSON、
+`result_sha256`、作者/时间，以及 `ANALYSIS_OF` 证据边。
+
+```bash
+bacmap research analysis list --study <study_id>
+bacmap research analysis show <analysis_id>
+bacmap research analysis save --study <study_id> --type phylo --result result.json \
+  --input alignment.fasta --title "core alignment"
+```
+
+Web：`/research/studies/{study_id}/analyses` 与 `/research/analyses/{analysis_id}`。
+MCP（只读）：`bacmap_research_analyses`、`bacmap_research_analysis`。

@@ -714,6 +714,7 @@ def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpe
             [edge.model_dump(mode="json") for edge in edges], ensure_ascii=False
         )
 
+    _register_analysis_tools(server, engine, profile)
     _register_request_tools(server, engine, profile)
     _register_phylo_tools(server, profile)
     _register_advanced_stats_tools(server, profile)
@@ -796,6 +797,47 @@ def _register_request_tools(server: MCPServer, engine: Any, profile: ProfileSpec
         return json.dumps(
             [item.model_dump(mode="json") for item in items], ensure_ascii=False
         )
+
+
+def _register_analysis_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -> None:
+    """D2 persisted analysis results; read-only."""
+    from pathlib import Path as _Path
+
+    @server.tool(
+        name="bacmap_research_analyses",
+        description=(
+            "List persisted analysis results for a study (logistic/iptw/match/survival/phylo "
+            "etc.), with result hashes and timestamps. Read-only. D2."
+        ),
+    )
+    def research_analyses(study_id: str, analysis_type: str = "", limit: int = 50) -> str:
+        from bacmap.research.analyses import ResearchAnalysisService
+
+        try:
+            items = ResearchAnalysisService(_Path(engine.home)).list_analyses(
+                study_id, analysis_type or None, max(1, min(limit, 100))
+            )
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(
+            [item.model_dump(mode="json") for item in items], ensure_ascii=False
+        )
+
+    @server.tool(
+        name="bacmap_research_analysis",
+        description=(
+            "Get one persisted analysis result by analysis_id: params, result, input hashes "
+            "and provenance. Read-only. D2."
+        ),
+    )
+    def research_analysis(analysis_id: str) -> str:
+        from bacmap.research.analyses import ResearchAnalysisService
+
+        try:
+            record = ResearchAnalysisService(_Path(engine.home)).get_analysis(analysis_id)
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(record.model_dump(mode="json"), ensure_ascii=False)
 
 
 def _register_phylo_tools(server: MCPServer, profile: ProfileSpec) -> None:

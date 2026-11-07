@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 from bacmap.interfaces.web.auth import verify_csrf
 from bacmap.interfaces.web.markdown import render_markdown
 from bacmap.research import advanced_stats, phylo, regression, reporting
+from bacmap.research.analyses import ResearchAnalysisService
 from bacmap.research.checklist import ChecklistService
 from bacmap.research.models import (
     ArtifactKind,
@@ -78,6 +79,7 @@ def _study_context(
                     "custom": artifacts.get(ArtifactKind.FIGURE_CUSTOM.value),
                 }
             )
+    analysis_service = ResearchAnalysisService(engine.home)
     checklist_service = ChecklistService(engine.home)
     try:
         checklist = checklist_service.merged(study_id)
@@ -95,6 +97,7 @@ def _study_context(
         "checklist": checklist,
         "checklist_review": checklist_review,
         "edges": edges,
+        "analyses": analysis_service.list_analyses(study_id, limit=20),
         "readiness": objects.publication_readiness(study_id),
     }
 
@@ -231,8 +234,8 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
         return RedirectResponse(f"/research/{view.session.session_id}", status_code=303)
 
     _phylo_routes(app, engine)
-    _stats_routes(app)
-    _advanced_stats_routes(app)
+    _stats_routes(app, engine)
+    _advanced_stats_routes(app, engine)
 
     @app.get("/research/{session_id}", response_class=HTMLResponse)
     def research_detail(request: Request, session_id: str) -> HTMLResponse:
@@ -247,6 +250,7 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     _package_routes(app, engine, objects)
     _package_history_routes(app, packages, objects)
     _checklist_routes(app, engine, objects)
+    _analysis_routes(app, engine, objects)
     _request_routes(app, requests)
     _cohort_builder_routes(app, engine, objects)
     _draft_upload_routes(app, engine, service)
@@ -509,6 +513,7 @@ def _phylo_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
         plan_json: str = Form(""),
         action: str = Form("profile"),
         run_validation: str = Form(""),
+        study_id: str = Form(""),
         csrf: str = Form(""),
     ) -> Any:
         if not verify_csrf(request, csrf):
@@ -520,6 +525,7 @@ def _phylo_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
             "goal": goal,
             "profile_json": profile_json,
             "plan_json": plan_json,
+            "study_id": study_id,
             "error": "",
         }
         try:
@@ -539,7 +545,7 @@ def _phylo_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
                 profile = phylo.AlignmentProfile.model_validate(json.loads(profile_json))
                 context["profile"] = profile
 
-            if action in {"plan", "xml", "iqtree"}:
+            if action in {"plan", "xml", "iqtree", "save"}:
                 if plan_json:
                     plan = phylo.PhyloPlan.model_validate(json.loads(plan_json))
                 else:
@@ -565,6 +571,25 @@ def _phylo_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
                 context["iqtree_command"] = phylo.render_iqtree_command(
                     plan, alignment, prefix
                 )
+
+            if action == "save":
+                if not study_id:
+                    raise ValueError("study_id is required to save a phylo analysis")
+                context["saved_analysis"] = ResearchAnalysisService(
+                    engine.home
+                ).save(
+                    study_id,
+                    "phylo",
+                    {
+                        "profile": profile.model_dump(mode="json", by_alias=True),
+                        "plan": plan.model_dump(mode="json", by_alias=True),
+                        "xml": context.get("xml_result", {}),
+                    },
+                    title="phylogenetic planning",
+                    params={"goal": goal, "partitions": partitions, "dates": dates},
+                    input_paths=[alignment],
+                    actor="web",
+                )
         except (phylo.PhyloError, ValueError, OSError) as exc:
             context["error"] = str(exc)
         return _TEMPLATES.TemplateResponse(request, "research_phylo.html", context)
@@ -579,7 +604,8 @@ def _phylo_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
         return FileResponse(path, media_type="application/xml", filename=name)
 
 
-def _stats_routes(app: FastAPI) -> None:
+def _stats_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
+    analyses = ResearchAnalysisService(engine.home)
     @app.get("/research/stats", response_class=HTMLResponse)
     def stats_page(request: Request) -> HTMLResponse:
         return _TEMPLATES.TemplateResponse(
@@ -594,6 +620,7 @@ def _stats_routes(app: FastAPI) -> None:
         data_path: str = Form(""),
         outcome: str = Form(""),
         predictors: str = Form(""),
+        study_id: str = Form(""),
         csrf: str = Form(""),
     ) -> Any:
         if not verify_csrf(request, csrf):
@@ -602,6 +629,7 @@ def _stats_routes(app: FastAPI) -> None:
             "data_path": data_path,
             "outcome": outcome,
             "predictors": predictors,
+            "study_id": study_id,
             "error": "",
         }
         names = [name.strip() for name in predictors.split(",") if name.strip()]
@@ -634,12 +662,23 @@ def _stats_routes(app: FastAPI) -> None:
             context["result_json"] = json.dumps(
                 result.model_dump(mode="json"), ensure_ascii=False, indent=2
             )
+            if study_id:
+                context["saved_analysis"] = analyses.save(
+                    study_id,
+                    "logistic",
+                    result.model_dump(mode="json"),
+                    title="logistic",
+                    params={"outcome": outcome, "predictors": names},
+                    input_paths=[data_path],
+                    actor="web",
+                )
         except ValueError as exc:
             context["error"] = str(exc)
         return _TEMPLATES.TemplateResponse(request, "research_stats.html", context)
 
 
-def _advanced_stats_routes(app: FastAPI) -> None:
+def _advanced_stats_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
+    analyses = ResearchAnalysisService(engine.home)
     @app.get("/research/stats/iptw", response_class=HTMLResponse)
     def iptw_page(request: Request) -> HTMLResponse:
         return _TEMPLATES.TemplateResponse(
@@ -663,6 +702,7 @@ def _advanced_stats_routes(app: FastAPI) -> None:
         outcome: str = Form(""),
         covariates: str = Form(""),
         weight: str = Form("ate"),
+        study_id: str = Form(""),
         csrf: str = Form(""),
     ) -> Any:
         if not verify_csrf(request, csrf):
@@ -674,6 +714,7 @@ def _advanced_stats_routes(app: FastAPI) -> None:
             "outcome": outcome,
             "covariates": covariates,
             "weight": weight,
+            "study_id": study_id,
             "error": "",
         }
         try:
@@ -689,6 +730,21 @@ def _advanced_stats_routes(app: FastAPI) -> None:
             )
             context["result"] = result
             context["dropped"] = dropped
+            if study_id:
+                context["saved_analysis"] = analyses.save(
+                    study_id,
+                    "iptw",
+                    result.model_dump(mode="json"),
+                    title="iptw",
+                    params={
+                        "treatment": treatment,
+                        "outcome": outcome,
+                        "covariates": names,
+                        "weight": weight,
+                    },
+                    input_paths=[data_path],
+                    actor="web",
+                )
         except ValueError as exc:
             context["error"] = str(exc)
         return _TEMPLATES.TemplateResponse(request, "research_iptw.html", context)
@@ -716,6 +772,7 @@ def _advanced_stats_routes(app: FastAPI) -> None:
         outcome: str = Form(""),
         covariates: str = Form(""),
         caliper: str = Form("0.05"),
+        study_id: str = Form(""),
         csrf: str = Form(""),
     ) -> Any:
         if not verify_csrf(request, csrf):
@@ -727,6 +784,7 @@ def _advanced_stats_routes(app: FastAPI) -> None:
             "outcome": outcome,
             "covariates": covariates,
             "caliper": caliper,
+            "study_id": study_id,
             "error": "",
         }
         try:
@@ -742,10 +800,29 @@ def _advanced_stats_routes(app: FastAPI) -> None:
             )
             context["result"] = result
             context["dropped"] = dropped
+            if study_id:
+                context["saved_analysis"] = analyses.save(
+                    study_id,
+                    "match",
+                    result.model_dump(mode="json"),
+                    title="match",
+                    params={
+                        "treatment": treatment,
+                        "outcome": outcome,
+                        "covariates": names,
+                        "caliper": float(caliper),
+                    },
+                    input_paths=[data_path],
+                    actor="web",
+                )
         except ValueError as exc:
             context["error"] = str(exc)
         return _TEMPLATES.TemplateResponse(request, "research_match.html", context)
 
+    _survival_routes(app, analyses)
+
+
+def _survival_routes(app: FastAPI, analyses: ResearchAnalysisService) -> None:
     @app.get("/research/stats/survival", response_class=HTMLResponse)
     def survival_page(request: Request) -> HTMLResponse:
         return _TEMPLATES.TemplateResponse(
@@ -761,6 +838,7 @@ def _advanced_stats_routes(app: FastAPI) -> None:
         time: str = Form(""),
         event: str = Form(""),
         group: str = Form(""),
+        study_id: str = Form(""),
         csrf: str = Form(""),
     ) -> Any:
         if not verify_csrf(request, csrf):
@@ -770,17 +848,30 @@ def _advanced_stats_routes(app: FastAPI) -> None:
             "time": time,
             "event": event,
             "group": group,
+            "study_id": study_id,
             "error": "",
         }
         try:
             times, events, groups, dropped = regression.load_survival_table(
                 data_path, time, event, group
             )
-            context["result"] = advanced_stats.kaplan_meier(times, events, groups)
+            result = advanced_stats.kaplan_meier(times, events, groups)
+            context["result"] = result
             context["dropped"] = dropped
+            if study_id:
+                context["saved_analysis"] = analyses.save(
+                    study_id,
+                    "survival",
+                    result.model_dump(mode="json"),
+                    title="survival",
+                    params={"time": time, "event": event, "group": group},
+                    input_paths=[data_path],
+                    actor="web",
+                )
         except ValueError as exc:
             context["error"] = str(exc)
         return _TEMPLATES.TemplateResponse(request, "research_survival.html", context)
+
 
 
 def _draft_upload_routes(
@@ -1194,6 +1285,48 @@ def _checklist_routes(
             )
         return RedirectResponse(
             f"/research/studies/{study_id}/checklist", status_code=303
+        )
+
+
+def _analysis_routes(
+    app: FastAPI, engine: DbosTaskEngine, objects: ResearchObjectService
+) -> None:
+    service = ResearchAnalysisService(engine.home)
+
+    @app.get(
+        "/research/studies/{study_id}/analyses", response_class=HTMLResponse
+    )
+    def analyses_page(request: Request, study_id: str) -> HTMLResponse:
+        try:
+            study = objects.get_study(study_id)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "research_analyses.html",
+            {"study": study, "analyses": service.list_analyses(study_id, limit=100)},
+        )
+
+    @app.get("/research/analyses/{analysis_id}", response_class=HTMLResponse)
+    def analysis_detail(request: Request, analysis_id: str) -> HTMLResponse:
+        try:
+            record = service.get_analysis(analysis_id)
+            study = objects.get_study(record.study_id)
+        except (ValueError, KeyError) as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "research_analysis.html",
+            {
+                "study": study,
+                "analysis": record,
+                "result_json": json.dumps(
+                    record.result, ensure_ascii=False, indent=2
+                ),
+                "params_json": json.dumps(
+                    record.params, ensure_ascii=False, indent=2
+                ),
+            },
         )
 
 

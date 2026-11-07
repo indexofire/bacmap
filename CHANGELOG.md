@@ -5,6 +5,16 @@
 
 ## [未发布]
 
+### 分析结果对象化
+
+- 新增 migration 9 `research_analyses`：保存 analysis_id、类型、输入路径 + SHA-256、
+  params、result、`result_sha256`、作者/时间，并自动写 `ANALYSIS_OF` 证据边。
+- Web stats 表单可填 Study 自动保存；phylo 页面新增“保存到 Study”；
+  `/research/studies/{id}/analyses` 与 `/research/analyses/{id}` 查看历史/详情。
+- CLI：`research analysis list|show|save`；stats 命令支持 `--study`。
+- MCP 只读：`bacmap_research_analyses`、`bacmap_research_analysis`。
+- 测试基线：1868 → 1873（1 skipped：gapit live smoke）。
+
 ### Research 证据链
 
 - 研究对象自动写入 `evidence_edges`：cohort/plan/session/claim/experiment/checklist/package/
@@ -156,7 +166,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1868（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1873（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 
