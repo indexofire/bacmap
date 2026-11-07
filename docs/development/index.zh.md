@@ -14,7 +14,7 @@ pixi shell
 回退到没有 DBOS 的 Python）。
 
 ```bash
-pixi run -e dev test          # pytest；当前基线 1812 passed
+pixi run -e dev test          # pytest；当前基线 1814 passed
 pixi run -e dev lint          # ruff（src + tests）
 pixi run -e dev typecheck     # 对 src/bacmap 跑 mypy
 pixi run -e dev contracts     # import-linter（5 条契约）
@@ -41,8 +41,10 @@ enabled = true
 ```
 
 环境变量优先：`BACMAP_DEBUG=0` 可临时关闭配置文件里的 debug 模式。
-它会关闭 Web 鉴权/CSRF、计划确认、任务审批、四道门、MCP Profile 数据级别上限（所有
-Profile 可见 D4）、Research Claim/发表门和沙箱回退。每个入口都会打印警告。
+它会关闭 Web 鉴权/CSRF、计划确认、任务审批、四道门、Research Claim/发表门和沙箱回退。
+每个入口都会打印警告。**MCP 数据级别上限与 HTTP 鉴权不放宽**：`cloud` 仍受
+`cloud_max_data_class` 限制，`local-trusted` 仍需 `[mcp] allow_local_trusted = true`，
+MCP HTTP 始终需要 bearer token。debug 不是安全边界。
 
 **硬边界：** debug 模式（环境变量或配置文件）**不会**允许 D3/D4 载荷发往 cloud LLM 端点（ADR-16）。
 不要在生产或共享主机设置该变量；不设置时，上述控制全部保持 fail-closed。
@@ -146,7 +148,7 @@ dev/               仅本地的调研笔记/脚本（不入库）
 - 程序版本：`pyproject.toml` / `pixi.toml`（当前 0.1.2），仅在明确发布决定后更改。
 - 冻结设计修订：`docs/concepts/frozen-design.zh.md` 中的标题与修订表（v1.10.0），
   独立于程序版本。
-- 测试基线：`AGENTS.md` 规则 7（当前 1812）。
+- 测试基线：`AGENTS.md` 规则 7（当前 1814）。
 
 ## 10. 提交清单
 

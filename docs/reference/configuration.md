@@ -53,7 +53,7 @@ export BACMAP_CONFIG="$PWD/config.toml"
 | `BACMAP_TOOL_SELECTION` | — | explicit `tool_selection.yaml` overlay path (§13) |
 | `BACMAP_DB_SELECTION` | — | legacy gapit-only overlay path (translated to `tool_selection.yaml`) |
 | `BACMAP_RESEARCH_PROFILE` | `research` | default governance profile for Research Workbench (`open-test`/`research`/`publication`) |
-| `BACMAP_DEBUG` | off | **development only**: explicit override of `[debug].enabled`; `1` enables, `0` disables. Disables Web auth/CSRF, plan confirmation, task approvals, gates, MCP Profile limits, Research claim/publication gates and sandbox fallback. D3/D4→cloud remains blocked. |
+| `BACMAP_DEBUG` | off | **development only**: explicit override of `[debug].enabled`; `1` enables, `0` disables. Disables Web auth/CSRF, plan confirmation, task approvals, gates, Research claim/publication gates and sandbox fallback. **MCP data-class ceilings and HTTP auth are not relaxed**; D3/D4→cloud remains blocked. |
 | `BACMAP_BENCHMARK_DATA` | — | local public-data snapshot for research benchmarks; may be a dataset dir or a parent containing `bvbrc_kpn_meropenem`/`osf_n78q3` |
 | `BACMAP_ALLOW_UNSANDBOXED` | off | `1` allows direct execution (dev only) |
 | `CHECKM2_DB` | — | CheckM2 database path |
@@ -181,7 +181,9 @@ BACMAP_DEBUG=0 bacmap doctor
 
 A configuration-file setting is persistent; `bacmap doctor` reports `debug=warn`. Never enable
 it in production. It does not relax the ADR-16 data boundary: D3/D4 still cannot be sent to a
-cloud LLM endpoint.
+cloud LLM endpoint. It also does not raise MCP data-class ceilings or bypass MCP HTTP auth:
+`cloud` keeps `cloud_max_data_class`, `local-trusted` still needs
+`[mcp] allow_local_trusted = true`, and HTTP always needs a token.
 
 ## 5. Plans
 

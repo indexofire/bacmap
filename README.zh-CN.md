@@ -6,7 +6,7 @@
 AI 智能体使用的 MCP 服务。数据不出本地网络。
 
 冻结设计：[docs/concepts/frozen-design.zh.md](docs/concepts/frozen-design.zh.md)（中文权威，修订
-**v1.10.7**）；[英文参考翻译](docs/concepts/frozen-design.md)。程序版本：**0.1.2**。
+**v1.10.9**）；[英文参考翻译](docs/concepts/frozen-design.md)。程序版本：**0.1.2**。
 
 ## 用自然语言操作（推荐入口）
 

@@ -42,13 +42,9 @@ def build_http_app(
         allowed_hosts=list(dict.fromkeys(allowed_hosts)),
     )
     app = server.streamable_http_app(host=host, transport_security=security)
-    from bacmap.config import debug_mode
-
-    if token:
-        return SecurityHeadersMiddleware(BearerTokenMiddleware(app, token))
-    if not debug_mode():
-        raise ValueError("MCP HTTP 需要非空 Bearer token")
-    return SecurityHeadersMiddleware(app)
+    if not token:
+        raise ValueError("MCP HTTP 需要非空 Bearer token（debug 模式也不例外）")
+    return SecurityHeadersMiddleware(BearerTokenMiddleware(app, token))
 
 
 def run_http(

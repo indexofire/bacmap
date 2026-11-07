@@ -167,7 +167,8 @@ def debug_mode() -> bool:
 
     优先级：``BACMAP_DEBUG`` 显式设置 > ``config.toml``。因此 ``BACMAP_DEBUG=0``
     可以临时关闭配置文件开启的 debug 模式。仅用于受控开发机；数据红线
-    （D3/D4 永不发往 cloud 端点）不在此开关范围内。
+    （D3/D4 永不发往 cloud 端点）与 MCP 数据级别/HTTP 鉴权**不**在此开关
+    范围内：debug 不是安全边界（ADR-16）。
     """
     enabled = _debug_from_env()
     if enabled is not None:
@@ -179,8 +180,8 @@ def debug_warning(component: str) -> str:
     """统一警告文本（调用方打印到 stderr/日志）。"""
     return (
         f"[bacmap] DEBUG MODE ({component}): BACMAP_DEBUG=1 或 "
-        "[debug] enabled=true——鉴权/CSRF/审批/门/MCP Profile/沙箱限制已放宽。"
-        "仅限本机开发；不要用于生产。"
+        "[debug] enabled=true——Web 鉴权/CSRF、审批、门与沙箱限制已放宽；"
+        "MCP 数据级别与 HTTP 鉴权不放宽。仅限本机开发；不要用于生产。"
     )
 
 

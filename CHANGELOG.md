@@ -5,6 +5,14 @@
 
 ## [未发布]
 
+### 安全收紧：debug 模式不再放宽 MCP 数据边界
+
+- `BACMAP_DEBUG=1` / `[debug].enabled=true` 不再把 `cloud` Profile 提升到 D4，
+  也不再跳过 `[mcp] allow_local_trusted = true`；MCP HTTP 始终要求 bearer token。
+- 仍保留的开发便利：Web 鉴权/CSRF、计划确认、任务审批、四道门、Research
+  Claim/发表门与沙箱回退。debug 不是安全边界（ADR-16）。
+- 冻结设计新增 v1.10.9 修订记录；配置/开发文档同步。
+
 ### Agent 桥接与发表级图片契约（`feat/agent-research-bridge`）
 
 #### 新增
@@ -52,7 +60,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1812（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1814（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 
