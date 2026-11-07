@@ -12,9 +12,9 @@
 #     mlst_scheme         gmlst typing mlst 方案（缺省 null）
 #     cgmlst_scheme       gmlst typing cgmlst 方案（缺省 null）
 #     amrfinder_organism  AMRFinderPlus -O（缺省 null → 不传 -O）
-#     gapit_screens       gapit 数据库（种以下判定：DEC 致病型、血清群、K/O 位点…）
-#     serotype_engine     血清型引擎：sistr（沙门菌）/ shigatyper（志贺菌，未来迁 gapit）/
-#                         ecoh（大肠埃希菌 O/H，gapit）；缺省 null → 该样本不跑血清型步骤
+#     gspec_screens       gspec 数据库（种以下判定：DEC 致病型、血清群、K/O 位点…）
+#     serotype_engine     血清型引擎：sistr（沙门菌）/ shigatyper（志贺菌，未来迁 gspec）/
+#                         ecoh（大肠埃希菌 O/H，gspec）；缺省 null → 该样本不跑血清型步骤
 #     snp_group           SNP cohort 分组名（仅当 snp_groups 已备参考基因组）
 #     plan                分析计划开关：{snp, cgmlst, recombination}
 #     enabled             false 则不进入任何查询表
@@ -46,7 +46,7 @@ pathogens:
     mlst_scheme: ecoli_1
     cgmlst_scheme: ecoli_2
     amrfinder_organism: Escherichia
-    gapit_screens: [eco_dec, ecoh]
+    gspec_screens: [eco_dec, ecoh]
     snp_group: ecoli
     plan: {snp: true, cgmlst: true, recombination: false}
   VPA:
@@ -54,7 +54,7 @@ pathogens:
     gside_labels: [V_parahaemolyticus]
     mlst_scheme: vparahaemolyticus_1
     cgmlst_scheme: vparahaemolyticus_3
-    gapit_screens: [vpara_virulence]
+    gspec_screens: [vpara_virulence]
     snp_group: vpara
     plan: {snp: true, cgmlst: true, recombination: false}
   VCH:
@@ -73,7 +73,7 @@ pathogens:
     mlst_scheme: lmonocytogenes_1
     snp_group: lmo
     plan: {snp: true}
-    gapit_screens: [lmo_sero]
+    gspec_screens: [lmo_sero]
   SAU:
     display_name: 金黄色葡萄球菌
     gside_labels: [Staphylococcus_aureus]
@@ -84,13 +84,13 @@ pathogens:
     gside_labels: [Klebsiella_pneumoniae]
     snp_group: kpn
     plan: {snp: true}
-    gapit_screens: [kpsc_k, kpsc_o]
+    gspec_screens: [kpsc_k, kpsc_o]
   ABA:
     display_name: 鲍曼不动杆菌
     gside_labels: [Acinetobacter_baumannii]
     snp_group: aba
     plan: {snp: true}
-    gapit_screens: [ab_k, ab_o]
+    gspec_screens: [ab_k, ab_o]
   PAE:
     display_name: 铜绿假单胞菌
     gside_labels: [Pseudomonas_aeruginosa]

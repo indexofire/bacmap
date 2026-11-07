@@ -1,8 +1,8 @@
 """``bacmap selection`` — inspect and edit the per-tool reference overlay.
 
-``tool_selection.yaml`` selects gapit databases and gmlst typing modes/schemes
-per species/sample.  ``bacmap db`` remains a gapit-only alias (the parser
-defaults ``--tool`` to ``gapit``).  The packaged ``pathogens.yaml`` is never
+``tool_selection.yaml`` selects gspec databases and gmlst typing modes/schemes
+per species/sample.  ``bacmap db`` remains a gspec-only alias (the parser
+defaults ``--tool`` to ``gspec``).  The packaged ``pathogens.yaml`` is never
 edited; this CLI writes ``$BACMAP_HOME/config/tool_selection.yaml`` atomically.
 """
 
@@ -43,12 +43,12 @@ from bacmap.core.tool_selection_validate import (
     validate_selection,
 )
 from bacmap.tools.tool_catalog import (
-    fetch_gapit_catalog,
     fetch_gmlst_schemes,
+    fetch_gspec_catalog,
     options_payload,
 )
 
-_TOOL_CHOICES = ("gapit", "gmlst", "all")
+_TOOL_CHOICES = ("gspec", "gmlst", "all")
 
 
 def _emit_json(data: Any) -> None:
@@ -70,7 +70,7 @@ def _safe(value: Any) -> str:
 def _warn_legacy(legacy: bool) -> None:
     if legacy:
         _console().print(
-            "[#d29922]正在使用旧 db_selection.yaml（gapit-only）；"
+            "[#d29922]正在使用旧 db_selection.yaml（gspec-only）；"
             "建议迁移到 tool_selection.yaml[/]"
         )
 
@@ -93,8 +93,8 @@ def _load(args: Any) -> ToolSelection:
     )
 
 
-def _gapit_catalog(args: Any) -> dict[str, Any]:
-    return fetch_gapit_catalog(datadir=str(getattr(args, "datadir", "") or "") or None)
+def _gspec_catalog(args: Any) -> dict[str, Any]:
+    return fetch_gspec_catalog(datadir=str(getattr(args, "datadir", "") or "") or None)
 
 
 def _gmlst_catalog(args: Any) -> dict[str, GmlstScheme]:
@@ -128,7 +128,7 @@ def _species_code(value: str) -> str:
     return code
 
 
-def _print_gapit_option(row: Any) -> None:
+def _print_gspec_option(row: Any) -> None:
     from rich.table import Table
 
     console = _console()
@@ -231,15 +231,15 @@ def run_selection_options(args: Any) -> None:
     console = _console()
     _warn_legacy(bool(payload.get("legacy_selection")))
     selected_tool = str(getattr(args, "tool", "all") or "all")
-    if not payload["catalog_available"] and selected_tool in ("gapit", "all"):
-        console.print("[#d29922]gapit catalog 不可用：无法校验库名/kind/typing[/]")
+    if not payload["catalog_available"] and selected_tool in ("gspec", "all"):
+        console.print("[#d29922]gspec catalog 不可用：无法校验库名/kind/typing[/]")
     if not payload["gmlst_catalog_available"] and selected_tool in ("gmlst", "all"):
         console.print("[#d29922]gmlst catalog 不可用：无法校验 scheme 名/类型[/]")
     if not args.species:
         from rich.table import Table
 
         table = Table(title="物种 → 工具选择（--species CODE 看详情）", box=None)
-        for column in ("code", "物种", "gapit 默认", "gapit 生效", "gmlst 生效"):
+        for column in ("code", "物种", "gspec 默认", "gspec 生效", "gmlst 生效"):
             table.add_column(column)
         for row in payload["species"]:
             table.add_row(
@@ -255,8 +255,8 @@ def run_selection_options(args: Any) -> None:
 
     for raw_row in payload["species"]:
         row = SpeciesOption.model_validate(raw_row)
-        if str(getattr(args, "tool", "all")) in ("gapit", "all"):
-            _print_gapit_option(row)
+        if str(getattr(args, "tool", "all")) in ("gspec", "all"):
+            _print_gspec_option(row)
         if str(getattr(args, "tool", "all")) in ("gmlst", "all"):
             _print_gmlst_option(row)
 
@@ -270,8 +270,8 @@ def run_selection_show(args: Any) -> None:
     for code, spec in sorted(registry.pathogens.items()):
         if code_filter is not None and code != code_filter:
             continue
-        defaults = list(spec.gapit_screens)
-        effective = selection.effective_gapit_databases(code, registry=registry)
+        defaults = list(spec.gspec_screens)
+        effective = selection.effective_gspec_databases(code, registry=registry)
         gmlst_defaults = selection.effective_gmlst(code, registry=registry)
         # The effective gmlst plan is already merged with the registry defaults.
         gmlst_registry = _registry_gmlst(registry, code)
@@ -292,7 +292,7 @@ def run_selection_show(args: Any) -> None:
             }
         )
     if code_filter == UNK:
-        effective = selection.effective_gapit_databases(UNK, registry=registry)
+        effective = selection.effective_gspec_databases(UNK, registry=registry)
         gmlst_effective = selection.effective_gmlst(UNK, registry=registry)
         rows.append(
             {
@@ -324,7 +324,7 @@ def run_selection_show(args: Any) -> None:
     from rich.table import Table
 
     table = Table(title="物种 → 工具选择", box=None)
-    for column in ("code", "物种", "gapit 默认", "gapit 生效", "gmlst 生效"):
+    for column in ("code", "物种", "gspec 默认", "gspec 生效", "gmlst 生效"):
         table.add_column(column)
     for row in rows:
         table.add_row(
@@ -351,7 +351,7 @@ def run_selection_show(args: Any) -> None:
             console.print(f"  {row['code']}: {' '.join(parts) or '(unchanged)'}")
         if diff["samples"]:
             samples = _safe(json.dumps(diff["samples"], ensure_ascii=False))
-            console.print(f"  samples(gapit): {samples}")
+            console.print(f"  samples(gspec): {samples}")
         if diff["gmlst_samples"]:
             console.print(
                 f"  samples(gmlst): {_safe(json.dumps(diff['gmlst_samples'], ensure_ascii=False))}"
@@ -382,7 +382,7 @@ def run_selection_validate(args: Any) -> None:
         resolved = resolve_selection_path(home=Path(args.home).expanduser())
         path = str(resolved or _target_path(args))
     selection = load_selection(path)
-    catalog = _gapit_catalog(args)
+    catalog = _gspec_catalog(args)
     gmlst_catalog = _gmlst_catalog(args)
     report = validate_selection(
         selection,
@@ -445,13 +445,13 @@ def _update_entry(
     selection: ToolSelection,
     code: str,
     *,
-    gapit: GapitSelection | None = None,
+    gspec: GapitSelection | None = None,
     gmlst: GmlstSelection | None = None,
 ) -> ToolSelection:
     current = _entry_for(selection, code)
     updated = current.model_copy(
         update={
-            "gapit": gapit if gapit is not None else current.gapit,
+            "gspec": gspec if gspec is not None else current.gspec,
             "gmlst": gmlst if gmlst is not None else current.gmlst,
         }
     )
@@ -460,16 +460,16 @@ def _update_entry(
     return selection.model_copy(update={"species": species})
 
 
-def _interactive_gapit(args: Any, selection: ToolSelection, code: str) -> ToolSelection:
+def _interactive_gspec(args: Any, selection: ToolSelection, code: str) -> ToolSelection:
     from rich.prompt import Prompt
 
     console = _console()
-    catalog = _gapit_catalog(args)
+    catalog = _gspec_catalog(args)
     doc = build_options(selection, catalog=catalog, species=code)
     row = doc.species[0]
-    _print_gapit_option(row)
+    _print_gspec_option(row)
     answer = Prompt.ask(
-        "输入要启用的 gapit 编号（逗号分隔；all=全选，none=全不选，回车=保持当前）",
+        "输入要启用的 gspec 编号（逗号分隔；all=全选，none=全不选，回车=保持当前）",
         default="",
         console=console,
     ).strip()
@@ -489,7 +489,7 @@ def _interactive_gapit(args: Any, selection: ToolSelection, code: str) -> ToolSe
     return _update_entry(
         selection,
         code,
-        gapit=GapitSelection(mode=args.mode, databases=chosen),
+        gspec=GapitSelection(mode=args.mode, databases=chosen),
     )
 
 
@@ -547,14 +547,14 @@ def _apply_noninteractive(
     args: Any, selection: ToolSelection, tool: str
 ) -> ToolSelection:
     if tool == "gmlst" and str(getattr(args, "databases", "") or "").strip():
-        raise SystemExit("--databases 只用于 --tool gapit")
-    if tool == "gapit" and str(getattr(args, "modes", "") or "").strip():
+        raise SystemExit("--databases 只用于 --tool gspec")
+    if tool == "gspec" and str(getattr(args, "modes", "") or "").strip():
         raise SystemExit("--modes/--schemes 只用于 --tool gmlst")
     species_value = str(getattr(args, "species", "") or "").strip()
     if not species_value:
         raise SystemExit("--json 模式需要 --species 或 --from-json/--from-yaml")
     code = _species_code(species_value)
-    if tool in ("gapit", "all") and str(getattr(args, "databases", "") or "").strip():
+    if tool in ("gspec", "all") and str(getattr(args, "databases", "") or "").strip():
         chosen = [
             item.strip()
             for item in str(args.databases).split(",")
@@ -563,7 +563,7 @@ def _apply_noninteractive(
         selection = _update_entry(
             selection,
             code,
-            gapit=GapitSelection(mode=args.mode, databases=chosen),
+            gspec=GapitSelection(mode=args.mode, databases=chosen),
         )
     if tool in ("gmlst", "all") and str(getattr(args, "modes", "") or "").strip():
         modes = _parse_modes(str(args.modes))
@@ -585,8 +585,8 @@ def _interactive_select(
     if not species_value:
         species_value = Prompt.ask("物种码", console=_console())
     code = _species_code(species_value)
-    if tool in ("gapit", "all"):
-        selection = _interactive_gapit(args, selection, code)
+    if tool in ("gspec", "all"):
+        selection = _interactive_gspec(args, selection, code)
     if tool in ("gmlst", "all"):
         selection = _interactive_gmlst(args, selection, code)
     return selection
@@ -606,7 +606,7 @@ def _with_meta(
                     "generated_at": datetime.now(UTC).isoformat(),
                     "approved_by": os.environ.get("USER", ""),
                     "registry_signature": registry.signature(),
-                    "gapit_catalog_hash": catalog_hash(catalog) if catalog else "",
+                    "gspec_catalog_hash": catalog_hash(catalog) if catalog else "",
                     "gmlst_catalog_hash": gmlst_catalog_hash(gmlst_catalog)
                     if gmlst_catalog
                     else "",
@@ -677,7 +677,7 @@ def run_selection_select(args: Any) -> None:
             raise SystemExit("--json 模式需要 --databases 或 --modes")
         selection = _interactive_select(args, selection, tool)
 
-    catalog = _gapit_catalog(args)
+    catalog = _gspec_catalog(args)
     gmlst_catalog = _gmlst_catalog(args)
     selection = _with_meta(selection, catalog, gmlst_catalog, load_registry())
     report = validate_selection(

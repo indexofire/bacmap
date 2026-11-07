@@ -78,7 +78,7 @@ core ← store ← tools ← workflow ← tasks ← application ← interfaces
 
 仅依赖基因组的分析属于外部工具（ADR-20），不属于 bacmap：
 
-1. 在 `gside`/`gapit`/`gmlst` 中实现/验证。
+1. 在 `gside`/`gspec`/`gmlst` 中实现/验证。
 2. 在 `workflow/` 下添加 `.smk` 规则与适配器/解析器。
 3. 若结果是证据，扩展摘要 schema 并入库。
 4. 添加测试夹具/金标准比较。

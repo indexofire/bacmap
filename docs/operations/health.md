@@ -14,7 +14,7 @@ bacmap doctor --json
 | `sandbox` | Apptainer/Podman availability | install one before `mine`; `passthrough` means no isolation |
 | `llm` | configured endpoint reachability | deterministic functions still work (C3) |
 | `disk` | ≥1 GB free | free space or move `BACMAP_HOME` |
-| `tools` | `gside`, `gapit`, `gmlst`, `snakemake` on `PATH` | run inside the pixi environment |
+| `tools` | `gside`, `gspec`, `gmlst`, `snakemake` on `PATH` | run inside the pixi environment |
 
 Exit code `1` only when a check is `fail`.
 

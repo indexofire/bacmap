@@ -7,7 +7,7 @@
 规则：``属首字母 + 种名前 2 字母``（大写）。
 例外/覆盖（见 ``_OVERRIDES``）：SAL(Salmonella)、SHI(Shigella)、ECO(DEC/E. coli)、
 EFM(E. faecium，避免与 EFA 撞)、CDP(C. diphtheriae，避免与 CDI 撞)。
-有意合并：VCH = Vibrio_cholerae / _O1 / _O139（种下血清型暂不拆分，交 gapit）。
+有意合并：VCH = Vibrio_cholerae / _O1 / _O139（种下血清型暂不拆分，交 gspec）。
 未识别/占位/否定（``not_*``）→ ``UNK`` 哨兵。
 """
 
@@ -28,7 +28,7 @@ _PLACEHOLDER_TOKENS = frozenset(
         "unidentified",
         "unclassified",
         "pending_gside",
-        "pending_gapit",
+        "pending_gspec",
     }
 )
 

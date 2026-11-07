@@ -8,7 +8,7 @@
 测序 reads / 组装好的基因组
         │
         ▼
-  Snakemake 管线 ── gside（物种） ── gapit（筛查/血清型） ── gmlst（MLST/cgMLST）
+  Snakemake 管线 ── gside（物种） ── gspec（筛查/血清型） ── gmlst（MLST/cgMLST）
         │
         ▼
   运行范围的结果 ──► GOM 对象 ──► 运行记录（哈希、版本、种子）
@@ -92,7 +92,7 @@ bacmap plan confirm <plan_id> --version 1 --hash <first-12-chars>
 
 - **默认确定性。** 分析 DAG 是固定的、版本化的，并从软件包部署；每次运行都会记录参数、
   工具/数据库版本、输入哈希与种子。
-- **分析外部化。** 物种鉴定、基因筛查/血清型与 MLST/cgMLST 由 `gside`、`gapit` 和 `gmlst`
+- **分析外部化。** 物种鉴定、基因筛查/血清型与 MLST/cgMLST 由 `gside`、`gspec` 和 `gmlst`
   完成（ADR-20）。bacmap 只做编排与适配，不重新实现生信算法。
 - **写入都走任务。** 元数据、实验室结果、知识条目、分析与开放路径脚本都以任务形式提交，
   任何界面都不会直接写入。

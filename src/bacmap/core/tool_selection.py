@@ -4,7 +4,7 @@ The packaged ``core/pathogens.yaml`` remains the default mapping (developers
 own it).  Users who need a different mapping write a ``tool_selection.yaml``
 under ``$BACMAP_HOME/config/`` (or point ``$BACMAP_TOOL_SELECTION`` / the
 ``tool_selection`` workflow config key at one).  The overlay is organised by
-tool (``gapit`` databases, ``gmlst`` typing modes/schemes) so future tools can
+tool (``gspec`` databases, ``gmlst`` typing modes/schemes) so future tools can
 add their own section without a new file.
 
 Layering (ADR-03 extension, v1.4.40)::
@@ -12,10 +12,10 @@ Layering (ADR-03 extension, v1.4.40)::
     pathogens.yaml          packaged defaults (never edited by users)
     tool_selection.yaml     user/project overlay (this module)
     species_id.json         runtime gside verdict (workflow only)
-    effective selection     merged plan handed to gapit/gmlst
+    effective selection     merged plan handed to gspec/gmlst
 
 The legacy ``db_selection.yaml`` / ``bacmap.db_selection/1`` document is
-accepted as a gapit-only alias and translated on load.
+accepted as a gspec-only alias and translated on load.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ class ToolModeDefaults(BaseModel):
 class SelectionDefaults(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    gapit: ToolModeDefaults = Field(default_factory=ToolModeDefaults)
+    gspec: ToolModeDefaults = Field(default_factory=ToolModeDefaults)
     gmlst: ToolModeDefaults = Field(default_factory=ToolModeDefaults)
 
     @model_validator(mode="before")
@@ -71,10 +71,10 @@ class SelectionDefaults(BaseModel):
         if (
             isinstance(value, dict)
             and "mode" in value
-            and "gapit" not in value
+            and "gspec" not in value
             and "gmlst" not in value
         ):
-            return {"gapit": {"mode": value["mode"]}}
+            return {"gspec": {"mode": value["mode"]}}
         return value
 
 
@@ -117,14 +117,14 @@ class GmlstSelection(BaseModel):
 class SpeciesSelection(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    gapit: GapitSelection | None = None
+    gspec: GapitSelection | None = None
     gmlst: GmlstSelection | None = None
 
 
 class SampleSelection(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    gapit: GapitSelection | None = None
+    gspec: GapitSelection | None = None
     gmlst: GmlstSelection | None = None
 
 
@@ -135,17 +135,17 @@ class SelectionMeta(BaseModel):
     generated_at: str = ""
     approved_by: str = ""
     registry_signature: str = ""
-    gapit_catalog_hash: str = ""
+    gspec_catalog_hash: str = ""
     gmlst_catalog_hash: str = ""
     note: str = ""
 
     @model_validator(mode="before")
     @classmethod
     def _legacy_meta(cls, value: Any) -> Any:
-        # Old db_selection.yaml wrote ``catalog_hash`` for the gapit catalog.
+        # Old db_selection.yaml wrote ``catalog_hash`` for the gspec catalog.
         if isinstance(value, dict) and "catalog_hash" in value:
             data = dict(value)
-            data.setdefault("gapit_catalog_hash", data.pop("catalog_hash"))
+            data.setdefault("gspec_catalog_hash", data.pop("catalog_hash"))
             return data
         return value
 
@@ -192,7 +192,7 @@ class ToolSelection(BaseModel):
             out[str(key).strip()] = _normalize_entry(item)
         return out
 
-    def effective_gapit_databases(
+    def effective_gspec_databases(
         self,
         code: str | None,
         *,
@@ -201,21 +201,21 @@ class ToolSelection(BaseModel):
     ) -> list[str]:
         """Sample override → species override → registry default → ``[]``."""
         if sample and sample in self.samples:
-            sample_gapit = self.samples[sample].gapit
-            if sample_gapit is not None:
-                return list(sample_gapit.databases)
+            sample_gspec = self.samples[sample].gspec
+            if sample_gspec is not None:
+                return list(sample_gspec.databases)
 
         key = code or UNK
         reg = registry or load_registry()
-        defaults = _registry_gapit_defaults(reg, key)
+        defaults = _registry_gspec_defaults(reg, key)
         spec = self.species.get(key)
-        if spec is None or spec.gapit is None:
+        if spec is None or spec.gspec is None:
             return defaults
 
-        mode = spec.gapit.mode or self.defaults.gapit.mode
+        mode = spec.gspec.mode or self.defaults.gspec.mode
         if mode == "replace":
-            return list(spec.gapit.databases)
-        return _dedupe([*defaults, *spec.gapit.databases])
+            return list(spec.gspec.databases)
+        return _dedupe([*defaults, *spec.gspec.databases])
 
     def effective_gmlst(
         self,
@@ -244,7 +244,7 @@ class ToolSelection(BaseModel):
                 )
         return species_plan
 
-    # Backward-compatible alias for the gapit-only call sites.
+    # Backward-compatible alias for the gspec-only call sites.
     def effective_databases(
         self,
         code: str | None,
@@ -252,7 +252,7 @@ class ToolSelection(BaseModel):
         sample: str | None = None,
         registry: PathogenRegistry | None = None,
     ) -> list[str]:
-        return self.effective_gapit_databases(
+        return self.effective_gspec_databases(
             code, sample=sample, registry=registry
         )
 
@@ -264,7 +264,7 @@ class ToolSelection(BaseModel):
         sample: str | None = None,
         registry: PathogenRegistry | None = None,
     ) -> bool:
-        return database in self.effective_gapit_databases(
+        return database in self.effective_gspec_databases(
             code, sample=sample, registry=registry
         )
 
@@ -274,14 +274,14 @@ DbSelection = ToolSelection
 
 
 def _normalize_entry(item: Any) -> Any:
-    """Accept the v1.4.40 gapit-only shapes as ``{gapit: ...}``."""
+    """Accept the v1.4.40 gspec-only shapes as ``{gspec: ...}``."""
     if isinstance(item, list):
-        return {"gapit": {"databases": item}}
+        return {"gspec": {"databases": item}}
     if isinstance(item, dict):
-        if "gapit" in item or "gmlst" in item:
+        if "gspec" in item or "gmlst" in item:
             return item
         if "databases" in item or "mode" in item:
-            return {"gapit": item}
+            return {"gspec": item}
     return item
 
 
@@ -294,11 +294,11 @@ def _dedupe(values: Any) -> list[str]:
     return out
 
 
-def default_gapit_databases(
+def default_gspec_databases(
     code: str | None, *, registry: PathogenRegistry | None = None
 ) -> list[str]:
-    """Registry default gapit databases for a species code (public helper)."""
-    return _registry_gapit_defaults(registry or load_registry(), code or UNK)
+    """Registry default gspec databases for a species code (public helper)."""
+    return _registry_gspec_defaults(registry or load_registry(), code or UNK)
 
 
 def default_gmlst_plan(
@@ -308,11 +308,11 @@ def default_gmlst_plan(
     return _registry_gmlst_defaults(registry or load_registry(), code or UNK)
 
 
-def _registry_gapit_defaults(registry: PathogenRegistry, code: str) -> list[str]:
+def _registry_gspec_defaults(registry: PathogenRegistry, code: str) -> list[str]:
     if code == UNK:
         return []
     spec = registry.pathogens.get(code)
-    return list(spec.gapit_screens) if spec is not None else []
+    return list(spec.gspec_screens) if spec is not None else []
 
 
 def _registry_gmlst_defaults(registry: PathogenRegistry, code: str) -> GmlstPlan:
@@ -396,8 +396,8 @@ def selection_to_yaml(selection: ToolSelection) -> str:
     """Deterministic YAML (sorted species/sample keys, schema first)."""
     payload: dict[str, Any] = {"schema": SCHEMA}
     defaults: dict[str, Any] = {}
-    if selection.defaults.gapit.mode != "extend":
-        defaults["gapit"] = {"mode": selection.defaults.gapit.mode}
+    if selection.defaults.gspec.mode != "extend":
+        defaults["gspec"] = {"mode": selection.defaults.gspec.mode}
     if selection.defaults.gmlst.mode != "extend":
         defaults["gmlst"] = {"mode": selection.defaults.gmlst.mode}
     if defaults:
@@ -420,12 +420,12 @@ def selection_to_yaml(selection: ToolSelection) -> str:
 
 def _entry_payload(entry: SpeciesSelection | SampleSelection) -> dict[str, Any]:
     payload: dict[str, Any] = {}
-    if entry.gapit is not None:
-        gapit: dict[str, Any] = {}
-        if entry.gapit.mode is not None:
-            gapit["mode"] = entry.gapit.mode
-        gapit["databases"] = list(entry.gapit.databases)
-        payload["gapit"] = gapit
+    if entry.gspec is not None:
+        gspec: dict[str, Any] = {}
+        if entry.gspec.mode is not None:
+            gspec["mode"] = entry.gspec.mode
+        gspec["databases"] = list(entry.gspec.databases)
+        payload["gspec"] = gspec
     if entry.gmlst is not None:
         gmlst: dict[str, Any] = {}
         if entry.gmlst.mode is not None:

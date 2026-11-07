@@ -1,8 +1,8 @@
-"""gapit 分型结果归一（run_gapit_typing.json → summary 字段）。"""
+"""gspec 分型结果归一（run_gspec_typing.json → summary 字段）。"""
 
 from __future__ import annotations
 
-from bacmap.core.analysis.gapit_typing import summarize
+from bacmap.core.analysis.gspec_typing import summarize
 
 
 def _payload(status: str, databases: dict) -> dict:
@@ -71,7 +71,7 @@ class TestClusterPreservation:
                             "k_group": {"phenotype": "K6", "confidence": "high"},
                         },
                         "loci_count": 2,
-                        "raw_schema": "gapit.cluster/2",
+                        "raw_schema": "gspec.cluster/2",
                     }
                 },
             )

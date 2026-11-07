@@ -23,8 +23,8 @@ from bacmap.core.tool_selection import (
     GmlstSelection,
     SelectionError,
     ToolSelection,
-    default_gapit_databases,
     default_gmlst_plan,
+    default_gspec_databases,
     validate_sample_id,
     validate_species_code,
 )
@@ -38,7 +38,7 @@ DIFF_SCHEMA: Literal["bacmap.tool_selection_diff/1"] = (
 
 
 class DbCatalogEntry(BaseModel):
-    """One ``gapit db list --json`` provider row (only fields we consume)."""
+    """One ``gspec db list --json`` provider row (only fields we consume)."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -192,17 +192,17 @@ class SelectionDiff(BaseModel):
 
 
 def parse_catalog(payload: Mapping[str, Any]) -> dict[str, DbCatalogEntry]:
-    """Parse a ``gapit.dblist/1`` document into name → entry."""
+    """Parse a ``gspec.dblist/1`` document into name → entry."""
     providers = payload.get("providers")
     if not isinstance(providers, list):
-        raise SelectionError("gapit db list --json: missing 'providers' array")
+        raise SelectionError("gspec db list --json: missing 'providers' array")
     out: dict[str, DbCatalogEntry] = {}
     for raw in providers:
         if not isinstance(raw, dict):
-            raise SelectionError("gapit db list --json: provider row is not an object")
+            raise SelectionError("gspec db list --json: provider row is not an object")
         name = str(raw.get("name") or "").strip()
         if not name:
-            raise SelectionError("gapit db list --json: provider row without a name")
+            raise SelectionError("gspec db list --json: provider row without a name")
         out[name] = DbCatalogEntry.model_validate(raw)
     return out
 
@@ -283,7 +283,7 @@ def validate_selection(
     if catalog is not None and not catalog:
         report.warn(
             "CATALOG_UNAVAILABLE",
-            "gapit db list returned no databases; names cannot be checked",
+            "gspec db list returned no databases; names cannot be checked",
         )
     if gmlst_catalog is not None and not gmlst_catalog:
         report.warn(
@@ -305,8 +305,8 @@ def validate_selection(
                 f"species {code!r} is not in pathogens.yaml",
                 species=code,
             )
-        if spec.gapit is not None:
-            for database in spec.gapit.databases:
+        if spec.gspec is not None:
+            for database in spec.gspec.databases:
                 _check_database(
                     database,
                     species=code,
@@ -333,8 +333,8 @@ def validate_selection(
                 f"sample key {sample!r} is not a safe sample id",
                 sample=sample,
             )
-        if sample_spec.gapit is not None:
-            for database in sample_spec.gapit.databases:
+        if sample_spec.gspec is not None:
+            for database in sample_spec.gspec.databases:
                 _check_database(
                     database,
                     species="",
@@ -390,7 +390,7 @@ def _check_database(
     if entry is None:
         report.error(
             "UNKNOWN_DATABASE",
-            f"database {database!r} is not in the gapit catalog",
+            f"database {database!r} is not in the gspec catalog",
             species=species,
             database=database,
             sample=sample,
@@ -401,7 +401,7 @@ def _check_database(
         report.warn(
             "DATABASE_NOT_INSTALLED",
             f"database {database!r} is not installed; run "
-            f"`gapit db setup -d {database}` before analysis",
+            f"`gspec db setup -d {database}` before analysis",
             species=species,
             database=database,
             sample=sample,
@@ -711,8 +711,8 @@ def build_options(
     for code, spec in sorted(reg.pathogens.items()):
         if wanted is not None and code != wanted:
             continue
-        defaults = default_gapit_databases(code, registry=reg)
-        effective = selection.effective_gapit_databases(code, registry=reg)
+        defaults = default_gspec_databases(code, registry=reg)
+        effective = selection.effective_gspec_databases(code, registry=reg)
         gmlst_defaults = default_gmlst_plan(code, registry=reg)
         gmlst_effective = selection.effective_gmlst(code, registry=reg)
         gmlst_candidates: set[str] | None = None
@@ -753,7 +753,7 @@ def build_options(
         )
 
     if wanted == UNK:
-        effective = selection.effective_gapit_databases(UNK, registry=reg)
+        effective = selection.effective_gspec_databases(UNK, registry=reg)
         gmlst_effective = selection.effective_gmlst(UNK, registry=reg)
         species_rows.append(
             SpeciesOption(
@@ -815,13 +815,13 @@ def diff_against_defaults(
     reg = registry or load_registry()
     rows: list[SpeciesDiff] = []
     for code in sorted(reg.pathogens):
-        defaults = default_gapit_databases(code, registry=reg)
-        effective = selection.effective_gapit_databases(code, registry=reg)
+        defaults = default_gspec_databases(code, registry=reg)
+        effective = selection.effective_gspec_databases(code, registry=reg)
         gmlst_defaults = default_gmlst_plan(code, registry=reg)
         gmlst_effective = selection.effective_gmlst(code, registry=reg)
-        gapit_changed = defaults != effective
+        gspec_changed = defaults != effective
         gmlst_changed = gmlst_defaults != gmlst_effective
-        if not gapit_changed and not gmlst_changed:
+        if not gspec_changed and not gmlst_changed:
             continue
         rows.append(
             SpeciesDiff(
@@ -843,9 +843,9 @@ def diff_against_defaults(
     return SelectionDiff(
         species=rows,
         samples={
-            sample: list(entry.gapit.databases)
+            sample: list(entry.gspec.databases)
             for sample, entry in sorted(selection.samples.items())
-            if entry.gapit is not None
+            if entry.gspec is not None
         },
         gmlst_samples={
             sample: GmlstPlanOption(

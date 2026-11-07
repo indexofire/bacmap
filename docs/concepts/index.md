@@ -78,7 +78,7 @@ analyze task
   submit ──► DBOS workflow ──► Snakemake (fixed DAG)
                                    │
                                    ├─ gside: species
-                                   ├─ gapit: screening/typing
+                                   ├─ gspec: screening/typing
                                    └─ gmlst: MLST/cgMLST
                                    │
                             runs/<task_id>/...
@@ -96,6 +96,6 @@ exact `(plan_id, version, plan_hash)`, and only then does the engine submit dete
 ## What is deliberately *not* in bacmap
 
 - No built-in chat/assistant (v1.6, ADR-21); conversation is external.
-- No bioinformatics algorithms for genome-only questions; `gside`/`gapit`/`gmlst` own those.
+- No bioinformatics algorithms for genome-only questions; `gside`/`gspec`/`gmlst` own those.
 - No runtime pipeline editing by an LLM; the DAG is a frozen, versioned artifact.
 - No direct store writes from interfaces; all writes are tasks.

@@ -9,7 +9,7 @@ local network.
 sequencing reads / assembled genomes
         │
         ▼
-  Snakemake pipeline ── gside (species) ── gapit (screening/serotype) ── gmlst (MLST/cgMLST)
+  Snakemake pipeline ── gside (species) ── gspec (screening/serotype) ── gmlst (MLST/cgMLST)
         │
         ▼
   run-scoped results ──► GOM objects ──► run record (hashes, versions, seeds)
@@ -96,7 +96,7 @@ bacmap plan confirm <plan_id> --version 1 --hash <first-12-chars>
 - **Deterministic by default.** The analysis DAG is fixed, versioned and deployed from the package;
   every run records parameters, tool/database versions, input hashes and seeds.
 - **Analysis is externalised.** Species identification, gene screening/serotyping and MLST/cgMLST
-  are performed by `gside`, `gapit` and `gmlst` (ADR-20). bacmap orchestrates and adapts; it does
+  are performed by `gside`, `gspec` and `gmlst` (ADR-20). bacmap orchestrates and adapts; it does
   not re-implement bioinformatics algorithms.
 - **Writes go through tasks.** Metadata, lab results, knowledge entries, analyses and open-path
   scripts are submitted as tasks, never written directly by an interface.

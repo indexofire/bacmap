@@ -1,4 +1,4 @@
-"""bacmap selection CLI：select/show/validate/options（gapit + gmlst）。"""
+"""bacmap selection CLI：select/show/validate/options（gspec + gmlst）。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from bacmap.core.tool_selection_validate import DbCatalogEntry, GmlstScheme
 from bacmap.interfaces.cli import selection as selection_cli
 
 
-def _gapit_catalog() -> dict[str, DbCatalogEntry]:
+def _gspec_catalog() -> dict[str, DbCatalogEntry]:
     return {
         "vpara_virulence": DbCatalogEntry(
             name="vpara_virulence", kind="gene", installed=True, source="local"
@@ -61,23 +61,23 @@ def _args(tmp_path: Path, **overrides):
 
 def _patch_catalogs(monkeypatch) -> None:
     monkeypatch.setattr(
-        selection_cli, "fetch_gapit_catalog", lambda **kwargs: _gapit_catalog()
+        selection_cli, "fetch_gspec_catalog", lambda **kwargs: _gspec_catalog()
     )
     monkeypatch.setattr(
         selection_cli, "fetch_gmlst_schemes", lambda **kwargs: _gmlst_catalog()
     )
 
 
-def test_select_gapit_writes_nested_section(tmp_path, monkeypatch, capsys):
+def test_select_gspec_writes_nested_section(tmp_path, monkeypatch, capsys):
     _patch_catalogs(monkeypatch)
     selection_cli.run_selection_select(
-        _args(tmp_path, tool="gapit", species="VPA", databases="vpa_ok,vpa_pai")
+        _args(tmp_path, tool="gspec", species="VPA", databases="vpa_ok,vpa_pai")
     )
     target = tmp_path / "config" / "tool_selection.yaml"
     assert target.is_file()
     text = target.read_text(encoding="utf-8")
     assert "schema: bacmap.tool_selection/1" in text
-    assert "gapit:" in text and "vpa_ok" in text and "vpa_pai" in text
+    assert "gspec:" in text and "vpa_ok" in text and "vpa_pai" in text
     assert json.loads(capsys.readouterr().out)["ok"] is True
 
 
@@ -96,7 +96,7 @@ def test_select_gmlst_writes_modes_and_schemes(tmp_path, monkeypatch, capsys):
     text = target.read_text(encoding="utf-8")
     assert "gmlst:" in text
     assert "vparahaemolyticus_1" in text and "vparahaemolyticus_3" in text
-    assert "gapit:" not in text  # this run only edited the gmlst section
+    assert "gspec:" not in text  # this run only edited the gmlst section
     assert json.loads(capsys.readouterr().out)["ok"] is True
 
 
@@ -107,7 +107,7 @@ def test_validate_unknown_database_fails(tmp_path, monkeypatch, capsys):
         "schema: bacmap.tool_selection/1\n"
         "species:\n"
         "  VPA:\n"
-        "    gapit:\n"
+        "    gspec:\n"
         "      databases: [nope]\n",
         encoding="utf-8",
     )
@@ -149,7 +149,7 @@ def test_select_dry_run_does_not_write(tmp_path, monkeypatch, capsys):
     selection_cli.run_selection_select(
         _args(
             tmp_path,
-            tool="gapit",
+            tool="gspec",
             species="VPA",
             databases="vpa_ok",
             dry_run=True,
@@ -164,7 +164,7 @@ def test_select_dry_run_does_not_write(tmp_path, monkeypatch, capsys):
 def test_show_diff_json(tmp_path, monkeypatch, capsys):
     _patch_catalogs(monkeypatch)
     selection_cli.run_selection_select(
-        _args(tmp_path, tool="gapit", species="VPA", databases="vpa_ok")
+        _args(tmp_path, tool="gspec", species="VPA", databases="vpa_ok")
     )
     capsys.readouterr()
     selection_cli.run_selection_show(_args(tmp_path, diff=True))

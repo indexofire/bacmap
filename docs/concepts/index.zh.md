@@ -78,7 +78,7 @@ analyze task
   submit ──► DBOS workflow ──► Snakemake (fixed DAG)
                                    │
                                    ├─ gside: species
-                                   ├─ gapit: screening/typing
+                                   ├─ gspec: screening/typing
                                    └─ gmlst: MLST/cgMLST
                                    │
                             runs/<task_id>/...
@@ -96,6 +96,6 @@ analyze task
 ## 有意*不*放进 bacmap 的东西
 
 - 没有内置对话/助手（v1.6，ADR-21）；对话在外部进行。
-- 对只需基因组的分析问题不实现生信算法；这些由 `gside`/`gapit`/`gmlst` 负责。
+- 对只需基因组的分析问题不实现生信算法；这些由 `gside`/`gspec`/`gmlst` 负责。
 - 不允许 LLM 在运行时编辑管线；DAG 是冻结的、带版本的产物。
 - 接口层不直接写存储；所有写操作都是任务。

@@ -52,7 +52,7 @@ export BACMAP_CONFIG="$PWD/config.toml"
 | `BACMAP_WEB_COOKIE_SECURE` | 关 | `1` 给 cookie 加上 `Secure` |
 | `BACMAP_LANG` | — | CLI 显示语言覆盖（`en`/`zh`）；优先于 `[ui].language` |
 | `BACMAP_TOOL_SELECTION` | — | 显式 `tool_selection.yaml` 覆盖层路径（§13） |
-| `BACMAP_DB_SELECTION` | — | 旧版 gapit-only 覆盖层路径（加载时翻译为 `tool_selection.yaml`） |
+| `BACMAP_DB_SELECTION` | — | 旧版 gspec-only 覆盖层路径（加载时翻译为 `tool_selection.yaml`） |
 | `BACMAP_RESEARCH_PROFILE` | `research` | Research Workbench 默认治理 Profile（`open-test`/`research`/`publication`） |
 | `BACMAP_DEBUG` | 关 | **仅开发**：显式覆盖 `[debug].enabled`；`1` 开启，`0` 关闭。关闭 Web 鉴权/CSRF、计划确认、任务审批、门、MCP Profile 限制、Research Claim/发表门与沙箱回退；D3/D4→cloud 仍被阻止。 |
 | `BACMAP_BENCHMARK_DATA` | — | Research 科学基准的本地公共数据快照；可指向单个数据集目录，或包含 `bvbrc_kpn_meropenem`/`osf_n78q3` 的父目录 |
@@ -269,7 +269,7 @@ $BACMAP_HOME/
 
 ```json
 {"databases": [
-  {"name": "gapit:card", "version": "3.2.6", "checksum": "sha256:..."},
+  {"name": "gspec:card", "version": "3.2.6", "checksum": "sha256:..."},
   {"name": "gmlst:senterica_2", "version": "2026-09", "checksum": "sha256:..."}
 ]}
 ```
@@ -331,24 +331,24 @@ YAML 覆盖层，升级时不会丢失：
 
 | 层 | 位置 |
 |---|---|
-| 包内默认值 | `core/pathogens.yaml`（gapit 库、gmlst scheme） |
+| 包内默认值 | `core/pathogens.yaml`（gspec 库、gmlst scheme） |
 | 用户/项目覆盖层 | `$BACMAP_HOME/config/tool_selection.yaml`、`BACMAP_TOOL_SELECTION`、工作流 `tool_selection` 键，或 `bacmap selection --selection PATH` |
 | 运行时物种判定 | `species/species_id.json`（gside；仅工作流） |
 
 覆盖层解析顺序：显式路径 → `BACMAP_TOOL_SELECTION` → 旧 `BACMAP_DB_SELECTION` →
 `$BACMAP_HOME/config/tool_selection.yaml` → `$BACMAP_HOME/config/db_selection.yaml`。旧文件
-（`bacmap.db_selection/1`）按 gapit-only 别名读取并在加载时告警。
+（`bacmap.db_selection/1`）按 gspec-only 别名读取并在加载时告警。
 
 Schema `bacmap.tool_selection/1`：
 
 ```yaml
 schema: bacmap.tool_selection/1
 defaults:                        # 可选：条目省略 `mode` 时的合并模式
-  gapit: {mode: extend}          # extend（默认）| replace
+  gspec: {mode: extend}          # extend（默认）| replace
   gmlst: {mode: extend}
 species:
   VPA:
-    gapit:
+    gspec:
       mode: extend               # registry 默认 + 列出的库
       databases: [vpa_ok, vpa_pai]
     gmlst:
@@ -357,14 +357,14 @@ species:
       schemes: {mlst: vparahaemolyticus_1}
 samples:
   S42:
-    gapit: {databases: [vpa_ok]} # 样本条目替换物种列表
+    gspec: {databases: [vpa_ok]} # 样本条目替换物种列表
 meta:                            # 可选：`selection select` 写入的来源信息
   generated_by: cli
   generated_at: "2026-11-07T00:00:00+00:00"
   approved_by: operator
 ```
 
-优先级为 **sample > species > registry**。`gapit.databases` 默认扩展 registry 列表，除非
+优先级为 **sample > species > registry**。`gspec.databases` 默认扩展 registry 列表，除非
 `mode: replace`；`gmlst.modes` 与 `gmlst.schemes` 默认按 key 合并，除非 `mode: replace`。
 未知物种码、库名或 scheme 名都是校验错误——不做任何猜测。scheme 必须在 gmlst catalog 中
 存在（配合 `--downloaded-only` 时还要求已缓存）。
@@ -376,7 +376,7 @@ bacmap selection options --tool all --json   # catalog 行 + 当前选择
 bacmap selection show --diff                 # 生效映射与 registry 的差异
 bacmap selection validate                    # 未知 / 未下载 / 类型不匹配条目
 bacmap selection select --tool gmlst --species VPA --modes mlst --schemes mlst=vparahaemolyticus_1
-bacmap db ...                                # gapit-only 别名（--tool gapit）
+bacmap db ...                                # gspec-only 别名（--tool gspec）
 ```
 
 `bacmap selection options --json` 与只读 MCP 工具 `bio_tool_selection_options` 返回同一份

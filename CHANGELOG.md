@@ -115,25 +115,25 @@
 #### 新增
 - **`tool_selection.yaml` 用户覆盖层**：`core/pathogens.yaml` 继续作为包内默认值，
   用户/项目选择写入 `$BACMAP_HOME/config/tool_selection.yaml`（schema `bacmap.tool_selection/1`），
-  按工具分节：`gapit`（`mode`/`databases`）与 `gmlst`（`mode`/`modes`/`schemes`），
+  按工具分节：`gspec`（`mode`/`databases`）与 `gmlst`（`mode`/`modes`/`schemes`），
   支持 `replace`/`extend`、物种级与单样本覆盖（优先级 sample > species > registry）。
-  旧 `db_selection.yaml`（`bacmap.db_selection/1`）自动翻译为 gapit-only 并告警。
-- **`bacmap selection options|select|show|validate`**：统一查看/编辑 gapit 库与 gmlst
-  模式/scheme；`bacmap db ...` 保留为 gapit-only 别名。校验未知库名/scheme、
+  旧 `db_selection.yaml`（`bacmap.db_selection/1`）自动翻译为 gspec-only 并告警。
+- **`bacmap selection options|select|show|validate`**：统一查看/编辑 gspec 库与 gmlst
+  模式/scheme；`bacmap db ...` 保留为 gspec-only 别名。校验未知库名/scheme、
   mode/scheme 类型不匹配、未下载 scheme、cgmlst/wgmlst 冲突、license、cluster-on-reads。
 - **只读 MCP 工具 `bio_tool_selection_options`**（L1/READ/D0）：AI 获取同一份选项文档；
   写路径仍是本地 CLI 或任务，AI 不直接落盘。
 - **gmlst 覆盖层接线**：`typing_mlst`/`typing_cgmlst` 从 `effective_gmlst` 取 mode/scheme，
   未选时写 `N/A`（不再用 `salmonella_2`/`ecoli_2` 兜底）；新增 `typing_tgmlst` 规则；
   cgMLST cohort 组要求组内 scheme 一致，混合 scheme 的组跳过。
-- **cluster 库分流**：`run_gapit_typing.py` 按 catalog `kind` 选择 `gapit screen --format json`
-  （cluster，typing 已在 screen 内完成）或 `screen` + `gapit typing`（gene），绝不对 cluster TSV
-  跑 `gapit typing`。
+- **cluster 库分流**：`run_gspec_typing.py` 按 catalog `kind` 选择 `gspec screen --format json`
+  （cluster，typing 已在 screen 内完成）或 `screen` + `gspec typing`（gene），绝不对 cluster TSV
+  跑 `gspec typing`。
 - **VPA O/K 表型**：`vpa_ok` 的 `o_group`/`k_group`/`serotype` 并入 `steps.vpa_serotype`
-  （占位规则保留兼容；gapit 结果优先，带 `source: gapit:vpa_ok`）。
+  （占位规则保留兼容；gspec 结果优先，带 `source: gspec:vpa_ok`）。
 
 #### 变更
-- `gapit_typing` 规则新增 `species_id.json` 输入：DAG 解析期合并用户覆盖层，运行时由 gside
+- `gspec_typing` 规则新增 `species_id.json` 输入：DAG 解析期合并用户覆盖层，运行时由 gside
   verdict 选物种码；`Unknown`/低置信度不路由物种特异库（通用 AMR/VF 仍运行）。
 - `pathogens.yaml` 默认值不变（VPA 仍为 `vpara_virulence`）；`vpa_ok`/`vpa_pai` 通过覆盖层按需启用。
 - 运行记录新增 `tool_selection_effective` 与 `tool_selection_sha256`（旧 `db_selection_*` 兼容读取）。
@@ -160,18 +160,18 @@
 - 测试基线：1703 → 1708（`start` 入口/旧命令拒绝/语言切换与回落/配置解析新增
   用例；原中文文案断言改为显式 `BACMAP_LANG=zh` 下断言）。
 
-### 外部工具依赖升级（gside / gapit / gmlst / gseek）
-- PyPI 依赖升级：`gside 0.1.4 → 0.2.2`、`gapit 0.5.6 → 0.6.8`、
-  `gmlst 0.5.5 → 0.6.1`；新增 `gseek ==0.10.4`（gside 0.2+ 依赖，gapit/gmlst
+### 外部工具依赖升级（gside / gspec / gmlst / gseek）
+- PyPI 依赖升级：`gside 0.1.4 → 0.2.2`、`gspec 0.5.6 → 0.6.8`、
+  `gmlst 0.5.5 → 0.6.1`；新增 `gseek ==0.10.4`（gside 0.2+ 依赖，gspec/gmlst
   可选引擎共用）。
-- 适配 gapit 0.6 数据库重命名：`ecoli_dec → eco_dec`、`lm_doumith → lmo_sero`。
+- 适配 gspec 0.6 数据库重命名：`ecoli_dec → eco_dec`、`lm_doumith → lmo_sero`。
 - 补齐 Listeria MLST 声明 `lmonocytogenes_1`，并修复未声明物种静默回退
   `salmonella_2` 的问题；无 scheme 时如实输出 `scheme=none / ST=N/A`。
 - CLI 签名复核与真实单株 analyze 冒烟通过：gside 0.2.2 鉴定
-  *E. coli*（high）、gmlst 0.6.1 得 ecoli_1 ST795、gapit 0.6.8 eco_dec 得
+  *E. coli*（high）、gmlst 0.6.1 得 ecoli_1 ST795、gspec 0.6.8 eco_dec 得
   EPEC_atypical（high），ecoh 如实 `no_scheme`，分析门 pass。
-- 注意：gapit 0.6.7 起 `ecoh`/`ncbi`/`resfinder` 不再随 wheel 捆绑，需要时在安装期
-  `gapit db fetch -d ...`。
+- 注意：gspec 0.6.7 起 `ecoh`/`ncbi`/`resfinder` 不再随 wheel 捆绑，需要时在安装期
+  `gspec db fetch -d ...`。
 
 ### 配置模板与分层配置路径
 - 新增根目录模板 `config.example.toml`，并纳入发行包。
@@ -552,9 +552,9 @@
   `species_ani`/`species_sourmash`（alternate 物种鉴定档，gside `all` 已含多法仲裁）、
   `taxonomy.smk`、`vpara_targets`；Snakefile 移除 `_ALT_*`/`_STANDARD_ACTIVE` 档位门控
   （`.smk` 11→10）。物种/分类学鉴定收敛为单一 `species_identify`（gside）。
-- **vpara_virulence 换装 gapit（ADR-20，冻结文档 v1.4.9）**：删除内联 blastn 筛查，
-  改用 gapit 自定义库 `vpara_virulence`（tdh/trh/tlh）；部署期
-  `workflow/scripts/build_gapit_db.py` 自动建库于 `$BACMAP_HOME/refs/gapit/` 并登记
+- **vpara_virulence 换装 gspec（ADR-20，冻结文档 v1.4.9）**：删除内联 blastn 筛查，
+  改用 gspec 自定义库 `vpara_virulence`（tdh/trh/tlh）；部署期
+  `workflow/scripts/build_gspec_db.py` 自动建库于 `$BACMAP_HOME/refs/gspec/` 并登记
   `refs/manifest.json`；规则输出归一化为既有 `virulence.json` 契约，新增
   tool/database/hits 溯源字段；打包参考序列 `workflow/refs/vpara_virulence.fasta`。
 - gmlst 0.1.1 → **0.5.5**（PyPI；`typing cgmlst -s --format tsv` / `visual matrix|mst` 接口兼容）。
@@ -604,7 +604,7 @@
 - 本地流行特征库（baseline_releases）与 cohort MST（gmlst visual）。
 
 ### 变更（架构裁定，冻结文档 v1.4 → v1.4.8）
-- v1.4.5：血清型扫描与判定整体迁入 gapit，bacmap `core/typing` 删除。
+- v1.4.5：血清型扫描与判定整体迁入 gspec，bacmap `core/typing` 删除。
 - v1.4.7：物种鉴定五模块外移 gside，4 个物种类工具删除；血清型三模块彻底放弃。
 - v1.4.7：genome_annotator 外移（annotation 规则 `pending_external_tool` 占位）。
 - v1.4.8：插件通道取消，仅保留 MCP。

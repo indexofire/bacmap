@@ -32,7 +32,7 @@ from bacmap.core.tool_selection_validate import (
 )
 
 
-def _gapit_catalog() -> dict[str, DbCatalogEntry]:
+def _gspec_catalog() -> dict[str, DbCatalogEntry]:
     return {
         "vpara_virulence": DbCatalogEntry(
             name="vpara_virulence",
@@ -93,27 +93,27 @@ def _gmlst_catalog() -> dict[str, GmlstScheme]:
 class TestGapitMerge:
     def test_empty_uses_registry_defaults(self):
         selection = ToolSelection()
-        assert selection.effective_gapit_databases("VPA") == ["vpara_virulence"]
+        assert selection.effective_gspec_databases("VPA") == ["vpara_virulence"]
 
     def test_replace(self):
         selection = ToolSelection(
             species={
                 "VPA": SpeciesSelection(
-                    gapit=GapitSelection(mode="replace", databases=["vpa_ok", "vpa_pai"])
+                    gspec=GapitSelection(mode="replace", databases=["vpa_ok", "vpa_pai"])
                 )
             }
         )
-        assert selection.effective_gapit_databases("VPA") == ["vpa_ok", "vpa_pai"]
+        assert selection.effective_gspec_databases("VPA") == ["vpa_ok", "vpa_pai"]
 
     def test_extend_keeps_defaults(self):
         selection = ToolSelection(
             species={
                 "VPA": SpeciesSelection(
-                    gapit=GapitSelection(mode="extend", databases=["vpa_ok"])
+                    gspec=GapitSelection(mode="extend", databases=["vpa_ok"])
                 )
             }
         )
-        assert selection.effective_gapit_databases("VPA") == [
+        assert selection.effective_gspec_databases("VPA") == [
             "vpara_virulence",
             "vpa_ok",
         ]
@@ -122,17 +122,17 @@ class TestGapitMerge:
         selection = ToolSelection(
             species={
                 "VPA": SpeciesSelection(
-                    gapit=GapitSelection(mode="replace", databases=["vpa_ok"])
+                    gspec=GapitSelection(mode="replace", databases=["vpa_ok"])
                 )
             },
             samples={
-                "S1": SampleSelection(gapit=GapitSelection(databases=["vpa_pai"]))
+                "S1": SampleSelection(gspec=GapitSelection(databases=["vpa_pai"]))
             },
         )
-        assert selection.effective_gapit_databases("VPA", sample="S1") == ["vpa_pai"]
+        assert selection.effective_gspec_databases("VPA", sample="S1") == ["vpa_pai"]
 
     def test_unknown_code_has_no_defaults(self):
-        assert ToolSelection().effective_gapit_databases("UNK") == []
+        assert ToolSelection().effective_gspec_databases("UNK") == []
 
 
 class TestGmlstMerge:
@@ -206,7 +206,7 @@ class TestLoadWrite:
         selection = ToolSelection(
             species={
                 "VPA": SpeciesSelection(
-                    gapit=GapitSelection(
+                    gspec=GapitSelection(
                         mode="replace", databases=["vpa_ok", "vpa_pai"]
                     ),
                     gmlst=GmlstSelection(
@@ -216,19 +216,19 @@ class TestLoadWrite:
                     ),
                 ),
                 "ECO": SpeciesSelection(
-                    gapit=GapitSelection(mode="extend", databases=["ecoh"])
+                    gspec=GapitSelection(mode="extend", databases=["ecoh"])
                 ),
             },
             samples={
-                "S1": SampleSelection(gapit=GapitSelection(databases=["vpa_ok"]))
+                "S1": SampleSelection(gspec=GapitSelection(databases=["vpa_ok"]))
             },
         )
         target = tmp_path / "config" / "tool_selection.yaml"
         write_selection(selection, target)
         loaded = load_selection(target)
-        assert loaded.effective_gapit_databases("VPA") == ["vpa_ok", "vpa_pai"]
+        assert loaded.effective_gspec_databases("VPA") == ["vpa_ok", "vpa_pai"]
         assert loaded.effective_gmlst("VPA").modes == ["cgmlst"]
-        assert loaded.effective_gapit_databases("ECO") == ["eco_dec", "ecoh"]
+        assert loaded.effective_gspec_databases("ECO") == ["eco_dec", "ecoh"]
         text = target.read_text(encoding="utf-8")
         assert text == selection_to_yaml(loaded)
         assert yaml.safe_load(text)["schema"] == "bacmap.tool_selection/1"
@@ -241,7 +241,7 @@ class TestLoadWrite:
             ToolSelection(
                 species={
                     "VPA": SpeciesSelection(
-                        gapit=GapitSelection(databases=["vpa_ok"])
+                        gspec=GapitSelection(databases=["vpa_ok"])
                     )
                 }
             ),
@@ -262,12 +262,12 @@ class TestLoadWrite:
                 "species": {"VPA": {"databases": ["vpa_ok"]}},
             }
         )
-        assert selection.effective_gapit_databases("VPA") == ["vpa_ok"]
-        assert selection.defaults.gapit.mode == "replace"
+        assert selection.effective_gspec_databases("VPA") == ["vpa_ok"]
+        assert selection.defaults.gspec.mode == "replace"
 
-    def test_list_shorthand_extends_gapit(self):
+    def test_list_shorthand_extends_gspec(self):
         selection = load_selection_data({"species": {"VPA": ["vpa_ok"]}})
-        assert selection.effective_gapit_databases("VPA") == [
+        assert selection.effective_gspec_databases("VPA") == [
             "vpara_virulence",
             "vpa_ok",
         ]
@@ -283,50 +283,50 @@ class TestGapitValidation:
     def test_unknown_species(self):
         selection = ToolSelection(
             species={
-                "XXX": SpeciesSelection(gapit=GapitSelection(databases=["card"]))
+                "XXX": SpeciesSelection(gspec=GapitSelection(databases=["card"]))
             }
         )
-        report = validate_selection(selection, catalog=_gapit_catalog())
+        report = validate_selection(selection, catalog=_gspec_catalog())
         assert not report.ok
         assert any(issue.code == "UNKNOWN_SPECIES" for issue in report.errors)
 
     def test_unknown_database(self):
         selection = ToolSelection(
             species={
-                "VPA": SpeciesSelection(gapit=GapitSelection(databases=["nope"]))
+                "VPA": SpeciesSelection(gspec=GapitSelection(databases=["nope"]))
             }
         )
-        report = validate_selection(selection, catalog=_gapit_catalog())
+        report = validate_selection(selection, catalog=_gspec_catalog())
         assert not report.ok
         assert any(issue.code == "UNKNOWN_DATABASE" for issue in report.errors)
 
     def test_unsafe_database_name_rejected(self):
         selection = ToolSelection(
             species={
-                "VPA": SpeciesSelection(gapit=GapitSelection(databases=["../escape"]))
+                "VPA": SpeciesSelection(gspec=GapitSelection(databases=["../escape"]))
             }
         )
-        report = validate_selection(selection, catalog=_gapit_catalog())
+        report = validate_selection(selection, catalog=_gspec_catalog())
         assert not report.ok
         assert any(issue.code == "INVALID_DATABASE_NAME" for issue in report.errors)
 
     def test_bundled_not_installed_is_fine(self):
         selection = ToolSelection(
             species={
-                "VPA": SpeciesSelection(gapit=GapitSelection(databases=["vpa_pai"]))
+                "VPA": SpeciesSelection(gspec=GapitSelection(databases=["vpa_pai"]))
             }
         )
-        report = validate_selection(selection, catalog=_gapit_catalog())
+        report = validate_selection(selection, catalog=_gspec_catalog())
         assert report.ok
         assert not any(issue.code == "DATABASE_NOT_INSTALLED" for issue in report.warnings)
 
     def test_provider_not_installed_warns(self):
         selection = ToolSelection(
             species={
-                "VPA": SpeciesSelection(gapit=GapitSelection(databases=["card"]))
+                "VPA": SpeciesSelection(gspec=GapitSelection(databases=["card"]))
             }
         )
-        report = validate_selection(selection, catalog=_gapit_catalog())
+        report = validate_selection(selection, catalog=_gspec_catalog())
         assert any(issue.code == "DATABASE_NOT_INSTALLED" for issue in report.warnings)
         assert any(issue.code == "LICENSE_REVIEW" for issue in report.warnings)
 
@@ -436,7 +436,7 @@ class TestOptions:
         selection = ToolSelection()
         doc = build_options(
             selection,
-            catalog=_gapit_catalog(),
+            catalog=_gspec_catalog(),
             gmlst_catalog=_gmlst_catalog(),
             species="VPA",
         )
@@ -447,14 +447,14 @@ class TestOptions:
         assert default == {"vpara_virulence"}
         assert doc.species[0].gmlst.effective.modes == ["mlst", "cgmlst"]
         assert doc.gmlst_catalog_available is True
-        assert doc.catalog_hash == catalog_hash(_gapit_catalog())
+        assert doc.catalog_hash == catalog_hash(_gspec_catalog())
         assert doc.gmlst_catalog_hash == gmlst_catalog_hash(_gmlst_catalog())
 
     def test_unknown_species_filter_raises(self):
         with pytest.raises(SelectionError):
             build_options(
                 ToolSelection(),
-                catalog=_gapit_catalog(),
+                catalog=_gspec_catalog(),
                 gmlst_catalog=_gmlst_catalog(),
                 species="not_a_species",
             )
@@ -463,7 +463,7 @@ class TestOptions:
         selection = ToolSelection(
             species={
                 "VPA": SpeciesSelection(
-                    gapit=GapitSelection(mode="replace", databases=["vpa_ok"])
+                    gspec=GapitSelection(mode="replace", databases=["vpa_ok"])
                 )
             }
         )
@@ -474,9 +474,9 @@ class TestOptions:
 
 
 class TestCatalogs:
-    def test_parse_gapit_and_hash(self):
+    def test_parse_gspec_and_hash(self):
         payload = {
-            "schema": "gapit.dblist/1",
+            "schema": "gspec.dblist/1",
             "providers": [
                 {"name": "vpa_ok", "kind": "cluster", "typing": True, "installed": True},
                 {"name": "card", "kind": "gene", "typing": False, "installed": False},

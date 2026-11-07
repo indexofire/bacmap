@@ -440,12 +440,12 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/bd/f4/27e386913417ad32aae42bba48b0c0cce40e9ff2fba1a871ca2702c37324/fastapi-0.143.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7f/9c/34f6962f9b9e9c71f6e5ed806e0d0ff03c9d1b0b2340088a0cf4bce09b18/flask-3.1.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a6/6e/babde908b879a3b51ffc230919d06a804912559dd4cf8c94f3fa2af69fec/fonttools-4.66.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/7f/40/d595efbc0bd6b61557fd83bfbaf904bbc472b451408ce513e215f556fee3/gapit-0.6.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/e0/57d07f653813b7ea9e3a82064a2b6a112f63004530ac665e0934829473c7/genai_prices-0.1.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ea/68/eb401fc340f743695fb93dcc73218fbdfc30b60deb2d64ba70f955231239/gmlst-0.6.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/e5/0ae74c83c1cab2c14daadf28bd0143eb14bb81503834af987b66badc7b61/griffelib-2.3.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/59/fe/5a7de69fa8dd2c21b507c1f2c793ab44e4dbfa4bd72cd1bfb621e38c987a/gseek-0.10.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a4/19/acf146de43a5f1aa194d1e0520e87ac64b1023480ac556b62adfe43a2342/gside-0.2.2-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/42/74/bd6c9ef927433446ed1ac5f715c08c74766516f517a38a5e2ee5cca2b55a/gspec-0.10.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7e/f5/f66802a942d491edb555dd61e3a9961140fd64c90bce1eafd741609d334d/httpcore-1.0.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl
@@ -977,13 +977,13 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/02/c3/253a89ee03fc9b9682f1541728eb66db7db22148cd94f89ab22528cd1e1b/deprecation-2.1.0-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7f/9c/34f6962f9b9e9c71f6e5ed806e0d0ff03c9d1b0b2340088a0cf4bce09b18/flask-3.1.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a6/6e/babde908b879a3b51ffc230919d06a804912559dd4cf8c94f3fa2af69fec/fonttools-4.66.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/7f/40/d595efbc0bd6b61557fd83bfbaf904bbc472b451408ce513e215f556fee3/gapit-0.6.8-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1b/e0/57d07f653813b7ea9e3a82064a2b6a112f63004530ac665e0934829473c7/genai_prices-0.1.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/f7/ec/67fbef5d497f86283db54c22eec6f6140243aae73265799baaaa19cd17fb/ghp_import-2.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ea/68/eb401fc340f743695fb93dcc73218fbdfc30b60deb2d64ba70f955231239/gmlst-0.6.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/e5/0ae74c83c1cab2c14daadf28bd0143eb14bb81503834af987b66badc7b61/griffelib-2.3.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/59/fe/5a7de69fa8dd2c21b507c1f2c793ab44e4dbfa4bd72cd1bfb621e38c987a/gseek-0.10.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a4/19/acf146de43a5f1aa194d1e0520e87ac64b1023480ac556b62adfe43a2342/gside-0.2.2-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/42/74/bd6c9ef927433446ed1ac5f715c08c74766516f517a38a5e2ee5cca2b55a/gspec-0.10.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d8/9c/6fe8931fd9f381042a9e4c7d5a7b4cbf7016b252bec0c99a49fce42c3326/httpx2-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl
@@ -2750,16 +2750,6 @@ packages:
   license: LGPL-2.1-or-later
   size: 64102
   timestamp: 1790011855888
-- pypi: https://files.pythonhosted.org/packages/7f/40/d595efbc0bd6b61557fd83bfbaf904bbc472b451408ce513e215f556fee3/gapit-0.6.8-py3-none-any.whl
-  name: gapit
-  version: 0.6.8
-  sha256: 3120f8512e3a37df693f3eb776d02b9580cb748352dc9c3d0a5a372be7a85474
-  requires_dist:
-  - click>=8.2
-  - pydantic>=2.7
-  - rich>=13
-  - gseek>=0.10.4 ; extra == 'gseek'
-  requires_python: '>=3.12,<3.13'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/gawk-5.4.1-h0a3468a_0.conda
   sha256: 0ae20399bc13d1097237cf29653c1f2dd68e37f08b47a9b3cab76f97556a6bfa
   md5: 64fd8d804a6aaef55d6d6c562446d72b
@@ -3035,6 +3025,16 @@ packages:
   purls: []
   size: 3376423
   timestamp: 1626369596591
+- pypi: https://files.pythonhosted.org/packages/42/74/bd6c9ef927433446ed1ac5f715c08c74766516f517a38a5e2ee5cca2b55a/gspec-0.10.0-py3-none-any.whl
+  name: gspec
+  version: 0.10.0
+  sha256: 5b10eb9f5fdd42ec6d0ace38ecbe96763b1e71fdf9ed857cdb94298b0832a90b
+  requires_dist:
+  - click>=8.2
+  - pydantic>=2.7
+  - rich>=13
+  - gseek>=0.10.4 ; extra == 'gseek'
+  requires_python: '>=3.12,<3.13'
 - conda: https://conda.anaconda.org/bioconda/linux-64/gubbins-3.4.3-py310hfc0ef84_1.conda
   sha256: 13d4c067c99656b1eb386eaa3f8ac5975f136a5c698489e2b0056516ababc98a
   md5: 72932398b7df9dbbbbc2e63db16b4e36

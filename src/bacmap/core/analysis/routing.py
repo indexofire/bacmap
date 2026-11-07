@@ -4,9 +4,9 @@
 不得对不适用物种执行外部工具：
 
 - SISTR 只做**沙门菌**血清型；
-- ShigaTyper（未来迁 gapit）只做**志贺菌**血清型；
-- `ecoh`（gapit）只做**大肠埃希菌** O/H；
-- `eco_dec`（gapit）只做**大肠埃希菌/志贺菌** DEC 致病型；
+- ShigaTyper（未来迁 gspec）只做**志贺菌**血清型；
+- `ecoh`（gspec）只做**大肠埃希菌** O/H；
+- `eco_dec`（gspec）只做**大肠埃希菌/志贺菌** DEC 致病型；
 - `vpara_virulence`/vpara 血清型只做**副溶血性弧菌**。
 
 本模块是纯函数（无 Snakemake 依赖），供 `rules/report.smk` 构造条件依赖，也便于单测。
@@ -26,14 +26,14 @@ def serotype_engine(species_value: str) -> str:
     return get_workflow_tables().serotype_engines.get(code, "")
 
 
-def uses_gapit_db(
+def uses_gspec_db(
     species_value: str,
     db: str,
     *,
     selection: ToolSelection | None = None,
     sample: str | None = None,
 ) -> bool:
-    """该物种是否声明了给定 gapit 库（决定对应分型步骤是否适用）。
+    """该物种是否声明了给定 gspec 库（决定对应分型步骤是否适用）。
 
     ``selection`` 存在时以用户覆盖后的生效库为准；缺省保持 registry 默认
     （向后兼容，单测/旧调用零变化）。
@@ -42,8 +42,8 @@ def uses_gapit_db(
     if code is None:
         return False
     if selection is not None:
-        return db in selection.effective_gapit_databases(code, sample=sample)
-    return db in get_workflow_tables().gapit_screens.get(code, [])
+        return db in selection.effective_gspec_databases(code, sample=sample)
+    return db in get_workflow_tables().gspec_screens.get(code, [])
 
 
 def report_inputs(
@@ -68,7 +68,7 @@ def report_inputs(
         "card": f"{base}/amr/abricate_card.tsv",
         "amrfinderplus": f"{base}/amr/amrfinderplus.tsv",
         "plasmidfinder": f"{base}/plasmid/abricate_plasmidfinder.tsv",
-        "gapit_typing": f"{base}/gapit/typing.json",
+        "gspec_typing": f"{base}/gspec/typing.json",
         "annotation": f"{base}/annotation/annotation.json",
     }
     if has_qc:
@@ -80,13 +80,13 @@ def report_inputs(
         files["ectyper"] = f"{base}/dec/ecoh_serotype.json"
     if engine == "shigatyper":
         files["shigella_serotype"] = f"{base}/dec/shigella_serotype.json"
-    if uses_gapit_db(species_value, "eco_dec", selection=selection, sample=sample):
+    if uses_gspec_db(species_value, "eco_dec", selection=selection, sample=sample):
         files["pathotype"] = f"{base}/dec/pathotype.json"
     # VPA 的血清型占位始终进 summary（事实性 unavailable）；若用户选了 vpa_ok，
-    # collect_summary 会用 gapit 的 O/K 表型覆盖它。
+    # collect_summary 会用 gspec 的 O/K 表型覆盖它。
     if resolve_species(species_value) == "VPA":
         files["vpa_serotype"] = f"{base}/vpa/vpa_serotype.json"
-    if uses_gapit_db(
+    if uses_gspec_db(
         species_value, "vpara_virulence", selection=selection, sample=sample
     ):
         files["vpa_virulence"] = f"{base}/vpara/virulence.json"

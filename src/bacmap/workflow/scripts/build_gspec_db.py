@@ -1,9 +1,9 @@
-"""部署期构建 gapit 自定义数据库（ADR-20）。
+"""部署期构建 gspec 自定义数据库（ADR-20）。
 
 当前用途：vpara 毒力基因库（tdh/trh/tlh），供 ``vpara_virulence`` 规则筛查。
 
-- 幂等：``<datadir>/<name>/gapit-manifest.json`` 已存在且未 ``--force`` 时跳过；
-- 可选 ``--manifest``：把 ``gapit:<name>``（版本 + 校验值）登记进
+- 幂等：``<datadir>/<name>/gspec-manifest.json`` 已存在且未 ``--force`` 时跳过；
+- 可选 ``--manifest``：把 ``gspec:<name>``（版本 + 校验值）登记进
   ``$BACMAP_HOME/refs/manifest.json``，使运行记录（ADR-18 ``ref_databases``）可追溯；
 - 失败显式非 0 退出（不静默降级）。
 """
@@ -21,12 +21,12 @@ DEFAULT_DESCRIPTION = "V. parahaemolyticus virulence gene markers (tdh/trh/tlh)"
 
 
 def db_built(datadir: Path, name: str) -> bool:
-    return (datadir / name / "gapit-manifest.json").is_file()
+    return (datadir / name / "gspec-manifest.json").is_file()
 
 
 def _db_version(datadir: Path, name: str) -> tuple[str, str]:
-    """从 gapit manifest 取 (version, sha256)。"""
-    manifest = datadir / name / "gapit-manifest.json"
+    """从 gspec manifest 取 (version, sha256)。"""
+    manifest = datadir / name / "gspec-manifest.json"
     try:
         data = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -40,8 +40,8 @@ def _db_version(datadir: Path, name: str) -> tuple[str, str]:
 
 
 def register_manifest(manifest_path: Path, name: str, version: str, checksum: str) -> None:
-    """在 refs/manifest.json 中 upsert ``gapit:<name>``（保序、去重）。"""
-    entry = {"name": f"gapit:{name}", "version": version, "checksum": checksum}
+    """在 refs/manifest.json 中 upsert ``gspec:<name>``（保序、去重）。"""
+    entry = {"name": f"gspec:{name}", "version": version, "checksum": checksum}
     if manifest_path.is_file():
         try:
             data: Any = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -61,7 +61,7 @@ def register_manifest(manifest_path: Path, name: str, version: str, checksum: st
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="build a custom gapit database")
+    parser = argparse.ArgumentParser(description="build a custom gspec database")
     parser.add_argument("--fasta", required=True)
     parser.add_argument("--name", default="vpara_virulence")
     parser.add_argument("--datadir", required=True)
@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not db_built(datadir, args.name):
         cmd = [
-            "gapit",
+            "gspec",
             "db",
             "build",
             args.name,
@@ -89,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
         if proc.returncode != 0:
             print(
-                f"ERROR: gapit db build failed (rc={proc.returncode}): "
+                f"ERROR: gspec db build failed (rc={proc.returncode}): "
                 f"{proc.stderr.strip()[:500]}",
                 file=sys.stderr,
             )

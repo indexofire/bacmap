@@ -29,7 +29,7 @@ What `pixi install` provides:
 
 - **Snakemake and the toolchain**: fastp, shovill, bwa, minimap2, samtools, bcftools, blast,
   bedtools, iqtree, and more (see `pixi.toml`).
-- **Common analysis tools** (ADR-20): `gside` (species identification), `gapit` (gene
+- **Common analysis tools** (ADR-20): `gside` (species identification), `gspec` (gene
   screening/typing), `gmlst` (MLST/cgMLST/MST).
 - **A separate `recomb` environment** with Gubbins for optional recombination detection, because
   its IQ-TREE pin conflicts with the main pipeline; run it with `pixi run -e recomb …`.
@@ -97,7 +97,7 @@ Hermes / Pi / DSH (their own installation)
         ▼
 bacmap (pixi/conda environment with Snakemake and bioinformatics tools)
         ▼
-gside / gapit / gmlst / samtools / blast / ...
+gside / gspec / gmlst / samtools / blast / ...
 ```
 
 For stdio access to a standalone conda environment, prefer:
@@ -182,7 +182,7 @@ the exact versions used:
 
 ```json
 {"databases": [
-  {"name": "gapit:card", "version": "3.2.6", "checksum": "sha256:..."},
+  {"name": "gspec:card", "version": "3.2.6", "checksum": "sha256:..."},
   {"name": "gmlst:senterica_2", "version": "2026-09", "checksum": "sha256:..."}
 ]}
 ```

@@ -728,11 +728,11 @@ def build_parser() -> argparse.ArgumentParser:
         )
         _add_home(d_options)
         _add_json(d_options)
-        d_options.add_argument("--tool", choices=["gapit", "gmlst", "all"], default=default_tool)
+        d_options.add_argument("--tool", choices=["gspec", "gmlst", "all"], default=default_tool)
         d_options.add_argument(
             "--species", default="", help=T("species code/label", "物种码/标签（如 VPA）")
         )
-        d_options.add_argument("--datadir", default="", help=T("gapit datadir", "gapit datadir"))
+        d_options.add_argument("--datadir", default="", help=T("gspec datadir", "gspec datadir"))
         d_options.add_argument(
             "--selection",
             default="",
@@ -774,7 +774,7 @@ def build_parser() -> argparse.ArgumentParser:
         )
         _add_home(d_validate)
         _add_json(d_validate)
-        d_validate.add_argument("--datadir", default="", help=T("gapit datadir", "gapit datadir"))
+        d_validate.add_argument("--datadir", default="", help=T("gspec datadir", "gspec datadir"))
         d_validate.add_argument(
             "--downloaded-only",
             action="store_true",
@@ -787,14 +787,14 @@ def build_parser() -> argparse.ArgumentParser:
         )
         _add_home(d_select)
         _add_json(d_select)
-        d_select.add_argument("--tool", choices=["gapit", "gmlst", "all"], default=default_tool)
+        d_select.add_argument("--tool", choices=["gspec", "gmlst", "all"], default=default_tool)
         d_select.add_argument(
             "--species", default="", help=T("species code/label", "物种码/标签（交互时可省略）")
         )
         d_select.add_argument(
             "--databases",
             default="",
-            help=T("gapit: comma-separated DB names", "gapit: 逗号分隔的库名"),
+            help=T("gspec: comma-separated DB names", "gspec: 逗号分隔的库名"),
         )
         d_select.add_argument(
             "--modes",
@@ -817,7 +817,7 @@ def build_parser() -> argparse.ArgumentParser:
             default="",
             help=T("target tool_selection.yaml", "目标 tool_selection.yaml 路径"),
         )
-        d_select.add_argument("--datadir", default="", help=T("gapit datadir", "gapit datadir"))
+        d_select.add_argument("--datadir", default="", help=T("gspec datadir", "gspec datadir"))
         d_select.add_argument(
             "--downloaded-only",
             action="store_true",
@@ -833,8 +833,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_selection = sub.add_parser(
         "selection",
         help=T(
-            "species→tool reference selection (gapit DBs / gmlst modes and schemes)",
-            "物种→工具参考数据选择（gapit 库 / gmlst 模式与 scheme）",
+            "species→tool reference selection (gspec DBs / gmlst modes and schemes)",
+            "物种→工具参考数据选择（gspec 库 / gmlst 模式与 scheme）",
         ),
     )
     _add_selection_commands(p_selection, default_tool="all", dest="selection_command")
@@ -842,11 +842,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_db = sub.add_parser(
         "db",
         help=T(
-            "gapit-only alias for `selection --tool gapit`",
-            "gapit-only 别名（等价于 selection --tool gapit）",
+            "gspec-only alias for `selection --tool gspec`",
+            "gspec-only 别名（等价于 selection --tool gspec）",
         ),
     )
-    _add_selection_commands(p_db, default_tool="gapit", dest="db_command")
+    _add_selection_commands(p_db, default_tool="gspec", dest="db_command")
 
     p_search = sub.add_parser("search", help=T("search samples", "样本检索"))
     p_search.add_argument(

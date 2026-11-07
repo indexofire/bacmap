@@ -1,7 +1,7 @@
 """Shigella 血清型判定（ShigaTyper 外部化；ADR-20：bacmap 只编排 + 适配）。
 
 ShigaTyper 从 Illumina reads 预测志贺菌血清型（含 ipaB 状态）；未来计划迁到
-gapit（届时替换本脚本，输出契约保持不变）。
+gspec（届时替换本脚本，输出契约保持不变）。
 
 用法：
     python run_shigatyper.py --r1 R1.fastq.gz --r2 R2.fastq.gz \

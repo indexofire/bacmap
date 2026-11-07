@@ -1,7 +1,7 @@
 """ToolSpec 注册表（ADR-04：唯一事实来源）。
 
 由 hermes-bacmap 的 29 项 legacy 表迁移而来，现存 27 项。
-v1.4.5 去 bio_vpa_serotype（typing→gapit）；v1.4.7 去
+v1.4.5 去 bio_vpa_serotype（typing→gspec）；v1.4.7 去
 bio_validate_taxonomy / bio_species_compare / bio_db_setup / bio_db_status（物种鉴定→gside）；
 新增 bio_compare_runs（ADR-18 运行比较工具）、bio_inspect_dataset（沙箱数据集登记查看）、
 bio_list_reference_genomes（参考基因组清单/供给状态）。

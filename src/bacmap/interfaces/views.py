@@ -35,7 +35,7 @@ def overview_data(engine: DbosTaskEngine) -> dict[str, Any]:
         for e in cfg.endpoints.values()
     ]
     versions: dict[str, str] = {}
-    for pkg in ("bacmap", "gside", "gapit", "gmlst"):
+    for pkg in ("bacmap", "gside", "gspec", "gmlst"):
         try:
             versions[pkg] = pkg_version(pkg)
         except PackageNotFoundError:

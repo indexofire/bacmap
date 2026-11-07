@@ -102,7 +102,7 @@ bacmap 有意只做编排，而不重新实现：
 | 问题 | 工具 |
 |---|---|
 | 这是什么物种？ | `gside species`（marker/panel/ANI/sketch/GTDB 档位） |
-| 有哪些耐药/毒力/血清型基因？ | `gapit screen` + 分型方案 |
+| 有哪些耐药/毒力/血清型基因？ | `gspec screen` + 分型方案 |
 | MLST/cgMLST 谱是什么？ | `gmlst typing` |
 | SNP 树 / 重组？ | 管线规则（IQ-TREE，可选 Gubbins） |
 

@@ -28,7 +28,7 @@ bacmap --version      # 0.1.2
 
 - **Snakemake 与工具链**：fastp、shovill、bwa、minimap2、samtools、bcftools、blast、
   bedtools、iqtree 等（见 `pixi.toml`）。
-- **常用分析工具**（ADR-20）：`gside`（物种鉴定）、`gapit`（基因筛查/分型）、
+- **常用分析工具**（ADR-20）：`gside`（物种鉴定）、`gspec`（基因筛查/分型）、
   `gmlst`（MLST/cgMLST/MST）。
 - **独立的 `recomb` 环境**，内含 Gubbins，用于可选的重组检测。因为其与
   IQ-TREE 版本锁定与主管线冲突；请用 `pixi run -e recomb …` 运行。
@@ -95,7 +95,7 @@ Hermes / Pi / DSH（自己的安装环境）
         ▼
 bacmap（pixi/conda 环境，含 Snakemake 与生信工具）
         ▼
-gside / gapit / gmlst / samtools / blast / ...
+gside / gspec / gmlst / samtools / blast / ...
 ```
 
 stdio 连接独立 conda 环境时推荐：
@@ -178,7 +178,7 @@ export GTDBTK_DATA_PATH=/srv/db/gtdbtk
 
 ```json
 {"databases": [
-  {"name": "gapit:card", "version": "3.2.6", "checksum": "sha256:..."},
+  {"name": "gspec:card", "version": "3.2.6", "checksum": "sha256:..."},
   {"name": "gmlst:senterica_2", "version": "2026-09", "checksum": "sha256:..."}
 ]}
 ```

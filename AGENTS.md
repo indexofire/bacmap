@@ -21,7 +21,7 @@ bacmap：本地病原菌基因组分析系统（单工作站、数据不出网�
    新工具的 `effect` 与 `output_data_class` 必须如实标注，写类工具不得直接注册进 MCP；
    MCP 按实例 Profile 裁剪数据级别（默认 `cloud`），提交者身份由服务端认定（v1.5）。
 6. **生信分析外部化（ADR-20）**：只依赖基因组的分析一律外部工具
-   （gside=物种鉴定、gapit=基因筛查/血清型、gmlst=MLST/cgMLST/MST），
+   （gside=物种鉴定、gspec=基因筛查/血清型、gmlst=MLST/cgMLST/MST），
    bacmap 只做编排、适配与"需结合本地数据的判定"。不要在 bacmap 里写生信算法。
 7. **测试基线不得回退**：当前 1838 passed。删测试来"通过"是最严重违规。
    （v1.6.0 基线由 1546 调整为 1500、v1.6.1 再调整为 1489：前者因 ADR-21 移除内置会话助手时其专属测试随之删除，后者为清理仅被该助手使用的死代码；
@@ -47,7 +47,7 @@ pixi run -e dev test            # pytest —— 注意必须 -e dev（default �
 pixi run -e dev lint            # ruff（src + tests）
 pixi run -e dev typecheck       # mypy（src/bacmap，ADR-02/规则 3）
 pixi run -e dev contracts       # import-linter
-pixi shell                      # 激活后可用 bacmap / gside / gapit / gmlst / snakemake
+pixi shell                      # 激活后可用 bacmap / gside / gspec / gmlst / snakemake
 bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟；默认 cloud Profile）
 ```
 
@@ -61,7 +61,7 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟；默认 c
 | `core/` | 领域模型、表定义 | 最底层，不依赖任何上层 |
 | `store/` | GOM/知识库持久化 | 只依赖 core |
 | `tools/` | 工具注册表 + 27 个 bio_* 工具 | 只依赖 core/store |
-| `workflow/` | Snakemake 规则（10 个 .smk）与脚本 | pending_gapit/pending_external_tool 占位等外部工具；物种鉴定整体交 gside |
+| `workflow/` | Snakemake 规则（10 个 .smk）与脚本 | pending_gspec/pending_external_tool 占位等外部工具；物种鉴定整体交 gside |
 | `tasks/` | DBOS 任务引擎、门、特征库 | 唯一导入 dbos 的模块（ADR-02） |
 | `agent/` | 意图分类、LLM 网关、任务内智能体（解读）、沙箱、仲裁 | 仅 `agent.llm` 导入 pydantic-ai |
 | `application/` | 应用服务（v1.5）：`PlanService` 版本化计划、统一错误 | 不得导入 interfaces/agent |
@@ -82,15 +82,15 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟；默认 c
 
 ## 外部工具依赖（pixi [pypi-dependencies]）
 
-- `gside ==0.2.2`、`gapit ==0.6.8`、`gmlst ==0.6.1`、`gseek ==0.10.4`：PyPI 发布版
+- `gside ==0.2.2`、`gspec ==0.10.0`、`gmlst ==0.6.1`、`gseek ==0.10.4`：PyPI 发布版
 - 升级这些工具后必须复核：CLI 接口签名 + bacmap 侧解析器 + V10 式单株冒烟
 
 ## 已知占位（等外部能力就绪后替换）
 
 | 位置 | 占位值 | 等待 |
 |---|---|---|
-| `workflow/rules/dec_shigella.smk`、`vpara.smk` 血清型 | `pending_gapit` | gapit 血清型子命令 |
-| `workflow/rules/annotation.smk` | `pending_external_tool` | gapit 注释子命令 |
+| `workflow/rules/dec_shigella.smk`、`vpara.smk` 血清型 | `pending_gspec` | gspec 血清型子命令 |
+| `workflow/rules/annotation.smk` | `pending_external_tool` | gspec 注释子命令 |
 
 > 物种与分类学鉴定已整体由 gside 承担（`species_identify` 规则 + `species_mode` 档位），
 > 原 `species_ani`/`species_sourmash`/`taxonomy`/`vpara_targets` 占位规则已删除（v1.4.10）。

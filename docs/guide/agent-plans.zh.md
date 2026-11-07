@@ -42,7 +42,7 @@ bacmap MCP 服务器在初始化时会返回一段 **server instructions**，已
 
 - 分析/写入先 `bacmap_create_plan`；
 - 计划由人确认，智能体不能确认；
-- 不要用 Harness 自己的 shell/文件工具运行 `snakemake`/`gside`/`gapit`/`gmlst`；
+- 不要用 Harness 自己的 shell/文件工具运行 `snakemake`/`gside`/`gspec`/`gmlst`；
 - 不要读取原始序列，只传绝对路径或样本 ID；
 - 结果用 `bacmap_get_plan` / `bacmap_task_status` / `bacmap_task_result` 跟踪；
 - 结论引用样本、task、run 标识。
@@ -65,7 +65,7 @@ AGENTS.md         # 跨客户端通用（当前目录）
 
 - bacmap 相关分析只调用 mcp__bacmap__* 工具。
 - 写入/分析先 bacmap_create_plan；把 plan_id/version/plan_hash/confirm_url 给用户，等待人工确认。
-- 禁止用 shell 运行 snakemake/gside/gapit/gmlst；禁止读取 FASTQ/FASTA 原文。
+- 禁止用 shell 运行 snakemake/gside/gspec/gmlst；禁止读取 FASTQ/FASTA 原文。
 - 用户提供绝对路径或样本 ID；由 bacmap 本地执行。
 - 跟踪用 bacmap_get_plan/bacmap_task_status；结论引用 task_id/run_id。
 ```
@@ -174,7 +174,7 @@ allow_local_trusted = true
 ### 3.0 先安装 Harness（三者任选）
 
 三者都与 bacmap 环境解耦，可以装在系统、npm、pipx 或各自的独立 conda 环境中；它们不需要
-看见 `snakemake`、`gside`、`gapit`、`gmlst`。
+看见 `snakemake`、`gside`、`gspec`、`gmlst`。
 
 **Hermes**
 

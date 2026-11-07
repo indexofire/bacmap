@@ -30,23 +30,23 @@ def _deployed_dir() -> Path:
 
 
 DEPLOYED_DIR = _deployed_dir()  # 兼容导出；实际写入一律经 _deployed_dir()
-GAPIT_DB_NAME = "vpara_virulence"
-GAPIT_REF_FASTA = "refs/vpara_virulence.fasta"
+GSPEC_DB_NAME = "vpara_virulence"
+GSPEC_REF_FASTA = "refs/vpara_virulence.fasta"
 
 
-def _ensure_gapit_vpara_db(deployed: Path) -> None:
-    """部署期构建 vpara 毒力基因 gapit 自定义库（ADR-20）。
+def _ensure_gspec_vpara_db(deployed: Path) -> None:
+    """部署期构建 vpara 毒力基因 gspec 自定义库（ADR-20）。
 
-    幂等：DB 已存在（manifest 在）即跳过；gapit 缺失/失败仅告警，不阻断部署
+    幂等：DB 已存在（manifest 在）即跳过；gspec 缺失/失败仅告警，不阻断部署
     （该规则在缺少 DB 时会显式失败，见 vpara.smk / vpara_virulence.py）。
     """
-    fasta = deployed / GAPIT_REF_FASTA
+    fasta = deployed / GSPEC_REF_FASTA
     if not fasta.is_file():
         return
-    datadir = BACMAP_HOME / "refs" / "gapit"
-    if (datadir / GAPIT_DB_NAME / "gapit-manifest.json").is_file():
+    datadir = BACMAP_HOME / "refs" / "gspec"
+    if (datadir / GSPEC_DB_NAME / "gspec-manifest.json").is_file():
         return
-    script = deployed / "scripts" / "build_gapit_db.py"
+    script = deployed / "scripts" / "build_gspec_db.py"
     if not script.is_file():
         return
     cmd = [
@@ -55,7 +55,7 @@ def _ensure_gapit_vpara_db(deployed: Path) -> None:
         "--fasta",
         str(fasta),
         "--name",
-        GAPIT_DB_NAME,
+        GSPEC_DB_NAME,
         "--datadir",
         str(datadir),
         "--manifest",
@@ -64,12 +64,12 @@ def _ensure_gapit_vpara_db(deployed: Path) -> None:
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        logger.warning("gapit vpara db build skipped: %s", exc)
+        logger.warning("gspec vpara db build skipped: %s", exc)
         return
     if proc.returncode != 0:
-        logger.warning("gapit vpara db build failed: %s", proc.stderr.strip()[:300])
+        logger.warning("gspec vpara db build failed: %s", proc.stderr.strip()[:300])
     else:
-        logger.info("gapit vpara db ready: %s", proc.stdout.strip()[:200])
+        logger.info("gspec vpara db ready: %s", proc.stdout.strip()[:200])
 
 
 def _tree_hash(root: Path) -> str:
@@ -149,7 +149,7 @@ def deploy(force: bool = False) -> Path:
         )
     cfg.write_text(rewritten)
 
-    _ensure_gapit_vpara_db(deployed)
+    _ensure_gspec_vpara_db(deployed)
 
     stamp.write_text(pkg_hash)
     return deployed

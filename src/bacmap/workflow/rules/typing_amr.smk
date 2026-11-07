@@ -4,7 +4,7 @@ import sys
 
 from bacmap.core.pathogen_registry import get_workflow_tables, resolve_species  # noqa: E402
 from bacmap.core.analysis.routing import serotype_engine as _routing_engine  # noqa: E402
-from bacmap.core.analysis.routing import uses_gapit_db as _routing_uses_db  # noqa: E402
+from bacmap.core.analysis.routing import uses_gspec_db as _routing_uses_db  # noqa: E402
 
 _TABLES = get_workflow_tables()
 
@@ -26,8 +26,8 @@ def _serotype_engine(sample):
     return _routing_engine(SAMPLES_DF.loc[sample, "species"])
 
 
-def _uses_gapit_db(sample, db):
-    """样本物种是否声明了该 gapit 库（决定该分型步骤是否适用）。"""
+def _uses_gspec_db(sample, db):
+    """样本物种是否声明了该 gspec 库（决定该分型步骤是否适用）。"""
     return _routing_uses_db(SAMPLES_DF.loc[sample, "species"], db)
 
 
@@ -118,7 +118,7 @@ rule amr_abricate_vfdb:
         mincov = ABRICATE_MINCOV
     shell:
         "mkdir -p $(dirname {output.result}) && "
-        "gapit screen {input.contigs} --db vfdb --minid {params.minid} --mincov {params.mincov} "
+        "gspec screen {input.contigs} --db vfdb --minid {params.minid} --mincov {params.mincov} "
         "> {output.result}"
 
 rule amr_abricate_card:
@@ -133,7 +133,7 @@ rule amr_abricate_card:
     threads: 2
     shell:
         "mkdir -p $(dirname {output.result}) && "
-        "gapit screen {input.contigs} --db card --minid {params.minid} --mincov {params.mincov} "
+        "gspec screen {input.contigs} --db card --minid {params.minid} --mincov {params.mincov} "
         "> {output.result}"
 
 rule amr_abricate_plasmidfinder:
@@ -146,7 +146,7 @@ rule amr_abricate_plasmidfinder:
         mincov = ABRICATE_MINCOV
     shell:
         "mkdir -p $(dirname {output.result}) && "
-        "gapit screen {input.contigs} --db plasmidfinder --minid {params.minid} --mincov {params.mincov} "
+        "gspec screen {input.contigs} --db plasmidfinder --minid {params.minid} --mincov {params.mincov} "
         "> {output.result}"
 
 rule amr_amrfinderplus:

@@ -213,11 +213,11 @@ Claim 审核 → `publication-readiness`（G0–G3）。`--members`、`--spec`�
 
 ```text
 bacmap selection path [--selection PATH] [--home H] [--json]
-bacmap selection options [--tool gapit|gmlst|all] [--species CODE] [--datadir DIR]
+bacmap selection options [--tool gspec|gmlst|all] [--species CODE] [--datadir DIR]
                          [--selection PATH] [--downloaded-only] [--home H] [--json]
 bacmap selection show [--species CODE] [--selection PATH] [--diff] [--home H] [--json]
 bacmap selection validate [PATH] [--datadir DIR] [--downloaded-only] [--home H] [--json]
-bacmap selection select [--tool gapit|gmlst|all] [--species CODE] [--databases A,B]
+bacmap selection select [--tool gspec|gmlst|all] [--species CODE] [--databases A,B]
                         [--modes mlst,cgmlst] [--schemes mlst=NAME,cgmlst=NAME]
                         [--from-json FILE] [--from-yaml FILE] [--selection PATH]
                         [--mode extend|replace] [--yes] [--dry-run] [--home H] [--json]
@@ -227,7 +227,7 @@ bacmap selection select [--tool gapit|gmlst|all] [--species CODE] [--databases A
 [配置 §13](configuration.zh.md#13-tool_selectionyaml)）：
 
 - `path` 显示实际解析到的覆盖层路径（显式 → 环境变量 → home；不会创建文件）；
-- `options` 合并实时 catalog（gapit `db list --json`、gmlst `scheme list -f json`）与当前
+- `options` 合并实时 catalog（gspec `db list --json`、gmlst `scheme list -f json`）与当前
   选择，输出一个 JSON 文档——与只读 MCP 工具 `bio_tool_selection_options` 返回的文档相同；
 - `show` 显示生效的物种映射；`--diff` 与 registry 默认值比较；
 - `validate` 拒绝未知库/scheme、mode/scheme 类型不匹配、未下载 scheme、cgmlst/wgmlst
@@ -235,13 +235,13 @@ bacmap selection select [--tool gapit|gmlst|all] [--species CODE] [--databases A
 - `select` 通过交互、命令行参数或 `--from-json`/`--from-yaml` 构造选择，校验后原子写入
   （`.bak` 保留上一份文档）；`--dry-run` 只打印不写盘。
 
-`bacmap db ...` 是固定 `--tool gapit` 的同一套解析器，保留为 gapit-only 别名：
+`bacmap db ...` 是固定 `--tool gspec` 的同一套解析器，保留为 gspec-only 别名：
 `bacmap db path|options|show|validate|select`。
 
 ```bash
 bacmap selection options --tool all --json | jq '.species[0]'
 bacmap selection show --diff
-bacmap selection select --tool gapit --species VPA --databases vpa_ok,vpa_pai
+bacmap selection select --tool gspec --species VPA --databases vpa_ok,vpa_pai
 ```
 
 ## `bacmap agent`

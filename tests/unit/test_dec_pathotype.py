@@ -1,4 +1,4 @@
-"""DEC 致病型结果归一（gapit typing_result → summary 字段）。"""
+"""DEC 致病型结果归一（gspec typing_result → summary 字段）。"""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ class TestSummarize:
 
     def test_skipped_and_failed_are_na(self):
         for payload in (
-            {"status": "skipped", "reason": "gapit not found"},
+            {"status": "skipped", "reason": "gspec not found"},
             {"status": "failed", "stage": "screen", "error": "boom"},
             None,
             {},

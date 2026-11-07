@@ -14,7 +14,7 @@ bacmap doctor --json
 | `sandbox` | Apptainer/Podman 可用性 | 运行 `mine` 前安装；`passthrough` 表示无隔离 |
 | `llm` | 配置的端点可达性 | 确定性功能仍可用（C3） |
 | `disk` | 可用空间 ≥1 GB | 清理空间或迁移 `BACMAP_HOME` |
-| `tools` | `gside`、`gapit`、`gmlst`、`snakemake` 在 `PATH` | 在 pixi 环境中运行 |
+| `tools` | `gside`、`gspec`、`gmlst`、`snakemake` 在 `PATH` | 在 pixi 环境中运行 |
 
 只有 `fail` 项会让退出码为 `1`。
 

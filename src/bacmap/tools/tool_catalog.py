@@ -1,6 +1,6 @@
 """Read-only tool catalogs + agent selection-options tool.
 
-``gapit db list --json`` and ``gmlst scheme list/show -f json`` are the live
+``gspec db list --json`` and ``gmlst scheme list/show -f json`` are the live
 sources of database/scheme facts.  The species defaults stay in
 ``core/pathogens.yaml``; this module never invents a mapping.
 """
@@ -29,11 +29,11 @@ from bacmap.core.tool_selection_validate import (
 from bacmap.tools._common import tool_handler
 
 
-def fetch_gapit_catalog(
-    *, datadir: str | None = None, gapit: str | None = None, timeout: int = 60
+def fetch_gspec_catalog(
+    *, datadir: str | None = None, gspec: str | None = None, timeout: int = 60
 ) -> dict[str, DbCatalogEntry]:
-    """Fetch ``gapit db list --json``; an unavailable gapit returns ``{}``."""
-    executable = gapit or shutil.which("gapit")
+    """Fetch ``gspec db list --json``; an unavailable gspec returns ``{}``."""
+    executable = gspec or shutil.which("gspec")
     if not executable:
         return {}
     cmd = [executable, "db", "list", "--json"]
@@ -58,7 +58,7 @@ def fetch_gapit_catalog(
 
 
 # Backward-compatible name for call sites written before the v1.4.40 rename.
-fetch_catalog = fetch_gapit_catalog
+fetch_catalog = fetch_gspec_catalog
 
 
 def fetch_gmlst_schemes(
@@ -140,11 +140,11 @@ def options_payload(
     resolved = resolve_selection_path(selection_path or None, home=home_path)
 
     selected_tool = tool.strip().lower()
-    if selected_tool not in {"gapit", "gmlst", "all"}:
-        raise SelectionError(f"unknown tool: {tool!r} (gapit|gmlst|all)")
-    gapit_catalog = (
-        fetch_gapit_catalog(datadir=datadir or None)
-        if selected_tool in {"gapit", "all"}
+    if selected_tool not in {"gspec", "gmlst", "all"}:
+        raise SelectionError(f"unknown tool: {tool!r} (gspec|gmlst|all)")
+    gspec_catalog = (
+        fetch_gspec_catalog(datadir=datadir or None)
+        if selected_tool in {"gspec", "all"}
         else None
     )
     gmlst_catalog = (
@@ -154,7 +154,7 @@ def options_payload(
     )
     document = build_options(
         selection,
-        catalog=gapit_catalog,
+        catalog=gspec_catalog,
         gmlst_catalog=gmlst_catalog,
         species=species or None,
         selection_path=str(resolved or ""),
@@ -165,7 +165,7 @@ def options_payload(
 
 @tool_handler
 def tool_selection_options(args: dict[str, Any], **kwargs: Any) -> str:
-    """Agent tool: list species defaults + live gapit/gmlst catalogs.
+    """Agent tool: list species defaults + live gspec/gmlst catalogs.
 
     Read-only (L1/D0).  Use the returned ``default``/``selected`` flags to
     propose a ``tool_selection.yaml``; write it through the CLI or a task,
@@ -183,4 +183,4 @@ def tool_selection_options(args: dict[str, Any], **kwargs: Any) -> str:
 
 
 # Backward-compatible handler name (not registered as a second MCP tool).
-gapit_db_options = tool_selection_options
+gspec_db_options = tool_selection_options

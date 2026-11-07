@@ -172,12 +172,12 @@ def collect_checks(home: Path) -> list[dict[str, str]]:
     )
 
     missing = [
-        t for t in ("gside", "gapit", "gmlst", "snakemake") if shutil.which(t) is None
+        t for t in ("gside", "gspec", "gmlst", "snakemake") if shutil.which(t) is None
     ]
     tools_detail = (
         T("missing external tools: ", "外部工具缺失：") + ", ".join(missing)
         if missing
-        else T("gside/gapit/gmlst/snakemake available", "gside/gapit/gmlst/snakemake 可用")
+        else T("gside/gspec/gmlst/snakemake available", "gside/gspec/gmlst/snakemake 可用")
     )
     checks.append(_check("tools", "ok" if not missing else "warn", tools_detail))
     return checks

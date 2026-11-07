@@ -317,7 +317,7 @@ class TestGeneScan:
         )
 
         def fake_run(cmd, capture_output=True, text=True, timeout=600):
-            assert cmd[:3] == ["gapit", "screen", str(contigs)]
+            assert cmd[:3] == ["gspec", "screen", str(contigs)]
             assert cmd[cmd.index("--db") + 1] == "card"
             assert cmd[cmd.index("--minid") + 1] == "90.0"
 
@@ -353,7 +353,7 @@ class TestGeneScan:
         r = _parse(tools.gene_scan({"contigs_path": str(contigs), "database": "card,vfdb"}))
         assert [x["database"] for x in r["results"]] == ["card", "vfdb"]
 
-    def test_gapit_failure_returns_error(self, tmp_path, monkeypatch):
+    def test_gspec_failure_returns_error(self, tmp_path, monkeypatch):
         contigs = tmp_path / "contigs.fa"
         contigs.write_text(">c\nACGT\n")
 

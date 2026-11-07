@@ -8,7 +8,7 @@ from bacmap.core.tool_selection_validate import DbCatalogEntry, GmlstScheme
 from bacmap.tools import tool_catalog
 
 
-def _gapit_catalog() -> dict[str, DbCatalogEntry]:
+def _gspec_catalog() -> dict[str, DbCatalogEntry]:
     return {
         "vpara_virulence": DbCatalogEntry(
             name="vpara_virulence", kind="gene", installed=True, source="local"
@@ -35,7 +35,7 @@ def _gmlst_catalog() -> dict[str, GmlstScheme]:
 
 def test_options_payload_vpa(monkeypatch):
     monkeypatch.setattr(
-        tool_catalog, "fetch_gapit_catalog", lambda **kwargs: _gapit_catalog()
+        tool_catalog, "fetch_gspec_catalog", lambda **kwargs: _gspec_catalog()
     )
     monkeypatch.setattr(
         tool_catalog, "fetch_gmlst_schemes", lambda **kwargs: _gmlst_catalog()
@@ -57,7 +57,7 @@ def test_options_payload_vpa(monkeypatch):
 
 def test_agent_handler_returns_json(monkeypatch):
     monkeypatch.setattr(
-        tool_catalog, "fetch_gapit_catalog", lambda **kwargs: _gapit_catalog()
+        tool_catalog, "fetch_gspec_catalog", lambda **kwargs: _gspec_catalog()
     )
     monkeypatch.setattr(
         tool_catalog, "fetch_gmlst_schemes", lambda **kwargs: _gmlst_catalog()
@@ -70,10 +70,10 @@ def test_agent_handler_returns_json(monkeypatch):
 
 def test_legacy_handler_alias(monkeypatch):
     monkeypatch.setattr(
-        tool_catalog, "fetch_gapit_catalog", lambda **kwargs: _gapit_catalog()
+        tool_catalog, "fetch_gspec_catalog", lambda **kwargs: _gspec_catalog()
     )
     monkeypatch.setattr(
         tool_catalog, "fetch_gmlst_schemes", lambda **kwargs: _gmlst_catalog()
     )
-    raw = tool_catalog.gapit_db_options({"tool": "gapit", "species": "VPA"})
+    raw = tool_catalog.gspec_db_options({"tool": "gspec", "species": "VPA"})
     assert json.loads(raw)["species"][0]["code"] == "VPA"

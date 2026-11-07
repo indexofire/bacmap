@@ -1,7 +1,7 @@
-"""DEC 致病型结果归一（gapit `eco_dec` → 摘要字段）。
+"""DEC 致病型结果归一（gspec `eco_dec` → 摘要字段）。
 
-纯格式适配（ADR-20：判定由 gapit 做，bacmap 只整理形状）。输入是
-``gapit.typing_result/1``（见 `gapit typing -f json`）或我们的 skipped/failed 信封；
+纯格式适配（ADR-20：判定由 gspec 做，bacmap 只整理形状）。输入是
+``gspec.typing_result/1``（见 `gspec typing -f json`）或我们的 skipped/failed 信封；
 输出用于 summary 的 `steps.dec`：
 
     {"pathotype": "EHEC", "pathotype_scheme": "gb4789_6", "pathotype_confidence": "high",
@@ -28,7 +28,7 @@ _EMPTY: dict[str, Any] = {
 
 
 def summarize(payload: Any) -> dict[str, Any]:
-    """gapit typing 结果 → 摘要字段；非 ran / 畸形输入 → 空摘要（fail-safe）。"""
+    """gspec typing 结果 → 摘要字段；非 ran / 畸形输入 → 空摘要（fail-safe）。"""
     if not isinstance(payload, dict) or payload.get("status") != "ran":
         return dict(_EMPTY)
     files = payload.get("files")

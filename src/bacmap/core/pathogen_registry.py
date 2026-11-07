@@ -1,7 +1,7 @@
 """Pathogen registry — the single source of pathogen configuration（码为准，v1.4.16）.
 
 Every rule file and analysis module derives its per-pathogen lookup tables
-(MLST / cgMLST schemes, AMRFinderPlus organisms, gapit screens, SNP groups) from
+(MLST / cgMLST schemes, AMRFinderPlus organisms, gspec screens, SNP groups) from
 ``pathogens.yaml`` shipped inside the package. Keys are **3-letter species codes**
 (``core/species_codes.py``); marker genes live in gside (ADR-20), not here.
 
@@ -40,7 +40,7 @@ _PATHOGEN_FIELDS = frozenset(
         "mlst_scheme",
         "cgmlst_scheme",
         "amrfinder_organism",
-        "gapit_screens",
+        "gspec_screens",
         "serotype_engine",
         "snp_group",
         "plan",
@@ -60,7 +60,7 @@ class PathogenSpec:
     mlst_scheme: str | None = None
     cgmlst_scheme: str | None = None
     amrfinder_organism: str | None = None
-    gapit_screens: tuple[str, ...] = ()
+    gspec_screens: tuple[str, ...] = ()
     serotype_engine: str | None = None
     snp_group: str | None = None
     plan: dict[str, bool] = field(default_factory=dict)
@@ -82,7 +82,7 @@ class WorkflowTables:
     mlst_schemes: dict[str, str]
     cgmlst_schemes: dict[str, str]
     amrfinder_organisms: dict[str, str]
-    gapit_screens: dict[str, list[str]]
+    gspec_screens: dict[str, list[str]]
     serotype_engines: dict[str, str]
     snp_groups: dict[str, dict[str, Any]]
     cgmlst_species_groups: dict[str, dict[str, Any]]
@@ -131,11 +131,11 @@ class PathogenRegistry:
             if p.enabled and p.amrfinder_organism is not None
         }
 
-    def gapit_screens(self) -> dict[str, list[str]]:
+    def gspec_screens(self) -> dict[str, list[str]]:
         return {
-            c: list(p.gapit_screens)
+            c: list(p.gspec_screens)
             for c, p in self.pathogens.items()
-            if p.enabled and p.gapit_screens
+            if p.enabled and p.gspec_screens
         }
 
     def serotype_engines(self) -> dict[str, str]:
@@ -195,7 +195,7 @@ class PathogenRegistry:
                     "mlst_scheme": p.mlst_scheme,
                     "cgmlst_scheme": p.cgmlst_scheme,
                     "amrfinder_organism": p.amrfinder_organism,
-                    "gapit_screens": list(p.gapit_screens),
+                    "gspec_screens": list(p.gspec_screens),
                     "serotype_engine": p.serotype_engine,
                     "snp_group": p.snp_group,
                     "plan": p.plan,
@@ -241,9 +241,9 @@ def _validate_pathogen(code: str, raw: dict[str, Any]) -> PathogenSpec:
     if not isinstance(plan, dict) or set(plan) - _PLAN_KEYS:
         raise RegistryError(f"pathogen {code!r}: plan keys must be within {sorted(_PLAN_KEYS)}")
 
-    screens = raw.get("gapit_screens") or []
+    screens = raw.get("gspec_screens") or []
     if not isinstance(screens, list):
-        raise RegistryError(f"pathogen {code!r}: gapit_screens must be a list")
+        raise RegistryError(f"pathogen {code!r}: gspec_screens must be a list")
     snp_group = raw.get("snp_group")
     if snp_group is not None and not isinstance(snp_group, str):
         raise RegistryError(f"pathogen {code!r}: snp_group must be a string or null")
@@ -255,7 +255,7 @@ def _validate_pathogen(code: str, raw: dict[str, Any]) -> PathogenSpec:
         mlst_scheme=raw.get("mlst_scheme"),
         cgmlst_scheme=raw.get("cgmlst_scheme"),
         amrfinder_organism=raw.get("amrfinder_organism"),
-        gapit_screens=tuple(str(x) for x in screens),
+        gspec_screens=tuple(str(x) for x in screens),
         serotype_engine=raw.get("serotype_engine"),
         snp_group=snp_group,
         plan={k: bool(v) for k, v in plan.items()},
@@ -340,7 +340,7 @@ def get_workflow_tables() -> WorkflowTables:
         mlst_schemes=reg.mlst_schemes(),
         cgmlst_schemes=reg.cgmlst_schemes(),
         amrfinder_organisms=reg.amrfinder_organisms(),
-        gapit_screens=reg.gapit_screens(),
+        gspec_screens=reg.gspec_screens(),
         serotype_engines=reg.serotype_engines(),
         snp_groups=reg.snp_groups(),
         cgmlst_species_groups=reg.cgmlst_species_groups(),
@@ -354,10 +354,10 @@ def resolve_species(value: str) -> str | None:
     return load_registry().resolve(value)
 
 
-def gapit_screens_for(value: str) -> list[str]:
-    """样本的物种值 → 该物种声明的 gapit 分型库列表（未识别 → []）。"""
+def gspec_screens_for(value: str) -> list[str]:
+    """样本的物种值 → 该物种声明的 gspec 分型库列表（未识别 → []）。"""
     code = load_registry().resolve(value)
     if code is None:
         return []
     spec = load_registry().pathogens.get(code)
-    return list(spec.gapit_screens) if spec else []
+    return list(spec.gspec_screens) if spec else []

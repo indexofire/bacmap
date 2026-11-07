@@ -57,7 +57,7 @@ exception type only; full details stay in logs.
 | bio_seq_ops | compute | Run sequence operations such as translation, ORF finding, and k-mer counting |
 | bio_seq_stats | compute | Compute statistics for a sequence file |
 | bio_snp_tree | compute | Retrieve the cohort SNP tree and pairwise SNP distances |
-| bio_tool_selection_options | read | List per-species gapit databases and gmlst modes/schemes with the user overlay applied |
+| bio_tool_selection_options | read | List per-species gspec databases and gmlst modes/schemes with the user overlay applied |
 | bio_variant | compute | Call, filter, query, annotate, or build consensus from variants |
 | bio_verify_result | compute | Run deterministic verification on results, with optional NLI reflection |
 
@@ -110,7 +110,7 @@ Align sequencing reads to a reference genome. Wraps BWA-MEM (short-read DNA), mi
 
 Version `v0.1.0` | Effect: `write` | Trust layer: `L1`
 
-Run the full pathogen analysis pipeline (QC, assembly, species identification via gside, MLST/cgMLST via gmlst, screening/serotyping via gapit, AMR/virulence/plasmid, report). Species routing is automatic and follows the pathogen registry. Returns a summary of results. For pipeline guidance and troubleshooting, read the MCP prompt bacmap_role_analyst.
+Run the full pathogen analysis pipeline (QC, assembly, species identification via gside, MLST/cgMLST via gmlst, screening/serotyping via gspec, AMR/virulence/plasmid, report). Species routing is automatic and follows the pathogen registry. Returns a summary of results. For pipeline guidance and troubleshooting, read the MCP prompt bacmap_role_analyst.
 
 **Parameters**
 
@@ -365,13 +365,13 @@ Retrieve the cohort-level SNP phylogenetic tree and pairwise distance matrix. Re
 
 Version `v0.1.0` | Effect: `read` | Trust layer: `L1`
 
-List the per-species reference data available to gapit and gmlst, with the user's `tool_selection.yaml` overlay applied: gapit databases (kind, typing, installed, license, default/selected flags) and gmlst typing modes/schemes (scheme_type, compute_type, downloaded, provider, default/selected flags). Use it before proposing a `tool_selection.yaml`; never invent database or scheme names. Read-only — writing the selection stays with the local CLI (`bacmap selection select`) or a confirmed task.
+List the per-species reference data available to gspec and gmlst, with the user's `tool_selection.yaml` overlay applied: gspec databases (kind, typing, installed, license, default/selected flags) and gmlst typing modes/schemes (scheme_type, compute_type, downloaded, provider, default/selected flags). Use it before proposing a `tool_selection.yaml`; never invent database or scheme names. Read-only — writing the selection stays with the local CLI (`bacmap selection select`) or a confirmed task.
 
 **Parameters**
 
-- `tool`: `string`. `gapit | gmlst | all` (default `all`).
+- `tool`: `string`. `gspec | gmlst | all` (default `all`).
 - `species`: `string`. Optional species code/label to filter (e.g. `VPA` or `V_parahaemolyticus`); omit for all species.
-- `datadir`: `string`. Optional gapit datadir (defaults to `GAPIT_DATADIR`).
+- `datadir`: `string`. Optional gspec datadir (defaults to `GSPEC_DATADIR`).
 - `selection_path`: `string`. Optional `tool_selection.yaml` path to inspect.
 - `include_remote_schemes`: `boolean`. Include gmlst schemes not downloaded yet (default `true`; set `false` to show only cached schemes).
 

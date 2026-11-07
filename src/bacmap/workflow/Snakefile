@@ -22,7 +22,7 @@ def _tool_selection_path() -> Path:
     """用户/项目覆盖：config 显式路径 → 新/旧环境变量 → BACMAP_HOME/config。
 
     新文件 ``tool_selection.yaml`` 优先；旧的 ``db_selection.yaml`` 仍被读取
-    （gapit-only，加载时自动翻译）。
+    （gspec-only，加载时自动翻译）。
     """
     raw = str(
         config.get("tool_selection") or config.get("db_selection") or ""
@@ -78,7 +78,7 @@ include: "rules/qc.smk"
 include: "rules/assembly.smk"
 include: "rules/species.smk"
 include: "rules/typing_amr.smk"
-include: "rules/gapit_typing.smk"
+include: "rules/gspec_typing.smk"
 include: "rules/dec_shigella.smk"
 include: "rules/vpara.smk"
 include: "rules/snp.smk"

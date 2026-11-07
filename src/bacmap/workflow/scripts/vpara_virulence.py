@@ -1,12 +1,12 @@
-"""vpara 毒力基因筛查（ADR-20：gapit 自定义库，替代内联 blastn）。
+"""vpara 毒力基因筛查（ADR-20：gspec 自定义库，替代内联 blastn）。
 
-调用 ``gapit screen <contigs> --db vpara_virulence``，把 gapit.report/1 归一化为
+调用 ``gspec screen <contigs> --db vpara_virulence``，把 gspec.report/1 归一化为
 本流程既有的 ``virulence.json`` 契约（tdh/trh/tlh 布尔 + 原始命中留档）：
 
-    {"tool": "gapit", "tool_version": "0.5.4", "database": "vpara_virulence",
+    {"tool": "gspec", "tool_version": "0.5.4", "database": "vpara_virulence",
      "tdh": true, "trh": false, "tlh": true, "n_hits": 2, "hits": [...]}
 
-DB 缺失或 gapit 失败 → 显式非 0 退出（不静默降级；ADR-20 质量门槛要求显式失败）。
+DB 缺失或 gspec 失败 → 显式非 0 退出（不静默降级；ADR-20 质量门槛要求显式失败）。
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ _HIT_FIELDS = (
 
 
 def normalize(report: dict[str, Any]) -> dict[str, Any]:
-    """gapit.report/1 → virulence.json 契约（纯函数，便于单测）。"""
+    """gspec.report/1 → virulence.json 契约（纯函数，便于单测）。"""
     hits: list[dict[str, Any]] = []
     for entry in report.get("files", []) or []:
         for hit in entry.get("hits", []) or []:
@@ -44,7 +44,7 @@ def normalize(report: dict[str, Any]) -> dict[str, Any]:
     tool = report.get("tool", {}) or {}
     params = report.get("params", {}) or {}
     return {
-        "tool": tool.get("name", "gapit"),
+        "tool": tool.get("name", "gspec"),
         "tool_version": tool.get("version", ""),
         "schema": report.get("schema", ""),
         "database": params.get("db", ""),
@@ -55,19 +55,19 @@ def normalize(report: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_screen(contigs: str, db: str, datadir: str | None, timeout: int = 600) -> dict[str, Any]:
-    cmd = ["gapit", "screen", str(contigs), "--db", db, "-f", "json"]
+    cmd = ["gspec", "screen", str(contigs), "--db", db, "-f", "json"]
     if datadir:
         cmd += ["-D", str(datadir)]
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     if proc.returncode != 0:
         raise RuntimeError(
-            f"gapit screen failed (rc={proc.returncode}): {proc.stderr.strip()[:500]}"
+            f"gspec screen failed (rc={proc.returncode}): {proc.stderr.strip()[:500]}"
         )
     return json.loads(proc.stdout)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="vpara virulence screen via gapit")
+    parser = argparse.ArgumentParser(description="vpara virulence screen via gspec")
     parser.add_argument("--contigs", required=True)
     parser.add_argument("--db", default="vpara_virulence")
     parser.add_argument("--datadir", default="")

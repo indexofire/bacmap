@@ -16,7 +16,7 @@ def _run(
     tmp_path: Path,
     species_id: dict,
     omit: set[str] | None = None,
-    gapit_typing: dict | None = None,
+    gspec_typing: dict | None = None,
 ) -> dict:
     rep = tmp_path / "results" / "S1" / "report"
     rep.mkdir(parents=True, exist_ok=True)
@@ -25,10 +25,10 @@ def _run(
     out = rep / "S1_summary.json"
 
     missing = str(tmp_path / "missing")
-    gapit_path = missing
-    if gapit_typing is not None:
-        gapit_path = str(tmp_path / "gapit_typing.json")
-        Path(gapit_path).write_text(json.dumps(gapit_typing), encoding="utf-8")
+    gspec_path = missing
+    if gspec_typing is not None:
+        gspec_path = str(tmp_path / "gspec_typing.json")
+        Path(gspec_path).write_text(json.dumps(gspec_typing), encoding="utf-8")
     attrs = {
         "qc_json": missing,
         "assembly_stats": missing,
@@ -40,7 +40,7 @@ def _run(
         "plasmidfinder": missing,
         "ectyper": missing,
         "pathotype": missing,
-        "gapit_typing": gapit_path,
+        "gspec_typing": gspec_path,
         "shigella_serotype": missing,
         "vpa_serotype": missing,
         "vpa_virulence": missing,
@@ -93,11 +93,11 @@ def test_non_salmonella_marks_sistr_not_applicable(tmp_path):
     assert summary["steps"]["dec"]["pathotype_status"] == "not_applicable"
 
 
-def test_vpa_ok_populates_serotype_from_gapit(tmp_path):
+def test_vpa_ok_populates_serotype_from_gspec(tmp_path):
     summary = _run(
         tmp_path,
         {"verdict": "V_parahaemolyticus"},
-        gapit_typing={
+        gspec_typing={
             "status": "ran",
             "databases": {
                 "vpa_ok": {
@@ -115,7 +115,7 @@ def test_vpa_ok_populates_serotype_from_gapit(tmp_path):
     assert summary["steps"]["vpa_serotype"]["predicted_serotype"] == "O3:K6"
     assert summary["steps"]["vpa_serotype"]["o_locus"] == "O3"
     assert summary["steps"]["vpa_serotype"]["k_locus"] == "K6"
-    assert summary["steps"]["vpa_serotype"]["source"] == "gapit:vpa_ok"
+    assert summary["steps"]["vpa_serotype"]["source"] == "gspec:vpa_ok"
 
 
 def test_non_dec_species_marks_dec_not_applicable(tmp_path):

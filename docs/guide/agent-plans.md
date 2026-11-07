@@ -47,7 +47,7 @@ The bacmap MCP server returns **server instructions** during initialisation. The
 
 - route analysis/writes through `bacmap_create_plan`;
 - a human confirms the exact plan version; the agent cannot;
-- do not use the harness shell/file tools to run `snakemake`/`gside`/`gapit`/`gmlst`;
+- do not use the harness shell/file tools to run `snakemake`/`gside`/`gspec`/`gmlst`;
 - do not read raw sequences; pass absolute paths or sample IDs and let bacmap execute locally;
 - track execution with `bacmap_get_plan` / `bacmap_task_status` / `bacmap_task_result`;
 - cite sample, task and run identifiers in conclusions.
@@ -72,7 +72,7 @@ Add:
 
 - For bacmap work, call only mcp__bacmap__* tools.
 - Create a plan first with bacmap_create_plan; show plan_id/version/plan_hash/confirm_url and wait for human confirmation.
-- Never run snakemake/gside/gapit/gmlst through the shell; never read FASTQ/FASTA content.
+- Never run snakemake/gside/gspec/gmlst through the shell; never read FASTQ/FASTA content.
 - The user provides absolute paths or sample IDs; bacmap executes locally.
 - Track with bacmap_get_plan/bacmap_task_status and cite task_id/run_id in conclusions.
 ```
@@ -184,7 +184,7 @@ are withheld (they may contain sample IDs/paths) but `bacmap_task_status` return
 ### 3.0 Install a harness first (pick one)
 
 All three are independent of the bacmap environment. Install them with their own installer, npm,
-pipx or conda environment; they do not need `snakemake`, `gside`, `gapit` or `gmlst` on PATH.
+pipx or conda environment; they do not need `snakemake`, `gside`, `gspec` or `gmlst` on PATH.
 
 **Hermes**
 

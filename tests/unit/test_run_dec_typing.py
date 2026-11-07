@@ -1,4 +1,4 @@
-"""DEC 致病型适配器（gapit eco_dec）：守卫 + 两段调用 + 失败留痕。"""
+"""DEC 致病型适配器（gspec eco_dec）：守卫 + 两段调用 + 失败留痕。"""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class _Proc:
 
 _TYPING = json.dumps(
     {
-        "schema": "gapit.typing_result/1",
+        "schema": "gspec.typing_result/1",
         "db": "eco_dec",
         "files": [
             {
@@ -42,7 +42,7 @@ _TYPING = json.dumps(
 
 
 class TestRunDecTyping:
-    def test_skipped_when_gapit_missing(self, tmp_path, monkeypatch):
+    def test_skipped_when_gspec_missing(self, tmp_path, monkeypatch):
         mod = _load()
         monkeypatch.setattr(mod.shutil, "which", lambda name: None)
         out = tmp_path / "pathotype.json"
@@ -51,7 +51,7 @@ class TestRunDecTyping:
 
     def test_ran_screen_then_typing(self, tmp_path, monkeypatch):
         mod = _load()
-        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gspec")
         calls: list[list[str]] = []
 
         def fake_run(cmd, capture_output=True, text=True, timeout=None):
@@ -71,7 +71,7 @@ class TestRunDecTyping:
 
     def test_screen_failure_recorded(self, tmp_path, monkeypatch):
         mod = _load()
-        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gspec")
         monkeypatch.setattr(mod.subprocess, "run", lambda *a, **k: _Proc(2, err="no hits"))
         out = tmp_path / "pathotype.json"
         assert mod.run(tmp_path / "c.fasta", out, tmp_path / "wd", db="eco_dec", timeout=60) == 0
@@ -80,7 +80,7 @@ class TestRunDecTyping:
 
     def test_typing_non_json_recorded(self, tmp_path, monkeypatch):
         mod = _load()
-        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gspec")
 
         def fake_run(cmd, capture_output=True, text=True, timeout=None):
             if "screen" in cmd:

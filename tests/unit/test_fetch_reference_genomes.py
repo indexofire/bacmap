@@ -138,7 +138,7 @@ class TestFetch:
         refs = tmp_path / "refs"
         refs.mkdir()
         (refs / "manifest.json").write_text(
-            json.dumps({"databases": [{"name": "gapit:card", "version": "1", "checksum": "c"}]})
+            json.dumps({"databases": [{"name": "gspec:card", "version": "1", "checksum": "c"}]})
         )
         out_dir = tmp_path / "genomes"
         rc = _run(
@@ -156,7 +156,7 @@ class TestFetch:
         assert rc == 0
         db = json.loads((refs / "manifest.json").read_text())["databases"]
         names = {d["name"] for d in db}
-        assert names == {"gapit:card", "ref:salmonella", "ref:vpara"}
+        assert names == {"gspec:card", "ref:salmonella", "ref:vpara"}
         ref_entry = next(d for d in db if d["name"] == "ref:salmonella")
         assert ref_entry["version"] == "NC_003197.2"
         assert len(ref_entry["checksum"]) == 64

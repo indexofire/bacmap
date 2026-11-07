@@ -84,18 +84,18 @@ if sistr_path is None:
     summary["steps"]["serotype"]["sistr_status"] = "not_applicable"
     summary["steps"]["serotype"]["sistr_reason"] = "SISTR 仅用于沙门菌血清型预测"
 
-# gapit 分型（registry 驱动；lmo_sero 等带 typing scheme 的库给出表型）
-from bacmap.core.analysis.gapit_typing import summarize as summarize_gapit_typing  # noqa: E402
+# gspec 分型（registry 驱动；lmo_sero 等带 typing scheme 的库给出表型）
+from bacmap.core.analysis.gspec_typing import summarize as summarize_gspec_typing  # noqa: E402
 
-gapit_tp = summarize_gapit_typing(read_json(snakemake.input.gapit_typing, {}))
-summary["steps"]["gapit_typing"] = {
-    "status": gapit_tp["status"],
-    "databases": gapit_tp["databases"],
+gspec_tp = summarize_gspec_typing(read_json(snakemake.input.gspec_typing, {}))
+summary["steps"]["gspec_typing"] = {
+    "status": gspec_tp["status"],
+    "databases": gspec_tp["databases"],
 }
 # 血清群（如 L. monocytogenes Doumith serogroup）并入 serotype 段，注明来源 scheme
-if gapit_tp["serogroup"]:
-    summary["steps"]["serotype"]["serogroup"] = gapit_tp["serogroup"]
-    summary["steps"]["serotype"]["serogroup_scheme"] = gapit_tp["serogroup_scheme"]
+if gspec_tp["serogroup"]:
+    summary["steps"]["serotype"]["serogroup"] = gspec_tp["serogroup"]
+    summary["steps"]["serotype"]["serogroup_scheme"] = gspec_tp["serogroup_scheme"]
 
 summary["steps"]["amr"] = {
     "abricate_vfdb": parse_tsv(snakemake.input.vfdb, []),
@@ -118,7 +118,7 @@ if _dec_applicable:
     dec_serotype = read_json(dec_serotype_path, {}) if dec_serotype_path else {}
     if not isinstance(dec_serotype, dict):
         dec_serotype = {}
-    # DEC 致病型：gapit `eco_dec` 的 typing 结果（v1.4.18，判定外部化）
+    # DEC 致病型：gspec `eco_dec` 的 typing 结果（v1.4.18，判定外部化）
     from bacmap.core.analysis.dec_pathotype import (
         summarize as summarize_dec_pathotype,
     )
@@ -177,7 +177,7 @@ if _dec_applicable:
     summary["steps"]["dec"]["primary_serotype"] = primary_serotype
     summary["steps"]["dec"]["serotype_method"] = serotype_method
 else:
-    # 非 DEC/志贺菌物种：整段不适用（不跑 gapit eco_dec / ecoh / ShigaTyper）
+    # 非 DEC/志贺菌物种：整段不适用（不跑 gspec eco_dec / ecoh / ShigaTyper）
     summary["steps"]["dec"] = {
         "status": "not_applicable",
         "reason": "DEC 致病型 / 志贺菌血清型仅适用于大肠埃希菌与志贺菌",
@@ -196,15 +196,15 @@ if vpa_serotype.get("predicted_serotype"):
         "k_confidence": vpa_serotype.get("k_confidence", "Unknown"),
     }
 elif vpa_serotype_path is not None:
-    # 占位规则：gapit 尚未给出表型时如实记录能力状态，不猜测。
+    # 占位规则：gspec 尚未给出表型时如实记录能力状态，不猜测。
     summary["steps"]["vpa_serotype"] = {
         "status": vpa_serotype.get("status", "unavailable"),
         "reason": vpa_serotype.get("reason", ""),
     }
 
 # vpa_ok（cluster, integrated typing）是 O/K 血清型的权威来源；占位规则仍保留
-# 兼容旧流程，但一旦 gapit 给出了表型，就以 gapit 的结果覆盖 unavailable 占位。
-_vpa_ok = gapit_tp["databases"].get("vpa_ok")
+# 兼容旧流程，但一旦 gspec 给出了表型，就以 gspec 的结果覆盖 unavailable 占位。
+_vpa_ok = gspec_tp["databases"].get("vpa_ok")
 if isinstance(_vpa_ok, dict) and _vpa_ok.get("status") == "ran":
     _phenotypes = _vpa_ok.get("phenotypes") if isinstance(_vpa_ok.get("phenotypes"), dict) else {}
     _o = _phenotypes.get("o_group", {}) if isinstance(_phenotypes.get("o_group"), dict) else {}
@@ -221,7 +221,7 @@ if isinstance(_vpa_ok, dict) and _vpa_ok.get("status") == "ran":
             "k_locus": str(_k.get("phenotype") or "None"),
             "o_confidence": str(_o.get("confidence") or "Unknown"),
             "k_confidence": str(_k.get("confidence") or "Unknown"),
-            "source": "gapit:vpa_ok",
+            "source": "gspec:vpa_ok",
         }
 
 vpa_virulence_path = opt_input("vpa_virulence")

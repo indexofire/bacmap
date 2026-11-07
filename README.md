@@ -36,7 +36,7 @@ fallback and operations surface.
 
 - **Deterministic pipeline** — Snakemake 9 runs QC → assembly → species → typing/AMR → report.
   Species identification, gene screening/serotyping and MLST/cgMLST are delegated to
-  [gside](https://github.com/indexofire/gside), `gapit` and `gmlst` (ADR-20).
+  [gside](https://github.com/indexofire/gside), `gspec` and `gmlst` (ADR-20).
 - **Five task types** — `analyze`, `curate`, `mine`, `write`, `record`. Every write goes through the
   task layer; open-path scripts/drafts require a human-confirmed plan.
 - **Durable execution** — DBOS workflows checkpoint every step, so a crash resumes from the last

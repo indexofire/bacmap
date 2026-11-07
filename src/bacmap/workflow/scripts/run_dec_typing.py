@@ -1,9 +1,9 @@
-"""DEC 致病型判定（gapit `eco_dec`，ADR-20：bacmap 只编排 + 适配）。
+"""DEC 致病型判定（gspec `eco_dec`，ADR-20：bacmap 只编排 + 适配）。
 
-调 `gapit screen --db eco_dec` + `gapit typing -f json`，把
-``gapit.typing_result/1`` 原样写入 `--out`（供报告与运行记录溯源）。
+调 `gspec screen --db eco_dec` + `gspec typing -f json`，把
+``gspec.typing_result/1`` 原样写入 `--out`（供报告与运行记录溯源）。
 
-**gapit 缺失不静默**：写 `status="skipped"` + reason；screen/typing 失败写
+**gspec 缺失不静默**：写 `status="skipped"` + reason；screen/typing 失败写
 `status="failed"` + stage/error。判定失败不影响其余步骤（`pathotype` 归一为 N/A）。
 """
 
@@ -18,11 +18,11 @@ from pathlib import Path
 
 
 def run(contigs: Path, out: Path, workdir: Path, *, db: str, timeout: int) -> int:
-    gapit = shutil.which("gapit")
-    if gapit is None:
+    gspec = shutil.which("gspec")
+    if gspec is None:
         out.write_text(
             json.dumps(
-                {"status": "skipped", "reason": "gapit not found in PATH", "db": db},
+                {"status": "skipped", "reason": "gspec not found in PATH", "db": db},
                 ensure_ascii=False,
                 indent=2,
             ),
@@ -33,7 +33,7 @@ def run(contigs: Path, out: Path, workdir: Path, *, db: str, timeout: int) -> in
     workdir.mkdir(parents=True, exist_ok=True)
     screen = workdir / f"{db}_screen.tsv"
     screen_proc = subprocess.run(
-        [gapit, "screen", str(contigs), "--db", db, "-o", str(screen)],
+        [gspec, "screen", str(contigs), "--db", db, "-o", str(screen)],
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -55,7 +55,7 @@ def run(contigs: Path, out: Path, workdir: Path, *, db: str, timeout: int) -> in
         return 0
 
     typing_proc = subprocess.run(
-        [gapit, "typing", str(screen), "-f", "json"],
+        [gspec, "typing", str(screen), "-f", "json"],
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -96,7 +96,7 @@ def run(contigs: Path, out: Path, workdir: Path, *, db: str, timeout: int) -> in
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="DEC pathotype via gapit eco_dec")
+    ap = argparse.ArgumentParser(description="DEC pathotype via gspec eco_dec")
     ap.add_argument("--contigs", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--workdir", required=True)

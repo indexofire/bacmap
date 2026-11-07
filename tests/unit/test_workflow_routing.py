@@ -6,7 +6,7 @@ vpa/dec/shigella 规则与 report 依赖都未按物种门控。
 
 from __future__ import annotations
 
-from bacmap.core.analysis.routing import report_inputs, serotype_engine, uses_gapit_db
+from bacmap.core.analysis.routing import report_inputs, serotype_engine, uses_gspec_db
 
 _COMMON = {
     "qc_json",
@@ -17,7 +17,7 @@ _COMMON = {
     "card",
     "amrfinderplus",
     "plasmidfinder",
-    "gapit_typing",
+    "gspec_typing",
     "annotation",
 }
 
@@ -53,15 +53,15 @@ class TestSerotypeEngine:
 
 class TestGapitDbRouting:
     def test_eco_dec_only_where_declared(self):
-        assert uses_gapit_db("DEC", "eco_dec") is True
+        assert uses_gspec_db("DEC", "eco_dec") is True
         # 志贺菌的血清型走 ShigaTyper；registry 未为其声明 eco_dec
-        assert uses_gapit_db("Shigella", "eco_dec") is False
-        assert uses_gapit_db("SAL", "eco_dec") is False
-        assert uses_gapit_db("V_parahaemolyticus", "eco_dec") is False
+        assert uses_gspec_db("Shigella", "eco_dec") is False
+        assert uses_gspec_db("SAL", "eco_dec") is False
+        assert uses_gspec_db("V_parahaemolyticus", "eco_dec") is False
 
     def test_vpara_only_for_vpara(self):
-        assert uses_gapit_db("V_parahaemolyticus", "vpara_virulence") is True
-        assert uses_gapit_db("DEC", "vpara_virulence") is False
+        assert uses_gspec_db("V_parahaemolyticus", "vpara_virulence") is True
+        assert uses_gspec_db("DEC", "vpara_virulence") is False
 
 
 class TestReportInputsGating:
@@ -84,7 +84,7 @@ class TestReportInputsGating:
         assert extra == {"vpa_serotype", "vpa_virulence"}
 
     def test_listeria_uses_none_of_them(self):
-        # LMO 的血清群由 gapit lmo_sero 给出（走 gapit_typing），不额外起步骤
+        # LMO 的血清群由 gspec lmo_sero 给出（走 gspec_typing），不额外起步骤
         assert _extra("Listeria_monocytogenes") == set()
 
     def test_unknown_species_has_no_species_steps(self):
@@ -93,7 +93,7 @@ class TestReportInputsGating:
     def test_common_inputs_always_present(self):
         files = report_inputs("S1", "DEC", "/w")
         assert set(files) >= _COMMON
-        assert files["gapit_typing"] == "/w/S1/gapit/typing.json"
+        assert files["gspec_typing"] == "/w/S1/gspec/typing.json"
 
 
 class TestSelectionAwareRouting:
@@ -107,13 +107,13 @@ class TestSelectionAwareRouting:
         selection = ToolSelection(
             species={
                 "VPA": SpeciesSelection(
-                    gapit=GapitSelection(mode="replace", databases=["vpa_ok", "vpa_pai"])
+                    gspec=GapitSelection(mode="replace", databases=["vpa_ok", "vpa_pai"])
                 )
             }
         )
-        assert uses_gapit_db("V_parahaemolyticus", "vpa_ok", selection=selection) is True
+        assert uses_gspec_db("V_parahaemolyticus", "vpa_ok", selection=selection) is True
         assert (
-            uses_gapit_db("V_parahaemolyticus", "vpara_virulence", selection=selection)
+            uses_gspec_db("V_parahaemolyticus", "vpara_virulence", selection=selection)
             is False
         )
         extra = set(
@@ -121,8 +121,8 @@ class TestSelectionAwareRouting:
                 "S1", "V_parahaemolyticus", "/w", selection=selection
             )
         ) - _COMMON
-        # vpa_ok/vpa_pai ride the generic gapit_typing aggregate; the factual
-        # vpa_serotype placeholder stays (gapit fills it when vpa_ok runs).
+        # vpa_ok/vpa_pai ride the generic gspec_typing aggregate; the factual
+        # vpa_serotype placeholder stays (gspec fills it when vpa_ok runs).
         assert extra == {"vpa_serotype"}
 
     def test_extend_keeps_vpara_special_steps(self):
@@ -135,7 +135,7 @@ class TestSelectionAwareRouting:
         selection = ToolSelection(
             species={
                 "VPA": SpeciesSelection(
-                    gapit=GapitSelection(mode="extend", databases=["vpa_ok"])
+                    gspec=GapitSelection(mode="extend", databases=["vpa_ok"])
                 )
             }
         )
@@ -157,17 +157,17 @@ class TestSelectionAwareRouting:
         selection = ToolSelection(
             species={
                 "VPA": SpeciesSelection(
-                    gapit=GapitSelection(mode="replace", databases=["vpa_ok"])
+                    gspec=GapitSelection(mode="replace", databases=["vpa_ok"])
                 )
             },
             samples={
                 "S1": SampleSelection(
-                    gapit=GapitSelection(databases=["vpara_virulence"])
+                    gspec=GapitSelection(databases=["vpara_virulence"])
                 )
             },
         )
         assert (
-            uses_gapit_db(
+            uses_gspec_db(
                 "V_parahaemolyticus", "vpara_virulence", selection=selection, sample="S1"
             )
             is True

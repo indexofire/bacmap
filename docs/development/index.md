@@ -84,7 +84,7 @@ also enforces the rules.
 
 Genome-only analysis belongs in an external tool (ADR-20), not in bacmap:
 
-1. Implement/validate it in `gside`/`gapit`/`gmlst`.
+1. Implement/validate it in `gside`/`gspec`/`gmlst`.
 2. Add an `.smk` rule + adapter/parser under `workflow/`.
 3. Extend the summary schema and ingest if the result is evidence.
 4. Add fixtures/gold-standard comparisons.

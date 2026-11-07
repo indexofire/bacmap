@@ -106,7 +106,7 @@ bacmap deliberately orchestrates rather than re-implements:
 | Question | Tool |
 |---|---|
 | Which species is this? | `gside species` (marker/panel/ANI/sketch/GTDB profiles) |
-| Which resistance/virulence/serotype genes? | `gapit screen` + typing schemes |
+| Which resistance/virulence/serotype genes? | `gspec screen` + typing schemes |
 | What is the MLST/cgMLST profile? | `gmlst typing` |
 | SNP tree / recombination? | pipeline rules (IQ-TREE, optional Gubbins) |
 

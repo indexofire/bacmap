@@ -124,7 +124,7 @@ def get_result(args: dict[str, Any], **kwargs: Any) -> str:
 
     pt_line = "N/A"
     if pathotype and pathotype != "N/A":
-        # 新契约（gapit typing 归一）：pathotype 已是干净字符串（如 EHEC）；
+        # 新契约（gspec typing 归一）：pathotype 已是干净字符串（如 EHEC）；
         # 兼容旧 summary 的多行 TSV：取最后一行第一列。
         pt_line = pathotype.strip().splitlines()[-1].split("\t")[0]
 
@@ -267,7 +267,7 @@ def list_samples(args: dict[str, Any], **kwargs: Any) -> str:
 
 @tool_handler
 def gene_scan(args: dict[str, Any], **kwargs: Any) -> str:
-    """Scan contigs against gene database(s) via gapit (ADR-20). Returns JSON."""
+    """Scan contigs against gene database(s) via gspec (ADR-20). Returns JSON."""
 
     contigs_path = args.get("contigs_path", "")
     database = args.get("database", "card")
@@ -287,12 +287,12 @@ def gene_scan(args: dict[str, Any], **kwargs: Any) -> str:
     def run_one(db: str) -> dict[str, Any]:
         try:
             proc = subprocess.run(
-                ["gapit", "screen", str(contigs), "--db", db,
+                ["gspec", "screen", str(contigs), "--db", db,
                  "--minid", str(min_identity), "--mincov", str(min_coverage)],
                 capture_output=True, text=True, timeout=600,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
-            return {"database": db, "error": f"gapit unavailable: {exc}", "hits": [], "n_hits": 0}
+            return {"database": db, "error": f"gspec unavailable: {exc}", "hits": [], "n_hits": 0}
         if proc.returncode != 0:
             return {"database": db, "error": proc.stderr[-500:], "hits": [], "n_hits": 0}
         hits = []
@@ -302,11 +302,11 @@ def gene_scan(args: dict[str, Any], **kwargs: Any) -> str:
             fields = line.split("	")
             if len(fields) >= 6:
                 hits.append(dict(zip(columns, fields, strict=False)))  # 行超长时截断多余列
-        return {"tool": "gapit", "database": db, "hits": hits, "n_hits": len(hits)}
+        return {"tool": "gspec", "database": db, "hits": hits, "n_hits": len(hits)}
 
     db_list = [d.strip() for d in database.split(",")]
     results = [run_one(d) for d in db_list]
-    payload = results[0] if len(results) == 1 else {"tool": "gapit", "results": results}
+    payload = results[0] if len(results) == 1 else {"tool": "gspec", "results": results}
     return json.dumps(payload, ensure_ascii=False)
 
 

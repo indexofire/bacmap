@@ -1,6 +1,6 @@
-"""gapit 分型结果归一（`run_gapit_typing.py` 输出 → summary 字段）。
+"""gspec 分型结果归一（`run_gspec_typing.py` 输出 → summary 字段）。
 
-纯适配（ADR-20：判定由 gapit 做）。把每库结果整形成
+纯适配（ADR-20：判定由 gspec 做）。把每库结果整形成
 ``{status, databases: {db: {status, schemes, confidence, genes, error}},
 serogroup, serogroup_scheme}``；`serogroup` 从 scheme 名含 ``serogroup`` 且给出
 表型者取（如 ``doumith_serogroup`` → L. monocytogenes 血清群）。
@@ -28,7 +28,7 @@ def _db_entry(raw: Any) -> dict[str, Any]:
         "genes": [str(g) for g in genes] if isinstance(genes, list) else [],
         "error": str(raw.get("error", "")) if raw.get("error") else "",
     }
-    # cluster 库（gapit.cluster/1|2）：保留表型与最佳位点，供报告/API 消费。
+    # cluster 库（gspec.cluster/1|2）：保留表型与最佳位点，供报告/API 消费。
     for key in (
         "kind",
         "phenotype",

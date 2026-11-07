@@ -1,6 +1,6 @@
-"""gapit 分型编排（ADR-20：bacmap 只编排 + 适配）。
+"""gspec 分型编排（ADR-20：bacmap 只编排 + 适配）。
 
-对样本生效的每个 gapit 库执行 screen（gene 库再 typing），把每库结果与状态
+对样本生效的每个 gspec 库执行 screen（gene 库再 typing），把每库结果与状态
 汇总为一个 JSON：
 
     {
@@ -22,19 +22,19 @@
 
 库清单来源（v1.4.40）：
 - 有 ``--species``（工作流路径）时，按 gside verdict → 物种码 → 用户
-  ``tool_selection.yaml`` 的 gapit 段 → 生效库列表；低置信度/未识别不路由物种特异库。
+  ``tool_selection.yaml`` 的 gspec 段 → 生效库列表；低置信度/未识别不路由物种特异库。
 - 无 ``--species`` 时沿用 ``--databases``（兼容旧调用/单测）。
 
 状态语义（**绝不猜测**）：
 - ``ran``        成功（gene 库有 typing scheme 并给出表型；cluster 库完成 screen）；
-- ``no_scheme``  gene 库存在但未 build --typing（gapit 报 TYPING_NO_SCHEME）；
-- ``unavailable`` 库未安装（gapit 报 DATABASE_NOT_FOUND）——能力未就绪，不是失败；
-- ``skipped``    gapit 不在 PATH；
+- ``no_scheme``  gene 库存在但未 build --typing（gspec 报 TYPING_NO_SCHEME）；
+- ``unavailable`` 库未安装（gspec 报 DATABASE_NOT_FOUND）——能力未就绪，不是失败；
+- ``skipped``    gspec 不在 PATH；
 - ``failed``     screen/typing 执行失败（带 stage/error）。
 
 ``eco_dec`` 由 DEC 专用步骤处理；``vpara_virulence`` 由既有 vpara 规则处理，
 两者在此排除以避免重复执行。cluster 库的 typing 已在 screen 内完成，绝不再对
-TSV 跑 ``gapit typing``。
+TSV 跑 ``gspec typing``。
 """
 
 from __future__ import annotations
@@ -83,8 +83,8 @@ def _first_genes(payload: dict[str, Any]) -> list[str]:
     return [str(g) for g in genes] if isinstance(genes, list) else []
 
 
-def _gapit_error(text: str | None) -> tuple[str, str] | None:
-    """从 gapit 输出里取 ``gapit.error/1`` 的 (code, message)；非错误 → None。"""
+def _gspec_error(text: str | None) -> tuple[str, str] | None:
+    """从 gspec 输出里取 ``gspec.error/1`` 的 (code, message)；非错误 → None。"""
     if not text:
         return None
     for line in text.splitlines():
@@ -95,7 +95,7 @@ def _gapit_error(text: str | None) -> tuple[str, str] | None:
             payload = json.loads(line)
         except ValueError:
             continue
-        if isinstance(payload, dict) and payload.get("schema") == "gapit.error/1":
+        if isinstance(payload, dict) and payload.get("schema") == "gspec.error/1":
             return str(payload.get("code", "")), str(payload.get("message", ""))
     return None
 
@@ -143,13 +143,13 @@ def _effective_databases(
     code, verdict, confidence = _route(species_json)
     species_block = {"verdict": verdict, "code": code, "confidence": confidence}
     selection = load_selection(selection_path)
-    return selection.effective_gapit_databases(code, sample=sample), species_block, True
+    return selection.effective_gspec_databases(code, sample=sample), species_block, True
 
 
 def _catalog(datadir: str) -> dict[str, Any]:
-    from bacmap.tools.tool_catalog import fetch_gapit_catalog
+    from bacmap.tools.tool_catalog import fetch_gspec_catalog
 
-    return fetch_gapit_catalog(datadir=datadir or None)
+    return fetch_gspec_catalog(datadir=datadir or None)
 
 
 def _db_kind(catalog: dict[str, Any], db: str) -> str:
@@ -196,7 +196,7 @@ def _cluster_result(document: dict[str, Any]) -> dict[str, Any]:
 
 
 def _screen_and_type(
-    gapit: str,
+    gspec: str,
     contigs: Path,
     db: str,
     workdir: Path,
@@ -206,7 +206,7 @@ def _screen_and_type(
     threads: int = 1,
     datadir: str = "",
 ) -> dict[str, Any]:
-    common = [gapit, "screen", str(contigs), "--db", db, "-t", str(threads)]
+    common = [gspec, "screen", str(contigs), "--db", db, "-t", str(threads)]
     if datadir:
         common += ["--datadir", datadir]
 
@@ -219,7 +219,7 @@ def _screen_and_type(
             timeout=timeout,
         )
         if sp.returncode != 0 or not screen_json.is_file():
-            code, message = _gapit_error(sp.stdout) or _gapit_error(sp.stderr) or ("", "")
+            code, message = _gspec_error(sp.stdout) or _gspec_error(sp.stderr) or ("", "")
             if code == "DATABASE_NOT_FOUND":
                 return {"kind": "cluster", "status": "unavailable",
                         "error": message or f"database {db} not installed"}
@@ -243,13 +243,13 @@ def _screen_and_type(
         timeout=timeout,
     )
     if sp.returncode != 0 or not screen.is_file():
-        code, message = _gapit_error(sp.stdout) or _gapit_error(sp.stderr) or ("", "")
+        code, message = _gspec_error(sp.stdout) or _gspec_error(sp.stderr) or ("", "")
         if code == "DATABASE_NOT_FOUND":
             return {"kind": "gene", "status": "unavailable",
                     "error": message or f"database {db} not installed"}
         return {"kind": "gene", "status": "failed", "stage": "screen",
                 "error": (message or sp.stderr or "")[-500:]}
-    typing_cmd = [gapit, "typing", str(screen), "--format", "json"]
+    typing_cmd = [gspec, "typing", str(screen), "--format", "json"]
     if datadir:
         typing_cmd += ["--datadir", datadir]
     tp = subprocess.run(
@@ -266,15 +266,15 @@ def _screen_and_type(
             raw = None
         if isinstance(raw, dict):
             payload = raw
-    # gapit 0.5.4 的 `typing` 在无 scheme 时把 error JSON 放到 stderr（stdout 为空、
+    # gspec 0.5.4 的 `typing` 在无 scheme 时把 error JSON 放到 stderr（stdout 为空、
     # 退出码非 0）——必须先识别错误码再判失败，否则 TYPING_NO_SCHEME 会被误记成 failed。
-    if payload.get("schema") == "gapit.error/1":
+    if payload.get("schema") == "gspec.error/1":
         err: tuple[str, str] | None = (
             str(payload.get("code", "")),
             str(payload.get("message", "")),
         )
     else:
-        err = _gapit_error(tp.stderr)
+        err = _gspec_error(tp.stderr)
     if err is not None:
         code, message = err
         if code in _NO_SCHEME_CODES:
@@ -325,7 +325,7 @@ def run(
         dbs = list(databases)
     dbs = [d for d in dbs if d and d not in _HANDLED_ELSEWHERE]
 
-    gapit = shutil.which("gapit")
+    gspec = shutil.which("gspec")
     payload: dict[str, Any] = {}
     if species_block:
         payload["species"] = species_block
@@ -336,13 +336,13 @@ def run(
             encoding="utf-8",
         )
         return 0
-    if gapit is None:
+    if gspec is None:
         out.write_text(
             json.dumps(
                 {
                     **payload,
                     "status": "skipped",
-                    "reason": "gapit not found in PATH",
+                    "reason": "gspec not found in PATH",
                     "databases": {d: {"status": "skipped"} for d in dbs},
                 },
                 ensure_ascii=False,
@@ -356,7 +356,7 @@ def run(
     catalog = _catalog(datadir) if species_json is not None else {}
     results = {
         db: _screen_and_type(
-            gapit,
+            gspec,
             contigs,
             db,
             workdir,
@@ -377,15 +377,15 @@ def run(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="gapit typing orchestration (registry-driven)")
+    ap = argparse.ArgumentParser(description="gspec typing orchestration (registry-driven)")
     ap.add_argument("--contigs", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--workdir", required=True)
-    ap.add_argument("--databases", default="", help="逗号分隔的 gapit 库名（旧路径）")
+    ap.add_argument("--databases", default="", help="逗号分隔的 gspec 库名（旧路径）")
     ap.add_argument("--species", default="", help="gside species_id.json（工作流路径）")
     ap.add_argument("--sample", default="", help="样本 ID（单样本覆盖）")
     ap.add_argument("--selection", default="", help="tool_selection.yaml 路径")
-    ap.add_argument("--datadir", default="", help="gapit datadir")
+    ap.add_argument("--datadir", default="", help="gspec datadir")
     ap.add_argument("--threads", type=int, default=1)
     ap.add_argument("--timeout", type=int, default=600)
     args = ap.parse_args()

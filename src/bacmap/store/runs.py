@@ -147,7 +147,7 @@ def load_ref_databases(refs_dir: Path) -> list[RefDatabase]:
 
     manifest 形如 ``$BACMAP_HOME/refs/manifest.json``::
 
-        {"databases": [{"name": "gapit:card", "version": "3.2.6", "checksum": "..."}]}
+        {"databases": [{"name": "gspec:card", "version": "3.2.6", "checksum": "..."}]}
 
     接受裸列表或带 ``databases`` 键的对象；文件缺失/条目非法时返回 ``[]``
     （不猜测、不做昂贵的目录全量哈希——校验值由部署方在登记时写入）。

@@ -30,7 +30,7 @@ MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小�
 ## 功能概览
 
 - **确定性管线** — Snakemake 9：QC → 组装 → 物种 → 分型/耐药 → 报告。物种鉴定、基因筛查/血清型、
-  MLST/cgMLST 分别交给 [gside](https://github.com/indexofire/gside)、`gapit`、`gmlst`（ADR-20）。
+  MLST/cgMLST 分别交给 [gside](https://github.com/indexofire/gside)、`gspec`、`gmlst`（ADR-20）。
 - **五类任务** — `analyze`、`curate`、`mine`、`write`、`record`。所有写入都经任务层；开放路径的
   脚本/草稿必须由人确认计划后才能执行。
 - **持久执行** — DBOS 工作流逐步检查点，进程崩溃后从最后完成的步骤恢复；Snakemake 用

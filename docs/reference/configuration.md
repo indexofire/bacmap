@@ -51,7 +51,7 @@ export BACMAP_CONFIG="$PWD/config.toml"
 | `BACMAP_WEB_COOKIE_SECURE` | off | `1` adds `Secure` to cookies |
 | `BACMAP_LANG` | — | CLI display language override (`en`/`zh`); takes precedence over `[ui].language` |
 | `BACMAP_TOOL_SELECTION` | — | explicit `tool_selection.yaml` overlay path (§13) |
-| `BACMAP_DB_SELECTION` | — | legacy gapit-only overlay path (translated to `tool_selection.yaml`) |
+| `BACMAP_DB_SELECTION` | — | legacy gspec-only overlay path (translated to `tool_selection.yaml`) |
 | `BACMAP_RESEARCH_PROFILE` | `research` | default governance profile for Research Workbench (`open-test`/`research`/`publication`) |
 | `BACMAP_DEBUG` | off | **development only**: explicit override of `[debug].enabled`; `1` enables, `0` disables. Disables Web auth/CSRF, plan confirmation, task approvals, gates, MCP Profile limits, Research claim/publication gates and sandbox fallback. D3/D4→cloud remains blocked. |
 | `BACMAP_BENCHMARK_DATA` | — | local public-data snapshot for research benchmarks; may be a dataset dir or a parent containing `bvbrc_kpn_meropenem`/`osf_n78q3` |
@@ -270,7 +270,7 @@ $BACMAP_HOME/
 
 ```json
 {"databases": [
-  {"name": "gapit:card", "version": "3.2.6", "checksum": "sha256:..."},
+  {"name": "gspec:card", "version": "3.2.6", "checksum": "sha256:..."},
   {"name": "gmlst:senterica_2", "version": "2026-09", "checksum": "sha256:..."}
 ]}
 ```
@@ -333,24 +333,24 @@ local choices go into a YAML overlay so they survive upgrades:
 
 | Layer | Location |
 |---|---|
-| packaged defaults | `core/pathogens.yaml` (gapit databases, gmlst schemes) |
+| packaged defaults | `core/pathogens.yaml` (gspec databases, gmlst schemes) |
 | user/project overlay | `$BACMAP_HOME/config/tool_selection.yaml`, `BACMAP_TOOL_SELECTION`, the workflow `tool_selection` key, or `bacmap selection --selection PATH` |
 | runtime species verdict | `species/species_id.json` (gside; workflow only) |
 
 Overlay resolution: explicit path → `BACMAP_TOOL_SELECTION` → legacy `BACMAP_DB_SELECTION` →
 `$BACMAP_HOME/config/tool_selection.yaml` → `$BACMAP_HOME/config/db_selection.yaml`. The legacy
-file (`bacmap.db_selection/1`) is accepted as a gapit-only alias and flagged at load time.
+file (`bacmap.db_selection/1`) is accepted as a gspec-only alias and flagged at load time.
 
 Schema `bacmap.tool_selection/1`:
 
 ```yaml
 schema: bacmap.tool_selection/1
 defaults:                        # optional merge mode when an entry omits `mode`
-  gapit: {mode: extend}          # extend (default) | replace
+  gspec: {mode: extend}          # extend (default) | replace
   gmlst: {mode: extend}
 species:
   VPA:
-    gapit:
+    gspec:
       mode: extend               # registry defaults + listed databases
       databases: [vpa_ok, vpa_pai]
     gmlst:
@@ -359,14 +359,14 @@ species:
       schemes: {mlst: vparahaemolyticus_1}
 samples:
   S42:
-    gapit: {databases: [vpa_ok]} # sample entry replaces the species list
+    gspec: {databases: [vpa_ok]} # sample entry replaces the species list
 meta:                            # optional provenance written by `selection select`
   generated_by: cli
   generated_at: "2026-11-07T00:00:00+00:00"
   approved_by: operator
 ```
 
-Precedence is **sample > species > registry**. `gapit.databases` extends the registry list unless
+Precedence is **sample > species > registry**. `gspec.databases` extends the registry list unless
 `mode: replace`; `gmlst.modes` and `gmlst.schemes` merge unless `mode: replace`. Unknown species
 codes, database names or scheme names are validation errors — nothing is guessed. A scheme is
 only accepted when the gmlst catalog knows it (and, with `--downloaded-only`, when it is cached).
@@ -378,7 +378,7 @@ bacmap selection options --tool all --json   # catalog rows + current selection
 bacmap selection show --diff                 # effective mapping vs registry
 bacmap selection validate                    # unknown / undownloaded / mismatched entries
 bacmap selection select --tool gmlst --species VPA --modes mlst --schemes mlst=vparahaemolyticus_1
-bacmap db ...                                # gapit-only alias (--tool gapit)
+bacmap db ...                                # gspec-only alias (--tool gspec)
 ```
 
 `bacmap selection options --json` and the read-only MCP tool `bio_tool_selection_options` return

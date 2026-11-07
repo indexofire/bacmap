@@ -896,9 +896,9 @@ LIST_REFERENCE_GENOMES = {
 TOOL_SELECTION_OPTIONS = {
     "name": "bio_tool_selection_options",
     "description": (
-        "List per-tool reference data for each species: gapit databases and "
+        "List per-tool reference data for each species: gspec databases and "
         "gmlst typing modes/schemes, with the user's tool_selection overlay "
-        "applied. Rows carry kind/typing/installed/license for gapit and "
+        "applied. Rows carry kind/typing/installed/license for gspec and "
         "scheme_type/downloaded/provider for gmlst, plus default/selected "
         "flags. Use this before proposing a tool_selection.yaml; never invent "
         "database or scheme names. Read-only."
@@ -908,7 +908,7 @@ TOOL_SELECTION_OPTIONS = {
         "properties": {
             "tool": {
                 "type": "string",
-                "description": "gapit | gmlst | all (default all).",
+                "description": "gspec | gmlst | all (default all).",
             },
             "species": {
                 "type": "string",
@@ -919,7 +919,7 @@ TOOL_SELECTION_OPTIONS = {
             },
             "datadir": {
                 "type": "string",
-                "description": "Optional gapit datadir (defaults to GAPIT_DATADIR).",
+                "description": "Optional gspec datadir (defaults to GSPEC_DATADIR).",
             },
             "selection_path": {
                 "type": "string",

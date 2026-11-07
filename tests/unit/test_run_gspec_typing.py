@@ -1,4 +1,4 @@
-"""gapit 分型编排：多库状态（ran/no_scheme/skipped/failed）+ eco_dec 排除。"""
+"""gspec 分型编排：多库状态（ran/no_scheme/skipped/failed）+ eco_dec 排除。"""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ _SCRIPTS = Path(__file__).resolve().parents[2] / "src" / "bacmap" / "workflow" /
 
 def _load():
     spec = importlib.util.spec_from_file_location(
-        "_wf_run_gapit_typing", _SCRIPTS / "run_gapit_typing.py"
+        "_wf_run_gspec_typing", _SCRIPTS / "run_gspec_typing.py"
     )
     mod = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
@@ -29,7 +29,7 @@ class _Proc:
 def _typing_json(phenotype: str = "IIa") -> str:
     return json.dumps(
         {
-            "schema": "gapit.typing_result/1",
+            "schema": "gspec.typing_result/1",
             "db": "lmo_sero",
             "files": [
                 {
@@ -55,7 +55,7 @@ def _fake_run(typing_out: dict[str, str], *, screen_fail: set[str] | None = None
         # typing <screen.tsv> -f json —— 库名从 screen 文件名推回
         db = Path(cmd[2]).name.replace("_screen.tsv", "")
         default = json.dumps(
-            {"schema": "gapit.error/1", "code": "TYPING_NO_SCHEME", "message": "no scheme"}
+            {"schema": "gspec.error/1", "code": "TYPING_NO_SCHEME", "message": "no scheme"}
         )
         return _Proc(0, out=typing_out.get(db, default))
 
@@ -63,7 +63,7 @@ def _fake_run(typing_out: dict[str, str], *, screen_fail: set[str] | None = None
 
 
 class TestRunGapitTyping:
-    def test_skipped_when_gapit_missing(self, tmp_path, monkeypatch):
+    def test_skipped_when_gspec_missing(self, tmp_path, monkeypatch):
         mod = _load()
         monkeypatch.setattr(mod.shutil, "which", lambda name: None)
         out = tmp_path / "typing.json"
@@ -79,7 +79,7 @@ class TestRunGapitTyping:
 
     def test_empty_when_no_databases(self, tmp_path, monkeypatch):
         mod = _load()
-        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gspec")
         out = tmp_path / "typing.json"
         # eco_dec 被专用步骤排除 → 无库可跑
         assert (
@@ -89,11 +89,11 @@ class TestRunGapitTyping:
         assert json.loads(out.read_text()) == {"status": "empty", "databases": {}}
 
     def test_error_json_on_stderr_is_no_scheme(self, tmp_path, monkeypatch):
-        """gapit typing 把 error JSON 放 stderr 且退出码非 0（实测 0.5.4 + ecoh）。"""
+        """gspec typing 把 error JSON 放 stderr 且退出码非 0（实测 0.5.4 + ecoh）。"""
         mod = _load()
-        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gspec")
         err = json.dumps(
-            {"schema": "gapit.error/1", "code": "TYPING_NO_SCHEME", "message": "no scheme"}
+            {"schema": "gspec.error/1", "code": "TYPING_NO_SCHEME", "message": "no scheme"}
         )
 
         def _run(cmd, **kwargs):
@@ -111,7 +111,7 @@ class TestRunGapitTyping:
 
     def test_ran_and_no_scheme_mixed(self, tmp_path, monkeypatch):
         mod = _load()
-        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gspec")
         monkeypatch.setattr(mod.subprocess, "run", _fake_run({"lmo_sero": _typing_json("IIa")}))
         out = tmp_path / "typing.json"
         mod.run(
@@ -125,7 +125,7 @@ class TestRunGapitTyping:
 
     def test_screen_failure_recorded(self, tmp_path, monkeypatch):
         mod = _load()
-        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gspec")
         monkeypatch.setattr(
             mod.subprocess, "run", _fake_run({}, screen_fail={"lmo_sero"})
         )
@@ -137,12 +137,12 @@ class TestRunGapitTyping:
 
     def test_missing_database_is_unavailable(self, tmp_path, monkeypatch):
         mod = _load()
-        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gspec")
         err = json.dumps(
             {
-                "schema": "gapit.error/1",
+                "schema": "gspec.error/1",
                 "code": "DATABASE_NOT_FOUND",
-                "message": "Database ab_k is not in ~/.local/share/gapit/db",
+                "message": "Database ab_k is not in ~/.local/share/gspec/db",
             }
         )
         monkeypatch.setattr(mod.subprocess, "run", lambda *a, **k: _Proc(0, out=err))
@@ -192,7 +192,7 @@ class TestSpeciesRouting:
         calls: list[list[str]] = []
 
         cluster_doc = {
-            "schema": "gapit.cluster/2",
+            "schema": "gspec.cluster/2",
             "files": [
                 {
                     "file": "c.fasta",
@@ -216,7 +216,7 @@ class TestSpeciesRouting:
             )
             return _Proc(0)
 
-        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gspec")
         monkeypatch.setattr(mod, "_catalog", lambda datadir: self._catalog())
         monkeypatch.setattr(mod.subprocess, "run", _run)
 
@@ -236,12 +236,12 @@ class TestSpeciesRouting:
         assert data["databases"]["vpa_ok"]["status"] == "ran"
         assert data["databases"]["vpa_ok"]["phenotype"] == "O3:K6"
         assert data["databases"]["vpa_pai"]["status"] == "ran"
-        # cluster 库绝不走 gapit typing
+        # cluster 库绝不走 gspec typing
         assert all("typing" not in call for call in calls)
 
     def test_low_confidence_routes_no_species_databases(self, tmp_path, monkeypatch):
         mod = _load()
-        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gspec")
         monkeypatch.setattr(mod, "_catalog", lambda datadir: self._catalog())
         monkeypatch.setattr(
             mod.subprocess,
@@ -271,7 +271,7 @@ class TestSpeciesRouting:
         def _run(cmd, **kwargs):
             calls.append(list(cmd))
             Path(cmd[cmd.index("-o") + 1]).write_text(
-                json.dumps({"schema": "gapit.cluster/2", "files": [{"best": {}, "loci": []}]}),
+                json.dumps({"schema": "gspec.cluster/2", "files": [{"best": {}, "loci": []}]}),
                 encoding="utf-8",
             )
             return _Proc(0)
@@ -284,7 +284,7 @@ class TestSpeciesRouting:
             "    databases: [vpa_ok]\n",
             encoding="utf-8",
         )
-        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gspec")
         monkeypatch.setattr(mod, "_catalog", lambda datadir: self._catalog())
         monkeypatch.setattr(mod.subprocess, "run", _run)
         out = tmp_path / "typing.json"

@@ -74,7 +74,7 @@ class TestAnalysisRun:
             "schema: bacmap.tool_selection/1\n"
             "species:\n"
             "  VPA:\n"
-            "    gapit:\n"
+            "    gspec:\n"
             "      databases: [vpa_ok]\n",
             encoding="utf-8",
         )
@@ -258,7 +258,7 @@ class TestRefDatabases:
             json.dumps(
                 {
                     "databases": [
-                        {"name": "gapit:card", "version": "3.2.6", "checksum": "abc"},
+                        {"name": "gspec:card", "version": "3.2.6", "checksum": "abc"},
                         {"name": "bad-no-version"},
                     ]
                 }
@@ -266,7 +266,7 @@ class TestRefDatabases:
         )
         out = runs.load_ref_databases(refs)
         assert len(out) == 1
-        assert out[0].name == "gapit:card" and out[0].version == "3.2.6"
+        assert out[0].name == "gspec:card" and out[0].version == "3.2.6"
 
         (refs / "manifest.json").write_text(
             json.dumps([{"name": "gmlst:senterica_2", "version": "2026-01"}])
@@ -287,7 +287,7 @@ class TestRefDatabases:
         refs = tmp_path / "refs"
         refs.mkdir()
         (refs / "manifest.json").write_text(
-            json.dumps({"databases": [{"name": "gapit:vfdb", "version": "2024"}]})
+            json.dumps({"databases": [{"name": "gspec:vfdb", "version": "2024"}]})
         )
         db = tmp_path / "r.sqlite"
         run = runs.create_run(
@@ -297,10 +297,10 @@ class TestRefDatabases:
             db_path=db,
             refs_dir=refs,
         )
-        assert [r.name for r in run.ref_databases] == ["gapit:vfdb"]
+        assert [r.name for r in run.ref_databases] == ["gspec:vfdb"]
         loaded = runs.read_run(run.run_id, db)
         assert loaded is not None
-        assert [r.name for r in loaded.ref_databases] == ["gapit:vfdb"]
+        assert [r.name for r in loaded.ref_databases] == ["gspec:vfdb"]
 
 
 class TestSeedsAndNondeterminism:

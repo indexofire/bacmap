@@ -57,7 +57,7 @@ MCP 客户端把单个 JSON 对象作为工具参数传入（形状与下文的 
 | bio_seq_ops | compute | 执行翻译、ORF 查找、k-mer 计数等序列操作 |
 | bio_seq_stats | compute | 计算序列文件的统计信息 |
 | bio_snp_tree | compute | 获取队列 SNP 树与两两 SNP 距离 |
-| bio_tool_selection_options | read | 列出按物种的 gapit 库与 gmlst 模式/scheme（应用用户覆盖层） |
+| bio_tool_selection_options | read | 列出按物种的 gspec 库与 gmlst 模式/scheme（应用用户覆盖层） |
 | bio_variant | compute | 对变异进行检出、过滤、查询、注释或构建一致性序列 |
 | bio_verify_result | compute | 对结果运行确定性验证，可选 NLI 反思 |
 
@@ -110,7 +110,7 @@ MCP 客户端把单个 JSON 对象作为工具参数传入（形状与下文的 
 
 版本 `v0.1.0` | 效果：`write` | 信任层：`L1`
 
-运行完整的病原菌分析流水线（QC、组装、经 gside 做物种鉴定、经 gmlst 做 MLST/cgMLST、经 gapit 做筛查/血清分型、AMR/毒力/质粒、报告）。物种路由是自动的，并遵循病原体注册表。返回结果摘要。流水线指引与故障排查请阅读 MCP 提示词 bacmap_role_analyst。
+运行完整的病原菌分析流水线（QC、组装、经 gside 做物种鉴定、经 gmlst 做 MLST/cgMLST、经 gspec 做筛查/血清分型、AMR/毒力/质粒、报告）。物种路由是自动的，并遵循病原体注册表。返回结果摘要。流水线指引与故障排查请阅读 MCP 提示词 bacmap_role_analyst。
 
 **参数**
 
@@ -365,13 +365,13 @@ MCP 客户端把单个 JSON 对象作为工具参数传入（形状与下文的 
 
 版本 `v0.1.0` | 效果：`read` | 信任层：`L1`
 
-列出 gapit 与 gmlst 可按物种使用的参考数据，并应用用户的 `tool_selection.yaml` 覆盖层：gapit 库（kind、typing、installed、license、default/selected 标记）与 gmlst 分型模式/scheme（scheme_type、compute_type、downloaded、provider、default/selected 标记）。在提议 `tool_selection.yaml` 前使用；绝不臆造库名或 scheme 名。只读——写入选择仍由本地 CLI（`bacmap selection select`）或经确认的任务完成。
+列出 gspec 与 gmlst 可按物种使用的参考数据，并应用用户的 `tool_selection.yaml` 覆盖层：gspec 库（kind、typing、installed、license、default/selected 标记）与 gmlst 分型模式/scheme（scheme_type、compute_type、downloaded、provider、default/selected 标记）。在提议 `tool_selection.yaml` 前使用；绝不臆造库名或 scheme 名。只读——写入选择仍由本地 CLI（`bacmap selection select`）或经确认的任务完成。
 
 **参数**
 
-- `tool`：`string`。`gapit | gmlst | all`（默认 `all`）。
+- `tool`：`string`。`gspec | gmlst | all`（默认 `all`）。
 - `species`：`string`。可选的物种码/标签过滤（如 `VPA` 或 `V_parahaemolyticus`）；省略则返回全部物种。
-- `datadir`：`string`。可选的 gapit datadir（默认取 `GAPIT_DATADIR`）。
+- `datadir`：`string`。可选的 gspec datadir（默认取 `GSPEC_DATADIR`）。
 - `selection_path`：`string`。可选的待检查 `tool_selection.yaml` 路径。
 - `include_remote_schemes`：`boolean`。是否包含尚未下载的 gmlst scheme（默认 `true`；设为 `false` 只看已缓存 scheme）。
 

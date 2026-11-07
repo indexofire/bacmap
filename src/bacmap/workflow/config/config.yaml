@@ -22,12 +22,12 @@ kraken2_prefilter: false
 
 samples_file: "config/samples.tsv"
 
-# 用户/项目级物种→工具参考数据覆盖（gapit 库 / gmlst 模式与 scheme）。
+# 用户/项目级物种→工具参考数据覆盖（gspec 库 / gmlst 模式与 scheme）。
 # 空 = $BACMAP_HOME/config/tool_selection.yaml（旧 db_selection.yaml 兼容）。
 # 也可由 BACMAP_TOOL_SELECTION 环境变量或 --config tool_selection=PATH 指定。
 # 生成/校验：`bacmap selection options|select|show|validate`。
 tool_selection: ""
-# 旧键（v1.4.40 兼容）：仍被读取，等价于 gapit-only 覆盖。
+# 旧键（v1.4.40 兼容）：仍被读取，等价于 gspec-only 覆盖。
 db_selection: ""
 
 databases:
@@ -37,8 +37,8 @@ databases:
   card: "card"
   plasmidfinder: "plasmidfinder"
   resfinder: "resfinder"
-  # gapit 自定义库（ADR-20）：部署期由 scripts/build_gapit_db.py 构建于
-  # $BACMAP_HOME/refs/gapit/；供 vpara_virulence 规则筛查。
+  # gspec 自定义库（ADR-20）：部署期由 scripts/build_gspec_db.py 构建于
+  # $BACMAP_HOME/refs/gspec/；供 vpara_virulence 规则筛查。
   vpara_virulence: "vpara_virulence"
 
 tools:
