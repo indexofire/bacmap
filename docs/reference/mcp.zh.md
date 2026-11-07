@@ -140,8 +140,10 @@ bacmap start mcp --profile local-trusted  # 要求 [mcp] allow_local_trusted = t
 | `bacmap_research_capabilities` | 无 | P1 能力；所有 Profile 可用 |
 | `bacmap_research_sessions` | `limit?` | D2；仅允许 D2 的 Profile |
 | `bacmap_research_session` | `session_id` | D2；统计表、诊断与产物路径 |
+| `bacmap_research_figure_spec` | `session_id` | D2；精确图片契约（数据、统计量、来源 ID、样式） |
 
-研究创建当前只经 CLI/Web/API；MCP 对研究会话只读。P1 产物为 `TEST/UNVERIFIED`
+研究创建与自定义图片登记当前只经 CLI/Web/API；MCP 对研究会话只读。自定义图片在脚本经
+`mine` 沙箱执行后用 `bacmap research figure attach` 登记。P1 产物为 `TEST/UNVERIFIED`
 （open-test）或 `REVIEW REQUIRED`。
 
 ### 3.6 `bio_*` 工具

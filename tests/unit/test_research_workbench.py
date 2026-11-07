@@ -115,7 +115,12 @@ class TestService:
         assert view.session.status.value == "complete_test"
         assert view.session.label == "TEST/UNVERIFIED"
         assert view.stat and view.stat.n == 16
-        assert {a.kind.value for a in view.artifacts} == {"figure", "report", "manuscript"}
+        assert {a.kind.value for a in view.artifacts} == {
+            "figure",
+            "report",
+            "manuscript",
+            "figure_spec",
+        }
         for art in view.artifacts:
             p = Path(art.path)
             assert p.is_file() and p.stat().st_size > 0
@@ -725,3 +730,77 @@ class TestExperimentAPI:
         readiness = c.get(f"/api/v1/research/studies/{sid}/publication-readiness")
         assert readiness.status_code == 200
         assert readiness.json()["ready"] is False
+
+
+class TestFigures:
+    def _session(self, home: Path):
+        return ResearchService(home).create_session(
+            CreateSessionRequest(
+                run_id="run-1",
+                gene="blaKPC-33",
+                test_name="meropenem",
+                profile=ResearchProfile.RESEARCH,
+            ),
+            actor="tester",
+        )
+
+    def test_figure_spec_is_stored_with_source(self, home: Path):
+        view = self._session(home)
+        spec = ResearchService(home).figure_spec(view.session.session_id)
+        assert spec.schema_name == "bacmap.figure_spec/1"
+        assert spec.data["table"] == view.stat.table
+        assert spec.data["odds_ratio"] == view.stat.odds_ratio
+        assert spec.source.session_id == view.session.session_id
+        assert spec.source.run_id == "run-1"
+        assert len(spec.source.stat_sha256) == 64
+        assert spec.style.dpi >= 300
+        assert any("colorblind" in c for c in spec.constraints)
+        stored = {a.kind.value for a in view.artifacts}
+        assert "figure_spec" in stored
+
+    def test_attach_registers_manifest_and_hashes(self, home: Path, tmp_path: Path):
+        view = self._session(home)
+        out = tmp_path / "figure.svg"
+        out.write_text("<svg xmlns='http://www.w3.org/2000/svg'/>", encoding="utf-8")
+        code = tmp_path / "plot.py"
+        code.write_text("print('plot')\n", encoding="utf-8")
+        art = ResearchService(home).attach_figure(
+            view.session.session_id, out, code=code, renderer="bacmap-deterministic"
+        )
+        assert len(art.output_sha256) == 64
+        assert len(art.code_sha256) == 64
+        assert Path(art.output).is_relative_to(home / "research" / view.session.session_id)
+        assert Path(art.code_path).is_relative_to(home / "research" / view.session.session_id)
+        assert len(art.spec_sha256) == 64
+        assert len(art.data_sha256) == 64
+        after = ResearchService(home).get_session(view.session.session_id)
+        kinds = {a.kind.value for a in after.artifacts}
+        assert {"figure_custom", "figure_manifest"} <= kinds
+        manifest = json.loads(
+            (home / "research" / view.session.session_id / "figure_custom.manifest.json")
+            .read_text(encoding="utf-8")
+        )
+        assert manifest["schema"] == "bacmap.figure_artifact/1"
+        assert manifest["renderer"] == "bacmap-deterministic"
+
+    def test_attach_rejects_spec_from_another_session(self, home: Path, tmp_path: Path):
+        first = self._session(home)
+        second = self._session(home)
+        spec = ResearchService(home).figure_spec(first.session.session_id)
+        from bacmap.research.figures import write_spec
+
+        spec_path = tmp_path / "spec.json"
+        write_spec(spec, spec_path)
+        out = tmp_path / "figure.svg"
+        out.write_text("<svg/>", encoding="utf-8")
+        with pytest.raises(ResearchError, match="belongs to session"):
+            ResearchService(home).attach_figure(
+                second.session.session_id, out, spec_path=spec_path
+            )
+
+    def test_attach_rejects_unsupported_format(self, home: Path, tmp_path: Path):
+        view = self._session(home)
+        out = tmp_path / "figure.txt"
+        out.write_text("not a figure", encoding="utf-8")
+        with pytest.raises(ResearchError, match="not allowed"):
+            ResearchService(home).attach_figure(view.session.session_id, out)

@@ -565,14 +565,14 @@ def _epilog() -> str:
     return (
         f"{interfaces_label}: bacmap start {{mcp|web|tui|console}}\n"
         f"{commands_label}: overview · task · plan · record · run · gom · "
-        "sample · search · selection\n"
+        "sample · search · selection · research · agent\n"
         f"{note}"
     )
 
 
 _COMMAND_METAVAR = (
     "{start,overview,task,plan,record,run,gom,config,doctor,backup,"
-    "restore,results,events,isolate,sample,search,selection,db}"
+    "restore,results,events,isolate,sample,search,selection,db,research,agent}"
 )
 
 
@@ -680,6 +680,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_plan_parser(sub, _add_home, _add_json)
 
+    from bacmap.interfaces.cli.agent import add_parser as add_agent_parser
     from bacmap.interfaces.cli.config_cmd import add_parser as add_config_parser
     from bacmap.interfaces.cli.evidence import add_parser as add_evidence_parser
     from bacmap.interfaces.cli.isolates import add_parser as add_isolate_parser
@@ -690,6 +691,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_record_parser(sub, _add_home, _add_json)
     add_config_parser(sub, _add_home, _add_json)
     add_research_parser(sub, _add_home, _add_json)
+    add_agent_parser(sub, _add_home, _add_json)
     add_evidence_parser(sub, _add_home, _add_json)
     add_isolate_parser(sub, _add_home, _add_json)
     add_ops_parser(sub, _add_home, _add_json)

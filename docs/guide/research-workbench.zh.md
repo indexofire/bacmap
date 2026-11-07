@@ -239,3 +239,38 @@ P1 复用：
 - 现有 Web/API/MCP/CLI/DBOS 边界。
 
 不改变 GOM、Snakemake、DBOS 或五类任务。
+
+## 10. 发表级图片
+
+图片与统计遵循同一条规则：数字来自 bacmap；叙事与自定义版式可以来自 agent。
+
+| 档 | 谁生成 | 用途 | 来源记录 |
+|---|---|---|---|
+| **A. 确定性标准图** | bacmap（`FigureSpec` + 固定 renderer） | 2×2 条形图、森林图、流程图 | spec/data/output SHA-256 |
+| **B. 自定义发表图** | agent 写脚本，在 `mine` 沙箱执行 | 期刊定制面板、特殊标注 | spec/data/code/output SHA-256 + 人工签字 |
+| **C. Paper skill** | agent 指导 | 选图、配色、图注、期刊格式 | 仅指导 |
+
+每个 session 都保存 `figure_spec.json`；读取方式：
+
+```bash
+bacmap research figure spec rs-0123456789ab
+```
+
+或经 MCP 的 `bacmap_research_figure_spec`（D2）。契约包含精确的表格与统计量、来源 ID
+（`session_id`、`run_id`、`stat_sha256`、`plan_id`）、样式约束（宽高、dpi、格式、
+色盲友好配色）以及图注约束。
+
+自定义图片渲染完成后登记来源：
+
+```bash
+bacmap research figure attach rs-0123456789ab \
+  --path figure.pdf --code plot.py
+```
+
+`attach` 会拒绝来自其他 session 的契约、契约不允许的输出格式，以及缺失的脚本。
+`figure_custom` 与 `figure_manifest` 产物记录 `spec_sha256`、`data_sha256`、
+`code_sha256` 与 `output_sha256`。
+
+自定义脚本必须走既有开放路径（`mine` 计划：无网络、只读挂载、挖掘门 + 人工签字）；
+沙箱镜像需包含绘图栈（例如 matplotlib 或 R）。能用确定性 renderer 表达的标准图，
+不要用 AI 重画。

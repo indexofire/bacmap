@@ -221,6 +221,25 @@ bacmap selection show --diff
 bacmap selection select --tool gapit --species VPA --databases vpa_ok,vpa_pai
 ```
 
+## `bacmap agent`
+
+```text
+bacmap agent list [--json]
+bacmap agent export --harness NAME [--format instructions|mcp-config|skill] [--role ROLE] [--json]
+bacmap agent install --harness NAME [--scope project|user] [--target DIR]
+                      [--with-skills] [--force] [--json]
+bacmap agent doctor [--target DIR] [--json]
+```
+
+为用户自选的 agent harness 生成薄适配文件。事实来源仍在 bacmap（MCP instructions、
+角色 prompts 与 `skill://` resources）；安装出的文件是指导，不是权限。
+
+- `list` 列出支持的 harness 及其配置格式；
+- `export` 打印指导文件、MCP 配置片段或某个角色的 `SKILL.md`；
+- `install` 写入 harness 指导文件与 `.bacmap-agent.json`；幂等，且除非 `--force`
+  否则拒绝覆盖用户文件；`--with-skills` 同时写 `.bacmap/skills/<role>/SKILL.md`；
+- `doctor` 校验文件 hash，并在内容或 bacmap 版本不一致时告警。
+
 ## `bacmap config`
 
 ```text

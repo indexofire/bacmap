@@ -16,6 +16,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 from pydantic import create_model
 
+from bacmap.agent.instructions import external_operating_rules
 from bacmap.interfaces.mcp.profiles import McpProfile, ProfileSpec
 from bacmap.tools import registry as tool_registry
 from bacmap.tools.spec import DataClass, Effect
@@ -88,18 +89,8 @@ def build_server(engine: Any = None, profile: ProfileSpec = DEFAULT_PROFILE) -> 
     """
     server = MCPServer(
         name="bacmap",
-        instructions=(
-            "bacmap 病原微生物基因组分析。操作规程："
-            "1) 分析/写入先调用 bacmap_create_plan，把 plan_id/version/plan_hash/confirm_url "
-            "交给用户；默认由人在 bacmap Web/CLI/本地对话框确认（智能体不能确认），"
-            "除非管理员已显式启用服务端 auto_confirm 预授权策略。"
-            "2) 确认后用 bacmap_get_plan 获取 task_ids，用 bacmap_task_status 跟踪，"
-            "用 bacmap_task_result 汇总；结论必须引用样本/task/run 标识。"
-            "3) 不要用 Harness 自己的 shell/文件工具运行 snakemake/gside/gapit/gmlst，"
-            "也不要读取原始序列；用户应提供绝对路径或样本 ID，由 bacmap 在本地执行。"
-            "4) 只读/计算工具可直接调用。"
-            f"本实例 Profile={profile.profile.value}，"
-            f"工具数据级别上限 {profile.max_data_class.name}（ADR-16）。"
+        instructions=external_operating_rules(
+            profile.profile.value, profile.max_data_class.name
         ),
     )
 
@@ -122,20 +113,25 @@ def build_server(engine: Any = None, profile: ProfileSpec = DEFAULT_PROFILE) -> 
 
 
 def _register_role_prompts(server: MCPServer) -> None:
-    """角色说明书经 MCP prompts 暴露（ADR-12：外部助手获得领域指导）。"""
+    """角色说明书经 MCP prompts 暴露（ADR-12：外部助手获得领域指导）。
+
+    外部 agent 不受 ``role.yaml`` 的权限字段约束，实际权限由 MCP Profile 决定；
+    因此这里使用 ``audience="external"`` 的说明书，避免把内部权限声明误当成强制。
+    """
     from bacmap.agent import roledef
 
     for role in roledef.list_roles():
         def _prompt(role_name: str = role) -> str:
-            return roledef.build_system_prompt(role_name)
+            return roledef.build_system_prompt(role_name, audience="external")
 
         _prompt.__name__ = f"bacmap_role_{role}"
-        _prompt.__doc__ = f"bacmap {role} 角色说明书：全局原则 + 权限边界 + SKILL 指导"
+        _prompt.__doc__ = f"bacmap {role} 角色说明书：全局原则 + SKILL 指导"
         server.prompt(
             name=f"bacmap_role_{role}",
             description=(
-                f"bacmap {role} 角色说明书：全局原则 + 权限边界 + SKILL 指导。"
-                "外部智能体以该角色使用 bacmap 工具前应先取此说明。"
+                f"bacmap {role} 角色说明书：全局原则 + SKILL 指导。"
+                "外部智能体以该角色使用 bacmap 工具前应先取此说明；"
+                "实际权限由 MCP Profile 决定。"
             ),
         )(_prompt)
 
@@ -633,3 +629,19 @@ def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpe
         except ResearchError as exc:
             return _err(exc)
         return json.dumps(view.model_dump(mode="json"), ensure_ascii=False)
+
+    @server.tool(
+        name="bacmap_research_figure_spec",
+        description=(
+            "Get the publication figure contract for a research session: exact counts and "
+            "statistics, source IDs, journal style constraints and required provenance. "
+            "Numbers must come from this spec; custom plotting scripts run through the mine "
+            "sandbox and are attached with hashes. Read-only."
+        ),
+    )
+    def research_figure_spec(session_id: str) -> str:
+        try:
+            spec = service.figure_spec(session_id)
+        except ResearchError as exc:
+            return _err(exc)
+        return json.dumps(spec.model_dump(mode="json", by_alias=True), ensure_ascii=False)

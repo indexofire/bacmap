@@ -112,6 +112,32 @@ Use a hook/plugin only for mechanical enforcement—intercepting shell calls, re
 writing audit events. For “do not bypass bacmap”, persistent instructions plus bacmap's server-side
 plan gate are enough: even a misled model has no tool to confirm a plan or sign a gate.
 
+## 0.2 Installable guidance (`bacmap agent`)
+
+The role guides and operating rules are served by bacmap itself: MCP server instructions,
+`bacmap_role_<role>` prompts and `skill://bacmap/<role>/SKILL.md` resources. If your client does
+not inject them automatically, generate a harness adapter instead of copying text by hand:
+
+```bash
+bacmap agent list                              # supported harnesses
+bacmap agent export --harness pi               # print instructions
+bacmap agent export --harness hermes --format mcp-config
+bacmap agent install --harness pi --scope project
+bacmap agent install --harness generic --with-skills
+bacmap agent doctor
+```
+
+- `install` is idempotent; it refuses to overwrite a user file unless `--force`;
+- `.bacmap-agent.json` records the generated files and their hashes;
+- `doctor` reports missing/modified files and bacmap-version drift;
+- `--with-skills` writes portable `.bacmap/skills/<role>/SKILL.md`; place that directory where
+  your harness discovers skills;
+- MCP configuration snippets are printed by `--format mcp-config` and are never written
+  automatically.
+
+These files are **guidance, not permissions**. Actual permissions come from the MCP profile; the
+plan gate, write boundary and data classes stay server-side (ADR-12/16/21).
+
 ## 1. Start an MCP server
 
 ```bash

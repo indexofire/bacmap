@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from bacmap.interfaces.i18n import T
-from bacmap.research.models import CreateSessionRequest, ResearchError, ResearchProfile
+from bacmap.research.models import (
+    ArtifactKind,
+    CreateSessionRequest,
+    ResearchError,
+    ResearchProfile,
+)
 from bacmap.research.service import ResearchService, default_profile
 
 
@@ -81,6 +86,47 @@ def run_artifact(args: argparse.Namespace) -> None:
     except ResearchError as exc:
         raise SystemExit(f"[{exc.code}] {exc.message}") from exc
     print(path.read_text(encoding="utf-8"))
+
+
+def run_figure_spec(args: argparse.Namespace) -> None:
+    try:
+        spec = _service(args).figure_spec(args.session_id)
+    except ResearchError as exc:
+        raise SystemExit(f"[{exc.code}] {exc.message}") from exc
+    print(json.dumps(spec.model_dump(mode="json", by_alias=True), ensure_ascii=False, indent=2))
+
+
+def run_figure_attach(args: argparse.Namespace) -> None:
+    try:
+        artifact = _service(args).attach_figure(
+            args.session_id,
+            args.path,
+            code=args.code or None,
+            spec_path=args.spec or None,
+            renderer=args.renderer,
+            actor=args.by,
+        )
+    except ResearchError as exc:
+        raise SystemExit(f"[{exc.code}] {exc.message}") from exc
+    if args.json:
+        print(
+            json.dumps(
+                artifact.model_dump(mode="json", by_alias=True),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    print(
+        T(
+            f"attached {artifact.output} ({artifact.renderer})",
+            f"已登记图片 {artifact.output}（{artifact.renderer}）",
+        )
+    )
+    print(f"  output_sha256: {artifact.output_sha256}")
+    print(f"  spec_sha256:   {artifact.spec_sha256}")
+    if artifact.code_sha256:
+        print(f"  code_sha256:   {artifact.code_sha256}")
 
 
 def _object_service(args: argparse.Namespace):
@@ -458,9 +504,49 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
         "artifact", help=T("Output figure/report/manuscript", "输出 figure/report/manuscript")
     )
     art.add_argument("session_id")
-    art.add_argument("kind", choices=["figure", "report", "manuscript"])
+    art.add_argument("kind", choices=[k.value for k in ArtifactKind])
     add_home(art)
     art.set_defaults(func=run_artifact)
+
+    fig = s.add_parser(
+        "figure",
+        help=T(
+            "Publication figure contract (spec/attach)", "发表级图片契约（spec/attach）"
+        ),
+    )
+    fig_sub = fig.add_subparsers(dest="figure_command", required=True)
+    fig_spec = fig_sub.add_parser(
+        "spec", help=T("print the machine-readable figure contract", "输出图片契约 JSON")
+    )
+    fig_spec.add_argument("session_id")
+    add_home(fig_spec)
+    add_json(fig_spec)
+    fig_spec.set_defaults(func=run_figure_spec)
+    fig_att = fig_sub.add_parser(
+        "attach",
+        help=T(
+            "register a rendered figure with provenance", "登记已渲染图片及其来源"
+        ),
+    )
+    fig_att.add_argument("session_id")
+    fig_att.add_argument(
+        "--path", required=True, help=T("rendered figure file", "图片文件")
+    )
+    fig_att.add_argument(
+        "--code", default="", help=T("plotting script (optional)", "绘图脚本（可选）")
+    )
+    fig_att.add_argument(
+        "--spec", default="", help=T("custom spec JSON (optional)", "自定义契约 JSON（可选）")
+    )
+    fig_att.add_argument(
+        "--renderer",
+        choices=["agent-script", "bacmap-deterministic"],
+        default="agent-script",
+    )
+    fig_att.add_argument("--by", default="cli")
+    add_home(fig_att)
+    add_json(fig_att)
+    fig_att.set_defaults(func=run_figure_attach)
 
     study = s.add_parser("study", help=T("Study object", "Study 对象"))
     study_sub = study.add_subparsers(dest="study_command", required=True)

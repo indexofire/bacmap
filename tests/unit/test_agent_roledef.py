@@ -132,6 +132,10 @@ class TestMcpRolePrompts:
         result = asyncio.run(build_server().get_prompt("bacmap_role_analyst", {}))
         text = str(result)
         assert "生信分析师" in text
+        # 外部 agent 不受 role.yaml 约束：prompt 不得把内部权限说成强制。
+        assert "由代码强制" not in text
+        assert "外部 agent" in text
+        assert "MCP" in text
 
 
 class TestRoleEnforcement:

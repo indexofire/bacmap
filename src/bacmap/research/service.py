@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from bacmap.research.figures import (
+    FigureArtifact,
+    FigureSpec,
+    Renderer,
+    build_artifact,
+    build_association_spec,
+    load_spec,
+    write_spec,
+)
 from bacmap.research.models import (
     AnalysisSession,
     Artifact,
@@ -105,6 +116,7 @@ class ResearchService:
         ), encoding="utf-8")
         report_path = outdir / "report.md"
         manuscript_path = outdir / "manuscript.md"
+        spec_path = outdir / "figure_spec.json"
 
         with ResearchStore(self.home) as store:
             session = store.create_session(
@@ -126,11 +138,13 @@ class ResearchService:
             manuscript_path.write_text(
                 render_manuscript_markdown(session, stat), encoding="utf-8"
             )
+            write_spec(build_association_spec(session, stat), spec_path)
             store.put_stat(stat)
             for kind, path in (
                 (ArtifactKind.FIGURE, fig_path),
                 (ArtifactKind.REPORT, report_path),
                 (ArtifactKind.MANUSCRIPT, manuscript_path),
+                (ArtifactKind.FIGURE_SPEC, spec_path),
             ):
                 store.put_artifact(
                     Artifact(
@@ -195,6 +209,108 @@ class ResearchService:
             raise ResearchError(
                 "not_found", f"artifact {kind!r} not found for session {session.session_id}"
             )
+
+    def figure_spec(self, session_id: str) -> FigureSpec:
+        """Return the stored figure contract (or rebuild it for legacy sessions)."""
+        with ResearchStore(self.home) as store:
+            try:
+                session = store.get_session(session_id)
+            except KeyError as exc:
+                raise ResearchError("not_found", f"no such research session: {session_id}") from exc
+            stat = store.get_stat(session_id)
+            for art in store.list_artifacts(session_id):
+                if art.kind is ArtifactKind.FIGURE_SPEC:
+                    path = Path(art.path)
+                    if path.is_file():
+                        return load_spec(path)
+        if stat is None:
+            raise ResearchError("not_found", f"session {session_id} has no statistics")
+        return build_association_spec(session, stat)
+
+    def attach_figure(
+        self,
+        session_id: str,
+        output: str | Path,
+        *,
+        code: str | Path | None = None,
+        spec_path: str | Path | None = None,
+        renderer: Renderer = "agent-script",
+        actor: str = "cli",
+    ) -> FigureArtifact:
+        """Register a rendered custom figure with spec/data/code/output hashes."""
+        view = self.get_session(session_id)
+        if view.stat is None:
+            raise ResearchError("not_found", f"session {session_id} has no statistics")
+        spec = (
+            load_spec(spec_path)
+            if spec_path is not None
+            else build_association_spec(view.session, view.stat)
+        )
+        if spec.source.session_id != session_id:
+            raise ResearchError(
+                "validation_error",
+                f"figure spec belongs to session {spec.source.session_id}, not {session_id}",
+            )
+        if renderer not in {"bacmap-deterministic", "agent-script"}:
+            raise ResearchError("validation_error", f"unknown figure renderer: {renderer}")
+        try:
+            artifact = build_artifact(
+                spec,
+                output,
+                renderer=renderer,
+                code=code,
+            )
+        except ValueError as exc:
+            raise ResearchError("validation_error", str(exc)) from exc
+        outdir = self.home / "research" / session_id
+        outdir.mkdir(parents=True, exist_ok=True)
+        src = Path(artifact.output)
+        dest = src if src.is_relative_to(outdir) else outdir / f"figure_custom{src.suffix.lower()}"
+        if src != dest:
+            shutil.copy2(src, dest)
+        updates: dict[str, str] = {"output": str(dest)}
+        if artifact.code_path:
+            code_src = Path(artifact.code_path)
+            code_dest = (
+                code_src
+                if code_src.is_relative_to(outdir)
+                else outdir / f"figure_custom{code_src.suffix.lower()}"
+            )
+            if code_src != code_dest:
+                shutil.copy2(code_src, code_dest)
+            updates["code_path"] = str(code_dest)
+        artifact = artifact.model_copy(update=updates)
+        manifest_path = outdir / "figure_custom.manifest.json"
+        manifest = json.dumps(
+            artifact.model_dump(mode="json", by_alias=True), ensure_ascii=False, indent=2
+        )
+        manifest_path.write_text(manifest + "\n", encoding="utf-8")
+        with ResearchStore(self.home) as store:
+            store.put_artifact(
+                Artifact(
+                    session_id=session_id,
+                    kind=ArtifactKind.FIGURE_CUSTOM,
+                    path=str(dest),
+                    sha256=_sha256(dest),
+                    created_at=artifact.created_at,
+                )
+            )
+            store.put_artifact(
+                Artifact(
+                    session_id=session_id,
+                    kind=ArtifactKind.FIGURE_MANIFEST,
+                    path=str(manifest_path),
+                    sha256=_sha256(manifest_path),
+                    created_at=artifact.created_at,
+                )
+            )
+            store.ledger(
+                session_id,
+                "figure.attached",
+                actor,
+                artifact.model_dump(mode="json", by_alias=True),
+            )
+        return artifact
 
     def ledger(self, session_id: str) -> list[dict]:
         with ResearchStore(self.home) as store:

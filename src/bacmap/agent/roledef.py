@@ -106,19 +106,50 @@ def list_roles() -> list[str]:
     return sorted(p.parent.name for p in _SKILLS_DIR.glob("*/SKILL.md"))
 
 
-def build_system_prompt(role: str) -> str:
-    """全局原则 + 角色权限摘要 + SKILL 说明书 → system instructions。"""
+def build_system_prompt(role: str, *, audience: str = "internal") -> str:
+    """全局原则 + 角色权限摘要 + SKILL 说明书 → system instructions.
+
+    ``audience="internal"`` 用于 bacmap 内部任务型 agent（``role.yaml`` 由代码强制）。
+    ``audience="external"`` 用于 MCP prompts：外部 harness 不受 ``role.yaml`` 约束，
+    实际权限由 MCP Profile 决定，因此只给方法论与边界提醒，不把内部权限说成强制。
+    """
+    if audience not in {"internal", "external"}:
+        raise ValueError(f"audience must be 'internal' or 'external', got {audience!r}")
     rd = load_role_def(role)
-    perm = (
-        f"- 任务类型：{'、'.join(rd.task_types)}\n"
-        f"- 工具白名单：{'、'.join(rd.tools) if rd.tools else '无'}\n"
-        f"- 数据级别上限：{rd.max_data_class}\n"
-        f"- 端点位置：{'、'.join(rd.allowed_locations)}\n"
-        f"- 网络：{'允许' if rd.network else '禁止'}\n"
-    )
+    if audience == "internal":
+        boundary = (
+            "## 权限边界（由代码强制，此处仅作提醒）\n"
+            f"- 任务类型：{'、'.join(rd.task_types)}\n"
+            f"- 工具白名单：{'、'.join(rd.tools) if rd.tools else '无'}\n"
+            f"- 数据级别上限：{rd.max_data_class}\n"
+            f"- 端点位置：{'、'.join(rd.allowed_locations)}\n"
+            f"- 网络：{'允许' if rd.network else '禁止'}\n"
+        )
+    else:
+        boundary = (
+            "## 权限边界（外部 agent）\n"
+            "本说明书只提供方法论与领域指导。你的实际权限由当前 bacmap MCP 实例的\n"
+            "Profile 决定（工具数据级别上限以 server instructions 为准），而不是由本文件\n"
+            "中的角色字段决定。你不能确认计划、不能直接写库；写操作必须走\n"
+            "`bacmap_create_plan` → 人工确认 → 任务执行。\n"
+        )
     return (
         f"# 全局原则\n\n{load_principles()}\n\n"
         f"# 角色：{role}\n\n"
-        f"## 权限边界（由代码强制，此处仅作提醒）\n{perm}\n"
+        f"{boundary}\n"
         f"## 角色说明书\n\n{load_skill(role)}\n"
     )
+
+
+def role_description(role: str) -> str:
+    """SKILL.md frontmatter 的一行描述（用于安装清单/导出）。"""
+    text = skill_markdown(role)
+    if not text.startswith("---"):
+        return ""
+    parts = text.split("---", 2)
+    if len(parts) != 3:
+        return ""
+    meta = yaml.safe_load(parts[1])
+    if not isinstance(meta, dict):
+        return ""
+    return str(meta.get("description") or "").strip()

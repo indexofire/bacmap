@@ -225,6 +225,27 @@ bacmap selection show --diff
 bacmap selection select --tool gapit --species VPA --databases vpa_ok,vpa_pai
 ```
 
+## `bacmap agent`
+
+```text
+bacmap agent list [--json]
+bacmap agent export --harness NAME [--format instructions|mcp-config|skill] [--role ROLE] [--json]
+bacmap agent install --harness NAME [--scope project|user] [--target DIR]
+                      [--with-skills] [--force] [--json]
+bacmap agent doctor [--target DIR] [--json]
+```
+
+Generates the thin adapter files for a user-selected agent harness. The source of truth stays
+in bacmap (MCP instructions, role prompts and `skill://` resources); installed files are
+guidance, not permissions.
+
+- `list` prints the supported harnesses and their config format;
+- `export` prints instructions, an MCP configuration snippet or one role's `SKILL.md`;
+- `install` writes the harness instructions and `.bacmap-agent.json`; it is idempotent and
+  refuses to overwrite a user file without `--force`; `--with-skills` also writes
+  `.bacmap/skills/<role>/SKILL.md`;
+- `doctor` verifies file hashes and warns when the installed content or bacmap version differs.
+
 ## `bacmap config`
 
 ```text

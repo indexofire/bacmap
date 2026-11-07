@@ -141,8 +141,11 @@ The call returns `{"task_id": "...", "kind": "...", "state": "running"}`. Follow
 | `bacmap_research_capabilities` | none | P1 capabilities; available on every profile |
 | `bacmap_research_sessions` | `limit?` | D2; only if the profile allows D2 |
 | `bacmap_research_session` | `session_id` | D2; stat table, diagnostics and artifact paths |
+| `bacmap_research_figure_spec` | `session_id` | D2; exact figure contract (data, statistics, source IDs, style) |
 
-Research creation is currently CLI/Web/API only; MCP is read-only for research sessions.
+Research creation and custom figure attachment are CLI/Web/API only; MCP is read-only for
+research sessions. Custom figures are attached with `bacmap research figure attach` after the
+script has run through the `mine` sandbox.
 P1 output is `TEST/UNVERIFIED` (open-test) or `REVIEW REQUIRED`.
 
 ### 3.6 `bio_*` tools

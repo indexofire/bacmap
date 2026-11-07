@@ -26,6 +26,9 @@ class ArtifactKind(StrEnum):
     FIGURE = "figure"
     REPORT = "report"
     MANUSCRIPT = "manuscript"
+    FIGURE_SPEC = "figure_spec"
+    FIGURE_CUSTOM = "figure_custom"
+    FIGURE_MANIFEST = "figure_manifest"
 
 
 class AnalysisSession(BaseModel):

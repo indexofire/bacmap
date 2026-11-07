@@ -105,6 +105,31 @@ $DSH_HOME/AGENTS.md              # 全局指令；DSH_HOME 未设置时为 ~/.ds
 对“不要绕过 bacmap”这种操作规程，持久指令 + bacmap 服务端计划门已经足够：即使模型被提示
 注入误导，它也没有确认计划或签门的权限。
 
+## 0.2 可安装的指导文件（`bacmap agent`）
+
+角色说明与操作规程由 bacmap 自己提供：MCP server instructions、`bacmap_role_<role>`
+prompts 与 `skill://bacmap/<role>/SKILL.md` resources。若客户端不会自动注入，生成
+harness 适配文件即可，不要手工复制文本：
+
+```bash
+bacmap agent list                              # 支持的 harness
+bacmap agent export --harness pi               # 打印指导文件
+bacmap agent export --harness hermes --format mcp-config
+bacmap agent install --harness pi --scope project
+bacmap agent install --harness generic --with-skills
+bacmap agent doctor
+```
+
+- `install` 幂等；除非 `--force`，否则拒绝覆盖用户文件；
+- `.bacmap-agent.json` 记录生成的文件及其 hash；
+- `doctor` 报告缺失/被修改的文件以及 bacmap 版本漂移；
+- `--with-skills` 写入可移植的 `.bacmap/skills/<role>/SKILL.md`；把该目录放到
+  harness 发现 skills 的位置；
+- MCP 配置片段由 `--format mcp-config` 打印，不会自动写入。
+
+这些文件是**指导，不是权限**。实际权限由 MCP Profile 决定；计划门、写边界与数据分级
+始终在服务端（ADR-12/16/21）。
+
 ## 1. 启动 MCP 服务器
 
 ```bash
