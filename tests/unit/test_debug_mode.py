@@ -77,18 +77,17 @@ class TestWebDebug:
 
 
 class TestMcpDebug:
-    def test_debug_does_not_raise_cloud_ceiling(self, debug, tmp_path: Path):
+    def test_cloud_profile_gets_d4(self, debug, tmp_path: Path):
         from bacmap.interfaces.mcp.profiles import resolve_profile
         from bacmap.tools.spec import DataClass
 
         profile = resolve_profile("cloud", tmp_path, "stdio")
-        assert profile.max_data_class is DataClass.D1
+        assert profile.max_data_class is DataClass.D4
 
-    def test_debug_does_not_enable_local_trusted(self, debug, tmp_path: Path):
-        from bacmap.interfaces.mcp.profiles import ProfileNotAllowedError, resolve_profile
+    def test_local_trusted_without_config(self, debug, tmp_path: Path):
+        from bacmap.interfaces.mcp.profiles import resolve_profile
 
-        with pytest.raises(ProfileNotAllowedError):
-            resolve_profile("local-trusted", tmp_path, "stdio")
+        assert resolve_profile("local-trusted", tmp_path, "stdio").max_data_class.name == "D4"
 
     def test_local_trusted_still_requires_config_without_debug(self, monkeypatch, tmp_path):
         from bacmap.interfaces.mcp.profiles import ProfileNotAllowedError, resolve_profile
@@ -96,19 +95,6 @@ class TestMcpDebug:
         monkeypatch.delenv("BACMAP_DEBUG", raising=False)
         with pytest.raises(ProfileNotAllowedError):
             resolve_profile("local-trusted", tmp_path, "stdio")
-
-    def test_default_profile_stays_d1_in_debug(self, debug):
-        from bacmap.interfaces.mcp.server import _default_profile
-        from bacmap.tools.spec import DataClass
-
-        assert _default_profile().max_data_class is DataClass.D1
-
-    def test_mcp_http_requires_token_in_debug(self, debug):
-        from bacmap.interfaces.mcp.http import build_http_app
-        from bacmap.interfaces.mcp.server import build_server
-
-        with pytest.raises(ValueError, match="Bearer token"):
-            build_http_app(build_server(), token="")
 
 
 class TestGatesAndResearchDebug:

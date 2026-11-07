@@ -59,11 +59,11 @@ def _model_from_schema(tool_name: str, schema: dict[str, Any] | None) -> type:
 
 
 def _default_profile() -> ProfileSpec:
-    # Defaults are intentionally conservative; debug mode must not raise the ceiling.
+    from bacmap.config import debug_mode
+
+    ceiling = DataClass.D4 if debug_mode() else DataClass.D1
     return ProfileSpec(
-        profile=McpProfile.CLOUD,
-        max_data_class=DataClass.D1,
-        actor="mcp-stdio:cloud:unknown",
+        profile=McpProfile.CLOUD, max_data_class=ceiling, actor="mcp-stdio:cloud:unknown"
     )
 
 

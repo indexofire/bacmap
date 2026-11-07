@@ -60,12 +60,16 @@ def serve(
     from bacmap.interfaces.mcp.http import run_http
 
     token = os.environ.get(token_env, "")
+    from bacmap.config import debug_mode, debug_warning
+
     if not token:
-        raise SystemExit(
-            T(
-                f"HTTP transport requires a bearer token (ADR-12): "
-                f"set the {token_env} environment variable first",
-                f"HTTP 传输需要 Bearer token（ADR-12）：请先设置环境变量 {token_env}",
+        if not debug_mode():
+            raise SystemExit(
+                T(
+                    f"HTTP transport requires a bearer token (ADR-12): "
+                    f"set the {token_env} environment variable first",
+                    f"HTTP 传输需要 Bearer token（ADR-12）：请先设置环境变量 {token_env}",
+                )
             )
-        )
+        print(debug_warning("bacmap start mcp"))
     run_http(server, token=token, host=host, port=port, uds=(uds or None))

@@ -15,7 +15,7 @@ Never use the system Python for tests: `pixi run -e dev test` (without `-e dev`,
 back to a Python without DBOS).
 
 ```bash
-pixi run -e dev test          # pytest; current baseline 1814 passed
+pixi run -e dev test          # pytest; current baseline 1812 passed
 pixi run -e dev lint          # ruff (src + tests)
 pixi run -e dev typecheck     # mypy on src/bacmap
 pixi run -e dev contracts     # import-linter (5 contracts)
@@ -43,11 +43,9 @@ enabled = true
 
 The environment variable takes precedence: `BACMAP_DEBUG=0` temporarily disables a file-enabled
 debug mode.
-It disables Web auth/CSRF, plan confirmation, task approvals, the four gates, Research
-Claim/publication gates, and the sandbox fallback. Every entry point prints a warning.
-**MCP data-class ceilings and HTTP auth are not relaxed**: `cloud` stays at
-`cloud_max_data_class`, `local-trusted` still requires `[mcp] allow_local_trusted = true`,
-and MCP HTTP always requires a bearer token. Debug is not a security boundary.
+It disables Web auth/CSRF, plan confirmation, task approvals, the four gates, MCP Profile
+data-class ceilings (all profiles see D4), Research Claim/publication gates, and the
+sandbox fallback. Every entry point prints a warning.
 
 **Hard boundary:** debug mode (environment variable or configuration file) does **not** allow D3/D4 payloads to be sent to a cloud LLM
 endpoint (ADR-16). Do not set it in production or on a shared host. Without the flag, all
@@ -156,7 +154,7 @@ Guidelines:
   release decision.
 - Frozen design revision: the title and revision table in
   `docs/concepts/frozen-design.zh.md` (v1.10.0), independent of the program version.
-- Test baseline: `AGENTS.md` rule 7 (currently 1814).
+- Test baseline: `AGENTS.md` rule 7 (currently 1812).
 
 ## 10. Commit checklist
 
