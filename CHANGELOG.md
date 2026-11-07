@@ -9,6 +9,18 @@
 
 ### Research 证据链（自 feat/agent-research-bridge 并入）
 
+### 分析结果对象化（自 feat/agent-research-bridge 并入）
+
+- 新增 migration 9 `research_analyses`：保存 analysis_id、类型、输入路径 + SHA-256、
+  params、result、`result_sha256`、作者/时间，并自动写 `ANALYSIS_OF` 证据边。
+- Web stats 表单可填 Study 自动保存；phylo 页面新增“保存到 Study”；
+  `/research/studies/{id}/analyses` 与 `/research/analyses/{id}` 查看历史/详情。
+- CLI：`research analysis list|show|save`；stats 命令支持 `--study`。
+- MCP 只读：`bacmap_research_analyses`、`bacmap_research_analysis`。
+- 测试基线：1868 → 1873（1 skipped：gapit live smoke）。
+
+### Research 证据链
+
 - 研究对象自动写入 `evidence_edges`：cohort/plan/session/claim/experiment/checklist/package/
   request 与 study 的关系；session 的 cohort/plan 来源；experiment 与 plan 的关系。
 - Edge 幂等；Study/Session 页面显示证据链表；MCP `bacmap_research_evidence` 与 CLI

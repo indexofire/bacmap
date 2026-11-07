@@ -363,3 +363,20 @@ class ChecklistReview(BaseModel):
     reviewed_at: str = ""
     note: str = Field(default="", max_length=4000)
     updated_at: str = ""
+
+
+class AnalysisRecord(BaseModel):
+    """Persisted deterministic analysis result linked to a Study."""
+
+    analysis_id: str
+    study_id: str
+    analysis_type: str
+    title: str = ""
+    input_paths: list[str] = Field(default_factory=list)
+    input_sha256: dict[str, str] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
+    result: dict[str, Any] = Field(default_factory=dict)
+    result_sha256: str = ""
+    note: str = Field(default="", max_length=2000)
+    created_by: str = ""
+    created_at: str = ""

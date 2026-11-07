@@ -188,6 +188,11 @@ bacmap research request reject <request_id> [--note TEXT]
 
 bacmap research evidence <identifier>
 
+bacmap research analysis list --study ID [--type TYPE]
+bacmap research analysis show <analysis_id>
+bacmap research analysis save --study ID --type TYPE --result FILE [--params FILE]
+                                 [--input PATH]... [--title TEXT] [--note TEXT]
+
 bacmap research study create --question TEXT [--pathogen SCOPE] [--data-class 0-4]
 bacmap research study ls|list [--limit N]
 bacmap research study show <study_id>

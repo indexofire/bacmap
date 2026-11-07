@@ -102,10 +102,11 @@ Run `bacmap start web` and open **研究 / Research**. The Web is the primary re
 9. the Study page and `/research/studies/{id}/packages` keep a **package history**: each build
    records package_id, label, created_at, file count, blockers and manifest SHA-256; open a
    package to view its manifest/checklist or download a ZIP;
-10. Study/Session pages show the **evidence graph** (`evidence_edges`);
-11. the Study page links to a **STROBE checklist editor**: edit status/evidence/note per item,
+10. stats/phylo results can be saved as **analysis objects** and listed per Study;
+11. Study/Session pages show the **evidence graph** (`evidence_edges`);
+12. the Study page links to a **STROBE checklist editor**: edit status/evidence/note per item,
     save a draft or sign off (signing requires no `missing` items);
-11. the package page shows the manifest, checklist, files and data/code availability, and offers
+13. the package page shows the manifest, checklist, files and data/code availability, and offers
    a ZIP download.
 
 Natural-language research instructions are handled by an external agent over MCP (Pi/Hermes/
@@ -690,4 +691,25 @@ Research objects are linked automatically in `evidence_edges`:
 
 Edges are idempotent (`ensure_edge`), shown on the Study and Session pages, and readable over
 MCP with `bacmap_research_evidence` or CLI `bacmap research evidence <identifier>`.
->>>>>>> 6522bc6 (feat: link research objects into an evidence graph)
+
+
+## 18. Persisted analysis results
+
+Deterministic results can be saved as first-class objects linked to a Study:
+
+- logistic / IPTW / matching / Kaplan-Meier (Web forms accept an optional Study and save
+  automatically; CLI accepts `--study`);
+- phylogenetic profile/plan/XML (Web "保存到 Study" action; generic CLI save).
+
+Each record stores `analysis_id`, type, title, input paths + SHA-256, params, result JSON,
+`result_sha256`, author/time, and an `ANALYSIS_OF` evidence edge.
+
+```bash
+bacmap research analysis list --study <study_id>
+bacmap research analysis show <analysis_id>
+bacmap research analysis save --study <study_id> --type phylo --result result.json \
+  --input alignment.fasta --title "core alignment"
+```
+
+Web: `/research/studies/{study_id}/analyses` and `/research/analyses/{analysis_id}`.
+MCP (read-only): `bacmap_research_analyses`, `bacmap_research_analysis`.

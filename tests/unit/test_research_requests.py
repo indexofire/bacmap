@@ -135,7 +135,6 @@ def test_unknown_run_is_rejected(home: Path):
 def test_mcp_request_tool_proposes_draft(home: Path):
     import asyncio
     import json
-
     from types import SimpleNamespace
 
     from bacmap.interfaces.mcp.profiles import McpProfile, ProfileSpec

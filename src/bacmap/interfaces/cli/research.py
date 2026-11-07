@@ -10,6 +10,7 @@ from typing import Any
 
 from bacmap.interfaces.i18n import T
 from bacmap.research import phylo, recipes, regression, reporting
+from bacmap.research.analyses import ResearchAnalysisService
 from bacmap.research.models import (
     ArtifactKind,
     CreateSessionRequest,
@@ -432,6 +433,78 @@ def run_phylo_iqtree(args: argparse.Namespace) -> None:
     print(" ".join(cmd))
 
 
+def _maybe_save_analysis(
+    args: argparse.Namespace,
+    analysis_type: str,
+    result: dict,
+    params: dict,
+) -> dict | None:
+    study_id = str(getattr(args, "study", "") or "")
+    if not study_id:
+        return None
+    record = ResearchAnalysisService(Path(args.home)).save(
+        study_id,
+        analysis_type,
+        result,
+        title=analysis_type,
+        params=params,
+        input_paths=[str(getattr(args, "data", "") or "")],
+        actor=str(getattr(args, "by", "cli")),
+    )
+    return record.model_dump(mode="json")
+
+
+def run_analysis_save(args: argparse.Namespace) -> None:
+    try:
+        result = _load_json_arg(args.result, "result")
+        params = _load_json_arg(args.params, "params") if args.params else {}
+        if not isinstance(result, dict):
+            raise ValueError("result must be a JSON object")
+        record = ResearchAnalysisService(Path(args.home)).save(
+            args.study_id,
+            args.type,
+            result,
+            title=args.title,
+            params=params if isinstance(params, dict) else {},
+            input_paths=args.input,
+            note=args.note,
+            actor=args.by,
+        )
+    except (ValueError, OSError) as exc:
+        raise SystemExit(str(exc)) from exc
+    if args.json:
+        print(json.dumps(record.model_dump(mode="json"), ensure_ascii=False, indent=2))
+        return
+    print(f"{record.analysis_id}  {record.analysis_type}  {record.result_sha256[:16]}…")
+
+
+def run_analysis_list(args: argparse.Namespace) -> None:
+    items = ResearchAnalysisService(Path(args.home)).list_analyses(
+        args.study_id, args.type or None, args.limit
+    )
+    if args.json:
+        print(
+            json.dumps(
+                [item.model_dump(mode="json") for item in items],
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    for item in items:
+        print(f"{item.analysis_id}  {item.analysis_type:<14} {item.title}")
+
+
+def run_analysis_show(args: argparse.Namespace) -> None:
+    try:
+        record = ResearchAnalysisService(Path(args.home)).get_analysis(
+            args.analysis_id
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(json.dumps(record.model_dump(mode="json"), ensure_ascii=False, indent=2))
+
+
 def run_stats_logistic(args: argparse.Namespace) -> None:
     try:
         predictors = [name.strip() for name in args.predictors.split(",") if name.strip()]
@@ -450,6 +523,14 @@ def run_stats_logistic(args: argparse.Namespace) -> None:
         "dropped": dropped,
         "result": result.model_dump(mode="json"),
     }
+    saved = _maybe_save_analysis(
+        args,
+        "logistic",
+        result.model_dump(mode="json"),
+        {"outcome": args.outcome, "predictors": predictors},
+    )
+    if saved is not None:
+        payload["analysis"] = saved
     if args.json:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
@@ -1298,6 +1379,9 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     logistic.add_argument(
         "--predictors", required=True, help=T("comma-separated predictor columns", "逗号分隔预测列")
     )
+    logistic.add_argument("--study", default="", help=T("save to Study", "保存到 Study"))
+    logistic.add_argument("--by", default="cli")
+    add_home(logistic)
     add_json(logistic)
     logistic.set_defaults(
         func=run_stats_logistic,
@@ -1445,6 +1529,37 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(req_reject)
     add_json(req_reject)
     req_reject.set_defaults(func=run_request_reject)
+
+    analysis = s.add_parser(
+        "analysis", help=T("persisted analysis results", "持久化分析结果")
+    )
+    analysis_sub = analysis.add_subparsers(dest="analysis_command", required=True)
+    ana_save = analysis_sub.add_parser(
+        "save", help=T("save a result to a Study", "保存结果到 Study")
+    )
+    ana_save.add_argument("--study", dest="study_id", required=True)
+    ana_save.add_argument("--type", required=True)
+    ana_save.add_argument("--result", required=True, help=T("result JSON/file", "结果 JSON/文件"))
+    ana_save.add_argument("--params", default="")
+    ana_save.add_argument("--input", action="append", default=[])
+    ana_save.add_argument("--title", default="")
+    ana_save.add_argument("--note", default="")
+    ana_save.add_argument("--by", default="cli")
+    add_home(ana_save)
+    add_json(ana_save)
+    ana_save.set_defaults(func=run_analysis_save)
+    ana_list = analysis_sub.add_parser("list", aliases=["ls"], help=T("list analyses", "列出分析"))
+    ana_list.add_argument("--study", dest="study_id", required=True)
+    ana_list.add_argument("--type", default="")
+    ana_list.add_argument("--limit", type=int, default=50)
+    add_home(ana_list)
+    add_json(ana_list)
+    ana_list.set_defaults(func=run_analysis_list)
+    ana_show = analysis_sub.add_parser("show", help=T("show an analysis", "查看分析"))
+    ana_show.add_argument("analysis_id")
+    add_home(ana_show)
+    add_json(ana_show)
+    ana_show.set_defaults(func=run_analysis_show)
 
     evidence = s.add_parser(
         "evidence", help=T("list evidence edges", "列出证据链")

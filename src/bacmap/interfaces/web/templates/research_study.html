@@ -92,6 +92,21 @@
 </section>
 
 <section class="card">
+  <div class="card__head"><h2 class="card__title">分析结果</h2>
+    <p class="card__lead"><a class="btn" href="/research/studies/{{ study.study_id }}/analyses">全部分析</a></p></div>
+  {% if analyses %}
+  <table class="table">
+    <thead><tr><th>analysis</th><th>type</th><th>title</th><th>created</th></tr></thead>
+    <tbody>
+    {% for item in analyses[:5] %}
+      <tr><td class="mono"><a href="/research/analyses/{{ item.analysis_id }}">{{ item.analysis_id }}</a></td><td>{{ item.analysis_type }}</td><td>{{ item.title }}</td><td class="mono-dim">{{ item.created_at[:19] }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="card__lead">暂无已保存分析。</p>{% endif %}
+</section>
+
+<section class="card">
   <div class="card__head"><h2 class="card__title">证据链</h2></div>
   {% if edges %}
   <table class="table">

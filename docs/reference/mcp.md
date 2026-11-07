@@ -156,6 +156,8 @@ Research tasks (ADR-23): `bacmap_create_plan` accepts `task_type=research`
 | `bacmap_research_request` | question, run_ids?, gene?, test_name?, analysis?, ... | D2+; writes a draft request only; human approves in Web |
 | `bacmap_research_requests` | `status?`, `limit?` | D2+; list request drafts |
 | `bacmap_research_evidence` | `identifier` | D2; evidence edges for a study/session/object |
+| `bacmap_research_analyses` | `study_id`, `analysis_type?`, `limit?` | D2; persisted analysis results |
+| `bacmap_research_analysis` | `analysis_id` | D2; one persisted analysis result |
 
 Research creation and custom figure attachment are CLI/Web/API only; MCP is read-only for
 research sessions. Custom figures are attached with `bacmap research figure attach` after the
