@@ -5,6 +5,14 @@
 
 ## [未发布]
 
+### Podman 沙箱兼容性
+
+- Rootless Podman 在无可用 systemd 会话时，`mine` 沙箱自动以
+  `--cgroup-manager=cgroupfs` 重试一次；同时将 `USER`/`LOGNAME` 对齐到真实账户，
+  修复 `$USER` 异常导致的 subuid/subgid 解析失败。真实 Pi + Podman 冒烟通过
+  （mine 脚本产出 `podman_ok.txt`，挖掘门签字后任务 `succeeded`）。
+- 测试基线：1812 → 1816。
+
 ### Agent 桥接与发表级图片契约（`feat/agent-research-bridge`）
 
 #### 新增
@@ -52,7 +60,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1812（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1816（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 

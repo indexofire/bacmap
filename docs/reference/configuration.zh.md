@@ -302,6 +302,9 @@ bacmap start web --host 127.0.0.1 --port 8800
 | 挂载 | results/GOM/datasets 只读 | 仅声明的输入路径 |
 
 不支持 Docker。没有可用后端时，`mine` 会以 `sandbox_unavailable` 失败。
+Rootless Podman 在没有可用 systemd 会话时会自动用 `--cgroup-manager=cgroupfs` 重试一次；
+沙箱同时把 `USER`/`LOGNAME` 对齐到真实账户，确保 subuid/subgid 范围可解析。镜像需先在本地存在
+（运行前 pull）。
 
 ## 11. 校验与失败行为
 

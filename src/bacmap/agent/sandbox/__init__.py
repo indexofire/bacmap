@@ -9,6 +9,7 @@ Docker 刻意不在链内（root 守护进程权限面，安装指南 §6）。
 
 from __future__ import annotations
 
+import getpass
 import logging
 import os
 import shutil
@@ -108,9 +109,16 @@ class PodmanRunner(ContainerRunner):
         return cmd
 
 
-def _run(cmd: list[str], timeout: int, cwd: Path | None = None) -> SandboxResult:
+def _run(
+    cmd: list[str],
+    timeout: int,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+) -> SandboxResult:
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd, env=env
+        )
     except subprocess.TimeoutExpired as exc:
         out = exc.stdout if isinstance(exc.stdout, str) else ""
         return SandboxResult(
@@ -183,13 +191,43 @@ class SandboxExecutor:
                 "BACMAP_ALLOW_UNSANDBOXED=1（不推荐）"
             )
         host_cmd = runner.build_cmd(spec)
-        result = _run(host_cmd, self.timeout)
+        env = os.environ.copy()
+        try:
+            user = getpass.getuser()
+        except OSError:
+            user = ""
+        if user:
+            # Podman resolves subuid/subgid from $USER; keep it aligned with the real
+            # account even when the caller's environment has a stale value.
+            env["USER"] = user
+            env["LOGNAME"] = user
+        result = _run(host_cmd, self.timeout, env=env)
+        if (
+            runner.backend_name == "podman"
+            and result.returncode != 0
+            and _podman_cgroup_fallback_needed(result.stderr)
+        ):
+            result = _run(_podman_cgroup_fallback(host_cmd), self.timeout, env=env)
         return SandboxResult(
             returncode=result.returncode,
             stdout=result.stdout,
             stderr=result.stderr,
             backend=runner.backend_name,
         )
+
+
+def _podman_cgroup_fallback_needed(stderr: str) -> bool:
+    """Rootless Podman without a working systemd session fails cgroup setup."""
+    text = stderr.lower()
+    return "cgroup" in text and (
+        "interactive authentication" in text or "systemd" in text
+    )
+
+
+def _podman_cgroup_fallback(cmd: list[str]) -> list[str]:
+    if cmd and cmd[0] == "podman":
+        return [cmd[0], "--cgroup-manager=cgroupfs", *cmd[1:]]
+    return cmd
 
 
 def run_in_sandbox(spec: SandboxSpec, **executor_kwargs: Any) -> SandboxResult:

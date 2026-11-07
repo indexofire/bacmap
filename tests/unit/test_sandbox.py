@@ -11,8 +11,11 @@ from bacmap.agent.sandbox import (
     ContainerRunner,
     PodmanRunner,
     SandboxExecutor,
+    SandboxResult,
     SandboxSpec,
     SandboxUnavailableError,
+    _podman_cgroup_fallback,
+    _podman_cgroup_fallback_needed,
 )
 
 
@@ -50,6 +53,72 @@ class TestCommandBuilding:
             SandboxSpec(image="", command=["x"], workspace=tmp_path)
         with pytest.raises(ValueError, match="workspace"):
             SandboxSpec(image="i", command=["x"], workspace=tmp_path / "nope")
+
+
+class TestPodmanFallbacks:
+    def test_cgroup_fallback_command(self):
+        assert _podman_cgroup_fallback(["podman", "run", "--rm"]) == [
+            "podman",
+            "--cgroup-manager=cgroupfs",
+            "run",
+            "--rm",
+        ]
+
+    def test_cgroup_failure_detection(self):
+        assert _podman_cgroup_fallback_needed(
+            "unable to apply cgroup configuration: Access denied; "
+            "interactive authentication has not been enabled"
+        )
+        assert not _podman_cgroup_fallback_needed("no such image")
+
+    def test_retry_on_cgroup_failure(self, tmp_path: Path, monkeypatch):
+        calls: list[list[str]] = []
+        results = [
+            SandboxResult(
+                1,
+                "",
+                "unable to apply cgroup configuration: interactive authentication",
+                "podman",
+            ),
+            SandboxResult(0, "ok", "", "podman"),
+        ]
+
+        class _Runner(PodmanRunner):
+            def build_cmd(self, spec: SandboxSpec) -> list[str]:
+                return ["podman", "run", "--rm", "image", "python", "x.py"]
+
+        def fake_run(cmd, timeout, cwd=None, env=None):
+            calls.append(cmd)
+            return results.pop(0)
+
+        monkeypatch.setattr("bacmap.agent.sandbox._which", lambda b: "podman")
+        monkeypatch.setattr("bacmap.agent.sandbox._run", fake_run)
+        ex = SandboxExecutor(runners=[_Runner()])
+        result = ex.run(SandboxSpec(image="i", command=["x"], workspace=tmp_path))
+        assert result.returncode == 0
+        assert calls[0][0] == "podman"
+        assert calls[1][:2] == ["podman", "--cgroup-manager=cgroupfs"]
+
+    def test_env_user_is_real_account(self, tmp_path: Path, monkeypatch):
+        import getpass
+
+        captured: dict = {}
+
+        class _Runner(PodmanRunner):
+            def build_cmd(self, spec: SandboxSpec) -> list[str]:
+                return ["podman", "run", "image"]
+
+        def fake_run(cmd, timeout, cwd=None, env=None):
+            captured["env"] = env
+            return SandboxResult(0, "", "", "podman")
+
+        monkeypatch.setattr("bacmap.agent.sandbox._which", lambda b: "podman")
+        monkeypatch.setattr("bacmap.agent.sandbox._run", fake_run)
+        SandboxExecutor(runners=[_Runner()]).run(
+            SandboxSpec(image="i", command=["x"], workspace=tmp_path)
+        )
+        assert captured["env"]["USER"] == getpass.getuser()
+        assert captured["env"]["LOGNAME"] == getpass.getuser()
 
 
 class TestImageNormalization:

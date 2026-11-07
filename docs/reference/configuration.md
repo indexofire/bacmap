@@ -303,6 +303,9 @@ bacmap start web --host 127.0.0.1 --port 8800
 | mounts | results/GOM/datasets read-only | declared input paths only |
 
 Docker is not supported. Without a backend, `mine` fails with `sandbox_unavailable`.
+Rootless Podman without a working systemd session is retried once with
+`--cgroup-manager=cgroupfs`; the sandbox also aligns `USER`/`LOGNAME` with the real account
+so subuid/subgid ranges resolve. The image must be present locally (pull it before a run).
 
 ## 11. Validation and failure behaviour
 
