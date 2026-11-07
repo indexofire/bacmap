@@ -328,6 +328,7 @@ bacmap research figure spec rs-0123456789ab
 自定义图片渲染完成后登记来源：
 
 ```bash
+bacmap research figure draft rs-0123456789ab --path draft.svg --note "first pass"
 bacmap research figure attach rs-0123456789ab \
   --path figure.pdf --code plot.py
 ```
@@ -339,3 +340,63 @@ bacmap research figure attach rs-0123456789ab \
 自定义脚本必须走既有开放路径（`mine` 计划：无网络、只读挂载、挖掘门 + 人工签字）；
 沙箱镜像需包含绘图栈（例如 matplotlib 或 R）。能用确定性 renderer 表达的标准图，
 不要用 AI 重画。
+
+## 11. 系统发育规划（ML 与 BEAST2）
+
+建树仍是工作流步骤。AI 从确定性 profile 规划参数；bacmap 校验计划并渲染 BEAST2 XML。
+AI 绝不把自由文本 XML 直接写进运行。
+
+```bash
+bacmap research phylo profile --alignment core.fasta [--dates dates.tsv] --json
+bacmap research phylo plan --profile profile.json --goal bayesian --json
+bacmap research phylo validate --profile profile.json --plan plan.json
+bacmap research phylo xml --profile profile.json --plan plan.json \
+  --alignment core.fasta -o beast.xml --validate
+bacmap research phylo iqtree --plan plan.json --alignment core.fasta
+```
+
+- `PhyloProfile`：taxa、位点数、缺失/模糊、可变与信息位点、日期、告警；确定性、只读。
+- `PhyloPlan`：替换模型、速率异质性、时钟模型、树先验、链长、burn-in、采样间隔、seed、
+  外群、分区以及 AI 的理由。
+- AI 可以修改计划；`validate` 强制边界（链长、burn-in、外群、profile hash）。`xml` 用
+  版本化模板渲染，记录 plan/XML/alignment hash，并可运行 `beast -validate`。
+- BEAST2 模板 v1 支持 HKY/GTR、可选 `+G`、strict clock 与 constant coalescent。
+  relaxed clock、birth-death/Yule 先验与分区会被明确拒绝；自定义 XML 走 `mine` 开放路径
+  （hash + 人工签字）。
+- BEAUti 替代：AI 选参数并解释权衡，bacmap 渲染/校验 XML，人确认后由工作流运行。
+
+MCP（仅 local-trusted，D3）：`bacmap_research_phylo_profile` 与
+`bacmap_research_phylo_plan`。
+
+## 12. 回归与投稿包
+
+### 多变量 logistic 回归
+
+```bash
+bacmap research stats logistic --data cohort.csv --outcome resistant \
+  --predictors gene_present,age,lineage --json
+```
+
+实现为确定性 IRLS（不依赖 scipy）：系数、OR、Wald 95% CI、双侧 p 值与诊断（事件数、
+收敛、分离告警）。缺失/非法行会被丢弃并计数。混合效应、IPTW、匹配与生存分析**尚未实现**；
+不允许 agent 伪造这些方法。
+
+MCP（仅 local-trusted，D3）：`bacmap_research_logistic`。
+
+### 投稿包
+
+```bash
+bacmap research package <study_id> --out ./submission --json
+```
+
+包含：
+
+- `submission_manifest.json`——研究、发表门、blocker、文件 hash、数据/代码可用性声明；
+- `strobe_checklist.json` / `strobe_checklist.md`——确定性 STROBE 草案，含 met/partial/
+  missing 与 evidence ID；
+- `artifacts/<session_id>/...`——会话图片、报告、论文草案，带 SHA-256 复制。
+
+清单只是草案，不是发表批准。叙述性条目（摘要、讨论、局限性、外推性、资助/利益冲突）在
+人工完成前保持 `missing`。门通过是必要条件，不是充分条件。
+
+MCP（D2，只读）：`bacmap_research_reporting_checklist`。

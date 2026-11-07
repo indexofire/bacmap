@@ -312,6 +312,40 @@ class ResearchService:
             )
         return artifact
 
+    def attach_draft(
+        self,
+        session_id: str,
+        output: str | Path,
+        *,
+        note: str = "",
+        actor: str = "cli",
+    ) -> dict[str, str]:
+        """Record an intermediate figure draft; final approval uses ``attach_figure``."""
+        view = self.get_session(session_id)
+        source = Path(output).expanduser().resolve()
+        if not source.is_file():
+            raise ResearchError("validation_error", f"draft not found: {source}")
+        digest = _sha256(source)
+        outdir = self.home / "research" / session_id / "drafts"
+        outdir.mkdir(parents=True, exist_ok=True)
+        dest = outdir / f"draft-{digest[:8]}{source.suffix.lower()}"
+        if source != dest:
+            shutil.copy2(source, dest)
+        with ResearchStore(self.home) as store:
+            store.ledger(
+                session_id,
+                "figure.draft",
+                actor,
+                {
+                    "session_id": session_id,
+                    "path": str(dest),
+                    "sha256": digest,
+                    "note": note,
+                    "run_id": view.session.run_id,
+                },
+            )
+        return {"session_id": session_id, "path": str(dest), "sha256": digest, "note": note}
+
     def ledger(self, session_id: str) -> list[dict]:
         with ResearchStore(self.home) as store:
             return store.list_ledger(session_id)

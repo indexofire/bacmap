@@ -342,6 +342,7 @@ statistics, source IDs (`session_id`, `run_id`, `stat_sha256`, `plan_id`), style
 After a custom figure is rendered, register it with provenance:
 
 ```bash
+bacmap research figure draft rs-0123456789ab --path draft.svg --note "first pass"
 bacmap research figure attach rs-0123456789ab \
   --path figure.pdf --code plot.py
 ```
@@ -354,3 +355,70 @@ Custom scripts must run through the existing open path (`mine` plan: no network,
 mounts, mining gate and human signature); the sandbox image must contain the plotting stack
 (for example matplotlib or R). Do not redraw a standard figure with AI when the deterministic
 renderer already expresses it.
+
+## 11. Phylogenetic planning (ML and BEAST2)
+
+Tree inference stays a workflow step. The AI plans parameters from a deterministic profile;
+bacmap validates the plan and renders the BEAST2 XML. The AI never writes free-form XML into a
+run.
+
+```bash
+bacmap research phylo profile --alignment core.fasta [--dates dates.tsv] --json
+bacmap research phylo plan --profile profile.json --goal bayesian --json
+bacmap research phylo validate --profile profile.json --plan plan.json
+bacmap research phylo xml --profile profile.json --plan plan.json \
+  --alignment core.fasta -o beast.xml --validate
+bacmap research phylo iqtree --plan plan.json --alignment core.fasta
+```
+
+- `PhyloProfile`: taxa, sites, missing/ambiguous data, variable and informative sites, dates,
+  warnings. It is deterministic and read-only.
+- `PhyloPlan`: substitution model, rate heterogeneity, clock model, tree prior, chain length,
+  burn-in, sampling interval, seed, outgroup, partitions and the AI's rationale.
+- The AI may revise the plan; `validate` enforces bounds (chain length, burn-in, outgroup,
+  profile hash). `xml` renders a versioned template, records plan/XML/alignment hashes and can
+  run `beast -validate`.
+- BEAST2 template v1 supports HKY/GTR, optional `+G`, strict clock and constant coalescent.
+  Relaxed clocks, birth-death/Yule priors and partitions are rejected with a clear message;
+  use the `mine` open path for custom XML (hashes + human sign-off).
+- BEAUti replacement: the AI chooses parameters and explains trade-offs, bacmap renders and
+  validates the XML, a human confirms, and the workflow runs it.
+
+Over MCP (local-trusted only, D3): `bacmap_research_phylo_profile` and
+`bacmap_research_phylo_plan`.
+
+## 12. Regression and submission package
+
+### Multivariable logistic regression
+
+```bash
+bacmap research stats logistic --data cohort.csv --outcome resistant \
+  --predictors gene_present,age,lineage --json
+```
+
+The implementation is deterministic IRLS (no scipy): coefficients, odds ratios, Wald 95%
+CIs, two-sided p-values and diagnostics (events, convergence, separation warning). Rows with
+missing/invalid values are dropped and counted. Mixed-effects, IPTW, matching and survival
+models are **not** implemented yet; do not let an agent fake them.
+
+Over MCP (local-trusted, D3): `bacmap_research_logistic`.
+
+### Submission package
+
+```bash
+bacmap research package <study_id> --out ./submission --json
+```
+
+The package contains:
+
+- `submission_manifest.json` — study, readiness gates, blockers, file hashes, data/code
+  availability statements;
+- `strobe_checklist.json` / `strobe_checklist.md` — deterministic STROBE draft with
+  met/partial/missing items and evidence IDs;
+- `artifacts/<session_id>/...` — session figures, reports and manuscripts copied with SHA-256.
+
+The checklist is a draft, not a publication approval. Narrative items (abstract, discussion,
+limitations, generalisability, funding/conflicts) remain `missing` until a human completes them.
+Gate pass is necessary, not sufficient.
+
+Over MCP (D2, read-only): `bacmap_research_reporting_checklist`.

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from bacmap.interfaces.i18n import T
-from bacmap.research import recipes
+from bacmap.research import phylo, recipes, regression, reporting
 from bacmap.research.models import (
     ArtifactKind,
     CreateSessionRequest,
@@ -161,6 +161,20 @@ def run_figure_spec(args: argparse.Namespace) -> None:
     print(json.dumps(spec.model_dump(mode="json", by_alias=True), ensure_ascii=False, indent=2))
 
 
+def run_figure_draft(args: argparse.Namespace) -> None:
+    try:
+        draft = _service(args).attach_draft(
+            args.session_id, args.path, note=args.note, actor=args.by
+        )
+    except ResearchError as exc:
+        raise SystemExit(f"[{exc.code}] {exc.message}") from exc
+    if args.json:
+        print(json.dumps(draft, ensure_ascii=False, indent=2))
+        return
+    print(f"draft: {draft['path']}")
+    print(f"  sha256: {draft['sha256']}")
+
+
 def run_figure_attach(args: argparse.Namespace) -> None:
     try:
         artifact = _service(args).attach_figure(
@@ -192,6 +206,177 @@ def run_figure_attach(args: argparse.Namespace) -> None:
     print(f"  spec_sha256:   {artifact.spec_sha256}")
     if artifact.code_sha256:
         print(f"  code_sha256:   {artifact.code_sha256}")
+
+
+def _load_profile(path: str) -> phylo.AlignmentProfile:
+    raw = Path(path).expanduser().read_text(encoding="utf-8")
+    return phylo.AlignmentProfile.model_validate(json.loads(raw))
+
+
+def _load_plan(path: str) -> phylo.PhyloPlan:
+    raw = Path(path).expanduser().read_text(encoding="utf-8")
+    return phylo.PhyloPlan.model_validate(json.loads(raw))
+
+
+def run_phylo_profile(args: argparse.Namespace) -> None:
+    try:
+        profile = phylo.profile_alignment(
+            args.alignment,
+            dates=args.dates or None,
+            partitions=[p.strip() for p in args.partitions.split(",") if p.strip()],
+        )
+    except phylo.PhyloError as exc:
+        raise SystemExit(str(exc)) from exc
+    if args.json:
+        print(
+            json.dumps(
+                profile.model_dump(mode="json", by_alias=True),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    print(
+        f"{profile.n_taxa} taxa × {profile.n_sites} sites; "
+        f"variable={profile.variable_sites} informative={profile.informative_sites}; "
+        f"missing={profile.missing_pct:.2f}%"
+    )
+    for warning in profile.warnings:
+        print(f"  warning: {warning}")
+
+
+def run_phylo_plan(args: argparse.Namespace) -> None:
+    try:
+        profile = _load_profile(args.profile)
+        plan = phylo.recommend_plan(profile, args.goal)
+    except (OSError, ValueError, phylo.PhyloError) as exc:
+        raise SystemExit(str(exc)) from exc
+    if args.json:
+        print(
+            json.dumps(
+                plan.model_dump(mode="json", by_alias=True),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    print(f"{plan.plan_id}  {plan.analysis}  {plan.tool}")
+    print(
+        f"  model={plan.substitution_model} "
+        f"clock={plan.clock_model or '-'} prior={plan.tree_prior or '-'}"
+    )
+    print(f"  chain={plan.chain_length} burn_in={plan.burn_in} sampling={plan.sampling_every}")
+    print(f"  rationale: {plan.rationale}")
+
+
+def run_phylo_validate(args: argparse.Namespace) -> None:
+    try:
+        profile = _load_profile(args.profile)
+        plan = _load_plan(args.plan)
+        issues = phylo.validate_plan(plan, profile)
+    except (OSError, ValueError, phylo.PhyloError) as exc:
+        raise SystemExit(str(exc)) from exc
+    payload = {"ok": not issues, "issues": issues}
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    print("ok" if not issues else "INVALID")
+    for issue in issues:
+        print(f"  - {issue}")
+    if issues:
+        raise SystemExit(1)
+
+
+def run_phylo_xml(args: argparse.Namespace) -> None:
+    try:
+        profile = _load_profile(args.profile)
+        plan = _load_plan(args.plan)
+        result = phylo.render_beast2_xml(
+            plan, profile, args.out, validate=args.validate
+        )
+    except (OSError, ValueError, phylo.PhyloError) as exc:
+        raise SystemExit(str(exc)) from exc
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+    print(f"wrote {result['xml']}  sha256={result['xml_sha256']}")
+    validation = result.get("validation", {})
+    if isinstance(validation, dict) and validation.get("requested"):
+        print(f"  beast -validate: {'ok' if validation.get('ok') else 'FAILED'}")
+        if not validation.get("ok"):
+            raise SystemExit(1)
+
+
+def run_phylo_iqtree(args: argparse.Namespace) -> None:
+    try:
+        plan = _load_plan(args.plan)
+        cmd = phylo.render_iqtree_command(plan, args.alignment, args.prefix)
+    except (OSError, ValueError, phylo.PhyloError) as exc:
+        raise SystemExit(str(exc)) from exc
+    if args.json:
+        print(json.dumps({"command": cmd}, ensure_ascii=False, indent=2))
+        return
+    print(" ".join(cmd))
+
+
+def run_stats_logistic(args: argparse.Namespace) -> None:
+    try:
+        predictors = [name.strip() for name in args.predictors.split(",") if name.strip()]
+        if not predictors:
+            raise SystemExit("--predictors is empty")
+        rows, outcomes, dropped = regression.load_table(
+            args.data, args.outcome, predictors
+        )
+        result = regression.fit_logistic(rows, outcomes, predictors)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    payload = {
+        "schema": "bacmap.logistic_regression/1",
+        "n": result.n,
+        "events": result.events,
+        "dropped": dropped,
+        "result": result.model_dump(mode="json"),
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    print(f"n={result.n} events={result.events} dropped={dropped}")
+    for name, beta, odds, low, high, p in zip(
+        result.feature_names,
+        result.coefficients,
+        result.odds_ratios,
+        result.ci_low,
+        result.ci_high,
+        result.p_values,
+        strict=True,
+    ):
+        print(f"  {name:<20} beta={beta:+.4f} OR={odds:.3f} ({low:.3f}-{high:.3f}) p={p:.4g}")
+    for warning in result.warnings:
+        print(f"  warning: {warning}")
+
+
+def run_package(args: argparse.Namespace) -> None:
+    try:
+        package = reporting.build_submission_package(
+            args.home, args.study_id, args.out
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    if args.json:
+        print(
+            json.dumps(
+                package.model_dump(mode="json", by_alias=True),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    print(f"package: {package.output_dir}")
+    print(f"  checklist: {package.checklist.met} met, {package.checklist.partial} partial, "
+          f"{package.checklist.missing} missing")
+    print(f"  files: {len(package.files)}")
+    for blocker in package.blockers:
+        print(f"  blocker: {blocker}")
 
 
 def _object_service(args: argparse.Namespace):
@@ -602,6 +787,16 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(fig_spec)
     add_json(fig_spec)
     fig_spec.set_defaults(func=run_figure_spec)
+    fig_draft = fig_sub.add_parser(
+        "draft", help=T("record an intermediate figure draft", "记录图片草稿")
+    )
+    fig_draft.add_argument("session_id")
+    fig_draft.add_argument("--path", required=True, help=T("draft figure file", "草稿图片"))
+    fig_draft.add_argument("--note", default="", help=T("iteration note", "迭代说明"))
+    fig_draft.add_argument("--by", default="cli")
+    add_home(fig_draft)
+    add_json(fig_draft)
+    fig_draft.set_defaults(func=run_figure_draft)
     fig_att = fig_sub.add_parser(
         "attach",
         help=T(
@@ -627,6 +822,88 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(fig_att)
     add_json(fig_att)
     fig_att.set_defaults(func=run_figure_attach)
+
+    phylo_p = s.add_parser(
+        "phylo",
+        help=T(
+            "Phylogenetic planning (profile/plan/XML)",
+            "系统发育规划（profile/plan/XML）",
+        ),
+    )
+    phylo_sub = phylo_p.add_subparsers(dest="phylo_command", required=True)
+    phylo_prof = phylo_sub.add_parser(
+        "profile", help=T("summarise an alignment", "统计比对特征")
+    )
+    phylo_prof.add_argument("--alignment", required=True)
+    phylo_prof.add_argument("--dates", default="", help=T("taxon/date TSV", "taxon/date TSV"))
+    phylo_prof.add_argument(
+        "--partitions",
+        default="",
+        help=T("comma-separated partition candidates", "逗号分隔分区候选"),
+    )
+    add_json(phylo_prof)
+    phylo_prof.set_defaults(func=run_phylo_profile)
+    phylo_plan = phylo_sub.add_parser(
+        "plan", help=T("recommend a typed PhyloPlan", "生成类型化 PhyloPlan")
+    )
+    phylo_plan.add_argument("--profile", required=True)
+    phylo_plan.add_argument("--goal", choices=["ml", "bayesian"], default="bayesian")
+    add_json(phylo_plan)
+    phylo_plan.set_defaults(func=run_phylo_plan)
+    phylo_val = phylo_sub.add_parser(
+        "validate", help=T("validate a PhyloPlan against its profile", "校验 PhyloPlan")
+    )
+    phylo_val.add_argument("--profile", required=True)
+    phylo_val.add_argument("--plan", required=True)
+    add_json(phylo_val)
+    phylo_val.set_defaults(func=run_phylo_validate)
+    phylo_xml = phylo_sub.add_parser(
+        "xml", help=T("render a BEAST2 XML template", "渲染 BEAST2 XML 模板")
+    )
+    phylo_xml.add_argument("--profile", required=True)
+    phylo_xml.add_argument("--plan", required=True)
+    phylo_xml.add_argument("--alignment", required=True)
+    phylo_xml.add_argument("-o", "--out", required=True)
+    phylo_xml.add_argument(
+        "--validate", action="store_true", help=T("run beast -validate", "运行 beast -validate")
+    )
+    add_json(phylo_xml)
+    phylo_xml.set_defaults(func=run_phylo_xml)
+    phylo_iq = phylo_sub.add_parser(
+        "iqtree", help=T("print the IQ-TREE command", "输出 IQ-TREE 命令")
+    )
+    phylo_iq.add_argument("--plan", required=True)
+    phylo_iq.add_argument("--alignment", required=True)
+    phylo_iq.add_argument("--prefix", default="iqtree")
+    add_json(phylo_iq)
+    phylo_iq.set_defaults(func=run_phylo_iqtree)
+
+    stats = s.add_parser(
+        "stats", help=T("Deterministic statistics", "确定性统计")
+    )
+    stats_sub = stats.add_subparsers(dest="stats_command", required=True)
+    logistic = stats_sub.add_parser(
+        "logistic", help=T("multivariable logistic regression", "多变量 logistic 回归")
+    )
+    logistic.add_argument("--data", required=True, help=T("CSV/TSV table", "CSV/TSV 表"))
+    logistic.add_argument("--outcome", required=True, help=T("0/1 outcome column", "0/1 结局列"))
+    logistic.add_argument(
+        "--predictors", required=True, help=T("comma-separated predictor columns", "逗号分隔预测列")
+    )
+    add_json(logistic)
+    logistic.set_defaults(
+        func=run_stats_logistic,
+    )
+
+    package = s.add_parser(
+        "package",
+        help=T("build a submission package and STROBE draft", "生成投稿包与 STROBE 草案"),
+    )
+    package.add_argument("study_id")
+    package.add_argument("--out", required=True, help=T("output directory", "输出目录"))
+    add_home(package)
+    add_json(package)
+    package.set_defaults(func=run_package)
 
     study = s.add_parser("study", help=T("Study object", "Study 对象"))
     study_sub = study.add_subparsers(dest="study_command", required=True)

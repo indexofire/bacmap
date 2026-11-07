@@ -221,3 +221,41 @@ def test_research_figure_runtimes_cli(monkeypatch, capsys):
     items = {item["recipe_id"]: item for item in json.loads(out)}
     assert items["association_bar"]["available"] is True
     assert items["tree_rectangular"]["runtime"]["kind"] == "container"
+
+
+def test_research_package_cli(tmp_path: Path, monkeypatch, capsys):
+    home = str(tmp_path)
+    code, out, _ = _run(
+        monkeypatch, capsys,
+        ["research", "study", "create", "--question", "q", "--home", home, "--json"],
+    )
+    assert code == 0
+    study_id = json.loads(out)["study_id"]
+    outdir = tmp_path / "package"
+    code, out, _ = _run(
+        monkeypatch, capsys,
+        ["research", "package", study_id, "--out", str(outdir),
+         "--home", home, "--json"],
+    )
+    assert code == 0
+    payload = json.loads(out)
+    assert payload["schema"] == "bacmap.submission_package/1"
+    assert (outdir / "submission_manifest.json").is_file()
+
+
+def test_research_stats_logistic_cli(tmp_path: Path, monkeypatch, capsys):
+    table = tmp_path / "cohort.csv"
+    rows = ["dose,outcome"]
+    values = [0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    for index, outcome in enumerate(values):
+        rows.append(f"{index - 5},{outcome}")
+    table.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    code, out, _ = _run(
+        monkeypatch, capsys,
+        ["research", "stats", "logistic", "--data", str(table),
+         "--outcome", "outcome", "--predictors", "dose", "--json"],
+    )
+    assert code == 0
+    payload = json.loads(out)
+    assert payload["schema"] == "bacmap.logistic_regression/1"
+    assert payload["result"]["converged"] is True

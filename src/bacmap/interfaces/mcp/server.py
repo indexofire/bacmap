@@ -661,3 +661,108 @@ def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpe
         return json.dumps(
             [recipe.model_dump(mode="json") for recipe in items], ensure_ascii=False
         )
+
+    @server.tool(
+        name="bacmap_research_reporting_checklist",
+        description=(
+            "Return the deterministic STROBE-style checklist draft for a study: met/partial/"
+            "missing items with evidence IDs. A human must complete the missing narrative and "
+            "limitations items. D2; read-only."
+        ),
+    )
+    def research_reporting_checklist(study_id: str) -> str:
+        from bacmap.research import reporting
+
+        try:
+            checklist = reporting.checklist_for_study(_Path(engine.home), study_id)
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(
+            checklist.model_dump(mode="json", by_alias=True), ensure_ascii=False
+        )
+
+    _register_phylo_tools(server, profile)
+
+
+def _register_phylo_tools(server: MCPServer, profile: ProfileSpec) -> None:
+    """D3 phylogenetic planning tools; only local-trusted profiles see them."""
+    if not profile.allows(DataClass.D3):
+        return
+
+    @server.tool(
+        name="bacmap_research_phylo_profile",
+        description=(
+            "Summarise an alignment for phylogenetic planning: taxa, sites, missing data, "
+            "variable/informative sites, dates and warnings. D3; local-trusted only. "
+            "Read-only."
+        ),
+    )
+    def research_phylo_profile(alignment: str, dates_file: str = "") -> str:
+        from bacmap.research import phylo
+
+        try:
+            result = phylo.profile_alignment(alignment, dates=dates_file or None)
+        except phylo.PhyloError as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(result.model_dump(mode="json", by_alias=True), ensure_ascii=False)
+
+    @server.tool(
+        name="bacmap_research_phylo_plan",
+        description=(
+            "Return a deterministic starting PhyloPlan (IQ-TREE ML or BEAST2 Bayesian) "
+            "from an alignment profile. The agent may revise the plan; bacmap validates "
+            "it before rendering XML. D3; local-trusted only."
+        ),
+    )
+    def research_phylo_plan(
+        alignment: str, goal: str = "bayesian", dates_file: str = ""
+    ) -> str:
+        from bacmap.research import phylo
+
+        if goal not in {"ml", "bayesian"}:
+            return json.dumps({"error": f"unknown goal: {goal!r}"}, ensure_ascii=False)
+        try:
+            profile_obj = phylo.profile_alignment(alignment, dates=dates_file or None)
+            plan = phylo.recommend_plan(
+                profile_obj, "ml" if goal == "ml" else "bayesian"
+            )
+        except phylo.PhyloError as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(
+            {
+                "profile": profile_obj.model_dump(mode="json", by_alias=True),
+                "plan": plan.model_dump(mode="json", by_alias=True),
+            },
+            ensure_ascii=False,
+        )
+
+    @server.tool(
+        name="bacmap_research_logistic",
+        description=(
+            "Fit a multivariable logistic regression from a CSV/TSV table: outcome must be "
+            "0/1, predictors are numeric columns. Returns coefficients, odds ratios, 95% CIs, "
+            "p-values and diagnostics. D3; local-trusted only. Deterministic, read-only."
+        ),
+    )
+    def research_logistic(
+        data_path: str, outcome: str, predictors: list[str]
+    ) -> str:
+        from bacmap.research import regression
+
+        try:
+            rows, outcomes, dropped = regression.load_table(
+                data_path, outcome, predictors
+            )
+            result = regression.fit_logistic(rows, outcomes, predictors)
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(
+            {
+                "schema": "bacmap.logistic_regression/1",
+                "n": result.n,
+                "events": result.events,
+                "dropped": dropped,
+                "result": result.model_dump(mode="json"),
+            },
+            ensure_ascii=False,
+        )

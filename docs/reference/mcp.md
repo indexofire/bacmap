@@ -143,6 +143,10 @@ The call returns `{"task_id": "...", "kind": "...", "state": "running"}`. Follow
 | `bacmap_research_session` | `session_id` | D2; stat table, diagnostics and artifact paths |
 | `bacmap_research_figure_spec` | `session_id` | D2; exact figure contract (data, statistics, source IDs, style) |
 | `bacmap_research_figure_recipes` | `executable_only?` | D2; versioned figure recipes and their status |
+| `bacmap_research_phylo_profile` | `alignment`, `dates_file?` | D3; local-trusted only; alignment summary |
+| `bacmap_research_phylo_plan` | `alignment`, `goal?`, `dates_file?` | D3; local-trusted only; typed ML/BEAST2 plan |
+| `bacmap_research_logistic` | `data_path`, `outcome`, `predictors` | D3; local-trusted only; multivariable logistic regression |
+| `bacmap_research_reporting_checklist` | `study_id` | D2; deterministic STROBE draft |
 
 Research creation and custom figure attachment are CLI/Web/API only; MCP is read-only for
 research sessions. Custom figures are attached with `bacmap research figure attach` after the

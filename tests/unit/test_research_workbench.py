@@ -801,9 +801,45 @@ class TestFigures:
                 second.session.session_id, out, spec_path=spec_path
             )
 
+    def test_draft_records_ledger(self, home: Path, tmp_path: Path):
+        view = self._session(home)
+        out = tmp_path / "draft.svg"
+        out.write_text("<svg/>", encoding="utf-8")
+        svc = ResearchService(home)
+        draft = svc.attach_draft(view.session.session_id, out, note="first pass")
+        assert Path(draft["path"]).is_file()
+        events = [entry["event"] for entry in svc.ledger(view.session.session_id)]
+        assert "figure.draft" in events
+
     def test_attach_rejects_unsupported_format(self, home: Path, tmp_path: Path):
         view = self._session(home)
         out = tmp_path / "figure.txt"
         out.write_text("not a figure", encoding="utf-8")
         with pytest.raises(ResearchError, match="not allowed"):
             ResearchService(home).attach_figure(view.session.session_id, out)
+
+
+class TestSubmissionPackageWithArtifacts:
+    def test_package_copies_session_artifacts(self, home: Path, tmp_path: Path):
+        from bacmap.research.reporting import build_submission_package
+        from bacmap.research.service import ResearchObjectService
+
+        svc = ResearchObjectService(home)
+        study = svc.create_study("q", "KPN", 2, "t")
+        ResearchService(home).create_session(
+            CreateSessionRequest(
+                run_id="run-1",
+                gene="blaKPC-33",
+                test_name="meropenem",
+                profile=ResearchProfile.RESEARCH,
+                study_id=study.study_id,
+            ),
+            actor="t",
+        )
+        out = tmp_path / "package"
+        package = build_submission_package(home, study.study_id, out)
+        assert (out / "submission_manifest.json").is_file()
+        copied = [f for f in package.files if f.kind == "figure"]
+        assert copied
+        assert Path(copied[0].path).is_file()
+        assert len(copied[0].sha256) == 64

@@ -149,7 +149,17 @@ bacmap research create --run-id ID --gene NAME --test-name NAME
 bacmap research artifact <session_id> {figure|report|manuscript|figure_spec|figure_custom|figure_manifest}
 bacmap research figure recipes [--executable-only] [--json]
 bacmap research figure spec <session_id> [--json]
+bacmap research figure draft <session_id> --path FILE [--note TEXT]
 bacmap research figure attach <session_id> --path FILE [--code FILE] [--spec FILE]
+
+bacmap research phylo profile --alignment FILE [--dates FILE] [--partitions A,B]
+bacmap research phylo plan --profile FILE [--goal ml|bayesian]
+bacmap research phylo validate --profile FILE --plan FILE
+bacmap research phylo xml --profile FILE --plan FILE --alignment FILE -o XML [--validate]
+bacmap research phylo iqtree --plan FILE --alignment FILE [--prefix P]
+
+bacmap research stats logistic --data FILE --outcome COL --predictors A,B
+bacmap research package <study_id> --out DIR
 
 bacmap research study create --question TEXT [--pathogen SCOPE] [--data-class 0-4]
 bacmap research study ls|list [--limit N]
