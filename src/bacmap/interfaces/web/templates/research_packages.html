@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}投稿包历史 · {{ study.study_id }} · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/research">研究</a><span class="crumbs__sep">/</span><a class="crumbs__link" href="/research/studies/{{ study.study_id }}">{{ study.study_id }}</a><span class="crumbs__sep">/</span><span class="crumbs__here">投稿包历史</span></nav>
+<header class="detailhead">
+  <h1 class="detailhead__title">投稿包历史</h1>
+  <p class="detailhead__lead">{{ study.question }}</p>
+  <p class="detailhead__id mono">{{ study.study_id }}</p>
+</header>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">生成新投稿包</h2></div>
+  <form class="form" method="post" action="/research/studies/{{ study.study_id }}/packages">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label class="field__label" for="pkg-label">标签（可选）</label>
+      <input class="field__control" id="pkg-label" name="label" placeholder="例如：投稿前最终版"></div>
+    <div class="form__actions"><button class="btn btn--primary" type="submit">生成投稿包</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">历史</h2></div>
+  {% if packages %}
+  <table class="table">
+    <thead><tr><th>package</th><th>label</th><th>created</th><th>files</th><th>blockers</th><th>links</th></tr></thead>
+    <tbody>
+    {% for item in packages %}
+      <tr>
+        <td class="mono">{{ item.package_id }}</td>
+        <td>{{ item.label or '—' }}</td>
+        <td class="mono-dim">{{ item.created_at[:19] }}</td>
+        <td>{{ item.n_files }}</td>
+        <td>{{ item.blockers | length }}</td>
+        <td>
+          <a href="/research/packages/{{ item.package_id }}">查看</a> ·
+          <a href="/research/packages/{{ item.package_id }}/download.zip">ZIP</a>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="card__lead">暂无投稿包。</p>{% endif %}
+</section>
+{% endblock %}

@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Red
 from fastapi.templating import Jinja2Templates
 
 from bacmap.interfaces.web.auth import verify_csrf
+from bacmap.interfaces.web.markdown import render_markdown
 from bacmap.research import phylo, regression, reporting
 from bacmap.research.models import (
     ArtifactKind,
@@ -21,6 +22,7 @@ from bacmap.research.models import (
     ResearchError,
     ResearchProfile,
 )
+from bacmap.research.packages import ResearchPackageService
 from bacmap.research.service import (
     ResearchObjectService,
     ResearchRequestService,
@@ -111,6 +113,21 @@ def _session_context(
             manifest = json.loads(Path(manifest_artifact.path).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             manifest = None
+    report_html = ""
+    manuscript_html = ""
+    for kind, target in (
+        (ArtifactKind.REPORT.value, "report_html"),
+        (ArtifactKind.MANUSCRIPT.value, "manuscript_html"),
+    ):
+        artifact = artifacts.get(kind)
+        if artifact is not None:
+            path = Path(artifact.path)
+            if path.is_file():
+                rendered = render_markdown(path.read_text(encoding="utf-8"))
+                if target == "report_html":
+                    report_html = rendered
+                else:
+                    manuscript_html = rendered
     study = None
     if view.session.study_id:
         try:
@@ -125,6 +142,8 @@ def _session_context(
         "manifest": manifest,
         "study": study,
         "drafts": service.list_drafts(session_id),
+        "report_html": report_html,
+        "manuscript_html": manuscript_html,
         "note": str(view.session.payload.get("note") or ""),
     }
 
@@ -133,6 +152,7 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     service = ResearchService(engine.home)
     objects = ResearchObjectService(engine.home)
     requests = ResearchRequestService(engine.home)
+    packages = ResearchPackageService(engine.home)
 
     @app.get("/research", response_class=HTMLResponse)
     def research_page(request: Request) -> HTMLResponse:
@@ -154,9 +174,9 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
 
     @app.get("/research/studies/{study_id}", response_class=HTMLResponse)
     def study_detail(request: Request, study_id: str) -> HTMLResponse:
-        return _TEMPLATES.TemplateResponse(
-            request, "research_study.html", _study_context(engine, objects, study_id)
-        )
+        context = _study_context(engine, objects, study_id)
+        context["packages"] = packages.list_packages(study_id, limit=20)
+        return _TEMPLATES.TemplateResponse(request, "research_study.html", context)
 
     @app.post("/research/sessions")
     def research_create(
@@ -211,6 +231,7 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     _object_form_routes(app, objects)
     _artifact_routes(app, service)
     _package_routes(app, engine, objects)
+    _package_history_routes(app, packages, objects)
     _request_routes(app, requests)
     _cohort_builder_routes(app, engine, objects)
     _draft_upload_routes(app, engine, service)
@@ -874,6 +895,73 @@ def _request_rows(items: list[Any]) -> list[dict[str, Any]]:
         }
         for item in items
     ]
+
+
+def _package_history_routes(
+    app: FastAPI,
+    packages: ResearchPackageService,
+    objects: ResearchObjectService,
+) -> None:
+    @app.get("/research/studies/{study_id}/packages", response_class=HTMLResponse)
+    def package_history(request: Request, study_id: str) -> HTMLResponse:
+        try:
+            study = objects.get_study(study_id)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "research_packages.html",
+            {"study": study, "packages": packages.list_packages(study_id, 50)},
+        )
+
+    @app.post("/research/studies/{study_id}/packages")
+    def package_build(
+        request: Request,
+        study_id: str,
+        label: str = Form(""),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        try:
+            record = packages.build(study_id, actor="web", label=label)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return RedirectResponse(
+            f"/research/packages/{record.package_id}", status_code=303
+        )
+
+    @app.get("/research/packages/{package_id}", response_class=HTMLResponse)
+    def package_detail(request: Request, package_id: str) -> HTMLResponse:
+        try:
+            record = packages.get_package(package_id)
+            study = objects.get_study(record.study_id)
+            manifest = packages.load_manifest(record)
+        except (ValueError, KeyError) as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "research_package.html",
+            {
+                "study": study,
+                "package": manifest,
+                "checklist": manifest.get("checklist", {}),
+                "record": record,
+            },
+        )
+
+    @app.get("/research/packages/{package_id}/download.zip")
+    def package_zip(package_id: str) -> FileResponse:
+        try:
+            record = packages.get_package(package_id)
+            archive = packages.zip_path(record)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return FileResponse(
+            archive,
+            media_type="application/zip",
+            filename=f"{package_id}.zip",
+        )
 
 
 def _claims(objects: ResearchObjectService) -> list:
