@@ -5,6 +5,14 @@
 
 ## [未发布]
 
+### Markdown 渲染与投稿包历史
+
+- Session 页安全渲染报告/论文草案 Markdown（转义原始 HTML、限制链接协议）。
+- 投稿包版本化：migration 7 `submission_packages`；Study 页/`/packages` 历史、
+  详情页与 ZIP 下载；记录 package_id、label、created_at、文件数、blockers、
+  manifest SHA-256。
+- 测试基线：1843 → 1852（1 skipped：gapit live smoke）。
+
 ### Figure 迭代（Web）
 
 - Session 页新增 **Figure 迭代** gallery：上传 SVG/PNG/PDF 草稿（≤10 MiB）、保存反馈、
@@ -117,7 +125,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1843（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1852（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 

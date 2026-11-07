@@ -6,6 +6,7 @@
   <h1 class="detailhead__title">投稿包</h1>
   <p class="detailhead__lead">{{ study.question }}</p>
   <p class="detailhead__id mono">{{ study.study_id }} · {{ package.generated_at[:19] }}</p>
+  {% if record %}<p class="card__lead">package <span class="mono">{{ record.package_id }}</span> · {{ record.label or '无标签' }} · {{ record.created_by }}</p>{% endif %}
   <p class="card__lead">
     <a class="btn btn--primary" href="/research/studies/{{ study.study_id }}/package.zip">下载 ZIP</a>
     <a class="btn" href="/research/studies/{{ study.study_id }}">返回 Study</a>
@@ -22,11 +23,11 @@
 
 <section class="card">
   <div class="card__head"><h2 class="card__title">STROBE 草案</h2></div>
-  <p class="card__lead">met={{ package.checklist.met }} · partial={{ package.checklist.partial }} · missing={{ package.checklist.missing }}</p>
+  <p class="card__lead">met={{ checklist.met }} · partial={{ checklist.partial }} · missing={{ checklist.missing }}</p>
   <table class="table">
     <thead><tr><th>item</th><th>section</th><th>status</th><th>requirement</th></tr></thead>
     <tbody>
-    {% for item in package.checklist.items %}
+    {% for item in checklist["items"] %}
       <tr><td class="mono">{{ item.item_id }}</td><td>{{ item.section }}</td><td><code>{{ item.status }}</code></td><td>{{ item.requirement }}</td></tr>
     {% endfor %}
     </tbody>

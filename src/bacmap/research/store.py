@@ -32,6 +32,7 @@ from bacmap.research.models import (
     StatResult,
     Study,
     StudyStatus,
+    SubmissionPackageRecord,
 )
 from bacmap.store.migrations import Migration, migrate
 
@@ -162,6 +163,20 @@ CREATE TABLE IF NOT EXISTS evidence_edges (
 )
 """
 
+PACKAGES_DDL = """
+CREATE TABLE IF NOT EXISTS submission_packages (
+    package_id      TEXT PRIMARY KEY,
+    study_id        TEXT NOT NULL,
+    path            TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    created_by      TEXT NOT NULL DEFAULT '',
+    label           TEXT NOT NULL DEFAULT '',
+    manifest_sha256 TEXT NOT NULL DEFAULT '',
+    n_files         INTEGER NOT NULL DEFAULT 0,
+    blockers_json   TEXT NOT NULL DEFAULT '[]'
+)
+"""
+
 DRAFTS_DDL = """
 CREATE TABLE IF NOT EXISTS figure_drafts (
     draft_id   TEXT PRIMARY KEY,
@@ -259,6 +274,11 @@ RESEARCH_MIGRATIONS: tuple[Migration, ...] = (
         6,
         "research: figure drafts and feedback",
         (DRAFTS_DDL,),
+    ),
+    Migration(
+        7,
+        "research: submission package history",
+        (PACKAGES_DDL,),
     ),
 )
 
@@ -1006,6 +1026,51 @@ class ResearchObjectStore:
         )
         return self.get_request(request_id)
 
+    def create_package(self, record: SubmissionPackageRecord) -> SubmissionPackageRecord:
+        self._conn.execute(
+            "INSERT INTO submission_packages"
+            " (package_id, study_id, path, created_at, created_by, label,"
+            "  manifest_sha256, n_files, blockers_json)"
+            " VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                record.package_id,
+                record.study_id,
+                record.path,
+                record.created_at,
+                record.created_by,
+                record.label,
+                record.manifest_sha256,
+                record.n_files,
+                json.dumps(record.blockers, ensure_ascii=False),
+            ),
+        )
+        self._ledger(
+            "package",
+            record.package_id,
+            "package.created",
+            record.created_by,
+            {"study_id": record.study_id, "n_files": record.n_files},
+        )
+        return self.get_package(record.package_id)
+
+    def get_package(self, package_id: str) -> SubmissionPackageRecord:
+        row = self._conn.execute(
+            "SELECT * FROM submission_packages WHERE package_id = ?", (package_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"no such submission package: {package_id}")
+        return _row_to_package(row)
+
+    def list_packages(
+        self, study_id: str, limit: int = 50
+    ) -> list[SubmissionPackageRecord]:
+        rows = self._conn.execute(
+            "SELECT * FROM submission_packages WHERE study_id = ?"
+            " ORDER BY created_at DESC LIMIT ?",
+            (study_id, max(1, min(limit, 200))),
+        ).fetchall()
+        return [_row_to_package(row) for row in rows]
+
     def _ledger(
         self,
         object_type: str,
@@ -1118,4 +1183,18 @@ def _row_to_draft(row: sqlite3.Row) -> FigureDraft:
         created_at=row["created_at"],
         reviewed_by=row["reviewed_by"],
         reviewed_at=row["reviewed_at"],
+    )
+
+
+def _row_to_package(row: sqlite3.Row) -> SubmissionPackageRecord:
+    return SubmissionPackageRecord(
+        package_id=row["package_id"],
+        study_id=row["study_id"],
+        path=row["path"],
+        created_at=row["created_at"],
+        created_by=row["created_by"],
+        label=row["label"],
+        manifest_sha256=row["manifest_sha256"],
+        n_files=int(row["n_files"]),
+        blockers=list(json.loads(row["blockers_json"])),
     )

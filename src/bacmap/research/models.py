@@ -325,3 +325,17 @@ class FigureDraft(BaseModel):
     created_at: str = ""
     reviewed_by: str = ""
     reviewed_at: str = ""
+
+
+class SubmissionPackageRecord(BaseModel):
+    """Persisted submission-package build (history entry)."""
+
+    package_id: str
+    study_id: str
+    path: str
+    created_at: str
+    created_by: str = ""
+    label: str = ""
+    manifest_sha256: str = ""
+    n_files: int = 0
+    blockers: list[str] = Field(default_factory=list)

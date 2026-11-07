@@ -19,8 +19,7 @@
   <div class="card__head">
     <h2 class="card__title">研究结果</h2>
     <p class="card__lead">
-      <a class="btn" href="/research/studies/{{ study.study_id }}/package">查看投稿包</a>
-      <a class="btn btn--primary" href="/research/studies/{{ study.study_id }}/package.zip">下载 ZIP</a>
+      <a class="btn" href="/research/studies/{{ study.study_id }}/packages">投稿包历史</a>
     </p>
   </div>
   {% if sessions %}
@@ -62,6 +61,33 @@
     </tbody>
   </table>
   {% else %}<p class="card__lead">暂无 checklist。</p>{% endif %}
+</section>
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">投稿包</h2></div>
+  <form class="form" method="post" action="/research/studies/{{ study.study_id }}/packages">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label class="field__label" for="pkg-label-{{ study.study_id }}">标签（可选）</label>
+      <input class="field__control" id="pkg-label-{{ study.study_id }}" name="label" placeholder="例如：投稿前最终版"></div>
+    <div class="form__actions"><button class="btn btn--primary" type="submit">生成新投稿包</button></div>
+  </form>
+  {% if packages %}
+  <table class="table">
+    <thead><tr><th>package</th><th>label</th><th>created</th><th>files</th><th>blockers</th><th></th></tr></thead>
+    <tbody>
+    {% for item in packages[:5] %}
+      <tr>
+        <td class="mono">{{ item.package_id }}</td>
+        <td>{{ item.label or '—' }}</td>
+        <td class="mono-dim">{{ item.created_at[:19] }}</td>
+        <td>{{ item.n_files }}</td>
+        <td>{{ item.blockers | length }}</td>
+        <td><a href="/research/packages/{{ item.package_id }}">查看</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="card__lead">暂无投稿包。</p>{% endif %}
 </section>
 
 <section class="card">

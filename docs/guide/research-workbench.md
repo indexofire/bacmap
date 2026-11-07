@@ -98,7 +98,11 @@ Run `bacmap start web` and open **研究 / Research**. The Web is the primary re
    writing members JSON;
 7. the session page also has a **Figure 迭代** gallery for uploading drafts, saving feedback and
    finalizing/rejecting them;
-8. the package page shows the manifest, checklist, files and data/code availability, and offers
+8. the session page renders report/manuscript Markdown safely (raw HTML escaped);
+9. the Study page and `/research/studies/{id}/packages` keep a **package history**: each build
+   records package_id, label, created_at, file count, blockers and manifest SHA-256; open a
+   package to view its manifest/checklist or download a ZIP;
+10. the package page shows the manifest, checklist, files and data/code availability, and offers
    a ZIP download.
 
 Natural-language research instructions are handled by an external agent over MCP (Pi/Hermes/
@@ -496,3 +500,20 @@ bacmap research figure feedback <draft_id> --text "use colorblind palette"
 bacmap research figure finalize <draft_id> --recipe custom [--code plot.py]
 bacmap research figure reject <draft_id> --note "wrong layout"
 ```
+
+
+## 15. Markdown rendering and package history
+
+Session pages render `report.md` and `manuscript.md` with a small safe Markdown subset
+(headings, lists, tables, code, bold/italic, links). Raw HTML is escaped and links are limited
+to http(s), mailto and relative paths.
+
+Package builds are versioned under `research/packages/<study_id>/<package_id>/` and recorded in
+`research.sqlite`:
+
+- `GET /research/studies/{study_id}/packages` — history;
+- `POST /research/studies/{study_id}/packages` — build a new package (label optional);
+- `GET /research/packages/{package_id}` — manifest, checklist, files, blockers;
+- `GET /research/packages/{package_id}/download.zip` — ZIP download.
+
+The older `/research/studies/{study_id}/package` route remains as a quick rebuild view.

@@ -155,8 +155,8 @@ def test_study_page_shows_checklist_and_package(web):
     body = client.get(f"/research/studies/{study_id}").text
     assert "研究结果" in body
     assert "STROBE 草案" in body
-    assert "查看投稿包" in body
-    assert "下载 ZIP" in body
+    assert "投稿包历史" in body
+    assert "生成新投稿包" in body
     assert "met=" in body
 
 
@@ -410,3 +410,32 @@ def test_figure_draft_rejects_unsupported_type(web):
         follow_redirects=False,
     )
     assert response.status_code == 400
+
+
+def test_package_history_and_detail(web):
+    client, _, study_id, _ = web
+    history = client.get(f"/research/studies/{study_id}/packages")
+    assert history.status_code == 200
+    assert "投稿包历史" in history.text
+    build = client.post(
+        f"/research/studies/{study_id}/packages",
+        data={"label": "history smoke"},
+        follow_redirects=False,
+    )
+    assert build.status_code == 303
+    location = build.headers["location"]
+    detail = client.get(location)
+    assert detail.status_code == 200
+    assert "history smoke" in detail.text
+    package_id = location.rsplit("/", 1)[-1]
+    archive = client.get(f"/research/packages/{package_id}/download.zip")
+    assert archive.status_code == 200
+    assert archive.headers["content-type"] == "application/zip"
+    assert client.get(f"/research/studies/{study_id}").text.count(package_id) >= 1
+
+
+def test_markdown_rendered_on_session(web):
+    client, session_id, _, _ = web
+    page = client.get(f"/research/{session_id}").text
+    assert '<div class="markdown">' in page
+    assert "<table>" in page or "<h1>" in page

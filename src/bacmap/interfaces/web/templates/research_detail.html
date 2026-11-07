@@ -92,6 +92,23 @@
 {% endif %}
 {% endif %}
 
+{% if report_html %}
+<section class="card">
+  <div class="card__head"><h2 class="card__title">报告</h2></div>
+  <div class="markdown">{{ report_html | safe }}</div>
+</section>
+{% endif %}
+
+{% if manuscript_html %}
+<section class="card">
+  <div class="card__head"><h2 class="card__title">论文草案</h2></div>
+  <details>
+    <summary>展开阅读</summary>
+    <div class="markdown">{{ manuscript_html | safe }}</div>
+  </details>
+</section>
+{% endif %}
+
 <section class="card">
   <div class="card__head"><h2 class="card__title">Figure 迭代</h2></div>
   <p class="card__lead">草稿、反馈与最终 attach。只有 final 的草稿会进入投稿包。</p>
