@@ -755,6 +755,8 @@ class TestFigures:
         assert spec.source.run_id == "run-1"
         assert len(spec.source.stat_sha256) == 64
         assert spec.style.dpi >= 300
+        assert spec.style.panel_layout == "single"
+        assert spec.style.reference_note == ""
         assert any("colorblind" in c for c in spec.constraints)
         stored = {a.kind.value for a in view.artifacts}
         assert "figure_spec" in stored

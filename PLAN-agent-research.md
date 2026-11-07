@@ -92,12 +92,36 @@ bacmap 不新增联网抓取；文献检索留在 agent，落库和引用判定�
 - [ ] B 档脚本模板 + `mine` 任务示例（需要沙箱镜像带 matplotlib/R）
 - [ ] PDF/PNG 校验（字体嵌入、DPI、色彩空间）
 
-### P3 论文级统计与报告（后续）
+### P3 系统发育参数规划与 BEAST XML（后续）
+
+目标：AI 参与**参数规划**，但执行仍是确定性工作流；BEAST XML 由 bacmap 从类型化
+`PhyloPlan` 渲染，不由 AI 直接写自由文本 XML。
+
+- [ ] `PhyloProfile`：比对长度、taxa、缺失率、可变/信息位点、分区候选、日期范围、
+      重组信号、ModelFinder 结果
+- [ ] `PhyloPlan`：AI 提议模型/速率异质性/时钟/树先验/MCMC 长度/burn-in/分区/外群；
+      bacmap 校验边界（如 BEAST2 链长下限、日期与时钟模型一致性）
+- [ ] IQ-TREE 计划：`-m MFP`、bootstrap、分区合并、ascertainment bias、seed
+- [ ] BEAST2 XML renderer：`PhyloPlan` + alignment → XML；`beast -validate` 门；
+      记录 plan hash、XML hash、BEAST 版本
+- [ ] 自定义 XML 走 `mine` 开放路径（脚本/配置 hash + 人工签字），不直接进主流程
+- [ ] `bacmap research phylo profile|plan|xml` CLI 与只读 MCP 工具（D3，仅 local-trusted）
+- [ ] BEAUti 替代路径：AI 辅助参数、bacmap 渲染/校验 XML、人确认后运行
+
+### P4 论文级统计与报告（后续）
 
 - [ ] 多变量回归 / 混合效应 / IPTW / 匹配 / 生存分析
 - [ ] 缺失值、样本量/把握度、外部验证
 - [ ] STROBE/STARD checklist、supplementary、投稿包
 - [ ] 研究 plan 类型（是否新增 `research` 计划类型需另立 ADR）
+
+### P5 图片运行时与风格（后续）
+
+- [x] recipe 声明 runtime（builtin/container/pixi/host）
+- [x] `bacmap research figure runtimes` 检查后端
+- [x] style brief 字段（journal/panel_layout/palette_colors/reference_note）
+- [ ] 构建并发布 `bacmap-figures:py312` / `bacmap-figures:r4` 镜像（含 renv/requirements 锁）
+- [ ] 示例图 → style brief 的 agent 工作流与草稿迭代记录
 
 ## 7. 验收标准
 

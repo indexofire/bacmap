@@ -26,5 +26,7 @@ metadata:
   沙箱（无网络、只读输入、挖掘门 + 人工签字）。
 - 遵守契约中的期刊约束：宽高、dpi、字体、色盲友好配色、输出格式；图注写清 n、统计量、
   来源（session/run/plan）和不确定性。
+- 用户给出示例图时，只提取 style brief（版式、配色、字号、期刊），把描述写入
+  `reference_note`；不得复制、下载或再分发原图。
 - 自定义图渲染后用 `bacmap research figure attach` 登记；没有 spec/data/code/output
   hash 的图片不得进入投稿包。

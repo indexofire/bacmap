@@ -38,7 +38,17 @@ class FigureStyle(BaseModel):
     font_family: str = "Arial"
     font_size_pt: float = 8.0
     palette: str = "colorblind-safe"
+    palette_colors: list[str] = Field(default_factory=list)
     line_width_pt: float = 0.75
+    journal: str = ""
+    panel_layout: str = "single"
+    reference_note: str = Field(
+        default="",
+        description=(
+            "Human-provided style reference (journal/example), never a copied image. "
+            "The agent extracts a brief; the image itself is not stored or redistributed."
+        ),
+    )
 
 
 class FigureSource(BaseModel):

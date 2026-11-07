@@ -18,6 +18,18 @@ from pydantic import BaseModel, ConfigDict, Field
 
 RecipeLanguage = Literal["svg", "python", "r"]
 RecipeStatus = Literal["stable", "experimental", "planned"]
+RuntimeKind = Literal["builtin", "container", "pixi", "host"]
+
+
+class RecipeRuntime(BaseModel):
+    """Where a recipe executes.  Container is the reproducible default for R/Python."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: RuntimeKind = "builtin"
+    image: str = ""
+    environment: str = ""
+    notes: str = ""
 
 
 class FigureRecipe(BaseModel):
@@ -34,6 +46,7 @@ class FigureRecipe(BaseModel):
     output_formats: list[str] = Field(default_factory=list)
     packages: list[str] = Field(default_factory=list)
     sandbox_image: str = ""
+    runtime: RecipeRuntime = Field(default_factory=RecipeRuntime)
     entrypoint: str = ""
     status: RecipeStatus = "planned"
     notes: str = ""
@@ -56,6 +69,7 @@ _RECIPES: tuple[FigureRecipe, ...] = (
         input_kind="association_table",
         output_formats=["svg"],
         entrypoint="bacmap.research.render:render_figure_svg",
+        runtime=RecipeRuntime(kind="builtin", notes="deterministic SVG renderer"),
         status="stable",
         notes="PDF/PNG conversion belongs to the sandbox/export step, not this renderer.",
     ),
@@ -72,6 +86,9 @@ _RECIPES: tuple[FigureRecipe, ...] = (
         output_formats=["pdf", "svg", "png"],
         packages=["matplotlib"],
         sandbox_image="bacmap-figures:py312",
+        runtime=RecipeRuntime(
+            kind="container", image="bacmap-figures:py312", notes="pinned matplotlib"
+        ),
         status="planned",
         notes="Needs a pinned matplotlib image and golden-file tests.",
     ),
@@ -88,6 +105,9 @@ _RECIPES: tuple[FigureRecipe, ...] = (
         output_formats=["pdf", "svg", "png"],
         packages=["ggtree", "ggplot2"],
         sandbox_image="bacmap-figures:r4",
+        runtime=RecipeRuntime(
+            kind="container", image="bacmap-figures:r4", notes="R + ggtree/ggplot2"
+        ),
         status="planned",
         notes="Build the tree with IQ-TREE/Gubbins first; this recipe only renders it.",
     ),
@@ -103,6 +123,9 @@ _RECIPES: tuple[FigureRecipe, ...] = (
         output_formats=["pdf", "svg", "png"],
         packages=["matplotlib", "seaborn"],
         sandbox_image="bacmap-figures:py312",
+        runtime=RecipeRuntime(
+            kind="container", image="bacmap-figures:py312", notes="pinned matplotlib"
+        ),
         status="planned",
     ),
     FigureRecipe(
@@ -115,6 +138,9 @@ _RECIPES: tuple[FigureRecipe, ...] = (
         output_formats=["pdf", "svg", "png"],
         packages=["matplotlib"],
         sandbox_image="bacmap-figures:py312",
+        runtime=RecipeRuntime(
+            kind="container", image="bacmap-figures:py312", notes="pinned matplotlib"
+        ),
         status="planned",
     ),
     FigureRecipe(
@@ -127,6 +153,9 @@ _RECIPES: tuple[FigureRecipe, ...] = (
         output_formats=["pdf", "svg", "png"],
         packages=["matplotlib"],
         sandbox_image="bacmap-figures:py312",
+        runtime=RecipeRuntime(
+            kind="container", image="bacmap-figures:py312", notes="pinned matplotlib"
+        ),
         status="planned",
     ),
     FigureRecipe(
@@ -137,6 +166,7 @@ _RECIPES: tuple[FigureRecipe, ...] = (
         language="svg",
         input_kind="cohort_flow",
         output_formats=["pdf", "svg", "png"],
+        runtime=RecipeRuntime(kind="builtin", notes="deterministic SVG"),
         status="planned",
     ),
     FigureRecipe(
@@ -151,6 +181,9 @@ _RECIPES: tuple[FigureRecipe, ...] = (
         input_kind="figure_spec",
         output_formats=["pdf", "svg", "png"],
         sandbox_image="bacmap-figures:py312",
+        runtime=RecipeRuntime(
+            kind="container", image="bacmap-figures:py312", notes="agent-authored script"
+        ),
         status="experimental",
         entrypoint="mine",
         notes="Requires human sign-off; never use for a plot a stable recipe already covers.",

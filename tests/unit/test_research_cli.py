@@ -211,3 +211,13 @@ def test_research_figure_recipes_cli(monkeypatch, capsys):
     assert code == 0
     ids = {item["recipe_id"] for item in json.loads(out)}
     assert {"association_bar", "tree_rectangular", "custom"} <= ids
+
+
+def test_research_figure_runtimes_cli(monkeypatch, capsys):
+    code, out, _ = _run(
+        monkeypatch, capsys, ["research", "figure", "runtimes", "--json"]
+    )
+    assert code == 0
+    items = {item["recipe_id"]: item for item in json.loads(out)}
+    assert items["association_bar"]["available"] is True
+    assert items["tree_rectangular"]["runtime"]["kind"] == "container"

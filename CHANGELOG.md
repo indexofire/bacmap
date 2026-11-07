@@ -19,6 +19,11 @@
   与 `bacmap.figure_artifact/1`（spec/data/code/output SHA-256）。会话自动保存
   `figure_spec.json`；`bacmap research figure spec|attach` 与只读 MCP 工具
   `bacmap_research_figure_spec` 暴露契约；自定义图脚本走既有 `mine` 沙箱 + 人工签字。
+- **图片 recipe 运行时**：recipe 声明 `builtin`/`container`/`pixi`/`host`；
+  `bacmap research figure runtimes` 检查 Apptainer/Podman、pixi 或 host R/Python 是否可用。
+  R/ggtree 与 matplotlib 走 `bacmap-figures:r4`/`py312` 容器，主环境不引入 R 依赖。
+- **style brief**：`FigureStyle` 增加 `journal`/`panel_layout`/`palette_colors`/`reference_note`；
+  示例图只提取风格描述，不复制、下载或再分发原图；草稿迭代后只登记最终图。
 - **版本化图片 recipe 注册表**：`bacmap research figure recipes` 与只读 MCP 工具
   `bacmap_research_figure_recipes`；`association_bar` 为 stable，`forest`/`heatmap`/`pca`/
   `volcano`/`tree_rectangular`/`strobe_flow` 为 planned，`custom` 为沙箱兜底。建树与渲染
@@ -29,7 +34,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1787（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1789（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 

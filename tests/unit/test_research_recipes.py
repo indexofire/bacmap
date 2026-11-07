@@ -20,6 +20,14 @@ def test_tree_recipe_is_render_only_and_planned():
     assert recipe.status == "planned"
     assert "ggtree" in recipe.packages
     assert "Tree inference is a separate workflow step" in recipe.description
+    assert recipe.runtime.kind == "container"
+    assert recipe.runtime.image == "bacmap-figures:r4"
+
+
+def test_builtin_recipe_has_builtin_runtime():
+    recipe = recipes.get_recipe("association_bar")
+    assert recipe.runtime.kind == "builtin"
+    assert recipe.runtime.image == ""
 
 
 def test_executable_only_excludes_planned_recipes():

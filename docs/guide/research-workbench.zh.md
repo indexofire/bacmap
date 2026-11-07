@@ -242,6 +242,44 @@ P1 复用：
 
 ## 10. 发表级图片
 
+
+### R/Python 运行时
+
+Recipe 声明自己在哪里运行；分析过程中不要临时安装 R/Python 包。
+
+| 运行时 | 适用 | 方式 |
+|---|---|---|
+| `builtin` | SVG/确定性 recipe | 在 bacmap 内运行 |
+| `container` | R/ggtree、matplotlib、seaborn | Apptainer/Podman 镜像（`bacmap-figures:r4`、`bacmap-figures:py312`） |
+| `pixi` | 离线/无容器机器 | 可选的 `figures` pixi 环境，包版本固定 |
+| `host` | 仅开发 | 现有 `Rscript`/Python；不可复现 |
+
+检查可用性：
+
+```bash
+bacmap research figure runtimes
+```
+
+容器镜像是可复现的默认方案：镜像 digest 随产物记录。主 bacmap 环境保持精简；R 与绘图库
+不会变成分析流水线的运行时依赖。如果 recipe 需要镜像中没有的包，把它加入镜像构建并升级
+recipe 版本——绝不在运行时 `install.packages()`。
+
+### 用示例图迭代
+
+用户可以指向一篇论文的图或描述版式。Agent 不得复制图片，而是把风格提取为
+`FigureSpec.style` 中的 **style brief**：
+
+- `journal`：目标期刊或空；
+- `panel_layout`：`single`、`2x2`、`top-bottom` 等；
+- `palette_colors`：用户明确要求时的 hex 值；
+- `reference_note`：人工描述（“Lancet 风格森林图，无网格线”）；
+- `width_mm`、`height_mm`、`dpi`、`font_family`、`font_size_pt`。
+
+循环是：`FigureSpec` + style brief + recipe → 渲染草稿 → 用户反馈 → 更新 brief/recipe 参数
+→ 重新渲染。草稿作为中间产物记录；只有确认后的图才按 hash 登记。参考图本身绝不进入仓库，
+也不由 bacmap 再分发。
+
+
 ### Recipe 库
 
 `bacmap research figure recipes` 列出版本化 recipe。只有状态为 `stable`/`experimental`

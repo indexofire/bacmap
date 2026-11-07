@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +88,51 @@ def run_artifact(args: argparse.Namespace) -> None:
     except ResearchError as exc:
         raise SystemExit(f"[{exc.code}] {exc.message}") from exc
     print(path.read_text(encoding="utf-8"))
+
+
+def _runtime_status(recipe: recipes.FigureRecipe) -> dict[str, object]:
+    runtime = recipe.runtime
+    backend = ""
+    available = False
+    if runtime.kind == "builtin":
+        available = True
+        backend = "bacmap"
+    elif runtime.kind == "container":
+        backend = shutil.which("apptainer") or shutil.which("podman") or ""
+        available = bool(backend)
+    elif runtime.kind == "pixi":
+        backend = shutil.which("pixi") or ""
+        available = bool(backend)
+    elif runtime.kind == "host":
+        if recipe.language == "r":
+            backend = shutil.which("Rscript") or ""
+        else:
+            backend = shutil.which("python") or ""
+        available = bool(backend)
+    return {
+        "recipe_id": recipe.recipe_id,
+        "language": recipe.language,
+        "runtime": runtime.model_dump(mode="json"),
+        "backend": backend,
+        "available": available,
+    }
+
+
+def run_figure_runtimes(args: argparse.Namespace) -> None:
+    items = [_runtime_status(recipe) for recipe in recipes.list_recipes()]
+    if args.json:
+        print(json.dumps(items, ensure_ascii=False, indent=2))
+        return
+    for item in items:
+        runtime = item["runtime"]
+        if not isinstance(runtime, dict):
+            continue
+        state = "ok" if item["available"] else "missing"
+        print(
+            f"{item['recipe_id']:<18} {runtime.get('kind', ''):<10} "
+            f"{runtime.get('image') or runtime.get('environment') or '-':<24} "
+            f"{state:<8} {item['backend']}"
+        )
 
 
 def run_figure_recipes(args: argparse.Namespace) -> None:
@@ -534,6 +580,11 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
         ),
     )
     fig_sub = fig.add_subparsers(dest="figure_command", required=True)
+    fig_runtimes = fig_sub.add_parser(
+        "runtimes", help=T("check recipe runtimes (R/Python/container)", "检查 recipe 运行时")
+    )
+    add_json(fig_runtimes)
+    fig_runtimes.set_defaults(func=run_figure_runtimes)
     fig_recipes = fig_sub.add_parser(
         "recipes", help=T("list figure recipes", "列出图片 recipe")
     )

@@ -252,6 +252,46 @@ It does not change GOM, Snakemake, DBOS or the five task types.
 
 ## 10. Publication figures
 
+
+### R/Python runtimes
+
+Recipes declare where they run; do not install R/Python packages ad hoc during an analysis.
+
+| Runtime | When | How |
+|---|---|---|
+| `builtin` | SVG/deterministic recipes | runs inside bacmap |
+| `container` | R/ggtree, matplotlib, seaborn | Apptainer/Podman image (`bacmap-figures:r4`, `bacmap-figures:py312`) |
+| `pixi` | offline/no-container machines | optional `figures` pixi environment with pinned packages |
+| `host` | development only | existing `Rscript`/Python; not reproducible |
+
+Check availability with:
+
+```bash
+bacmap research figure runtimes
+```
+
+Container images are the reproducible default: the image digest is recorded with the artifact.
+The main bacmap environment stays small; R and plotting libraries do not become runtime
+dependencies of the analysis pipeline. If a recipe needs a package that is not in its image, add
+it to the image build and bump the recipe version — never `install.packages()` at run time.
+
+### Iterating from an example figure
+
+A user can point at a published figure or describe a layout. The agent must not copy the image.
+Instead it extracts a **style brief** into the `FigureSpec.style` fields:
+
+- `journal`: target journal or `""`;
+- `panel_layout`: `single`, `2x2`, `top-bottom`, ...;
+- `palette_colors`: explicit hex values when the user requires them;
+- `reference_note`: human description of the reference (“Lancet-style forest, no gridlines”);
+- `width_mm`, `height_mm`, `dpi`, `font_family`, `font_size_pt`.
+
+The loop is: `FigureSpec` + style brief + recipe → draft render → user feedback → update the
+brief/recipe parameters → re-render. Record drafts as intermediate artifacts; only the approved
+figure is attached with hashes. The reference image itself is never stored in the repository or
+redistributed by bacmap.
+
+
 ### Recipe library
 
 `bacmap research figure recipes` lists the versioned recipes. A recipe is executable only when
