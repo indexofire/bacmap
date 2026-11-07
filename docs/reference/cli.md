@@ -244,7 +244,8 @@ bacmap selection select --tool gapit --species VPA --databases vpa_ok,vpa_pai
 bacmap agent list [--json]
 bacmap agent export --harness NAME [--format instructions|mcp-config|skill] [--role ROLE] [--json]
 bacmap agent install --harness NAME [--scope project|user] [--target DIR]
-                      [--with-skills] [--force] [--json]
+                      [--with-skills] [--inline-skills] [--inline-role ROLE]
+                      [--force] [--json]
 bacmap agent doctor [--target DIR] [--json]
 ```
 

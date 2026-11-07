@@ -79,7 +79,9 @@ bacmap 不新增联网抓取；文献检索留在 agent，落库和引用判定�
 - [x] 外部角色说明书（`audience="external"`）
 - [x] 安装清单 `.bacmap-agent.json` + 内容 hash + 漂移检查
 - [x] MCP server instructions 增补 prompts/resources 指引
-- [ ] 真实 harness 端到端验证（本分支后续测试；Hermes / Pi / DSH 至少各一）
+- [x] Pi 1.5.0 端到端验证（MCP 连接、只读 research/phylo/logistic、计划创建 + 人工确认、
+  sandbox 缺失时的失败路径、内联 skill）
+- [ ] Hermes / DSH 端到端验证（后续）
 - [ ] `bacmap agent install --with-skills` 在各 harness 的 skills 目录约定（按实测再定）
 
 ### P2 发表图契约（本分支）

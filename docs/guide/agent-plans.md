@@ -124,6 +124,7 @@ bacmap agent export --harness pi               # print instructions
 bacmap agent export --harness hermes --format mcp-config
 bacmap agent install --harness pi --scope project
 bacmap agent install --harness generic --with-skills
+bacmap agent install --harness pi --inline-skills
 bacmap agent doctor
 ```
 
@@ -132,6 +133,9 @@ bacmap agent doctor
 - `doctor` reports missing/modified files and bacmap-version drift;
 - `--with-skills` writes portable `.bacmap/skills/<role>/SKILL.md`; place that directory where
   your harness discovers skills;
+- `--inline-skills` (or repeated `--inline-role ROLE`) appends the role bodies to the
+  instructions file. Use it when the harness does not inject skills/resources into the model
+  context (Pi in `--print` mode is a verified example);
 - MCP configuration snippets are printed by `--format mcp-config` and are never written
   automatically.
 

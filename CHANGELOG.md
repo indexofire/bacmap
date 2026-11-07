@@ -12,6 +12,9 @@
   文件（Hermes/Pi/DSH/Codex/OpenCode/generic）。事实来源仍是 bacmap 的 MCP instructions、
   `bacmap_role_<role>` prompts 与 `skill://bacmap/<role>/SKILL.md` resources；安装文件带
   `.bacmap-agent.json` 清单与 hash，`doctor` 检测缺失、篡改与版本漂移。
+- **Pi 实测修正**：`bacmap agent install --inline-skills/--inline-role` 把角色正文内联到
+  指导文件；静态安装文件不再硬编码 `Profile=cloud/D1`（以运行中 server instructions 为准）。
+  Pi 1.5.0 `--print` 模式不会自动注入 skills/MCP resources，内联是已验证的可用路径。
 - **外部角色说明书**：`build_system_prompt(role, audience="external")` 不再把
   `role.yaml` 的内部权限字段说成强制，明确外部 agent 的实际权限由 MCP Profile 决定；
   MCP prompts 改用 external 版本。
@@ -49,7 +52,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1810（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1812（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 

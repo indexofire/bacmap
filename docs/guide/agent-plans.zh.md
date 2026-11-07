@@ -117,6 +117,7 @@ bacmap agent export --harness pi               # 打印指导文件
 bacmap agent export --harness hermes --format mcp-config
 bacmap agent install --harness pi --scope project
 bacmap agent install --harness generic --with-skills
+bacmap agent install --harness pi --inline-skills
 bacmap agent doctor
 ```
 
@@ -125,6 +126,8 @@ bacmap agent doctor
 - `doctor` 报告缺失/被修改的文件以及 bacmap 版本漂移；
 - `--with-skills` 写入可移植的 `.bacmap/skills/<role>/SKILL.md`；把该目录放到
   harness 发现 skills 的位置；
+- `--inline-skills`（或重复 `--inline-role ROLE`）把角色正文追加到指导文件。适用于不会把
+  skills/resources 注入模型上下文的 harness（Pi 的 `--print` 模式是已实测例子）；
 - MCP 配置片段由 `--format mcp-config` 打印，不会自动写入。
 
 这些文件是**指导，不是权限**。实际权限由 MCP Profile 决定；计划门、写边界与数据分级

@@ -129,9 +129,21 @@ def _one_line(text: str) -> str:
     return " ".join(text.split())
 
 
-def instructions_markdown(spec: HarnessSpec) -> str:
-    """Portable instructions file generated from the same content the MCP server serves."""
+def instructions_markdown(
+    spec: HarnessSpec, *, inline_roles: list[str] | None = None
+) -> str:
+    """Portable instructions file generated from the same content the MCP server serves.
+
+    Some harnesses (for example Pi in non-interactive mode) do not inject skills or MCP
+    resources into the model context. ``inline_roles`` appends the role bodies so the
+    guidance still reaches the agent without relying on skill discovery.
+    """
     roles = roledef.list_roles()
+    for role in inline_roles or []:
+        if role not in roles:
+            raise InstallError(
+                f"unknown role {role!r}; choose from {', '.join(roles)}"
+            )
     lines = [
         f"<!-- {GENERATED_MARKER} {__version__}; source: bacmap agent export; do not edit -->",
         "# bacmap operating rules",
@@ -149,6 +161,10 @@ def instructions_markdown(spec: HarnessSpec) -> str:
         lines.append(
             f"| `{role}` | `bacmap_role_{role}` | `skill://bacmap/{role}/SKILL.md` |"
         )
+    if inline_roles:
+        lines += ["", "## Inlined role guides", ""]
+        for role in inline_roles:
+            lines += [f"### {role}", "", roledef.load_skill(role), ""]
     lines += [
         "",
         "## Refresh",
@@ -230,6 +246,7 @@ class InstallResult(BaseModel):
     instructions: str
     manifest: str
     skills: list[str] = Field(default_factory=list)
+    inline_roles: list[str] = Field(default_factory=list)
     files: list[InstalledFile] = Field(default_factory=list)
 
 
@@ -277,6 +294,7 @@ def install(
     scope: str = "project",
     target: str | Path | None = None,
     with_skills: bool = False,
+    inline_roles: list[str] | None = None,
     force: bool = False,
 ) -> InstallResult:
     """Write the generated instructions (and optional portable skills) into a harness base."""
@@ -289,7 +307,7 @@ def install(
     base = _base_dir(scope, target)
     rel = Path(spec.instructions[scope])
     dest = base / rel
-    content = instructions_markdown(spec)
+    content = instructions_markdown(spec, inline_roles=inline_roles)
     if dest.exists():
         existing = dest.read_text(encoding="utf-8", errors="replace")
         if GENERATED_MARKER not in existing and not force:
@@ -321,6 +339,7 @@ def install(
         instructions=str(dest),
         manifest=str(manifest_path),
         skills=skills,
+        inline_roles=list(inline_roles or []),
         files=files,
     )
     manifest = json.dumps(
@@ -386,7 +405,9 @@ def doctor(target: str | Path | None = None) -> DoctorResult:
         else:
             instructions_path = Path(str(raw.get("instructions") or ""))
             if instructions_path.is_file():
-                expected_text = instructions_markdown(spec)
+                inline = raw.get("inline_roles") or []
+                inline_roles = [str(role) for role in inline] if isinstance(inline, list) else []
+                expected_text = instructions_markdown(spec, inline_roles=inline_roles)
                 if instructions_path.read_text(encoding="utf-8") != expected_text:
                     warnings.append(
                         f"instructions differ from current bacmap content: {instructions_path}"

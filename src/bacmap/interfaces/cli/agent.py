@@ -10,7 +10,7 @@ import argparse
 import json
 from typing import Any
 
-from bacmap.agent import harnesses
+from bacmap.agent import harnesses, roledef
 from bacmap.interfaces.i18n import T
 
 
@@ -37,7 +37,7 @@ def run_export(args: argparse.Namespace) -> None:
     if args.format == "mcp-config":
         print(harnesses.mcp_config_example(spec), end="")
         return
-    text = harnesses.instructions_markdown(spec)
+    text = harnesses.instructions_markdown(spec, inline_roles=args.inline_role or None)
     if args.json:
         _emit(
             {
@@ -51,12 +51,16 @@ def run_export(args: argparse.Namespace) -> None:
 
 
 def run_install(args: argparse.Namespace) -> None:
+    inline = list(args.inline_role)
+    if args.inline_skills:
+        inline = roledef.list_roles()
     try:
         result = harnesses.install(
             args.harness,
             scope=args.scope,
             target=args.target,
             with_skills=args.with_skills,
+            inline_roles=inline or None,
             force=args.force,
         )
     except harnesses.InstallError as exc:
@@ -113,6 +117,15 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
         default="instructions",
     )
     exp.add_argument("--role", default="", help=T("role for --format skill", "skill 的角色"))
+    exp.add_argument(
+        "--inline-role",
+        action="append",
+        default=[],
+        help=T(
+            "inline a role body into instructions (repeatable)",
+            "把角色正文内联进指导文件（可重复）",
+        ),
+    )
     add_json(exp)
     exp.set_defaults(func=run_export)
 
@@ -131,6 +144,20 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
         "--with-skills",
         action="store_true",
         help=T("also write portable .bacmap/skills/<role>/SKILL.md", "同时写可移植 skills"),
+    )
+    inst.add_argument(
+        "--inline-skills",
+        action="store_true",
+        help=T(
+            "inline all role bodies (for harnesses that do not load skills)",
+            "内联全部角色正文（适用于不加载 skills 的 harness）",
+        ),
+    )
+    inst.add_argument(
+        "--inline-role",
+        action="append",
+        default=[],
+        help=T("inline one role body (repeatable)", "内联一个角色正文（可重复）"),
     )
     inst.add_argument("--force", action="store_true", help=T("replace a user file", "覆盖用户文件"))
     add_json(inst)

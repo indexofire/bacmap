@@ -78,6 +78,28 @@ def test_agent_install_and_doctor(tmp_path: Path, capsys):
     assert json.loads(out)["ok"] is True
 
 
+def test_agent_install_inline_role(tmp_path: Path, capsys):
+    code, out, _ = _run(
+        [
+            "agent",
+            "install",
+            "--harness",
+            "pi",
+            "--target",
+            str(tmp_path),
+            "--inline-role",
+            "writer",
+            "--json",
+        ],
+        capsys,
+    )
+    assert code == 0
+    payload = json.loads(out)
+    text = Path(payload["instructions"]).read_text(encoding="utf-8")
+    assert "发表级图片" in text
+    assert payload["inline_roles"] == ["writer"]
+
+
 def test_agent_install_unknown_harness(capsys):
     code, _, err = _run(
         ["agent", "install", "--harness", "nope", "--target", "/tmp"], capsys
