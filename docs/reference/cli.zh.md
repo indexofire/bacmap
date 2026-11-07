@@ -155,6 +155,10 @@ bacmap research figure spec <session_id> [--json]
 bacmap research figure render <session_id> [--recipe ID] [--by ACTOR] [--json]
 bacmap research figure template [--output FILE] [--json]
 bacmap research figure draft <session_id> --path FILE [--note TEXT]
+bacmap research figure drafts <session_id>
+bacmap research figure feedback <draft_id> --text TEXT
+bacmap research figure finalize <draft_id> [--recipe ID] [--code FILE]
+bacmap research figure reject <draft_id> [--note TEXT]
 bacmap research figure attach <session_id> --path FILE [--code FILE] [--spec FILE]
                               [--renderer agent-script|bacmap-deterministic] [--recipe ID]
 

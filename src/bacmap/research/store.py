@@ -22,6 +22,8 @@ from bacmap.research.models import (
     EvidenceLevel,
     Experiment,
     ExperimentStatus,
+    FigureDraft,
+    FigureDraftStatus,
     PlanStatus,
     ResearchProfile,
     ResearchRequest,
@@ -173,6 +175,22 @@ CREATE TABLE IF NOT EXISTS evidence_edges (
 )
 """
 
+DRAFTS_DDL = """
+CREATE TABLE IF NOT EXISTS figure_drafts (
+    draft_id   TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    path       TEXT NOT NULL,
+    sha256     TEXT NOT NULL,
+    note       TEXT NOT NULL DEFAULT '',
+    feedback   TEXT NOT NULL DEFAULT '',
+    status     TEXT NOT NULL,
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    reviewed_by TEXT NOT NULL DEFAULT '',
+    reviewed_at TEXT NOT NULL DEFAULT ''
+)
+"""
+
 REQUESTS_DDL = """
 CREATE TABLE IF NOT EXISTS research_requests (
     request_id     TEXT PRIMARY KEY,
@@ -261,6 +279,11 @@ RESEARCH_MIGRATIONS: tuple[Migration, ...] = (
             "DROP TABLE research_artifacts",
             "ALTER TABLE research_artifacts_v6 RENAME TO research_artifacts",
         ),
+    ),
+    Migration(
+        7,
+        "research: figure drafts with feedback/review states (agent-research-bridge)",
+        (DRAFTS_DDL,),
     ),
 )
 
@@ -444,6 +467,77 @@ class ResearchStore:
         ).fetchall()
         return [dict(r) for r in rows]
 
+
+    def create_draft(self, draft: FigureDraft) -> FigureDraft:
+        self._conn.execute(
+            "INSERT INTO figure_drafts"
+            " (draft_id, session_id, path, sha256, note, feedback, status,"
+            "  created_by, created_at, reviewed_by, reviewed_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                draft.draft_id,
+                draft.session_id,
+                draft.path,
+                draft.sha256,
+                draft.note,
+                draft.feedback,
+                draft.status.value,
+                draft.created_by,
+                draft.created_at or _now(),
+                draft.reviewed_by,
+                draft.reviewed_at,
+            ),
+        )
+        self.ledger(
+            draft.session_id,
+            "figure.draft.created",
+            draft.created_by,
+            {"draft_id": draft.draft_id, "sha256": draft.sha256},
+        )
+        return self.get_draft(draft.draft_id)
+
+    def get_draft(self, draft_id: str) -> FigureDraft:
+        row = self._conn.execute(
+            "SELECT * FROM figure_drafts WHERE draft_id = ?", (draft_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"no such figure draft: {draft_id}")
+        return _row_to_draft(row)
+
+    def list_drafts(self, session_id: str, limit: int = 100) -> list[FigureDraft]:
+        rows = self._conn.execute(
+            "SELECT * FROM figure_drafts WHERE session_id = ?"
+            " ORDER BY created_at DESC LIMIT ?",
+            (session_id, max(1, min(limit, 500))),
+        ).fetchall()
+        return [_row_to_draft(row) for row in rows]
+
+    def update_draft(
+        self,
+        draft_id: str,
+        *,
+        feedback: str | None = None,
+        status: FigureDraftStatus | None = None,
+        actor: str = "",
+    ) -> FigureDraft:
+        draft = self.get_draft(draft_id)
+        new_feedback = draft.feedback if feedback is None else feedback
+        new_status = draft.status if status is None else status
+        reviewed_at = _now() if status is not None else draft.reviewed_at
+        self._conn.execute(
+            "UPDATE figure_drafts SET feedback=?, status=?, reviewed_by=?,"
+            " reviewed_at=? WHERE draft_id=?",
+            (new_feedback, new_status.value, actor or draft.reviewed_by, reviewed_at, draft_id),
+        )
+        self.ledger(
+            draft.session_id,
+            "figure.draft.feedback"
+            if feedback is not None
+            else f"figure.draft.{new_status.value}",
+            actor,
+            {"draft_id": draft_id, "status": new_status.value},
+        )
+        return self.get_draft(draft_id)
 
 def _row_to_session(row: sqlite3.Row) -> AnalysisSession:
     return AnalysisSession(
@@ -1036,4 +1130,20 @@ def _row_to_request(row: sqlite3.Row) -> ResearchRequest:
         cohort_id=row["cohort_id"],
         plan_id=row["plan_id"],
         session_id=row["session_id"],
+    )
+
+
+def _row_to_draft(row: sqlite3.Row) -> FigureDraft:
+    return FigureDraft(
+        draft_id=row["draft_id"],
+        session_id=row["session_id"],
+        path=row["path"],
+        sha256=row["sha256"],
+        note=row["note"],
+        feedback=row["feedback"],
+        status=FigureDraftStatus(row["status"]),
+        created_by=row["created_by"],
+        created_at=row["created_at"],
+        reviewed_by=row["reviewed_by"],
+        reviewed_at=row["reviewed_at"],
     )

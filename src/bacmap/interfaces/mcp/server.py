@@ -723,6 +723,23 @@ def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpe
             checklist.model_dump(mode="json", by_alias=True), ensure_ascii=False
         )
 
+    @server.tool(
+        name="bacmap_research_figure_drafts",
+        description=(
+            "List intermediate figure drafts for a research session, including notes, "
+            "feedback, status and SHA-256. Humans finalize drafts in the Web console; "
+            "this tool is read-only. D2."
+        ),
+    )
+    def research_figure_drafts(session_id: str) -> str:
+        try:
+            drafts = service.list_drafts(session_id)
+        except ResearchError as exc:
+            return _err(exc)
+        return json.dumps(
+            [draft.model_dump(mode="json") for draft in drafts], ensure_ascii=False
+        )
+
     _register_request_tools(server, engine, profile)
     _register_phylo_tools(server, profile)
 

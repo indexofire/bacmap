@@ -93,6 +93,65 @@
 {% endif %}
 
 <section class="card">
+  <div class="card__head"><h2 class="card__title">Figure 迭代</h2></div>
+  <p class="card__lead">草稿、反馈与最终 attach。只有 final 的草稿会进入投稿包。</p>
+
+  <form class="form" method="post" action="/research/{{ session.session_id }}/drafts"
+        enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label class="field__label" for="draft-file">草稿文件（SVG/PNG/PDF）</label>
+      <input class="field__control" id="draft-file" name="file" type="file" accept=".svg,.png,.pdf" required></div>
+    <div class="field"><label class="field__label" for="draft-note">说明</label>
+      <input class="field__control" id="draft-note" name="note" placeholder="例如：换成色盲友好配色"></div>
+    <div class="form__actions"><button class="btn" type="submit">上传草稿</button></div>
+  </form>
+
+  {% if drafts %}
+  <div class="figuregrid">
+    {% for draft in drafts %}
+    <article class="figurecard">
+      {% if draft.path.endswith('.svg') or draft.path.endswith('.png') %}
+      <a href="/research/drafts/{{ draft.draft_id }}/file">
+        <img src="/research/drafts/{{ draft.draft_id }}/file" alt="draft {{ draft.draft_id }}">
+      </a>
+      {% else %}
+      <p><a href="/research/drafts/{{ draft.draft_id }}/file">下载 {{ draft.path.split('/')[-1] }}</a></p>
+      {% endif %}
+      <figcaption>
+        <strong>{{ draft.status.value }}</strong> · <span class="mono">{{ draft.draft_id }}</span><br>
+        {{ draft.note or '无说明' }}<br>
+        <span class="mono-dim">sha256 {{ draft.sha256[:16] }}… · {{ draft.created_by }}</span>
+      </figcaption>
+      {% if draft.feedback %}<p class="card__lead">反馈：{{ draft.feedback }}</p>{% endif %}
+      {% if draft.status.value == 'draft' %}
+      <form class="form" method="post" action="/research/drafts/{{ draft.draft_id }}/feedback">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field"><label class="field__label" for="fb-{{ draft.draft_id }}">反馈</label>
+          <textarea class="field__control" id="fb-{{ draft.draft_id }}" name="feedback" rows="2"></textarea></div>
+        <div class="form__actions"><button class="btn" type="submit">保存反馈</button></div>
+      </form>
+      <form class="form" method="post" action="/research/drafts/{{ draft.draft_id }}/finalize">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field"><label class="field__label" for="rc-{{ draft.draft_id }}">recipe</label>
+          <input class="field__control" id="rc-{{ draft.draft_id }}" name="recipe_id" value="custom"></div>
+        <div class="field"><label class="field__label" for="cp-{{ draft.draft_id }}">脚本路径（可选）</label>
+          <input class="field__control" id="cp-{{ draft.draft_id }}" name="code_path" placeholder="/path/to/plot.py"></div>
+        <div class="form__actions"><button class="btn btn--primary" type="submit">最终 attach</button></div>
+      </form>
+      <form class="form" method="post" action="/research/drafts/{{ draft.draft_id }}/reject">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field"><label class="field__label" for="rj-{{ draft.draft_id }}">拒绝原因</label>
+          <input class="field__control" id="rj-{{ draft.draft_id }}" name="note" placeholder="可选"></div>
+        <div class="form__actions"><button class="btn" type="submit">拒绝</button></div>
+      </form>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}<p class="card__lead">暂无草稿。</p>{% endif %}
+</section>
+
+<section class="card">
   <div class="card__head"><h2 class="card__title">全部产物</h2></div>
   <table class="table">
     <thead><tr><th>kind</th><th>sha256</th><th>路径</th><th>下载</th></tr></thead>
