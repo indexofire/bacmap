@@ -10,7 +10,6 @@ _TABLES = get_workflow_tables()
 
 ABRICATE_MINID = config["tools"]["abricate"]["minid"]
 ABRICATE_MINCOV = config["tools"]["abricate"]["mincov"]
-_GMLST_SCHEMES = _TABLES.mlst_schemes
 _SEROTYPE_ENGINES = _TABLES.serotype_engines
 GMLST_BIN = "gmlst"
 
@@ -33,10 +32,17 @@ def _uses_gapit_db(sample, db):
 
 
 def _mlst_scheme(sample):
-    """物种未声明 MLST scheme 时返回空串：绝不静默回退到无关 scheme
-    （曾把 Listeria 一律跑成 salmonella_2，位点全 '-'）——空串走
-    "scheme=none / ST=N/A" 分支，不再调用 gmlst。"""
-    return _GMLST_SCHEMES.get(_sample_code(sample) or "", "")
+    """用户覆盖后的 gmlst mlst 方案；未选 mlst → 空串（写 none/N/A，不猜方案）。"""
+    code = _sample_code(sample)
+    plan = TOOL_SELECTION.effective_gmlst(code, sample=sample)
+    if "mlst" not in plan.modes:
+        return ""
+    return plan.schemes.get("mlst", "")
+
+
+def _tgmlst_enabled(sample):
+    plan = TOOL_SELECTION.effective_gmlst(_sample_code(sample), sample=sample)
+    return "1" if "tgmlst" in plan.modes else "0"
 
 
 def _amr_org_flag(sample):
@@ -64,6 +70,24 @@ rule typing_mlst:
         "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\t{params.scheme}\\tN/A' > {output.result}; "
         "else "
         "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\tnone\\tN/A' > {output.result}; "
+        "fi"
+
+rule typing_tgmlst:
+    input:
+        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+    output:
+        result = str(WORKDIR) + "/{sample}/typing/tgmlst.tsv"
+    params:
+        enabled = lambda wc: _tgmlst_enabled(wc.sample)
+    threads: 4
+    shell:
+        "mkdir -p $(dirname {output.result}) && "
+        "if [ '{params.enabled}' = '1' ]; then "
+        "{GMLST_BIN} typing tgmlst --format tsv -t {threads} "
+        "-o {output.result} {input.contigs} || "
+        "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\ttgmlst\\tN/A' > {output.result}; "
+        "else "
+        "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\ttgmlst\\tN/A' > {output.result}; "
         "fi"
 
 rule typing_sistr:

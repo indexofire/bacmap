@@ -146,7 +146,7 @@ bacmap start mcp --profile local-trusted  # 要求 [mcp] allow_local_trusted = t
 
 ### 3.6 `bio_*` 工具
 
-26 个注册工具记录在[工具注册表](tools.zh.md)中。在 `cloud` 下，只有数据级别在
+27 个注册工具记录在[工具注册表](tools.zh.md)中。在 `cloud` 下，只有数据级别在
 上限之内的工具会被注册；在 `local-trusted` 下，全部读/计算工具可用。四个
 `write` 工具（`bio_analyze_pathogen`、`bio_generate_report`、`bio_add_metadata`、
 `bio_add_lab_result`）永不直接暴露；请使用任务/计划/记录。

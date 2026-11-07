@@ -21,13 +21,32 @@ def _db_entry(raw: Any) -> dict[str, Any]:
         else {}
     )
     genes = raw.get("genes")
-    return {
+    entry: dict[str, Any] = {
         "status": str(raw.get("status", "")),
         "schemes": schemes,
         "confidence": str(raw.get("confidence", "")),
         "genes": [str(g) for g in genes] if isinstance(genes, list) else [],
         "error": str(raw.get("error", "")) if raw.get("error") else "",
     }
+    # cluster 库（gapit.cluster/1|2）：保留表型与最佳位点，供报告/API 消费。
+    for key in (
+        "kind",
+        "phenotype",
+        "best_locus",
+        "type",
+        "loci_count",
+        "raw_schema",
+    ):
+        if key in raw:
+            entry[key] = raw[key]
+    phenotypes = raw.get("phenotypes")
+    if isinstance(phenotypes, dict):
+        entry["phenotypes"] = {
+            str(name): dict(call)
+            for name, call in phenotypes.items()
+            if isinstance(call, dict)
+        }
+    return entry
 
 
 def summarize(payload: Any) -> dict[str, Any]:

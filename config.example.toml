@@ -10,6 +10,9 @@
 # - 密钥绝不写入本文件：api_key_env 只填环境变量的**名字**。
 # - 常用环境变量（优先级高于本文件）：BACMAP_CONFIG、BACMAP_HOME、
 #   BACMAP_DATA_DIR、BACMAP_DB_PATH、BACMAP_RESULTS_DIR、BACMAP_DEBUG。
+# - 按物种选择 gapit 库 / gmlst 模式与 scheme 使用单独的 YAML 覆盖层
+#   （$BACMAP_HOME/config/tool_selection.yaml 或 BACMAP_TOOL_SELECTION），
+#   由 `bacmap selection options|select|show|validate` 维护；不要改包内 pathogens.yaml。
 
 # ─────────────────────────────────────────────────────────────────
 # [paths] 数据路径覆盖（缺省全部派生自 $BACMAP_HOME，一般无需配置）

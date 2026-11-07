@@ -1,8 +1,11 @@
 # bacmap 端到端分析流程：物种由 gside 鉴定（species_identify），
 # 分型/血清型/SNP/cgMLST 等按病原注册表（core/pathogens.yaml）路由。
 
+import os
 import pandas as pd
 from pathlib import Path
+
+from bacmap.core.tool_selection import load_selection
 
 configfile: str(Path(workflow.basedir) / "config" / "config.yaml")
 
@@ -13,6 +16,33 @@ if not _SAMPLES_FILE.is_absolute():
     _SAMPLES_FILE = Path(workflow.basedir) / _SAMPLES_FILE
 SAMPLES_DF = pd.read_csv(_SAMPLES_FILE, sep="\t").set_index("sample")
 SAMPLES = SAMPLES_DF.index.tolist()
+
+
+def _tool_selection_path() -> Path:
+    """用户/项目覆盖：config 显式路径 → 新/旧环境变量 → BACMAP_HOME/config。
+
+    新文件 ``tool_selection.yaml`` 优先；旧的 ``db_selection.yaml`` 仍被读取
+    （gapit-only，加载时自动翻译）。
+    """
+    raw = str(
+        config.get("tool_selection") or config.get("db_selection") or ""
+    ).strip()
+    if raw:
+        path = Path(raw).expanduser()
+        return path if path.is_absolute() else PROJECT_ROOT / path
+    for env_name in ("BACMAP_TOOL_SELECTION", "BACMAP_DB_SELECTION"):
+        env_value = os.environ.get(env_name, "").strip()
+        if env_value:
+            return Path(env_value).expanduser()
+    for name in ("tool_selection.yaml", "db_selection.yaml"):
+        candidate = PROJECT_ROOT / "config" / name
+        if candidate.is_file():
+            return candidate
+    return PROJECT_ROOT / "config" / "tool_selection.yaml"
+
+
+TOOL_SELECTION_PATH = _tool_selection_path()
+TOOL_SELECTION = load_selection(TOOL_SELECTION_PATH)
 
 
 def _col(sample: str, col: str) -> str:

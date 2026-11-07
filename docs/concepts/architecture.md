@@ -41,7 +41,7 @@ pixi run -e dev contracts
 |---|---|---|
 | Core | domain types, MLST/cgMLST parsers, species canonicalisation, verifiers | `core/` |
 | Store | SQLite persistence: GOM, runs, metadata, lab results, knowledge, datasets, isolates | `store/` |
-| Tools | 26 registry tools + task-layer tool handlers; `effect`/`data_class` labels | `tools/` |
+| Tools | 27 registry tools + task-layer tool handlers; `effect`/`data_class` labels | `tools/` |
 | Workflow | deployed Snakemake DAG, rule scripts, runner/deploy | `workflow/` |
 | Tasks | DBOS workflows/steps, gates, record tasks, event log | `tasks/` |
 | Application | plan lifecycle, version/hash confirmation, error codes | `application/` |

@@ -61,6 +61,12 @@ summary["steps"]["species"] = species_id
 mlst_text = read_file(snakemake.input.mlst, "")
 summary["steps"]["mlst"] = mlst_text
 
+tgmlst_path = opt_input("tgmlst")
+if tgmlst_path:
+    tgmlst_text = read_file(tgmlst_path, "")
+    if tgmlst_text:
+        summary["steps"]["gmlst_tgmlst"] = tgmlst_text
+
 sistr_path = opt_input("sistr")  # 非沙门菌：不适用（不进入 DAG，不跑 SISTR）
 sistr = read_json(sistr_path, []) if sistr_path else []
 if isinstance(sistr, list) and sistr:
@@ -189,6 +195,34 @@ if vpa_serotype.get("predicted_serotype"):
         "o_confidence": vpa_serotype.get("o_confidence", "Unknown"),
         "k_confidence": vpa_serotype.get("k_confidence", "Unknown"),
     }
+elif vpa_serotype_path is not None:
+    # 占位规则：gapit 尚未给出表型时如实记录能力状态，不猜测。
+    summary["steps"]["vpa_serotype"] = {
+        "status": vpa_serotype.get("status", "unavailable"),
+        "reason": vpa_serotype.get("reason", ""),
+    }
+
+# vpa_ok（cluster, integrated typing）是 O/K 血清型的权威来源；占位规则仍保留
+# 兼容旧流程，但一旦 gapit 给出了表型，就以 gapit 的结果覆盖 unavailable 占位。
+_vpa_ok = gapit_tp["databases"].get("vpa_ok")
+if isinstance(_vpa_ok, dict) and _vpa_ok.get("status") == "ran":
+    _phenotypes = _vpa_ok.get("phenotypes") if isinstance(_vpa_ok.get("phenotypes"), dict) else {}
+    _o = _phenotypes.get("o_group", {}) if isinstance(_phenotypes.get("o_group"), dict) else {}
+    _k = _phenotypes.get("k_group", {}) if isinstance(_phenotypes.get("k_group"), dict) else {}
+    _serotype = str(_vpa_ok.get("phenotype") or "")
+    if not _serotype:
+        _serotype = ":".join(
+            part for part in (str(_o.get("phenotype") or ""), str(_k.get("phenotype") or "")) if part
+        )
+    if _serotype:
+        summary["steps"]["vpa_serotype"] = {
+            "predicted_serotype": _serotype,
+            "o_locus": str(_o.get("phenotype") or "None"),
+            "k_locus": str(_k.get("phenotype") or "None"),
+            "o_confidence": str(_o.get("confidence") or "Unknown"),
+            "k_confidence": str(_k.get("confidence") or "Unknown"),
+            "source": "gapit:vpa_ok",
+        }
 
 vpa_virulence_path = opt_input("vpa_virulence")
 vpa_virulence = read_json(vpa_virulence_path, {}) if vpa_virulence_path else {}

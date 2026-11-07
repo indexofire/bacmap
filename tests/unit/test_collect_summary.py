@@ -12,7 +12,12 @@ from types import SimpleNamespace
 _SCRIPT = Path(__file__).resolve().parents[2] / "src/bacmap/workflow/scripts/collect_summary.py"
 
 
-def _run(tmp_path: Path, species_id: dict, omit: set[str] | None = None) -> dict:
+def _run(
+    tmp_path: Path,
+    species_id: dict,
+    omit: set[str] | None = None,
+    gapit_typing: dict | None = None,
+) -> dict:
     rep = tmp_path / "results" / "S1" / "report"
     rep.mkdir(parents=True, exist_ok=True)
     sid = tmp_path / "species.json"
@@ -20,6 +25,10 @@ def _run(tmp_path: Path, species_id: dict, omit: set[str] | None = None) -> dict
     out = rep / "S1_summary.json"
 
     missing = str(tmp_path / "missing")
+    gapit_path = missing
+    if gapit_typing is not None:
+        gapit_path = str(tmp_path / "gapit_typing.json")
+        Path(gapit_path).write_text(json.dumps(gapit_typing), encoding="utf-8")
     attrs = {
         "qc_json": missing,
         "assembly_stats": missing,
@@ -31,7 +40,7 @@ def _run(tmp_path: Path, species_id: dict, omit: set[str] | None = None) -> dict
         "plasmidfinder": missing,
         "ectyper": missing,
         "pathotype": missing,
-        "gapit_typing": missing,
+        "gapit_typing": gapit_path,
         "shigella_serotype": missing,
         "vpa_serotype": missing,
         "vpa_virulence": missing,
@@ -82,6 +91,31 @@ def test_non_salmonella_marks_sistr_not_applicable(tmp_path):
     # DEC 致病型仍适用（ECO 有 eco_dec）
     # 本桩未提供 pathotype 文件 → 该子步骤不适用
     assert summary["steps"]["dec"]["pathotype_status"] == "not_applicable"
+
+
+def test_vpa_ok_populates_serotype_from_gapit(tmp_path):
+    summary = _run(
+        tmp_path,
+        {"verdict": "V_parahaemolyticus"},
+        gapit_typing={
+            "status": "ran",
+            "databases": {
+                "vpa_ok": {
+                    "kind": "cluster",
+                    "status": "ran",
+                    "phenotype": "O3:K6",
+                    "phenotypes": {
+                        "o_group": {"phenotype": "O3", "confidence": "high"},
+                        "k_group": {"phenotype": "K6", "confidence": "high"},
+                    },
+                }
+            },
+        },
+    )
+    assert summary["steps"]["vpa_serotype"]["predicted_serotype"] == "O3:K6"
+    assert summary["steps"]["vpa_serotype"]["o_locus"] == "O3"
+    assert summary["steps"]["vpa_serotype"]["k_locus"] == "K6"
+    assert summary["steps"]["vpa_serotype"]["source"] == "gapit:vpa_ok"
 
 
 def test_non_dec_species_marks_dec_not_applicable(tmp_path):

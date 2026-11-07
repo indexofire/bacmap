@@ -5,7 +5,8 @@ The `bacmap` executable has two kinds of top-level entries:
 - **`start`** — launches a long-running interface that takes over the terminal or binds a port:
   `bacmap start mcp|web|tui|console`; each interface keeps its own flags;
 - **commands** that perform one operation and exit: `overview`, `task`, `plan`, `record`, `run`,
-  `gom`, `isolate`, `sample`, `search`, `doctor`, `backup`, `restore`, `results`, `events`.
+  `gom`, `isolate`, `sample`, `search`, `selection`, `doctor`, `backup`, `restore`, `results`,
+  `events`.
 
 `--version` prints the program version.
 
@@ -185,6 +186,44 @@ P2 adds the full object lifecycle: Study → frozen Cohort → frozen AnalysisPl
 ledger → Claim review → publication-readiness (G0–G3). `--members`, `--spec`, `--rules`,
 `--evidence` and `--outcome` accept inline JSON or a JSON file. `cohort create` also accepts a
 whole `cohort_members.json` object (the `members` array is used).
+
+## `bacmap selection`
+
+```text
+bacmap selection path [--selection PATH] [--home H] [--json]
+bacmap selection options [--tool gapit|gmlst|all] [--species CODE] [--datadir DIR]
+                         [--selection PATH] [--downloaded-only] [--home H] [--json]
+bacmap selection show [--species CODE] [--selection PATH] [--diff] [--home H] [--json]
+bacmap selection validate [PATH] [--datadir DIR] [--downloaded-only] [--home H] [--json]
+bacmap selection select [--tool gapit|gmlst|all] [--species CODE] [--databases A,B]
+                        [--modes mlst,cgmlst] [--schemes mlst=NAME,cgmlst=NAME]
+                        [--from-json FILE] [--from-yaml FILE] [--selection PATH]
+                        [--mode extend|replace] [--yes] [--dry-run] [--home H] [--json]
+```
+
+Inspect and edit the `tool_selection.yaml` overlay (see
+[Configuration §13](configuration.md#13-tool-reference-selection-tool_selectionyaml)):
+
+- `path` prints the overlay path actually resolved (explicit → env → home; nothing is created);
+- `options` merges the live catalogs (gapit `db list --json`, gmlst `scheme list -f json`) with
+  the current selection and emits one JSON document — the same document the read-only MCP tool
+  `bio_tool_selection_options` returns;
+- `show` prints the effective species mapping; `--diff` compares it with the registry defaults;
+- `validate` rejects unknown databases/schemes, mode/scheme mismatches, undownloaded schemes,
+  cgmlst/wgmlst conflicts, cluster databases on read input and license violations; a bad
+  selection exits `1`;
+- `select` builds the selection interactively, from flags, or from `--from-json`/`--from-yaml`,
+  validates it, then writes atomically (`.bak` keeps the previous document); `--dry-run` prints
+  only.
+
+`bacmap db ...` is the same parser with `--tool gapit` fixed, kept as the gapit-only alias:
+`bacmap db path|options|show|validate|select`.
+
+```bash
+bacmap selection options --tool all --json | jq '.species[0]'
+bacmap selection show --diff
+bacmap selection select --tool gapit --species VPA --databases vpa_ok,vpa_pai
+```
 
 ## `bacmap config`
 

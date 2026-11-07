@@ -62,6 +62,7 @@ def overview_data(engine: DbosTaskEngine) -> dict[str, Any]:
             "data/": str(home / "data"),
             "results/": str(home / "results"),
             "workflows/": str(home / "workflows"),
+            "tool_selection": str(home / "config" / "tool_selection.yaml"),
         },
         "sandbox": sandbox,
         "task_counts": dict(counts),

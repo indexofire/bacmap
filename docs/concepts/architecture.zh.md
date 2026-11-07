@@ -40,7 +40,7 @@ pixi run -e dev contracts
 |---|---|---|
 | Core | 领域类型、MLST/cgMLST 解析器、物种规范化、校验器 | `core/` |
 | Store | SQLite 持久化：GOM、运行、元数据、实验室结果、知识库、数据集、菌株实体 | `store/` |
-| Tools | 26 个注册工具 + 任务层工具处理器；`effect`/`data_class` 标注 | `tools/` |
+| Tools | 27 个注册工具 + 任务层工具处理器；`effect`/`data_class` 标注 | `tools/` |
 | Workflow | 已部署的 Snakemake DAG、规则脚本、runner/deploy | `workflow/` |
 | Tasks | DBOS 工作流/步骤、门、记录任务、事件日志 | `tasks/` |
 | Application | 计划生命周期、版本/哈希确认、错误码 | `application/` |

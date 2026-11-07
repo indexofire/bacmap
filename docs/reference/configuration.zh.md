@@ -1,7 +1,8 @@
 # 配置参考
 
-配置由**环境变量 + 一个 TOML 文件**组成（不是 YAML）。数据路径绝不从源码树推导
-（ADR-03）。当配置文件不存在时，使用内置默认值。
+配置由**环境变量 + 一个 TOML 文件**组成（不是 YAML），另有一个可选的 YAML 覆盖层用于
+按工具选择参考数据（§13）。数据路径绝不从源码树推导（ADR-03）。当配置文件不存在时，
+使用内置默认值。
 
 配置模板：仓库根目录的 [`config.example.toml`](https://github.com/indexofire/bacmap/blob/main/config.example.toml)，
 或运行：
@@ -50,6 +51,8 @@ export BACMAP_CONFIG="$PWD/config.toml"
 | `BACMAP_WEB_SECRET` | 由 token 派生 | 会话 cookie 的 HMAC 密钥 |
 | `BACMAP_WEB_COOKIE_SECURE` | 关 | `1` 给 cookie 加上 `Secure` |
 | `BACMAP_LANG` | — | CLI 显示语言覆盖（`en`/`zh`）；优先于 `[ui].language` |
+| `BACMAP_TOOL_SELECTION` | — | 显式 `tool_selection.yaml` 覆盖层路径（§13） |
+| `BACMAP_DB_SELECTION` | — | 旧版 gapit-only 覆盖层路径（加载时翻译为 `tool_selection.yaml`） |
 | `BACMAP_RESEARCH_PROFILE` | `research` | Research Workbench 默认治理 Profile（`open-test`/`research`/`publication`） |
 | `BACMAP_DEBUG` | 关 | **仅开发**：显式覆盖 `[debug].enabled`；`1` 开启，`0` 关闭。关闭 Web 鉴权/CSRF、计划确认、任务审批、门、MCP Profile 限制、Research Claim/发表门与沙箱回退；D3/D4→cloud 仍被阻止。 |
 | `BACMAP_BENCHMARK_DATA` | — | Research 科学基准的本地公共数据快照；可指向单个数据集目录，或包含 `bvbrc_kpn_meropenem`/`osf_n78q3` 的父目录 |
@@ -244,6 +247,7 @@ SAM-001	Salmonella	gs/SAM-001/SAM-001_R1.fastq.gz	gs/SAM-001/SAM-001_R2.fastq.gz
 
 ```text
 $BACMAP_HOME/
+├── config/               # config.toml、可选的 tool_selection.yaml
 ├── data/                 # bacmap.sqlite, knowledge.sqlite
 ├── results/runs/<task_id>/...
 ├── workflows/bacmap/     # 已部署的 DAG + samples.tsv
@@ -316,3 +320,62 @@ bacmap start web --host 127.0.0.1 --port 8800
 
 非法或缺失的取值确定性回落 `en`（与 `[debug]` 的容错口径一致）。该设置只影响
 CLI 帮助、提示与消息——数据、报告与 JSON 输出不受影响。
+
+## 13. 工具参考数据选择（`tool_selection.yaml`）
+
+`core/pathogens.yaml` 是包内的物种→参考数据默认映射，**用户不直接编辑**；本地选择写入
+YAML 覆盖层，升级时不会丢失：
+
+| 层 | 位置 |
+|---|---|
+| 包内默认值 | `core/pathogens.yaml`（gapit 库、gmlst scheme） |
+| 用户/项目覆盖层 | `$BACMAP_HOME/config/tool_selection.yaml`、`BACMAP_TOOL_SELECTION`、工作流 `tool_selection` 键，或 `bacmap selection --selection PATH` |
+| 运行时物种判定 | `species/species_id.json`（gside；仅工作流） |
+
+覆盖层解析顺序：显式路径 → `BACMAP_TOOL_SELECTION` → 旧 `BACMAP_DB_SELECTION` →
+`$BACMAP_HOME/config/tool_selection.yaml` → `$BACMAP_HOME/config/db_selection.yaml`。旧文件
+（`bacmap.db_selection/1`）按 gapit-only 别名读取并在加载时告警。
+
+Schema `bacmap.tool_selection/1`：
+
+```yaml
+schema: bacmap.tool_selection/1
+defaults:                        # 可选：条目省略 `mode` 时的合并模式
+  gapit: {mode: extend}          # extend（默认）| replace
+  gmlst: {mode: extend}
+species:
+  VPA:
+    gapit:
+      mode: extend               # registry 默认 + 列出的库
+      databases: [vpa_ok, vpa_pai]
+    gmlst:
+      mode: replace
+      modes: [mlst]              # mlst | cgmlst | wgmlst | tgmlst
+      schemes: {mlst: vparahaemolyticus_1}
+samples:
+  S42:
+    gapit: {databases: [vpa_ok]} # 样本条目替换物种列表
+meta:                            # 可选：`selection select` 写入的来源信息
+  generated_by: cli
+  generated_at: "2026-11-07T00:00:00+00:00"
+  approved_by: operator
+```
+
+优先级为 **sample > species > registry**。`gapit.databases` 默认扩展 registry 列表，除非
+`mode: replace`；`gmlst.modes` 与 `gmlst.schemes` 默认按 key 合并，除非 `mode: replace`。
+未知物种码、库名或 scheme 名都是校验错误——不做任何猜测。scheme 必须在 gmlst catalog 中
+存在（配合 `--downloaded-only` 时还要求已缓存）。
+
+用确定性 CLI 查看与写入；流水线本身绝不调用 LLM：
+
+```bash
+bacmap selection options --tool all --json   # catalog 行 + 当前选择
+bacmap selection show --diff                 # 生效映射与 registry 的差异
+bacmap selection validate                    # 未知 / 未下载 / 类型不匹配条目
+bacmap selection select --tool gmlst --species VPA --modes mlst --schemes mlst=vparahaemolyticus_1
+bacmap db ...                                # gapit-only 别名（--tool gapit）
+```
+
+`bacmap selection options --json` 与只读 MCP 工具 `bio_tool_selection_options` 返回同一份
+选项文档，因此智能体可以提议选择、由人工确认。运行记录保存 `tool_selection_effective` 与
+`tool_selection_sha256`（旧 `db_selection_*` 名称仍可读取）。

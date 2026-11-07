@@ -22,6 +22,14 @@ kraken2_prefilter: false
 
 samples_file: "config/samples.tsv"
 
+# 用户/项目级物种→工具参考数据覆盖（gapit 库 / gmlst 模式与 scheme）。
+# 空 = $BACMAP_HOME/config/tool_selection.yaml（旧 db_selection.yaml 兼容）。
+# 也可由 BACMAP_TOOL_SELECTION 环境变量或 --config tool_selection=PATH 指定。
+# 生成/校验：`bacmap selection options|select|show|validate`。
+tool_selection: ""
+# 旧键（v1.4.40 兼容）：仍被读取，等价于 gapit-only 覆盖。
+db_selection: ""
+
 databases:
   invA_ref: "../../data/reference/species/markers.fasta"
   amrfinderplus_db: "../../data/db/amrfinderplus"

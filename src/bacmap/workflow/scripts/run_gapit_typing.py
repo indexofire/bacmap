@@ -1,26 +1,40 @@
 """gapit 分型编排（ADR-20：bacmap 只编排 + 适配）。
 
-对样本声明的每个 gapit 分型库（`pathogens.yaml` 的 `gapit_screens`）执行
-`gapit screen --db <db>` → `gapit typing -f json`，把每库结果与状态汇总为一个
-JSON：
+对样本生效的每个 gapit 库执行 screen（gene 库再 typing），把每库结果与状态
+汇总为一个 JSON：
 
     {
       "status": "ran" | "skipped" | "empty",
+      "species": {"verdict": "V_parahaemolyticus", "code": "VPA", "confidence": "high"},
       "databases": {
-        "lmo_sero": {"status": "ran", "schemes": {"doumith_serogroup": "IIa"},
-                        "confidence": "high", "genes": [...], "raw": {...}},
-        "ecoh":       {"status": "no_scheme", "error": "database 'ecoh' carries no typing scheme"}
+        "lmo_sero": {"kind": "gene", "status": "ran",
+                        "schemes": {"doumith_serogroup": "IIa"},
+                        "confidence": "high", "genes": [...]},
+        "ecoh":       {"kind": "gene", "status": "no_scheme",
+                        "error": "database 'ecoh' carries no typing scheme"},
+        "vpa_ok":     {"kind": "cluster", "status": "ran",
+                        "best_locus": "OL3", "type": "O3",
+                        "phenotype": "O3:K6",
+                        "phenotypes": {"o_group": {...}, "k_group": {...}}},
+        "vpa_pai":    {"kind": "cluster", "status": "ran", "loci_count": 10}
       }
     }
 
+库清单来源（v1.4.40）：
+- 有 ``--species``（工作流路径）时，按 gside verdict → 物种码 → 用户
+  ``tool_selection.yaml`` 的 gapit 段 → 生效库列表；低置信度/未识别不路由物种特异库。
+- 无 ``--species`` 时沿用 ``--databases``（兼容旧调用/单测）。
+
 状态语义（**绝不猜测**）：
-- ``ran``        该库有 typing scheme 并给出表型；
-- ``no_scheme``  库存在但未 build --typing（gapit 报 TYPING_NO_SCHEME）——如实记录；
+- ``ran``        成功（gene 库有 typing scheme 并给出表型；cluster 库完成 screen）；
+- ``no_scheme``  gene 库存在但未 build --typing（gapit 报 TYPING_NO_SCHEME）；
 - ``unavailable`` 库未安装（gapit 报 DATABASE_NOT_FOUND）——能力未就绪，不是失败；
 - ``skipped``    gapit 不在 PATH；
 - ``failed``     screen/typing 执行失败（带 stage/error）。
 
-`eco_dec` 由 `run_dec_typing.py` 专门处理（DEC 致病型有独立契约），此处排除。
+``eco_dec`` 由 DEC 专用步骤处理；``vpara_virulence`` 由既有 vpara 规则处理，
+两者在此排除以避免重复执行。cluster 库的 typing 已在 screen 内完成，绝不再对
+TSV 跑 ``gapit typing``。
 """
 
 from __future__ import annotations
@@ -31,14 +45,15 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
-# 由专用步骤承担的库（避免重复执行）：DEC 致病型走 run_dec_typing.py。
-_HANDLED_ELSEWHERE = frozenset({"eco_dec"})
+# 由专用步骤承担的库（避免重复执行）：DEC 走 run_dec_typing.py，vpara 走 vpara 规则。
+_HANDLED_ELSEWHERE = frozenset({"eco_dec", "vpara_virulence"})
 
 _NO_SCHEME_CODES = frozenset({"TYPING_NO_SCHEME"})
 
 
-def _phenotypes(payload: dict) -> dict[str, str]:
+def _phenotypes(payload: dict[str, Any]) -> dict[str, str]:
     files = payload.get("files")
     entry = files[0] if isinstance(files, list) and files and isinstance(files[0], dict) else {}
     phenotypes = entry.get("phenotypes")
@@ -51,7 +66,7 @@ def _phenotypes(payload: dict) -> dict[str, str]:
     }
 
 
-def _first_confidence(payload: dict) -> str:
+def _first_confidence(payload: dict[str, Any]) -> str:
     files = payload.get("files")
     entry = files[0] if isinstance(files, list) and files and isinstance(files[0], dict) else {}
     phenotypes = entry.get("phenotypes")
@@ -61,7 +76,7 @@ def _first_confidence(payload: dict) -> str:
     return str((first or {}).get("confidence") or "") if isinstance(first, dict) else ""
 
 
-def _first_genes(payload: dict) -> list[str]:
+def _first_genes(payload: dict[str, Any]) -> list[str]:
     files = payload.get("files")
     entry = files[0] if isinstance(files, list) and files and isinstance(files[0], dict) else {}
     genes = entry.get("genes")
@@ -85,32 +100,165 @@ def _gapit_error(text: str | None) -> tuple[str, str] | None:
     return None
 
 
-def _screen_and_type(gapit: str, contigs: Path, db: str, workdir: Path, timeout: int) -> dict:
+def _route(species_json: Path) -> tuple[str, str, str]:
+    """gside verdict → (物种码, verdict, confidence)；低置信度归 UNK。
+
+    ``UNK`` 仍会查用户覆盖层的 ``UNK`` 段：显式配置了 fallback 库时才跑，
+    未配置则返回空列表（不会误用 species-specific 库）。
+    """
+    from bacmap.core.pathogen_registry import resolve_species
+    from bacmap.core.species_codes import UNK
+
+    try:
+        payload = json.loads(species_json.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return UNK, "", "low"
+    if not isinstance(payload, dict):
+        return UNK, "", "low"
+    verdict = str(payload.get("species") or "")
+    confidence = str(payload.get("confidence") or "low")
+    # 兼容直接传入 gside 原始 JSON（物种/置信度嵌在 verdict 对象里）。
+    raw_verdict = payload.get("verdict")
+    if not verdict and isinstance(raw_verdict, dict):
+        verdict = str(raw_verdict.get("species") or "")
+        confidence = str(raw_verdict.get("confidence") or confidence)
+    if verdict in {"", "Unknown", "Mixed/Unknown"} or confidence == "low":
+        return UNK, verdict, confidence
+    return resolve_species(verdict) or UNK, verdict, confidence
+
+
+def _effective_databases(
+    species_json: Path | None, selection_path: Path | None, sample: str
+) -> tuple[list[str], dict[str, str], bool]:
+    """Return (databases, species block, routed).
+
+    ``routed=False`` means "no species verdict available, use --databases";
+    ``routed=True`` with an empty list means "verdict available but no
+    species-specific databases" (low confidence / unknown / user override).
+    """
+    if species_json is None or not species_json.is_file():
+        return [], {}, False
+    from bacmap.core.tool_selection import load_selection
+
+    code, verdict, confidence = _route(species_json)
+    species_block = {"verdict": verdict, "code": code, "confidence": confidence}
+    selection = load_selection(selection_path)
+    return selection.effective_gapit_databases(code, sample=sample), species_block, True
+
+
+def _catalog(datadir: str) -> dict[str, Any]:
+    from bacmap.tools.tool_catalog import fetch_gapit_catalog
+
+    return fetch_gapit_catalog(datadir=datadir or None)
+
+
+def _db_kind(catalog: dict[str, Any], db: str) -> str:
+    entry = catalog.get(db)
+    kind = getattr(entry, "kind", "")
+    return str(kind or "gene")
+
+
+def _cluster_result(document: dict[str, Any]) -> dict[str, Any]:
+    files = document.get("files")
+    entry = files[0] if isinstance(files, list) and files and isinstance(files[0], dict) else {}
+    best = entry.get("best") if isinstance(entry.get("best"), dict) else {}
+    raw_phenotypes = entry.get("phenotypes")
+    phenotypes: dict[str, dict[str, str]] = {}
+    if isinstance(raw_phenotypes, dict):
+        for name, call in raw_phenotypes.items():
+            if isinstance(call, dict):
+                phenotypes[str(name)] = {
+                    "phenotype": str(call.get("phenotype") or ""),
+                    "confidence": str(call.get("confidence") or ""),
+                }
+    phenotype = str(best.get("phenotype") or "")
+    if not phenotype and phenotypes:
+        serotype = phenotypes.get("serotype", {}).get("phenotype", "")
+        if serotype:
+            phenotype = serotype
+        else:
+            parts = [
+                phenotypes.get(key, {}).get("phenotype", "")
+                for key in ("o_group", "k_group")
+            ]
+            phenotype = ":".join(part for part in parts if part)
+    loci = entry.get("loci")
+    return {
+        "kind": "cluster",
+        "status": "ran",
+        "best_locus": str(best.get("locus") or ""),
+        "type": str(best.get("type") or ""),
+        "phenotype": phenotype,
+        "phenotypes": phenotypes,
+        "loci_count": len(loci) if isinstance(loci, list) else 0,
+        "raw_schema": str(document.get("schema") or ""),
+    }
+
+
+def _screen_and_type(
+    gapit: str,
+    contigs: Path,
+    db: str,
+    workdir: Path,
+    timeout: int,
+    *,
+    kind: str = "gene",
+    threads: int = 1,
+    datadir: str = "",
+) -> dict[str, Any]:
+    common = [gapit, "screen", str(contigs), "--db", db, "-t", str(threads)]
+    if datadir:
+        common += ["--datadir", datadir]
+
+    if kind == "cluster":
+        screen_json = workdir / f"{db}_screen.json"
+        sp = subprocess.run(
+            [*common, "--format", "json", "-o", str(screen_json)],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if sp.returncode != 0 or not screen_json.is_file():
+            code, message = _gapit_error(sp.stdout) or _gapit_error(sp.stderr) or ("", "")
+            if code == "DATABASE_NOT_FOUND":
+                return {"kind": "cluster", "status": "unavailable",
+                        "error": message or f"database {db} not installed"}
+            return {"kind": "cluster", "status": "failed", "stage": "screen",
+                    "error": (message or sp.stderr or "")[-500:]}
+        try:
+            document = json.loads(screen_json.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            return {"kind": "cluster", "status": "failed", "stage": "screen",
+                    "error": f"invalid cluster JSON: {exc}"}
+        if not isinstance(document, dict):
+            return {"kind": "cluster", "status": "failed", "stage": "screen",
+                    "error": "cluster JSON is not an object"}
+        return _cluster_result(document)
+
     screen = workdir / f"{db}_screen.tsv"
     sp = subprocess.run(
-        [gapit, "screen", str(contigs), "--db", db, "-o", str(screen)],
+        [*common, "-o", str(screen)],
         capture_output=True,
         text=True,
         timeout=timeout,
     )
     if sp.returncode != 0 or not screen.is_file():
-        # gapit 缺库时以退出码 0 返回 gapit.error/1（DATABASE_NOT_FOUND）——如实记 unavailable，
-        # 与真正的执行失败（failed）区分开。
         code, message = _gapit_error(sp.stdout) or _gapit_error(sp.stderr) or ("", "")
         if code == "DATABASE_NOT_FOUND":
-            return {"status": "unavailable", "error": message or f"database {db} not installed"}
-        return {
-            "status": "failed",
-            "stage": "screen",
-            "error": (message or sp.stderr or "")[-500:],
-        }
+            return {"kind": "gene", "status": "unavailable",
+                    "error": message or f"database {db} not installed"}
+        return {"kind": "gene", "status": "failed", "stage": "screen",
+                "error": (message or sp.stderr or "")[-500:]}
+    typing_cmd = [gapit, "typing", str(screen), "--format", "json"]
+    if datadir:
+        typing_cmd += ["--datadir", datadir]
     tp = subprocess.run(
-        [gapit, "typing", str(screen), "-f", "json"],
+        typing_cmd,
         capture_output=True,
         text=True,
         timeout=timeout,
     )
-    payload: dict = {}
+    payload: dict[str, Any] = {}
     if tp.stdout.strip():
         try:
             raw = json.loads(tp.stdout)
@@ -118,7 +266,7 @@ def _screen_and_type(gapit: str, contigs: Path, db: str, workdir: Path, timeout:
             raw = None
         if isinstance(raw, dict):
             payload = raw
-    # gapit 0.5.4 的 `typing` 在无 scheme 时把 error JSON 放到 **stderr**（stdout 为空、
+    # gapit 0.5.4 的 `typing` 在无 scheme 时把 error JSON 放到 stderr（stdout 为空、
     # 退出码非 0）——必须先识别错误码再判失败，否则 TYPING_NO_SCHEME 会被误记成 failed。
     if payload.get("schema") == "gapit.error/1":
         err: tuple[str, str] | None = (
@@ -135,18 +283,22 @@ def _screen_and_type(gapit: str, contigs: Path, db: str, workdir: Path, timeout:
             status = "unavailable"
         else:
             status = "failed"
-        out: dict = {"status": status, "error": message or code}
+        out: dict[str, Any] = {"kind": "gene", "status": status, "error": message or code}
         if status == "failed":
             out["stage"] = "typing"
         return out
     if tp.returncode != 0:
-        return {"status": "failed", "stage": "typing", "error": (tp.stderr or "")[-500:]}
+        return {"kind": "gene", "status": "failed", "stage": "typing",
+                "error": (tp.stderr or "")[-500:]}
     if not payload:
-        return {"status": "failed", "stage": "typing", "error": "non-JSON output"}
+        return {"kind": "gene", "status": "failed", "stage": "typing",
+                "error": "non-JSON output"}
     schemes = _phenotypes(payload)
     if not schemes:
-        return {"status": "failed", "stage": "typing", "error": "no phenotypes in typing result"}
+        return {"kind": "gene", "status": "failed", "stage": "typing",
+                "error": "no phenotypes in typing result"}
     return {
+        "kind": "gene",
         "status": "ran",
         "schemes": schemes,
         "confidence": _first_confidence(payload),
@@ -155,12 +307,32 @@ def _screen_and_type(gapit: str, contigs: Path, db: str, workdir: Path, timeout:
     }
 
 
-def run(contigs: Path, out: Path, workdir: Path, *, databases: list[str], timeout: int) -> int:
-    dbs = [d for d in databases if d and d not in _HANDLED_ELSEWHERE]
+def run(
+    contigs: Path,
+    out: Path,
+    workdir: Path,
+    *,
+    databases: list[str],
+    timeout: int,
+    species_json: Path | None = None,
+    sample: str = "",
+    selection_path: Path | None = None,
+    threads: int = 1,
+    datadir: str = "",
+) -> int:
+    dbs, species_block, routed = _effective_databases(species_json, selection_path, sample)
+    if not routed:
+        dbs = list(databases)
+    dbs = [d for d in dbs if d and d not in _HANDLED_ELSEWHERE]
+
     gapit = shutil.which("gapit")
+    payload: dict[str, Any] = {}
+    if species_block:
+        payload["species"] = species_block
+
     if not dbs:
         out.write_text(
-            json.dumps({"status": "empty", "databases": {}}, ensure_ascii=False, indent=2),
+            json.dumps({**payload, "status": "empty", "databases": {}}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         return 0
@@ -168,6 +340,7 @@ def run(contigs: Path, out: Path, workdir: Path, *, databases: list[str], timeou
         out.write_text(
             json.dumps(
                 {
+                    **payload,
                     "status": "skipped",
                     "reason": "gapit not found in PATH",
                     "databases": {d: {"status": "skipped"} for d in dbs},
@@ -180,10 +353,24 @@ def run(contigs: Path, out: Path, workdir: Path, *, databases: list[str], timeou
         return 0
 
     workdir.mkdir(parents=True, exist_ok=True)
-    results = {db: _screen_and_type(gapit, contigs, db, workdir, timeout) for db in dbs}
+    catalog = _catalog(datadir) if species_json is not None else {}
+    results = {
+        db: _screen_and_type(
+            gapit,
+            contigs,
+            db,
+            workdir,
+            timeout,
+            kind=_db_kind(catalog, db),
+            threads=threads,
+            datadir=datadir,
+        )
+        for db in dbs
+    }
     status = "ran" if any(r["status"] == "ran" for r in results.values()) else "empty"
     out.write_text(
-        json.dumps({"status": status, "databases": results}, ensure_ascii=False, indent=2),
+        json.dumps({**payload, "status": status, "databases": results},
+                   ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     return 0
@@ -194,7 +381,12 @@ def main() -> int:
     ap.add_argument("--contigs", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--workdir", required=True)
-    ap.add_argument("--databases", required=True, help="逗号分隔的 gapit 库名")
+    ap.add_argument("--databases", default="", help="逗号分隔的 gapit 库名（旧路径）")
+    ap.add_argument("--species", default="", help="gside species_id.json（工作流路径）")
+    ap.add_argument("--sample", default="", help="样本 ID（单样本覆盖）")
+    ap.add_argument("--selection", default="", help="tool_selection.yaml 路径")
+    ap.add_argument("--datadir", default="", help="gapit datadir")
+    ap.add_argument("--threads", type=int, default=1)
     ap.add_argument("--timeout", type=int, default=600)
     args = ap.parse_args()
     return run(
@@ -203,6 +395,11 @@ def main() -> int:
         Path(args.workdir),
         databases=[d.strip() for d in args.databases.split(",") if d.strip()],
         timeout=args.timeout,
+        species_json=Path(args.species) if args.species else None,
+        sample=args.sample,
+        selection_path=Path(args.selection) if args.selection else None,
+        threads=args.threads,
+        datadir=args.datadir,
     )
 
 

@@ -147,7 +147,7 @@ P1 output is `TEST/UNVERIFIED` (open-test) or `REVIEW REQUIRED`.
 
 ### 3.6 `bio_*` tools
 
-The 26 registry tools are documented in [Tool registry](tools.md). Under `cloud`, only tools within
+The 27 registry tools are documented in [Tool registry](tools.md). Under `cloud`, only tools within
 the data ceiling are registered; under `local-trusted`, all read/compute tools are available. Four
 `write` tools (`bio_analyze_pathogen`, `bio_generate_report`, `bio_add_metadata`,
 `bio_add_lab_result`) are never exposed directly; use tasks/plans/records.

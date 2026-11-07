@@ -29,6 +29,8 @@ from pathlib import Path
 from typing import Any
 
 from bacmap.config import BACMAP_HOME
+from bacmap.core.tool_selection import SelectionError
+from bacmap.interfaces.cli import selection as selection_cli
 from bacmap.interfaces.i18n import T
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -168,6 +170,12 @@ def _run_overview(args: argparse.Namespace) -> None:
         )
     )
     c.print(T(f"  sandbox     : {data['sandbox']}", f"  沙箱后端     : {data['sandbox']}"))
+    c.print(
+        T(
+            f"  tool selection: {data['paths'].get('tool_selection', '-')}",
+            f"  工具选择     : {data['paths'].get('tool_selection', '-')}",
+        )
+    )
     c.print(
         T(
             f"  components  : {', '.join(f'{k} {v}' for k, v in data['versions'].items())}",
@@ -556,14 +564,15 @@ def _epilog() -> str:
     )
     return (
         f"{interfaces_label}: bacmap start {{mcp|web|tui|console}}\n"
-        f"{commands_label}: overview · task · plan · record · run · gom · sample · search\n"
+        f"{commands_label}: overview · task · plan · record · run · gom · "
+        "sample · search · selection\n"
         f"{note}"
     )
 
 
 _COMMAND_METAVAR = (
     "{start,overview,task,plan,record,run,gom,config,doctor,backup,"
-    "restore,results,events,isolate,sample,search}"
+    "restore,results,events,isolate,sample,search,selection,db}"
 )
 
 
@@ -697,6 +706,146 @@ def build_parser() -> argparse.ArgumentParser:
     _add_json(s_show)
     s_show.set_defaults(func=_run_sample_show)
 
+    def _add_selection_commands(parent: Any, *, default_tool: str, dest: str) -> None:
+        subparsers = parent.add_subparsers(dest=dest, required=True)
+
+        d_path = subparsers.add_parser(
+            "path", help=T("show the resolved selection path", "显示工具选择解析路径")
+        )
+        _add_home(d_path)
+        _add_json(d_path)
+        d_path.add_argument(
+            "--selection",
+            default="",
+            help=T("explicit tool_selection.yaml", "显式 tool_selection.yaml 路径"),
+        )
+        d_path.set_defaults(func=selection_cli.run_selection_path)
+
+        d_options = subparsers.add_parser(
+            "options", help=T("list species defaults and catalogs", "列出物种默认值与 catalog")
+        )
+        _add_home(d_options)
+        _add_json(d_options)
+        d_options.add_argument("--tool", choices=["gapit", "gmlst", "all"], default=default_tool)
+        d_options.add_argument(
+            "--species", default="", help=T("species code/label", "物种码/标签（如 VPA）")
+        )
+        d_options.add_argument("--datadir", default="", help=T("gapit datadir", "gapit datadir"))
+        d_options.add_argument(
+            "--selection",
+            default="",
+            help=T("explicit tool_selection.yaml", "显式 tool_selection.yaml 路径"),
+        )
+        d_options.add_argument(
+            "--downloaded-only",
+            action="store_true",
+            help=T("gmlst: only cached schemes", "gmlst: 只看已下载 scheme"),
+        )
+        d_options.set_defaults(func=selection_cli.run_selection_options)
+
+        d_show = subparsers.add_parser(
+            "show", help=T("show the effective selection", "显示生效的工具选择")
+        )
+        _add_home(d_show)
+        _add_json(d_show)
+        d_show.add_argument("--species", default="", help=T("filter one species", "只看一个物种"))
+        d_show.add_argument(
+            "--selection",
+            default="",
+            help=T("explicit tool_selection.yaml", "显式 tool_selection.yaml 路径"),
+        )
+        d_show.add_argument(
+            "--diff",
+            action="store_true",
+            help=T("diff against registry defaults", "显示与 registry 默认的差异"),
+        )
+        d_show.set_defaults(func=selection_cli.run_selection_show)
+
+        d_validate = subparsers.add_parser(
+            "validate", help=T("validate the selection", "校验工具选择")
+        )
+        d_validate.add_argument(
+            "path",
+            nargs="?",
+            default="",
+            help=T("file to validate (default: effective)", "待校验文件（缺省用生效路径）"),
+        )
+        _add_home(d_validate)
+        _add_json(d_validate)
+        d_validate.add_argument("--datadir", default="", help=T("gapit datadir", "gapit datadir"))
+        d_validate.add_argument(
+            "--downloaded-only",
+            action="store_true",
+            help=T("gmlst: only cached schemes", "gmlst: 只看已下载 scheme"),
+        )
+        d_validate.set_defaults(func=selection_cli.run_selection_validate)
+
+        d_select = subparsers.add_parser(
+            "select", help=T("interactive or JSON/YAML proposal", "交互/从 JSON 生成工具选择")
+        )
+        _add_home(d_select)
+        _add_json(d_select)
+        d_select.add_argument("--tool", choices=["gapit", "gmlst", "all"], default=default_tool)
+        d_select.add_argument(
+            "--species", default="", help=T("species code/label", "物种码/标签（交互时可省略）")
+        )
+        d_select.add_argument(
+            "--databases",
+            default="",
+            help=T("gapit: comma-separated DB names", "gapit: 逗号分隔的库名"),
+        )
+        d_select.add_argument(
+            "--modes",
+            default="",
+            help=T("gmlst: mlst,cgmlst,wgmlst,tgmlst", "gmlst: mlst,cgmlst,wgmlst,tgmlst"),
+        )
+        d_select.add_argument(
+            "--schemes",
+            default="",
+            help=T("gmlst: mlst=name,cgmlst=name", "gmlst: mlst=name,cgmlst=name"),
+        )
+        d_select.add_argument(
+            "--from-json", default="", help=T("full proposal JSON", "完整 proposal JSON")
+        )
+        d_select.add_argument(
+            "--from-yaml", default="", help=T("full proposal YAML", "完整 proposal YAML")
+        )
+        d_select.add_argument(
+            "--selection",
+            default="",
+            help=T("target tool_selection.yaml", "目标 tool_selection.yaml 路径"),
+        )
+        d_select.add_argument("--datadir", default="", help=T("gapit datadir", "gapit datadir"))
+        d_select.add_argument(
+            "--downloaded-only",
+            action="store_true",
+            help=T("gmlst: only cached schemes", "gmlst: 只看已下载 scheme"),
+        )
+        d_select.add_argument("--mode", choices=["extend", "replace"], default="replace")
+        d_select.add_argument("--yes", action="store_true", help=T("skip confirmation", "跳过确认"))
+        d_select.add_argument(
+            "--dry-run", action="store_true", help=T("print only, do not write", "只打印，不写盘")
+        )
+        d_select.set_defaults(func=selection_cli.run_selection_select)
+
+    p_selection = sub.add_parser(
+        "selection",
+        help=T(
+            "species→tool reference selection (gapit DBs / gmlst modes and schemes)",
+            "物种→工具参考数据选择（gapit 库 / gmlst 模式与 scheme）",
+        ),
+    )
+    _add_selection_commands(p_selection, default_tool="all", dest="selection_command")
+
+    p_db = sub.add_parser(
+        "db",
+        help=T(
+            "gapit-only alias for `selection --tool gapit`",
+            "gapit-only 别名（等价于 selection --tool gapit）",
+        ),
+    )
+    _add_selection_commands(p_db, default_tool="gapit", dest="db_command")
+
     p_search = sub.add_parser("search", help=T("search samples", "样本检索"))
     p_search.add_argument(
         "--query",
@@ -717,4 +866,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
-    args.func(args)
+    try:
+        args.func(args)
+    except SelectionError as exc:
+        raise SystemExit(str(exc)) from exc

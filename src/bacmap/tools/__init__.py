@@ -31,6 +31,7 @@ from .services import (
     search_samples,
     snp_tree,
 )
+from .tool_catalog import tool_selection_options
 
 __all__ = [
     "add_lab_result",
@@ -53,6 +54,7 @@ __all__ = [
     "seq_ops",
     "seq_stats",
     "snp_tree",
+    "tool_selection_options",
     "variant",
     "verify_result",
 ]

@@ -5,22 +5,27 @@ import sys
 #   Salmonella          -> senterica_2          (3002 loci)
 #   E.coli / Shigella   -> ecoli_2              (2513 loci)
 #   V.parahaemolyticus  -> vparahaemolyticus_3  (2254 loci)
-# NOTE: _CGMLST_SCHEMES is DIFFERENT from _GMLST_SCHEMES in typing_amr.smk
-#       (those are classical-MLST schemes: salmonella_2/ecoli_1/vparahaemolyticus_1).
-# Both mappings derive from pathogens.yaml (single source of truth).
+# cgMLST schemes come from TOOL_SELECTION.effective_gmlst (registry default
+# plus the user's tool_selection.yaml overlay).  Classical-MLST schemes in
+# typing_amr.smk are a different mode (mlst vs cgmlst/wgmlst).
 # cgMLST cohort rules are added in todo 11 (gated by config.cgmlst.run_cgmlst_cohort).
 
 from bacmap.core.pathogen_registry import get_workflow_tables, resolve_species  # noqa: E402
 
 _TABLES = get_workflow_tables()
 
-_CGMLST_SCHEMES = _TABLES.cgmlst_schemes
 GMLST_BIN = "gmlst"
 
 
 def _cgmlst_scheme(sample):
-    """samples.tsv species 值（码/标签/显示名）→ cgMLST 方案。"""
-    return _CGMLST_SCHEMES.get(resolve_species(SAMPLES_DF.loc[sample, "species"]) or "", "ecoli_2")
+    """用户覆盖后的 cgMLST/wgMLST 方案；未选 → 空串（写 N/A，不猜方案）。"""
+    code = resolve_species(SAMPLES_DF.loc[sample, "species"])
+    plan = TOOL_SELECTION.effective_gmlst(code, sample=sample)
+    if "cgmlst" in plan.modes:
+        return plan.schemes.get("cgmlst", "")
+    if "wgmlst" in plan.modes:
+        return plan.schemes.get("wgmlst", "")
+    return ""
 
 rule typing_cgmlst:
     input:
@@ -32,9 +37,13 @@ rule typing_cgmlst:
     threads: 4
     shell:
         "mkdir -p $(dirname {output}) && "
+        "if [ -z '{params.scheme}' ]; then "
+        "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\t-\\tN/A' > {output}; "
+        "else "
         "{GMLST_BIN} typing cgmlst -s {params.scheme} --format tsv "
         "-o {output} {input.contigs} || "
-        "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\t{params.scheme}\\tN/A' > {output}"
+        "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\t{params.scheme}\\tN/A' > {output}; "
+        "fi"
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -53,13 +62,32 @@ _CGMLST_SPECIES_GROUPS = _TABLES.cgmlst_species_groups
 # Derive per-group sample lists. A group needs >=2 samples to justify joint
 # analysis — mirrors the snp.smk:32-39 _GROUP_SAMPLES guard (single-sample
 # groups are silently skipped).
+def _group_effective_scheme(samples: list[str]) -> str:
+    """All samples in a cohort must use the same cgMLST/wgMLST scheme."""
+    schemes: set[str] = set()
+    for _sample in samples:
+        _plan = TOOL_SELECTION.effective_gmlst(
+            resolve_species(SAMPLES_DF.loc[_sample, "species"]), sample=_sample
+        )
+        schemes.add(_plan.schemes.get("cgmlst") or _plan.schemes.get("wgmlst") or "")
+    return schemes.pop() if len(schemes) == 1 else ""
+
+
 _CGMLST_GROUP_SAMPLES: dict[str, list[str]] = {}
+_CGMLST_GROUP_SCHEMES: dict[str, str] = {}
 for _grp, _info in _CGMLST_SPECIES_GROUPS.items():
     _samps = [
         s for s in SAMPLES if resolve_species(SAMPLES_DF.loc[s, "species"]) in _info["species"]
     ]
-    if len(_samps) >= 2:
-        _CGMLST_GROUP_SAMPLES[_grp] = _samps
+    if len(_samps) < 2:
+        continue
+    _scheme = _group_effective_scheme(_samps)
+    if not _scheme:
+        # Mixed schemes or no scheme selected: skip the cohort rather than
+        # joining incompatible allele columns.
+        continue
+    _CGMLST_GROUP_SAMPLES[_grp] = _samps
+    _CGMLST_GROUP_SCHEMES[_grp] = _scheme
 
 # Cohort is opt-in. With the flag off (default) _CGMLST_ACTIVE_GROUPS is empty
 # AND the rule definitions below are skipped, so cohort targets are absent
@@ -91,7 +119,7 @@ if _RUN_CGMLST_COHORT:
             str(WORKDIR) + "/cgmlst/{group}/cgmlst_profiles.tsv"
         params:
             samples=lambda wc: _CGMLST_GROUP_SAMPLES.get(wc.group, []),
-            scheme=lambda wc: _CGMLST_SPECIES_GROUPS[wc.group]["scheme"],
+            scheme=lambda wc: _CGMLST_GROUP_SCHEMES[wc.group],
             group="{group}"
         run:
             _cgmlst_os.makedirs(
@@ -180,7 +208,7 @@ if _RUN_CGMLST_COHORT:
             python=sys.executable,
             group="{group}",
             organism=lambda wc: _CGMLST_SPECIES_GROUPS[wc.group]["organism"],
-            scheme=lambda wc: _CGMLST_SPECIES_GROUPS[wc.group]["scheme"],
+            scheme=lambda wc: _CGMLST_GROUP_SCHEMES[wc.group],
             config_file=str(
                 PROJECT_ROOT / "workflows/bacmap/config/config.yaml"
             )

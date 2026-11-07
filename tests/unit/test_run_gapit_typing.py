@@ -151,3 +151,154 @@ class TestRunGapitTyping:
         data = json.loads(out.read_text())
         # 缺库 ≠ 执行失败：如实记 unavailable（声明了但未 fetch）
         assert data["databases"]["ab_k"]["status"] == "unavailable"
+
+
+class TestSpeciesRouting:
+    def _species(self, tmp_path: Path, verdict: str = "V_parahaemolyticus",
+                 confidence: str = "high") -> Path:
+        p = tmp_path / "species_id.json"
+        p.write_text(
+            json.dumps({"species": verdict, "confidence": confidence}), encoding="utf-8"
+        )
+        return p
+
+    def _selection(self, tmp_path: Path, databases: list[str]) -> Path:
+        p = tmp_path / "db_selection.yaml"
+        p.write_text(
+            "schema: bacmap.db_selection/1\n"
+            "species:\n"
+            "  VPA:\n"
+            "    mode: replace\n"
+            "    databases:\n"
+            + "".join(f"    - {db}\n" for db in databases),
+            encoding="utf-8",
+        )
+        return p
+
+    def _catalog(self):
+        from bacmap.core.tool_selection_validate import DbCatalogEntry
+
+        return {
+            "vpa_ok": DbCatalogEntry(
+                name="vpa_ok", kind="cluster", typing=True, installed=True, source="bundled"
+            ),
+            "vpa_pai": DbCatalogEntry(
+                name="vpa_pai", kind="cluster", typing=False, installed=True, source="bundled"
+            ),
+        }
+
+    def test_species_and_selection_drive_cluster_screens(self, tmp_path, monkeypatch):
+        mod = _load()
+        calls: list[list[str]] = []
+
+        cluster_doc = {
+            "schema": "gapit.cluster/2",
+            "files": [
+                {
+                    "file": "c.fasta",
+                    "best": {"locus": "OL3", "type": "O3"},
+                    "phenotypes": {
+                        "o_group": {"phenotype": "O3", "confidence": "high"},
+                        "k_group": {"phenotype": "K6", "confidence": "high"},
+                        "serotype": {"phenotype": "O3:K6", "confidence": "high"},
+                    },
+                    "loci": [{"locus": "OL3"}],
+                }
+            ],
+        }
+
+        def _run(cmd, **kwargs):
+            calls.append(list(cmd))
+            assert "screen" in cmd
+            assert "--format" in cmd and cmd[cmd.index("--format") + 1] == "json"
+            Path(cmd[cmd.index("-o") + 1]).write_text(
+                json.dumps(cluster_doc), encoding="utf-8"
+            )
+            return _Proc(0)
+
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        monkeypatch.setattr(mod, "_catalog", lambda datadir: self._catalog())
+        monkeypatch.setattr(mod.subprocess, "run", _run)
+
+        out = tmp_path / "typing.json"
+        mod.run(
+            tmp_path / "c.fasta",
+            out,
+            tmp_path / "wd",
+            databases=[],
+            timeout=30,
+            species_json=self._species(tmp_path),
+            sample="S1",
+            selection_path=self._selection(tmp_path, ["vpa_ok", "vpa_pai"]),
+        )
+        data = json.loads(out.read_text())
+        assert data["species"]["code"] == "VPA"
+        assert data["databases"]["vpa_ok"]["status"] == "ran"
+        assert data["databases"]["vpa_ok"]["phenotype"] == "O3:K6"
+        assert data["databases"]["vpa_pai"]["status"] == "ran"
+        # cluster 库绝不走 gapit typing
+        assert all("typing" not in call for call in calls)
+
+    def test_low_confidence_routes_no_species_databases(self, tmp_path, monkeypatch):
+        mod = _load()
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        monkeypatch.setattr(mod, "_catalog", lambda datadir: self._catalog())
+        monkeypatch.setattr(
+            mod.subprocess,
+            "run",
+            lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not run")),
+        )
+        out = tmp_path / "typing.json"
+        mod.run(
+            tmp_path / "c.fasta",
+            out,
+            tmp_path / "wd",
+            databases=["vpa_ok"],  # samples.tsv fallback must NOT be used
+            timeout=30,
+            species_json=self._species(tmp_path, confidence="low"),
+            sample="S1",
+            selection_path=self._selection(tmp_path, ["vpa_ok"]),
+        )
+        data = json.loads(out.read_text())
+        assert data["status"] == "empty"
+        assert data["databases"] == {}
+        assert data["species"]["confidence"] == "low"
+
+    def test_unk_fallback_selection_runs(self, tmp_path, monkeypatch):
+        mod = _load()
+        calls: list[list[str]] = []
+
+        def _run(cmd, **kwargs):
+            calls.append(list(cmd))
+            Path(cmd[cmd.index("-o") + 1]).write_text(
+                json.dumps({"schema": "gapit.cluster/2", "files": [{"best": {}, "loci": []}]}),
+                encoding="utf-8",
+            )
+            return _Proc(0)
+
+        selection = tmp_path / "db_selection.yaml"
+        selection.write_text(
+            "schema: bacmap.db_selection/1\n"
+            "species:\n"
+            "  UNK:\n"
+            "    databases: [vpa_ok]\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(mod.shutil, "which", lambda name: "/usr/bin/gapit")
+        monkeypatch.setattr(mod, "_catalog", lambda datadir: self._catalog())
+        monkeypatch.setattr(mod.subprocess, "run", _run)
+        out = tmp_path / "typing.json"
+        mod.run(
+            tmp_path / "c.fasta",
+            out,
+            tmp_path / "wd",
+            databases=[],
+            timeout=30,
+            species_json=self._species(tmp_path, verdict="Unknown", confidence="low"),
+            sample="S1",
+            selection_path=selection,
+        )
+        data = json.loads(out.read_text())
+        assert data["species"]["code"] == "UNK"
+        assert data["databases"]["vpa_ok"]["status"] == "ran"
+        assert calls

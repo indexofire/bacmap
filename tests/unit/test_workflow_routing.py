@@ -94,3 +94,81 @@ class TestReportInputsGating:
         files = report_inputs("S1", "DEC", "/w")
         assert set(files) >= _COMMON
         assert files["gapit_typing"] == "/w/S1/gapit/typing.json"
+
+
+class TestSelectionAwareRouting:
+    def test_replace_removes_vpara_special_steps(self):
+        from bacmap.core.tool_selection import (
+            GapitSelection,
+            SpeciesSelection,
+            ToolSelection,
+        )
+
+        selection = ToolSelection(
+            species={
+                "VPA": SpeciesSelection(
+                    gapit=GapitSelection(mode="replace", databases=["vpa_ok", "vpa_pai"])
+                )
+            }
+        )
+        assert uses_gapit_db("V_parahaemolyticus", "vpa_ok", selection=selection) is True
+        assert (
+            uses_gapit_db("V_parahaemolyticus", "vpara_virulence", selection=selection)
+            is False
+        )
+        extra = set(
+            report_inputs(
+                "S1", "V_parahaemolyticus", "/w", selection=selection
+            )
+        ) - _COMMON
+        # vpa_ok/vpa_pai ride the generic gapit_typing aggregate; the factual
+        # vpa_serotype placeholder stays (gapit fills it when vpa_ok runs).
+        assert extra == {"vpa_serotype"}
+
+    def test_extend_keeps_vpara_special_steps(self):
+        from bacmap.core.tool_selection import (
+            GapitSelection,
+            SpeciesSelection,
+            ToolSelection,
+        )
+
+        selection = ToolSelection(
+            species={
+                "VPA": SpeciesSelection(
+                    gapit=GapitSelection(mode="extend", databases=["vpa_ok"])
+                )
+            }
+        )
+        extra = set(
+            report_inputs(
+                "S1", "V_parahaemolyticus", "/w", selection=selection
+            )
+        ) - _COMMON
+        assert extra == {"vpa_serotype", "vpa_virulence"}
+
+    def test_sample_override_applies_to_special_steps(self):
+        from bacmap.core.tool_selection import (
+            GapitSelection,
+            SampleSelection,
+            SpeciesSelection,
+            ToolSelection,
+        )
+
+        selection = ToolSelection(
+            species={
+                "VPA": SpeciesSelection(
+                    gapit=GapitSelection(mode="replace", databases=["vpa_ok"])
+                )
+            },
+            samples={
+                "S1": SampleSelection(
+                    gapit=GapitSelection(databases=["vpara_virulence"])
+                )
+            },
+        )
+        assert (
+            uses_gapit_db(
+                "V_parahaemolyticus", "vpara_virulence", selection=selection, sample="S1"
+            )
+            is True
+        )

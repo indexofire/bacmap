@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from bacmap.core.pathogen_registry import get_workflow_tables, resolve_species
+from bacmap.core.tool_selection import ToolSelection
 
 
 def serotype_engine(species_value: str) -> str:
@@ -25,16 +26,33 @@ def serotype_engine(species_value: str) -> str:
     return get_workflow_tables().serotype_engines.get(code, "")
 
 
-def uses_gapit_db(species_value: str, db: str) -> bool:
-    """该物种是否声明了给定 gapit 库（决定对应分型步骤是否适用）。"""
+def uses_gapit_db(
+    species_value: str,
+    db: str,
+    *,
+    selection: ToolSelection | None = None,
+    sample: str | None = None,
+) -> bool:
+    """该物种是否声明了给定 gapit 库（决定对应分型步骤是否适用）。
+
+    ``selection`` 存在时以用户覆盖后的生效库为准；缺省保持 registry 默认
+    （向后兼容，单测/旧调用零变化）。
+    """
     code = resolve_species(species_value)
     if code is None:
         return False
+    if selection is not None:
+        return db in selection.effective_gapit_databases(code, sample=sample)
     return db in get_workflow_tables().gapit_screens.get(code, [])
 
 
 def report_inputs(
-    sample: str, species_value: str, workdir: str, *, has_qc: bool = True
+    sample: str,
+    species_value: str,
+    workdir: str,
+    *,
+    has_qc: bool = True,
+    selection: ToolSelection | None = None,
 ) -> dict[str, str]:
     """样本的 summary 依赖（只含适用步骤；不适用者不进入 DAG）。
 
@@ -62,9 +80,20 @@ def report_inputs(
         files["ectyper"] = f"{base}/dec/ecoh_serotype.json"
     if engine == "shigatyper":
         files["shigella_serotype"] = f"{base}/dec/shigella_serotype.json"
-    if uses_gapit_db(species_value, "eco_dec"):
+    if uses_gapit_db(species_value, "eco_dec", selection=selection, sample=sample):
         files["pathotype"] = f"{base}/dec/pathotype.json"
-    if uses_gapit_db(species_value, "vpara_virulence"):
+    # VPA 的血清型占位始终进 summary（事实性 unavailable）；若用户选了 vpa_ok，
+    # collect_summary 会用 gapit 的 O/K 表型覆盖它。
+    if resolve_species(species_value) == "VPA":
         files["vpa_serotype"] = f"{base}/vpa/vpa_serotype.json"
+    if uses_gapit_db(
+        species_value, "vpara_virulence", selection=selection, sample=sample
+    ):
         files["vpa_virulence"] = f"{base}/vpara/virulence.json"
+    if selection is not None:
+        code = resolve_species(species_value)
+        if code is not None:
+            plan = selection.effective_gmlst(code, sample=sample)
+            if "tgmlst" in plan.modes:
+                files["tgmlst"] = f"{base}/typing/tgmlst.tsv"
     return files

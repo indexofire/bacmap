@@ -1,7 +1,8 @@
 # Configuration reference
 
-Configuration is **environment variables + one TOML file** (not YAML). Data paths are never
-derived from the source tree (ADR-03). Missing configuration means built-in defaults.
+Configuration is **environment variables + one TOML file** (not YAML), plus an optional YAML
+overlay for per-tool reference selection (§13). Data paths are never derived from the source tree
+(ADR-03). Missing configuration means built-in defaults.
 
 Template: [`config.example.toml`](https://github.com/indexofire/bacmap/blob/main/config.example.toml)
 in the repository root, or run:
@@ -49,6 +50,8 @@ export BACMAP_CONFIG="$PWD/config.toml"
 | `BACMAP_WEB_SECRET` | derived from token | HMAC key for session cookies |
 | `BACMAP_WEB_COOKIE_SECURE` | off | `1` adds `Secure` to cookies |
 | `BACMAP_LANG` | — | CLI display language override (`en`/`zh`); takes precedence over `[ui].language` |
+| `BACMAP_TOOL_SELECTION` | — | explicit `tool_selection.yaml` overlay path (§13) |
+| `BACMAP_DB_SELECTION` | — | legacy gapit-only overlay path (translated to `tool_selection.yaml`) |
 | `BACMAP_RESEARCH_PROFILE` | `research` | default governance profile for Research Workbench (`open-test`/`research`/`publication`) |
 | `BACMAP_DEBUG` | off | **development only**: explicit override of `[debug].enabled`; `1` enables, `0` disables. Disables Web auth/CSRF, plan confirmation, task approvals, gates, MCP Profile limits, Research claim/publication gates and sandbox fallback. D3/D4→cloud remains blocked. |
 | `BACMAP_BENCHMARK_DATA` | — | local public-data snapshot for research benchmarks; may be a dataset dir or a parent containing `bvbrc_kpn_meropenem`/`osf_n78q3` |
@@ -245,6 +248,7 @@ See [Data & identity](../guide/data.md) for column semantics, naming, collisions
 
 ```text
 $BACMAP_HOME/
+├── config/               # config.toml, optional tool_selection.yaml
 ├── data/                 # bacmap.sqlite, knowledge.sqlite
 ├── results/runs/<task_id>/...
 ├── workflows/bacmap/     # deployed DAG + samples.tsv
@@ -318,3 +322,63 @@ Docker is not supported. Without a backend, `mine` fails with `sandbox_unavailab
 Invalid or missing values fall back to `en` deterministically (same tolerance as `[debug]`).
 The setting affects CLI help, prompts and messages only — data, reports and JSON output are
 unaffected.
+
+## 13. Tool reference selection (`tool_selection.yaml`)
+
+`core/pathogens.yaml` is the packaged species→reference mapping and is **never edited by users**;
+local choices go into a YAML overlay so they survive upgrades:
+
+| Layer | Location |
+|---|---|
+| packaged defaults | `core/pathogens.yaml` (gapit databases, gmlst schemes) |
+| user/project overlay | `$BACMAP_HOME/config/tool_selection.yaml`, `BACMAP_TOOL_SELECTION`, the workflow `tool_selection` key, or `bacmap selection --selection PATH` |
+| runtime species verdict | `species/species_id.json` (gside; workflow only) |
+
+Overlay resolution: explicit path → `BACMAP_TOOL_SELECTION` → legacy `BACMAP_DB_SELECTION` →
+`$BACMAP_HOME/config/tool_selection.yaml` → `$BACMAP_HOME/config/db_selection.yaml`. The legacy
+file (`bacmap.db_selection/1`) is accepted as a gapit-only alias and flagged at load time.
+
+Schema `bacmap.tool_selection/1`:
+
+```yaml
+schema: bacmap.tool_selection/1
+defaults:                        # optional merge mode when an entry omits `mode`
+  gapit: {mode: extend}          # extend (default) | replace
+  gmlst: {mode: extend}
+species:
+  VPA:
+    gapit:
+      mode: extend               # registry defaults + listed databases
+      databases: [vpa_ok, vpa_pai]
+    gmlst:
+      mode: replace
+      modes: [mlst]              # mlst | cgmlst | wgmlst | tgmlst
+      schemes: {mlst: vparahaemolyticus_1}
+samples:
+  S42:
+    gapit: {databases: [vpa_ok]} # sample entry replaces the species list
+meta:                            # optional provenance written by `selection select`
+  generated_by: cli
+  generated_at: "2026-11-07T00:00:00+00:00"
+  approved_by: operator
+```
+
+Precedence is **sample > species > registry**. `gapit.databases` extends the registry list unless
+`mode: replace`; `gmlst.modes` and `gmlst.schemes` merge unless `mode: replace`. Unknown species
+codes, database names or scheme names are validation errors — nothing is guessed. A scheme is
+only accepted when the gmlst catalog knows it (and, with `--downloaded-only`, when it is cached).
+
+Inspect and write the overlay with the deterministic CLI; the pipeline never calls an LLM:
+
+```bash
+bacmap selection options --tool all --json   # catalog rows + current selection
+bacmap selection show --diff                 # effective mapping vs registry
+bacmap selection validate                    # unknown / undownloaded / mismatched entries
+bacmap selection select --tool gmlst --species VPA --modes mlst --schemes mlst=vparahaemolyticus_1
+bacmap db ...                                # gapit-only alias (--tool gapit)
+```
+
+`bacmap selection options --json` and the read-only MCP tool `bio_tool_selection_options` return
+the same option document, so an agent can propose a selection and a human approves it. Run records
+store `tool_selection_effective` and `tool_selection_sha256` (the legacy `db_selection_*` names
+remain readable).

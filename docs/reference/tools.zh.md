@@ -1,11 +1,11 @@
 # bacmap 工具参考
 
 
-`bacmap.tools.registry` 中的工具注册表是 bacmap 能力的唯一目录。每个条目是一个 `ToolSpec`，包含名称、版本、描述、效果与信任层。单一事实来源同时供给 MCP 服务器与调用工具处理器的各接口。本页记录全部 26 个已注册工具；它们当前都处于 0.1.0 版本。
+`bacmap.tools.registry` 中的工具注册表是 bacmap 能力的唯一目录。每个条目是一个 `ToolSpec`，包含名称、版本、描述、效果与信任层。单一事实来源同时供给 MCP 服务器与调用工具处理器的各接口。本页记录全部 27 个已注册工具；它们当前都处于 0.1.0 版本。
 
-每个工具都带有一种效果标签。`read` 工具查询已存储的结果。`compute` 工具运行分析或包装外部二进制程序，但不写入持久状态。`write` 工具会修改 GOM 或数据库，因此它们从不直接注册进 MCP。MCP 服务器暴露 22 个读/计算工具，以及任务工具 `bacmap_submit_task`、`bacmap_task_status`、`bacmap_task_result` 与 `bacmap_task_cancel`（v1.5.2），计划工具 `bacmap_create_plan`、`bacmap_revise_plan` 与 `bacmap_get_plan`，`bacmap_record_data`（仅 local-trusted，v1.8.4），以及 `bacmap_confirm_plan_locally`（stdio 对话框，v1.9.0）。任务只能通过任务提交，或在 bacmap CLI/Web 中确认的计划进入引擎；不存在由模型确认的工具。在只读模式（`bacmap start mcp --read-only`）下，连任务工具也不会注册。从 v1.5 起，每个 MCP 实例还会按其 **Profile** 裁剪（ADR-12/16）：默认的 `cloud` Profile 只暴露输出数据分级不高于 `cloud_max_data_class` 的读/算工具（默认 D1，因此只有 `bio_list_reference_genomes` 与 `bio_diagnose`；计划/任务/能力工具另行注册），而 `local-trusted`（管理员显式选择加入）暴露全部 22 个读/算工具。见[智能体与计划](../guide/agent-plans.zh.md)。
+每个工具都带有一种效果标签。`read` 工具查询已存储的结果。`compute` 工具运行分析或包装外部二进制程序，但不写入持久状态。`write` 工具会修改 GOM 或数据库，因此它们从不直接注册进 MCP。MCP 服务器暴露 23 个读/计算工具，以及任务工具 `bacmap_submit_task`、`bacmap_task_status`、`bacmap_task_result` 与 `bacmap_task_cancel`（v1.5.2），计划工具 `bacmap_create_plan`、`bacmap_revise_plan` 与 `bacmap_get_plan`，`bacmap_record_data`（仅 local-trusted，v1.8.4），以及 `bacmap_confirm_plan_locally`（stdio 对话框，v1.9.0）。任务只能通过任务提交，或在 bacmap CLI/Web 中确认的计划进入引擎；不存在由模型确认的工具。在只读模式（`bacmap start mcp --read-only`）下，连任务工具也不会注册。从 v1.5 起，每个 MCP 实例还会按其 **Profile** 裁剪（ADR-12/16）：默认的 `cloud` Profile 只暴露输出数据分级不高于 `cloud_max_data_class` 的读/算工具（默认 D1，因此只有 `bio_list_reference_genomes` 与 `bio_diagnose`；计划/任务/能力工具另行注册），而 `local-trusted`（管理员显式选择加入）暴露全部 23 个读/算工具。见[智能体与计划](../guide/agent-plans.zh.md)。
 
-信任层标记调用层拥有多少自主权：L1 是固定流水线，只能调用，不能改写；L2 是在沙箱中受控探索，并有人工复核；L3 是门之后的自由对话。26 个工具分为 9 个读、13 个计算与 4 个写。四个写工具是 `bio_analyze_pathogen`、`bio_generate_report`、`bio_add_lab_result` 与 `bio_add_metadata`。
+信任层标记调用层拥有多少自主权：L1 是固定流水线，只能调用，不能改写；L2 是在沙箱中受控探索，并有人工复核；L3 是门之后的自由对话。27 个工具分为 10 个读、13 个计算与 4 个写。四个写工具是 `bio_analyze_pathogen`、`bio_generate_report`、`bio_add_lab_result` 与 `bio_add_metadata`。
 
 ## 调用工具
 
@@ -57,6 +57,7 @@ MCP 客户端把单个 JSON 对象作为工具参数传入（形状与下文的 
 | bio_seq_ops | compute | 执行翻译、ORF 查找、k-mer 计数等序列操作 |
 | bio_seq_stats | compute | 计算序列文件的统计信息 |
 | bio_snp_tree | compute | 获取队列 SNP 树与两两 SNP 距离 |
+| bio_tool_selection_options | read | 列出按物种的 gapit 库与 gmlst 模式/scheme（应用用户覆盖层） |
 | bio_variant | compute | 对变异进行检出、过滤、查询、注释或构建一致性序列 |
 | bio_verify_result | compute | 对结果运行确定性验证，可选 NLI 反思 |
 
@@ -359,6 +360,20 @@ MCP 客户端把单个 JSON 对象作为工具参数传入（形状与下文的 
 获取队列级 SNP 系统发育树与两两距离矩阵。返回 Newick 树字符串、样本列表、SNP 位点数、缺失率与所有两两 SNP 距离。当用户询问遗传相关性、暴发簇、系统发育关系或样本间 SNP 距离时使用。SNP 距离解读阈值（0-5=暴发，6-15=可能相关）请阅读 MCP 提示词 bacmap_role_analyst。
 
 **参数**：无
+
+### bio_tool_selection_options
+
+版本 `v0.1.0` | 效果：`read` | 信任层：`L1`
+
+列出 gapit 与 gmlst 可按物种使用的参考数据，并应用用户的 `tool_selection.yaml` 覆盖层：gapit 库（kind、typing、installed、license、default/selected 标记）与 gmlst 分型模式/scheme（scheme_type、compute_type、downloaded、provider、default/selected 标记）。在提议 `tool_selection.yaml` 前使用；绝不臆造库名或 scheme 名。只读——写入选择仍由本地 CLI（`bacmap selection select`）或经确认的任务完成。
+
+**参数**
+
+- `tool`：`string`。`gapit | gmlst | all`（默认 `all`）。
+- `species`：`string`。可选的物种码/标签过滤（如 `VPA` 或 `V_parahaemolyticus`）；省略则返回全部物种。
+- `datadir`：`string`。可选的 gapit datadir（默认取 `GAPIT_DATADIR`）。
+- `selection_path`：`string`。可选的待检查 `tool_selection.yaml` 路径。
+- `include_remote_schemes`：`boolean`。是否包含尚未下载的 gmlst scheme（默认 `true`；设为 `false` 只看已缓存 scheme）。
 
 ### bio_variant
 

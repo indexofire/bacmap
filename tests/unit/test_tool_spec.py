@@ -47,7 +47,7 @@ class TestRegistryAccessors:
         from bacmap.tools import registry
 
         specs = registry.list_specs()
-        assert len(specs) == 26  # 元数据缺项会被静默丢弃——此处锁死数量
+        assert len(specs) == 27  # 元数据缺项会被静默丢弃——此处锁死数量
 
     def test_get_returns_spec(self):
         from bacmap.tools import registry
@@ -73,6 +73,15 @@ class TestRegistryAccessors:
         from bacmap.tools.spec import TrustLayer
 
         assert registry.by_trust_layer(TrustLayer.L1)
+
+    def test_tool_selection_options_is_read_only_d0(self):
+        from bacmap.tools import registry
+        from bacmap.tools.spec import DataClass, Effect, TrustLayer
+
+        spec = registry.get("bio_tool_selection_options")
+        assert spec.effect == Effect.READ
+        assert spec.trust_layer == TrustLayer.L1
+        assert spec.output_data_class == DataClass.D0
 
 
 class TestRegistrySelfCheck:

@@ -67,6 +67,27 @@ class TestAnalysisRun:
         conn.close()
         assert fin[0] is not None
 
+    def test_tool_selection_hash_recorded(self, tmp_path: Path, workflow_dir: Path, monkeypatch):
+        monkeypatch.setattr(runs, "probe_tool_versions", lambda tools: {})
+        selection = tmp_path / "tool_selection.yaml"
+        selection.write_text(
+            "schema: bacmap.tool_selection/1\n"
+            "species:\n"
+            "  VPA:\n"
+            "    gapit:\n"
+            "      databases: [vpa_ok]\n",
+            encoding="utf-8",
+        )
+        run = runs.create_run(
+            workflow="bacmap",
+            workflow_dir=workflow_dir,
+            strain_ids=[],
+            overrides={"tool_selection": str(selection)},
+            db_path=tmp_path / "runs.sqlite",
+        )
+        assert run.resolved_config["tool_selection_effective"] == str(selection)
+        assert run.resolved_config["tool_selection_sha256"] == runs.file_sha256(selection)
+
     def test_manifest_roundtrip(self, tmp_path: Path, workflow_dir: Path, monkeypatch):
         monkeypatch.setattr(runs, "probe_tool_versions", lambda tools: {})
         db = tmp_path / "runs.sqlite"

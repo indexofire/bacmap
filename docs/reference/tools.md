@@ -1,11 +1,11 @@
 # bacmap Tool Reference
 
 
-The tool registry in `bacmap.tools.registry` is the single catalog of what bacmap can do. Each entry is a `ToolSpec` with a name, version, description, effect, and trust layer. One source of truth feeds the MCP server and the interfaces that call tool handlers. This page documents all 26 registered tools; all currently sit at version 0.1.0.
+The tool registry in `bacmap.tools.registry` is the single catalog of what bacmap can do. Each entry is a `ToolSpec` with a name, version, description, effect, and trust layer. One source of truth feeds the MCP server and the interfaces that call tool handlers. This page documents all 27 registered tools; all currently sit at version 0.1.0.
 
-Every tool carries an effect label. `read` tools query stored results. `compute` tools run analysis or wrap external binaries without writing persistent state. `write` tools change the GOM or the database, and they are never registered into MCP directly. The MCP server exposes the 22 read/compute tools plus the task tools `bacmap_submit_task`, `bacmap_task_status`, `bacmap_task_result` and `bacmap_task_cancel` (v1.5.2), the plan tools `bacmap_create_plan`, `bacmap_revise_plan` and `bacmap_get_plan`, `bacmap_record_data` (local-trusted only, v1.8.4) and `bacmap_confirm_plan_locally` (stdio dialog, v1.9.0). Tasks reach the engine only through task submission or a plan confirmed in the bacmap CLI/Web; there is no model-confirm tool. In read-only mode (`bacmap start mcp --read-only`), even the task tools stay unregistered. From v1.5 each MCP instance is also filtered by its **profile** (ADR-12/16): the default `cloud` profile only exposes read/compute tools whose output data class is at or below `cloud_max_data_class` (D1 by default, so only `bio_list_reference_genomes` and `bio_diagnose`; the plan/task/capability tools are added separately), while `local-trusted` (an explicit administrator opt-in) exposes all 22 read/compute tools. See [Agents & plans](../guide/agent-plans.md).
+Every tool carries an effect label. `read` tools query stored results. `compute` tools run analysis or wrap external binaries without writing persistent state. `write` tools change the GOM or the database, and they are never registered into MCP directly. The MCP server exposes the 23 read/compute tools plus the task tools `bacmap_submit_task`, `bacmap_task_status`, `bacmap_task_result` and `bacmap_task_cancel` (v1.5.2), the plan tools `bacmap_create_plan`, `bacmap_revise_plan` and `bacmap_get_plan`, `bacmap_record_data` (local-trusted only, v1.8.4) and `bacmap_confirm_plan_locally` (stdio dialog, v1.9.0). Tasks reach the engine only through task submission or a plan confirmed in the bacmap CLI/Web; there is no model-confirm tool. In read-only mode (`bacmap start mcp --read-only`), even the task tools stay unregistered. From v1.5 each MCP instance is also filtered by its **profile** (ADR-12/16): the default `cloud` profile only exposes read/compute tools whose output data class is at or below `cloud_max_data_class` (D1 by default, so only `bio_list_reference_genomes` and `bio_diagnose`; the plan/task/capability tools are added separately), while `local-trusted` (an explicit administrator opt-in) exposes all 23 read/compute tools. See [Agents & plans](../guide/agent-plans.md).
 
-Trust layers mark how much autonomy the calling layer has: L1 is the fixed pipeline, invoke only, no rewriting; L2 is controlled exploration in a sandbox with human review; L3 is free conversation behind gates. The 26 tools split into 9 read, 13 compute, and 4 write. The four write tools are `bio_analyze_pathogen`, `bio_generate_report`, `bio_add_lab_result`, and `bio_add_metadata`.
+Trust layers mark how much autonomy the calling layer has: L1 is the fixed pipeline, invoke only, no rewriting; L2 is controlled exploration in a sandbox with human review; L3 is free conversation behind gates. The 27 tools split into 10 read, 13 compute, and 4 write. The four write tools are `bio_analyze_pathogen`, `bio_generate_report`, `bio_add_lab_result`, and `bio_add_metadata`.
 
 ## Calling a tool
 
@@ -57,6 +57,7 @@ exception type only; full details stay in logs.
 | bio_seq_ops | compute | Run sequence operations such as translation, ORF finding, and k-mer counting |
 | bio_seq_stats | compute | Compute statistics for a sequence file |
 | bio_snp_tree | compute | Retrieve the cohort SNP tree and pairwise SNP distances |
+| bio_tool_selection_options | read | List per-species gapit databases and gmlst modes/schemes with the user overlay applied |
 | bio_variant | compute | Call, filter, query, annotate, or build consensus from variants |
 | bio_verify_result | compute | Run deterministic verification on results, with optional NLI reflection |
 
@@ -359,6 +360,20 @@ Version `v0.1.0` | Effect: `compute` | Trust layer: `L1`
 Retrieve the cohort-level SNP phylogenetic tree and pairwise distance matrix. Returns Newick tree string, sample list, SNP site count, missing rate, and all pairwise SNP distances. Use this when the user asks about genetic relatedness, outbreak clusters, phylogenetic relationships, or SNP distances between samples. For SNP distance interpretation thresholds (0-5=outbreak, 6-15=possibly related), read the MCP prompt bacmap_role_analyst.
 
 **Parameters**: none
+
+### bio_tool_selection_options
+
+Version `v0.1.0` | Effect: `read` | Trust layer: `L1`
+
+List the per-species reference data available to gapit and gmlst, with the user's `tool_selection.yaml` overlay applied: gapit databases (kind, typing, installed, license, default/selected flags) and gmlst typing modes/schemes (scheme_type, compute_type, downloaded, provider, default/selected flags). Use it before proposing a `tool_selection.yaml`; never invent database or scheme names. Read-only — writing the selection stays with the local CLI (`bacmap selection select`) or a confirmed task.
+
+**Parameters**
+
+- `tool`: `string`. `gapit | gmlst | all` (default `all`).
+- `species`: `string`. Optional species code/label to filter (e.g. `VPA` or `V_parahaemolyticus`); omit for all species.
+- `datadir`: `string`. Optional gapit datadir (defaults to `GAPIT_DATADIR`).
+- `selection_path`: `string`. Optional `tool_selection.yaml` path to inspect.
+- `include_remote_schemes`: `boolean`. Include gmlst schemes not downloaded yet (default `true`; set `false` to show only cached schemes).
 
 ### bio_variant
 

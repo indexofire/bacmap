@@ -40,7 +40,7 @@ Lookup material for exact names, flags, payloads and defaults.
 
     ---
 
-    All 26 `bio_*` tools, effects, data classes and parameters.
+    All 27 `bio_*` tools, effects, data classes and parameters.
 
     [Tools](tools.md)
 

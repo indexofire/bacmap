@@ -180,6 +180,34 @@ def load_ref_databases(refs_dir: Path) -> list[RefDatabase]:
     return out
 
 
+def _resolve_tool_selection(
+    resolved: dict[str, Any], workflow_dir: Path
+) -> Path | None:
+    """Locate the optional tool_selection overlay for the run record.
+
+    Mirrors the Snakefile precedence: explicit ``tool_selection`` (or legacy
+    ``db_selection``) config → new/legacy env vars → new/legacy config file.
+    """
+    raw = str(
+        resolved.get("tool_selection") or resolved.get("db_selection") or ""
+    ).strip()
+    project_root = Path(
+        str(resolved.get("project_root") or workflow_dir.parents[1])
+    ).expanduser()
+    if raw:
+        path = Path(raw).expanduser()
+        return path if path.is_absolute() else project_root / path
+    for env_name in ("BACMAP_TOOL_SELECTION", "BACMAP_DB_SELECTION"):
+        env_value = os.environ.get(env_name, "").strip()
+        if env_value:
+            return Path(env_value).expanduser()
+    for name in ("tool_selection.yaml", "db_selection.yaml"):
+        candidate = project_root / "config" / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def create_run(
     workflow: str,
     workflow_dir: Path,
@@ -191,8 +219,15 @@ def create_run(
     refs_dir: Path | None = None,
 ) -> AnalysisRun:
     from bacmap.config import BACMAP_HOME, REFS_DIR, env_lock_path
+    from bacmap.core.tool_selection import file_hash, is_legacy_path
 
     resolved = resolve_config(workflow_dir, overrides)
+    selection_path = _resolve_tool_selection(resolved, workflow_dir)
+    if selection_path is not None and selection_path.is_file():
+        resolved["tool_selection_effective"] = str(selection_path)
+        resolved["tool_selection_sha256"] = file_hash(selection_path)
+        if is_legacy_path(selection_path):
+            resolved["tool_selection_legacy"] = True
 
     # 随机种子（ADR-18）：iqtree 固定种子为基线，config.yaml 的 seeds 段可覆盖/扩展。
     seeds: dict[str, int] = {"iqtree": int(resolved.get("iqtree_seed", 42))}

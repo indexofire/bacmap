@@ -5,7 +5,8 @@
 - **`start`**，启动一个接管终端或绑定端口的长驻界面：
   `bacmap start mcp|web|tui|console`；各界面保留自己的参数；
 - **命令**，执行一次操作后退出：`overview`、`task`、`plan`、`record`、`run`、
-  `gom`、`isolate`、`sample`、`search`、`doctor`、`backup`、`restore`、`results`、`events`。
+  `gom`、`isolate`、`sample`、`search`、`selection`、`doctor`、`backup`、`restore`、
+  `results`、`events`。
 
 `--version` 打印程序版本。
 
@@ -184,6 +185,41 @@ P2 增加完整对象生命周期：Study → 冻结 Cohort → 冻结 AnalysisP
 Claim 审核 → `publication-readiness`（G0–G3）。`--members`、`--spec`、`--rules`、
 `--evidence`、`--outcome` 接受内联 JSON 或 JSON 文件；`cohort create` 也接受完整的
 `cohort_members.json`（读取其中的 `members` 数组）。
+
+## `bacmap selection`
+
+```text
+bacmap selection path [--selection PATH] [--home H] [--json]
+bacmap selection options [--tool gapit|gmlst|all] [--species CODE] [--datadir DIR]
+                         [--selection PATH] [--downloaded-only] [--home H] [--json]
+bacmap selection show [--species CODE] [--selection PATH] [--diff] [--home H] [--json]
+bacmap selection validate [PATH] [--datadir DIR] [--downloaded-only] [--home H] [--json]
+bacmap selection select [--tool gapit|gmlst|all] [--species CODE] [--databases A,B]
+                        [--modes mlst,cgmlst] [--schemes mlst=NAME,cgmlst=NAME]
+                        [--from-json FILE] [--from-yaml FILE] [--selection PATH]
+                        [--mode extend|replace] [--yes] [--dry-run] [--home H] [--json]
+```
+
+查看与编辑 `tool_selection.yaml` 覆盖层（见
+[配置 §13](configuration.zh.md#13-tool_selectionyaml)）：
+
+- `path` 显示实际解析到的覆盖层路径（显式 → 环境变量 → home；不会创建文件）；
+- `options` 合并实时 catalog（gapit `db list --json`、gmlst `scheme list -f json`）与当前
+  选择，输出一个 JSON 文档——与只读 MCP 工具 `bio_tool_selection_options` 返回的文档相同；
+- `show` 显示生效的物种映射；`--diff` 与 registry 默认值比较；
+- `validate` 拒绝未知库/scheme、mode/scheme 类型不匹配、未下载 scheme、cgmlst/wgmlst
+  冲突、对读段使用 cluster 库以及 license 违规；校验失败退出码 `1`；
+- `select` 通过交互、命令行参数或 `--from-json`/`--from-yaml` 构造选择，校验后原子写入
+  （`.bak` 保留上一份文档）；`--dry-run` 只打印不写盘。
+
+`bacmap db ...` 是固定 `--tool gapit` 的同一套解析器，保留为 gapit-only 别名：
+`bacmap db path|options|show|validate|select`。
+
+```bash
+bacmap selection options --tool all --json | jq '.species[0]'
+bacmap selection show --diff
+bacmap selection select --tool gapit --species VPA --databases vpa_ok,vpa_pai
+```
 
 ## `bacmap config`
 

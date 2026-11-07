@@ -892,3 +892,46 @@ LIST_REFERENCE_GENOMES = {
         },
     },
 }
+
+TOOL_SELECTION_OPTIONS = {
+    "name": "bio_tool_selection_options",
+    "description": (
+        "List per-tool reference data for each species: gapit databases and "
+        "gmlst typing modes/schemes, with the user's tool_selection overlay "
+        "applied. Rows carry kind/typing/installed/license for gapit and "
+        "scheme_type/downloaded/provider for gmlst, plus default/selected "
+        "flags. Use this before proposing a tool_selection.yaml; never invent "
+        "database or scheme names. Read-only."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "tool": {
+                "type": "string",
+                "description": "gapit | gmlst | all (default all).",
+            },
+            "species": {
+                "type": "string",
+                "description": (
+                    "Optional species code/label to filter (e.g. VPA or "
+                    "V_parahaemolyticus); omit for all species."
+                ),
+            },
+            "datadir": {
+                "type": "string",
+                "description": "Optional gapit datadir (defaults to GAPIT_DATADIR).",
+            },
+            "selection_path": {
+                "type": "string",
+                "description": "Optional tool_selection.yaml path to inspect.",
+            },
+            "include_remote_schemes": {
+                "type": "boolean",
+                "description": (
+                    "Include gmlst schemes that are not downloaded yet "
+                    "(default true; set false to show only cached schemes)."
+                ),
+            },
+        },
+    },
+}

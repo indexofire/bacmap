@@ -5,6 +5,38 @@
 
 ## [未发布]
 
+### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
+
+#### 新增
+- **`tool_selection.yaml` 用户覆盖层**：`core/pathogens.yaml` 继续作为包内默认值，
+  用户/项目选择写入 `$BACMAP_HOME/config/tool_selection.yaml`（schema `bacmap.tool_selection/1`），
+  按工具分节：`gapit`（`mode`/`databases`）与 `gmlst`（`mode`/`modes`/`schemes`），
+  支持 `replace`/`extend`、物种级与单样本覆盖（优先级 sample > species > registry）。
+  旧 `db_selection.yaml`（`bacmap.db_selection/1`）自动翻译为 gapit-only 并告警。
+- **`bacmap selection options|select|show|validate`**：统一查看/编辑 gapit 库与 gmlst
+  模式/scheme；`bacmap db ...` 保留为 gapit-only 别名。校验未知库名/scheme、
+  mode/scheme 类型不匹配、未下载 scheme、cgmlst/wgmlst 冲突、license、cluster-on-reads。
+- **只读 MCP 工具 `bio_tool_selection_options`**（L1/READ/D0）：AI 获取同一份选项文档；
+  写路径仍是本地 CLI 或任务，AI 不直接落盘。
+- **gmlst 覆盖层接线**：`typing_mlst`/`typing_cgmlst` 从 `effective_gmlst` 取 mode/scheme，
+  未选时写 `N/A`（不再用 `salmonella_2`/`ecoli_2` 兜底）；新增 `typing_tgmlst` 规则；
+  cgMLST cohort 组要求组内 scheme 一致，混合 scheme 的组跳过。
+- **cluster 库分流**：`run_gapit_typing.py` 按 catalog `kind` 选择 `gapit screen --format json`
+  （cluster，typing 已在 screen 内完成）或 `screen` + `gapit typing`（gene），绝不对 cluster TSV
+  跑 `gapit typing`。
+- **VPA O/K 表型**：`vpa_ok` 的 `o_group`/`k_group`/`serotype` 并入 `steps.vpa_serotype`
+  （占位规则保留兼容；gapit 结果优先，带 `source: gapit:vpa_ok`）。
+
+#### 变更
+- `gapit_typing` 规则新增 `species_id.json` 输入：DAG 解析期合并用户覆盖层，运行时由 gside
+  verdict 选物种码；`Unknown`/低置信度不路由物种特异库（通用 AMR/VF 仍运行）。
+- `pathogens.yaml` 默认值不变（VPA 仍为 `vpara_virulence`）；`vpa_ok`/`vpa_pai` 通过覆盖层按需启用。
+- 运行记录新增 `tool_selection_effective` 与 `tool_selection_sha256`（旧 `db_selection_*` 兼容读取）。
+- 文档双语同步：`docs/reference/configuration`（新增 §13）、`docs/reference/cli`、
+  `docs/reference/tools`、`docs/reference/mcp`、README；架构冻结文档新增 v1.10.8 修订记录
+  （ADR-03 扩展）。
+- 测试基线：1703 → 1761（新增 tool_selection 模型/校验/CLI/MCP 工具与工作流路由用例）。
+
 ### CLI：长驻界面统一为 `bacmap start <iface>` + 显示语言设置
 - **破坏性变更**：顶层接口命令 `bacmap mcp|web|tui|console` 移除，统一为
   `bacmap start mcp|web|tui|console`（不留别名）。一次性命令（overview/task/

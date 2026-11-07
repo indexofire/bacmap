@@ -52,3 +52,33 @@ class TestSummarizeGapitTyping:
             out = summarize(payload)
             assert isinstance(out["databases"], dict)
             assert out["serogroup"] == ""
+
+
+class TestClusterPreservation:
+    def test_cluster_fields_pass_through(self):
+        out = summarize(
+            _payload(
+                "ran",
+                {
+                    "vpa_ok": {
+                        "kind": "cluster",
+                        "status": "ran",
+                        "best_locus": "OL3",
+                        "type": "O3",
+                        "phenotype": "O3:K6",
+                        "phenotypes": {
+                            "o_group": {"phenotype": "O3", "confidence": "high"},
+                            "k_group": {"phenotype": "K6", "confidence": "high"},
+                        },
+                        "loci_count": 2,
+                        "raw_schema": "gapit.cluster/2",
+                    }
+                },
+            )
+        )
+        entry = out["databases"]["vpa_ok"]
+        assert entry["kind"] == "cluster"
+        assert entry["phenotype"] == "O3:K6"
+        assert entry["phenotypes"]["o_group"]["phenotype"] == "O3"
+        assert entry["best_locus"] == "OL3"
+        assert entry["loci_count"] == 2
