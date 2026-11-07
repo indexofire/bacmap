@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Cohort builder · {{ study.study_id }} · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/research">研究</a><span class="crumbs__sep">/</span><a class="crumbs__link" href="/research/studies/{{ study.study_id }}">{{ study.study_id }}</a><span class="crumbs__sep">/</span><span class="crumbs__here">Cohort builder</span></nav>
+<header class="detailhead">
+  <h1 class="detailhead__title">Cohort builder</h1>
+  <p class="detailhead__lead">{{ study.question }}</p>
+  <p class="detailhead__id mono">{{ study.study_id }} · D{{ study.data_class }}</p>
+</header>
+
+{% if error %}<p class="card__lead" role="alert"><strong>{{ error }}</strong></p>{% endif %}
+
+<form method="post" action="/research/studies/{{ study.study_id }}/cohorts/builder">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+
+  <section class="card">
+    <div class="card__head"><h2 class="card__title">Cohort 信息</h2></div>
+    <div class="field"><label class="field__label" for="cb-name">名称</label>
+      <input class="field__control" id="cb-name" name="name" value="{{ name }}" placeholder="discovery"></div>
+    <div class="field"><label class="field__label" for="cb-rules">rules JSON</label>
+      <textarea class="field__control" id="cb-rules" name="rules" rows="2">{{ rules_raw }}</textarea></div>
+  </section>
+
+  {% if runs %}
+    {% for r in runs %}
+    <section class="card">
+      <div class="card__head">
+        <h2 class="card__title mono">{{ r.run_id }}</h2>
+        <p class="card__lead">{{ r.started_at[:19] }} · {{ r.strain_ids|length }} strains</p>
+      </div>
+      <div class="membergrid">
+        {% for sid in r.strain_ids %}
+        <label class="membercheck">
+          <input type="checkbox" name="member" value="{{ r.run_id }}|{{ sid }}"
+                 {% if (r.run_id ~ '|' ~ sid) in selected %}checked{% endif %}>
+          <span class="mono">{{ sid }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+  {% else %}
+  <section class="card"><p class="card__lead">还没有 run。先完成一次分析，或使用研究请求创建。</p></section>
+  {% endif %}
+
+  <section class="card">
+    <div class="card__head"><h2 class="card__title">操作</h2></div>
+    <p class="card__lead">先预览重复成员与缺失 run；通过后再创建 Cohort。</p>
+    <div class="form__actions">
+      <button class="btn" type="submit" name="action" value="preview">预览</button>
+      <button class="btn btn--primary" type="submit" name="action" value="create">创建 Cohort</button>
+    </div>
+  </section>
+</form>
+
+{% if preview %}
+<section class="card">
+  <div class="card__head"><h2 class="card__title">预检结果</h2></div>
+  <table class="table">
+    <tbody>
+      <tr><th>成员</th><td>{{ preview.n_members }}</td></tr>
+      <tr><th>去重 isolate</th><td>{{ preview.n_isolates }}</td></tr>
+      <tr><th>dataset</th><td>{{ preview.n_datasets }}</td></tr>
+      <tr><th>状态</th><td><strong>{{ '通过' if preview.ok else '未通过' }}</strong></td></tr>
+      <tr><th>重复 isolate</th><td>{{ preview.duplicate_isolates | join(', ') or '—' }}</td></tr>
+      <tr><th>重复 dataset</th><td>{{ preview.duplicate_datasets | join(', ') or '—' }}</td></tr>
+      <tr><th>缺失 run</th><td>{{ preview.missing_runs | join(', ') or '—' }}</td></tr>
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

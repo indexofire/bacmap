@@ -31,6 +31,7 @@ from bacmap.store import runs as runs_store
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 
 _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+_EMPTY_MEMBER_FORM = Form(default=[])
 
 
 def _status(code: str) -> int:
@@ -205,6 +206,7 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     _artifact_routes(app, service)
     _package_routes(app, engine, objects)
     _request_routes(app, requests)
+    _cohort_builder_routes(app, engine, objects)
 
 
 def _json_field(raw: str, what: str) -> Any:
@@ -438,6 +440,119 @@ def _package_routes(
             archive,
             media_type="application/zip",
             filename=f"{study_id}_submission.zip",
+        )
+
+
+def _members_from_form(values: list[str]) -> list[dict[str, str]]:
+    members: list[dict[str, str]] = []
+    for value in values:
+        if "|" not in value:
+            continue
+        run_id, isolate_id = value.split("|", 1)
+        if run_id and isolate_id:
+            members.append({"isolate_id": isolate_id, "run_id": run_id})
+    return members
+
+
+def _cohort_builder_routes(
+    app: FastAPI, engine: DbosTaskEngine, objects: ResearchObjectService
+) -> None:
+    def _render(
+        request: Request,
+        study_id: str,
+        *,
+        members: list[dict[str, str]] | None = None,
+        name: str = "",
+        rules_raw: str = "{}",
+        preview: dict[str, Any] | None = None,
+        error: str = "",
+    ) -> HTMLResponse:
+        study = objects.get_study(study_id)
+        selected = {
+            f"{member.get('run_id', '')}|{member.get('isolate_id', '')}"
+            for member in (members or [])
+        }
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "research_cohort_builder.html",
+            {
+                "study": study,
+                "runs": runs_store.list_runs(engine.home / "runs.sqlite", 50),
+                "selected": selected,
+                "name": name,
+                "rules_raw": rules_raw,
+                "preview": preview,
+                "error": error,
+            },
+        )
+
+    @app.get(
+        "/research/studies/{study_id}/cohorts/builder", response_class=HTMLResponse
+    )
+    def cohort_builder(request: Request, study_id: str) -> HTMLResponse:
+        try:
+            return _render(request, study_id)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.post(
+        "/research/studies/{study_id}/cohorts/builder", response_class=HTMLResponse
+    )
+    def cohort_builder_submit(
+        request: Request,
+        study_id: str,
+        name: str = Form(""),
+        rules: str = Form("{}"),
+        member: list[str] = _EMPTY_MEMBER_FORM,
+        action: str = Form("preview"),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        members = _members_from_form(member)
+        try:
+            rules_obj = _json_field(rules, "rules")
+        except HTTPException as exc:
+            return _render(
+                request,
+                study_id,
+                members=members,
+                name=name,
+                rules_raw=rules,
+                error=str(exc.detail),
+            )
+        if not members:
+            return _render(
+                request,
+                study_id,
+                members=members,
+                name=name,
+                rules_raw=rules,
+                error="至少选择一个样本",
+            )
+        preview = objects.preview_cohort(study_id, members, rules_obj)
+        if action == "create":
+            if not preview["ok"]:
+                return _render(
+                    request,
+                    study_id,
+                    members=members,
+                    name=name,
+                    rules_raw=rules,
+                    preview=preview,
+                    error="预检未通过：请先处理重复成员或缺失 run",
+                )
+            objects.create_cohort(study_id, members, rules_obj, name, "web")
+            return RedirectResponse(
+                f"/research/studies/{study_id}", status_code=303
+            )
+        return _render(
+            request,
+            study_id,
+            members=members,
+            name=name,
+            rules_raw=rules,
+            preview=preview,
         )
 
 

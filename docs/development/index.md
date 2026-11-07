@@ -15,7 +15,7 @@ Never use the system Python for tests: `pixi run -e dev test` (without `-e dev`,
 back to a Python without DBOS).
 
 ```bash
-pixi run -e dev test          # pytest; current baseline 1831 passed
+pixi run -e dev test          # pytest; current baseline 1834 passed
 pixi run -e dev lint          # ruff (src + tests)
 pixi run -e dev typecheck     # mypy on src/bacmap
 pixi run -e dev contracts     # import-linter (5 contracts)
@@ -154,7 +154,7 @@ Guidelines:
   release decision.
 - Frozen design revision: the title and revision table in
   `docs/concepts/frozen-design.zh.md` (v1.10.0), independent of the program version.
-- Test baseline: `AGENTS.md` rule 7 (currently 1831).
+- Test baseline: `AGENTS.md` rule 7 (currently 1834).
 
 ## 10. Commit checklist
 

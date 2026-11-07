@@ -87,7 +87,9 @@ blockers；`ready=true` 仍需人工评审。
    manifest，以及带 SHA-256 的可下载产物；
 4. Study 页显示 G0–G3、带缩略图的关联 session、STROBE 草案（met/partial/missing）和
    投稿包入口；
-5. 投稿包页显示 manifest、checklist、文件与数据/代码可用性，并提供 ZIP 下载。
+5. Study 页还提供 **Cohort builder**：用复选框选择 run/样本，预览重复 isolate/dataset 与
+   缺失 run，然后直接创建 cohort，不必手写 members JSON；
+6. 投稿包页显示 manifest、checklist、文件与数据/代码可用性，并提供 ZIP 下载。
 
 自然语言研究指令由外部 agent 经 MCP 处理（Pi/Hermes/DSH）；agent 可读取研究对象并提议
 下一步，写入目前仍在 Web/CLI/API。Web 保持为人工审核与结果查看界面。

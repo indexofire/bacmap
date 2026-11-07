@@ -220,3 +220,63 @@ def test_request_inbox_and_approval(web):
     assert reviewed.status.value == "approved"
     assert reviewed.study_id
     assert reviewed.session_id
+
+
+def test_cohort_builder_preview_and_create(web):
+    client, _, study_id, _ = web
+    page = client.get(f"/research/studies/{study_id}/cohorts/builder")
+    assert page.status_code == 200
+    assert "Cohort builder" in page.text
+    assert "run-1" in page.text
+    assert "S00" in page.text
+    preview = client.post(
+        f"/research/studies/{study_id}/cohorts/builder",
+        data={
+            "name": "builder-cohort",
+            "rules": "{}",
+            "member": ["run-1|S00", "run-1|S01"],
+            "action": "preview",
+        },
+    )
+    assert preview.status_code == 200
+    assert "预检结果" in preview.text
+    assert "通过" in preview.text
+    created = client.post(
+        f"/research/studies/{study_id}/cohorts/builder",
+        data={
+            "name": "builder-cohort",
+            "rules": "{}",
+            "member": ["run-1|S00", "run-1|S01"],
+            "action": "create",
+        },
+        follow_redirects=False,
+    )
+    assert created.status_code == 303
+    study_page = client.get(f"/research/studies/{study_id}").text
+    assert "builder-cohort" in study_page
+
+
+def test_cohort_builder_blocks_duplicates(web):
+    client, _, study_id, _ = web
+    duplicate = client.post(
+        f"/research/studies/{study_id}/cohorts/builder",
+        data={
+            "name": "dup",
+            "rules": "{}",
+            "member": ["run-1|S00", "run-1|S00"],
+            "action": "create",
+        },
+    )
+    assert duplicate.status_code == 200
+    assert "预检未通过" in duplicate.text
+    assert "S00" in duplicate.text
+
+
+def test_cohort_builder_requires_members(web):
+    client, _, study_id, _ = web
+    response = client.post(
+        f"/research/studies/{study_id}/cohorts/builder",
+        data={"name": "empty", "rules": "{}", "member": [], "action": "preview"},
+    )
+    assert response.status_code == 200
+    assert "至少选择一个样本" in response.text

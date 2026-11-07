@@ -5,6 +5,14 @@
 
 ## [未发布]
 
+### Cohort builder（Web）
+
+- Study 页新增 Cohort builder：从 `runs.sqlite` 选择 run/样本，复选框生成 members；
+- 创建前预览重复 isolate/dataset、缺失 run、成员/去重计数；预检不通过时阻止创建；
+- 支持 cohort 名称与 rules JSON；创建后回到 Study 页；
+- 保留原有 members JSON 表单作为高级兜底。
+- 测试基线：1831 → 1834。
+
 ### 研究请求（Agent → 人）与 Web 收件箱
 
 - 新增 `bacmap.research_request` 草案：MCP `bacmap_research_request` 只写
@@ -91,7 +99,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1831（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1834（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 

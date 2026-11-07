@@ -929,3 +929,21 @@ code {
   gap: var(--sp-1);
   margin-bottom: var(--sp-2);
 }
+
+.membergrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.membercheck {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-raise);
+  font-size: var(--fs-mono);
+}

@@ -90,7 +90,10 @@ Run `bacmap start web` and open **研究 / Research**. The Web is the primary re
    `FigureSpec`, the custom-figure provenance manifest and downloadable artifacts with SHA-256;
 4. the Study page shows G0–G3, linked sessions with figure thumbnails, the STROBE draft
    (met/partial/missing) and links to the submission package;
-5. the package page shows the manifest, checklist, files and data/code availability, and offers
+5. the Study page also links to the **Cohort builder**: select runs/samples with checkboxes,
+   preview duplicate isolates/datasets and missing runs, then create the cohort without hand-
+   writing members JSON;
+6. the package page shows the manifest, checklist, files and data/code availability, and offers
    a ZIP download.
 
 Natural-language research instructions are handled by an external agent over MCP (Pi/Hermes/
