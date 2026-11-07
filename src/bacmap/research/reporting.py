@@ -87,6 +87,7 @@ class SubmissionPackage(BaseModel):
     data_availability: str
     code_availability: str
     checklist_review: dict[str, Any] = Field(default_factory=dict)
+    analyses: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def _sha256(path: Path) -> str:
@@ -385,6 +386,7 @@ def build_submission_package(
         claims = store.list_claims(study_id)
         experiments = store.list_experiments(study_id)
         sessions = store.list_sessions_by_study(study_id)
+        analyses = store.list_analyses(study_id, limit=500)
 
     if checklist is None:
         checklist = build_checklist(study, cohorts, plans, claims, experiments, sessions)
@@ -411,6 +413,38 @@ def build_submission_package(
                         sha256=_sha256(dest),
                     )
                 )
+
+    supplementary_dir = target / "supplementary"
+    supplementary_dir.mkdir(exist_ok=True)
+    analyses_json = supplementary_dir / "analyses.json"
+    analyses_json.write_text(
+        json.dumps(
+            [item.model_dump(mode="json") for item in analyses],
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    analyses_tsv = supplementary_dir / "analyses.tsv"
+    tsv_lines = [
+        "analysis_id\tanalysis_type\ttitle\tresult_sha256\tcreated_at"
+    ]
+    tsv_lines += [
+        f"{item.analysis_id}\t{item.analysis_type}\t{item.title}\t"
+        f"{item.result_sha256}\t{item.created_at}"
+        for item in analyses
+    ]
+    analyses_tsv.write_text("\n".join(tsv_lines) + "\n", encoding="utf-8")
+    for path in (analyses_json, analyses_tsv):
+        files.append(
+            PackageFile(
+                kind="supplementary",
+                source=str(path),
+                path=str(path),
+                sha256=_sha256(path),
+            )
+        )
 
     checklist_json = target / "strobe_checklist.json"
     checklist_json.write_text(
@@ -448,6 +482,16 @@ def build_submission_package(
         files=files,
         blockers=blockers,
         checklist_review=dict(checklist_review or {}),
+        analyses=[
+            {
+                "analysis_id": item.analysis_id,
+                "analysis_type": item.analysis_type,
+                "title": item.title,
+                "result_sha256": item.result_sha256,
+                "created_at": item.created_at,
+            }
+            for item in analyses
+        ],
         data_availability=(
             "Data are local; availability must be decided by the human (D0-D2 only for export)."
         ),

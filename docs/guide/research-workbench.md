@@ -585,7 +585,9 @@ The package contains:
   availability statements;
 - `strobe_checklist.json` / `strobe_checklist.md` — deterministic STROBE draft with
   met/partial/missing items and evidence IDs;
-- `artifacts/<session_id>/...` — session figures, reports and manuscripts copied with SHA-256.
+- `artifacts/<session_id>/...` — session figures, reports and manuscripts copied with SHA-256;
+- `supplementary/analyses.json` + `analyses.tsv` — persisted analysis results with hashes;
+  the manifest also carries an `analyses` summary list.
 
 The checklist is a draft, not a publication approval. Narrative items (abstract, discussion,
 limitations, generalisability, funding/conflicts) remain `missing` until a human completes them.

@@ -541,7 +541,9 @@ bacmap research package <study_id> --out ./submission --json
 - `submission_manifest.json`——研究、发表门、blocker、文件 hash、数据/代码可用性声明；
 - `strobe_checklist.json` / `strobe_checklist.md`——确定性 STROBE 草案，含 met/partial/
   missing 与 evidence ID；
-- `artifacts/<session_id>/...`——会话图片、报告、论文草案，带 SHA-256 复制。
+- `artifacts/<session_id>/...`——会话图片、报告、论文草案，带 SHA-256 复制；
+- `supplementary/analyses.json` + `analyses.tsv`——持久化分析结果及 hash；manifest 同时
+  包含 `analyses` 摘要列表。
 
 清单只是草案，不是发表批准。叙述性条目（摘要、讨论、局限性、外推性、资助/利益冲突）在
 人工完成前保持 `missing`。门通过是必要条件，不是充分条件。

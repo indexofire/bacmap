@@ -9,6 +9,12 @@
 
 ### Research 证据链（自 feat/agent-research-bridge 并入）
 
+### 投稿包导出分析结果（自 feat/agent-research-bridge 并入）
+
+- 投稿包新增 `supplementary/analyses.json` 与 `analyses.tsv`，包含 Study 下所有
+  `research_analyses` 结果与 hash；manifest 增加 `analyses` 摘要列表。
+- 投稿包详情页显示 Supplementary analyses 表。
+
 ### 分析结果对象化（自 feat/agent-research-bridge 并入）
 
 - 新增 migration 9 `research_analyses`：保存 analysis_id、类型、输入路径 + SHA-256、

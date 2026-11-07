@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from bacmap.research.analyses import ResearchAnalysisService
 from bacmap.research.packages import ResearchPackageService
 from bacmap.research.service import ResearchObjectService
 
@@ -48,3 +49,24 @@ def test_unknown_study_and_package(study):
         svc.build("study-nope")
     with pytest.raises(ValueError, match="no such submission package"):
         svc.get_package("pkg-nope")
+
+
+def test_package_includes_supplementary_analyses(study):
+    item, home = study
+    ResearchAnalysisService(home).save(
+        item.study_id,
+        "logistic",
+        {"n": 20, "odds_ratio": 1.5},
+        title="supplementary logistic",
+        params={"outcome": "outcome"},
+        actor="t",
+    )
+    record = ResearchPackageService(home).build(item.study_id, actor="t")
+    manifest = ResearchPackageService(home).load_manifest(record)
+    assert manifest["analyses"][0]["analysis_type"] == "logistic"
+    supplementary = [f for f in manifest["files"] if f["kind"] == "supplementary"]
+    assert {Path(f["path"]).name for f in supplementary} == {
+        "analyses.json",
+        "analyses.tsv",
+    }
+    assert (Path(record.path) / "supplementary" / "analyses.tsv").is_file()

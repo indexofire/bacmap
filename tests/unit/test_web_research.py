@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 import bacmap.tasks.engine.dbos_engine as eng
 from bacmap.interfaces.web import create_app
+from bacmap.research.analyses import ResearchAnalysisService
 from bacmap.research.checklist import ChecklistService
 from bacmap.research.models import CreateSessionRequest, ResearchProfile
 from bacmap.research.service import (
@@ -522,3 +523,19 @@ def test_phylo_analysis_saved_to_study(web):
     assert "已保存分析" in response.text
     analyses = client.get(f"/research/studies/{study_id}/analyses").text
     assert "phylo" in analyses
+
+
+def test_package_page_shows_supplementary_analyses(web):
+    client, _, study_id, home = web
+    ResearchAnalysisService(home).save(
+        study_id, "logistic", {"n": 20}, title="web supp", actor="t"
+    )
+    build = client.post(
+        f"/research/studies/{study_id}/packages",
+        data={"label": "supp"},
+        follow_redirects=False,
+    )
+    assert build.status_code == 303
+    detail = client.get(build.headers["location"]).text
+    assert "Supplementary analyses" in detail
+    assert "web supp" in detail
