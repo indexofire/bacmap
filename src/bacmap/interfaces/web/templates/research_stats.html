@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Logistic regression · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/research">研究</a><span class="crumbs__sep">/</span><span class="crumbs__here">Logistic regression</span></nav>
+<header class="detailhead">
+  <h1 class="detailhead__title">多变量 logistic 回归</h1>
+  <p class="detailhead__lead">确定性 IRLS；输出系数、OR、Wald 95% CI、p 值与诊断。不是因果推断。</p>
+</header>
+
+{% if error %}<p class="card__lead" role="alert"><strong>{{ error }}</strong></p>{% endif %}
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">输入</h2></div>
+  <form class="form" method="post" action="/research/stats">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="field"><label class="field__label" for="st-data">CSV/TSV 绝对路径</label>
+      <input class="field__control" id="st-data" name="data_path" required
+             value="{{ data_path }}" placeholder="/data/cohort.csv"></div>
+    <div class="field"><label class="field__label" for="st-outcome">outcome 列（0/1）</label>
+      <input class="field__control" id="st-outcome" name="outcome" required
+             value="{{ outcome }}" placeholder="outcome"></div>
+    <div class="field"><label class="field__label" for="st-predictors">predictors（逗号分隔）</label>
+      <input class="field__control" id="st-predictors" name="predictors" required
+             value="{{ predictors }}" placeholder="gene_present,age,lineage"></div>
+    <div class="form__actions"><button class="btn btn--primary" type="submit">运行回归</button></div>
+  </form>
+</section>
+
+{% if result %}
+<section class="card">
+  <div class="card__head"><h2 class="card__title">结果</h2></div>
+  <p class="card__lead">n={{ result.n }} · events={{ result.events }} · dropped={{ dropped }} · converged={{ result.converged }} · iterations={{ result.iterations }}</p>
+  <table class="table">
+    <thead><tr><th>term</th><th>beta</th><th>OR</th><th>95% CI</th><th>p</th></tr></thead>
+    <tbody>
+    {% for term in terms %}
+      <tr>
+        <td class="mono">{{ term.name }}</td>
+        <td>{{ '%.4f'|format(term.beta) }}</td>
+        <td>{{ '%.3g'|format(term.odds_ratio) }}</td>
+        <td>{{ '%.3g'|format(term.ci_low) }}–{{ '%.3g'|format(term.ci_high) }}</td>
+        <td>{{ '%.4g'|format(term.p_value) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if result.warnings %}<p class="card__lead">诊断：{{ result.warnings | join('; ') }}</p>{% endif %}
+  <details><summary>JSON</summary><pre class="mono">{{ result_json }}</pre></details>
+</section>
+{% endif %}
+{% endblock %}

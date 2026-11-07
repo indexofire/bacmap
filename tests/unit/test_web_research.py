@@ -113,6 +113,17 @@ def web(tmp_path: Path, monkeypatch):
         renderer="agent-script",
         recipe_id="custom",
     )
+    (tmp_path / "alignment.fasta").write_text(
+        ">t1\nACGTACGTACGT\n>t2\nACGTACGTACGA\n"
+        ">t3\nACGTTCGTACGT\n>t4\nACGTACGTTCGT\n",
+        encoding="utf-8",
+    )
+    csv_rows = ["gene_present,age,lineage,outcome"]
+    for i in range(20):
+        gene = 1 if i < 10 else 0
+        outcome = 1 if (i < 8 or i in {10, 13}) else 0
+        csv_rows.append(f"{gene},{20 + i},{1 if i % 4 == 0 else 0},{outcome}")
+    (tmp_path / "cohort.csv").write_text("\n".join(csv_rows) + "\n", encoding="utf-8")
     monkeypatch.setattr(eng, "_run_snakemake", lambda p: object())
     engine = eng.DbosTaskEngine(tmp_path)
     client = TestClient(create_app(engine))
@@ -280,3 +291,75 @@ def test_cohort_builder_requires_members(web):
     )
     assert response.status_code == 200
     assert "至少选择一个样本" in response.text
+
+
+def test_phylo_web_profile_plan_xml(web):
+    client, _, _, home = web
+    assert client.get("/research/phylo").status_code == 200
+    alignment = str(home / "alignment.fasta")
+    profile = client.post(
+        "/research/phylo",
+        data={"alignment": alignment, "goal": "bayesian", "action": "profile"},
+    )
+    assert profile.status_code == 200
+    assert "Alignment profile" in profile.text
+    plan = client.post(
+        "/research/phylo",
+        data={"alignment": alignment, "goal": "bayesian", "action": "plan"},
+    )
+    assert plan.status_code == 200
+    assert "PhyloPlan" in plan.text
+    xml = client.post(
+        "/research/phylo",
+        data={"alignment": alignment, "goal": "bayesian", "action": "xml"},
+    )
+    assert xml.status_code == 200
+    assert "BEAST2 XML" in xml.text
+    assert "/research/phylo/download/" in xml.text
+    iqtree = client.post(
+        "/research/phylo",
+        data={"alignment": alignment, "goal": "ml", "action": "iqtree"},
+    )
+    assert iqtree.status_code == 200
+    assert "iqtree2" in iqtree.text
+
+
+def test_phylo_web_invalid_alignment(web):
+    client, _, _, home = web
+    response = client.post(
+        "/research/phylo",
+        data={"alignment": str(home / "missing.fasta"), "action": "profile"},
+    )
+    assert response.status_code == 200
+    assert "alignment not found" in response.text
+
+
+def test_stats_web_logistic(web):
+    client, _, _, home = web
+    assert client.get("/research/stats").status_code == 200
+    response = client.post(
+        "/research/stats",
+        data={
+            "data_path": str(home / "cohort.csv"),
+            "outcome": "outcome",
+            "predictors": "gene_present,age,lineage",
+        },
+    )
+    assert response.status_code == 200
+    assert "结果" in response.text
+    assert "gene_present" in response.text
+    assert "converged=True" in response.text
+
+
+def test_stats_web_invalid_table(web):
+    client, _, _, home = web
+    response = client.post(
+        "/research/stats",
+        data={
+            "data_path": str(home / "missing.csv"),
+            "outcome": "outcome",
+            "predictors": "gene_present",
+        },
+    )
+    assert response.status_code == 200
+    assert "table not found" in response.text

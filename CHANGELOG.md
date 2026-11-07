@@ -5,6 +5,15 @@
 
 ## [未发布]
 
+### Web Phylo / Logistic 页面
+
+- 新增 `/research/phylo`：alignment profile → PhyloPlan → 校验 → BEAST2 XML 下载 /
+  IQ-TREE 命令；支持 dates、partition 候选与可选 `beast -validate`。
+- 新增 `/research/stats`：CSV/TSV 路径 + outcome/predictors → 多变量 logistic
+  OR/CI/p 表格、诊断与 JSON。
+- 研究首页新增两个工具入口；结果页面保留输入与隐藏 profile/plan JSON，可连续操作。
+- 测试基线：1834 → 1838。
+
 ### Cohort builder（Web）
 
 - Study 页新增 Cohort builder：从 `runs.sqlite` 选择 run/样本，复选框生成 members；

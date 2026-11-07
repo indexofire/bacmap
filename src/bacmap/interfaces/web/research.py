@@ -7,13 +7,14 @@ import mimetypes
 import shutil
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from bacmap.interfaces.web.auth import verify_csrf
-from bacmap.research import reporting
+from bacmap.research import phylo, regression, reporting
 from bacmap.research.models import (
     ArtifactKind,
     CreateSessionRequest,
@@ -193,6 +194,9 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
             _raise(exc)
             raise  # pragma: no cover
         return RedirectResponse(f"/research/{view.session.session_id}", status_code=303)
+
+    _phylo_routes(app, engine)
+    _stats_routes(app)
 
     @app.get("/research/{session_id}", response_class=HTMLResponse)
     def research_detail(request: Request, session_id: str) -> HTMLResponse:
@@ -441,6 +445,158 @@ def _package_routes(
             media_type="application/zip",
             filename=f"{study_id}_submission.zip",
         )
+
+
+def _phylo_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
+    output_dir = engine.home / "research" / "phylo"
+
+    @app.get("/research/phylo", response_class=HTMLResponse)
+    def phylo_page(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "research_phylo.html",
+            {"alignment": "", "dates": "", "partitions": "", "goal": "bayesian"},
+        )
+
+    @app.post("/research/phylo", response_class=HTMLResponse)
+    def phylo_submit(
+        request: Request,
+        alignment: str = Form(""),
+        dates: str = Form(""),
+        partitions: str = Form(""),
+        goal: str = Form("bayesian"),
+        profile_json: str = Form(""),
+        plan_json: str = Form(""),
+        action: str = Form("profile"),
+        run_validation: str = Form(""),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        context: dict[str, Any] = {
+            "alignment": alignment,
+            "dates": dates,
+            "partitions": partitions,
+            "goal": goal,
+            "profile_json": profile_json,
+            "plan_json": plan_json,
+            "error": "",
+        }
+        try:
+            if action == "profile" or not profile_json:
+                profile = phylo.profile_alignment(
+                    alignment,
+                    dates=dates or None,
+                    partitions=[
+                        item.strip() for item in partitions.split(",") if item.strip()
+                    ],
+                )
+                context["profile"] = profile
+                context["profile_json"] = json.dumps(
+                    profile.model_dump(mode="json", by_alias=True)
+                )
+            else:
+                profile = phylo.AlignmentProfile.model_validate(json.loads(profile_json))
+                context["profile"] = profile
+
+            if action in {"plan", "xml", "iqtree"}:
+                if plan_json:
+                    plan = phylo.PhyloPlan.model_validate(json.loads(plan_json))
+                else:
+                    plan = phylo.recommend_plan(
+                        profile, "ml" if goal == "ml" else "bayesian"
+                    )
+                context["plan"] = plan
+                context["plan_json"] = json.dumps(
+                    plan.model_dump(mode="json", by_alias=True)
+                )
+                context["issues"] = phylo.validate_plan(plan, profile)
+
+            if action == "xml":
+                output_dir.mkdir(parents=True, exist_ok=True)
+                xml_path = output_dir / f"{uuid4().hex[:12]}.xml"
+                context["xml_result"] = phylo.render_beast2_xml(
+                    plan, profile, xml_path, validate=bool(run_validation)
+                )
+                context["xml_name"] = xml_path.name
+
+            if action == "iqtree":
+                prefix = str(output_dir / f"iqtree-{uuid4().hex[:8]}")
+                context["iqtree_command"] = phylo.render_iqtree_command(
+                    plan, alignment, prefix
+                )
+        except (phylo.PhyloError, ValueError, OSError) as exc:
+            context["error"] = str(exc)
+        return _TEMPLATES.TemplateResponse(request, "research_phylo.html", context)
+
+    @app.get("/research/phylo/download/{name}")
+    def phylo_download(name: str) -> FileResponse:
+        if Path(name).name != name or not name.endswith(".xml"):
+            raise HTTPException(400, "invalid XML name")
+        path = output_dir / name
+        if not path.is_file():
+            raise HTTPException(404, "XML not found")
+        return FileResponse(path, media_type="application/xml", filename=name)
+
+
+def _stats_routes(app: FastAPI) -> None:
+    @app.get("/research/stats", response_class=HTMLResponse)
+    def stats_page(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "research_stats.html",
+            {"data_path": "", "outcome": "", "predictors": "", "error": ""},
+        )
+
+    @app.post("/research/stats", response_class=HTMLResponse)
+    def stats_submit(
+        request: Request,
+        data_path: str = Form(""),
+        outcome: str = Form(""),
+        predictors: str = Form(""),
+        csrf: str = Form(""),
+    ) -> Any:
+        if not verify_csrf(request, csrf):
+            raise HTTPException(403, "CSRF 校验失败")
+        context: dict[str, Any] = {
+            "data_path": data_path,
+            "outcome": outcome,
+            "predictors": predictors,
+            "error": "",
+        }
+        names = [name.strip() for name in predictors.split(",") if name.strip()]
+        try:
+            rows, outcomes, dropped = regression.load_table(
+                data_path, outcome, names
+            )
+            result = regression.fit_logistic(rows, outcomes, names)
+            context["result"] = result
+            context["dropped"] = dropped
+            context["terms"] = [
+                {
+                    "name": name,
+                    "beta": beta,
+                    "odds_ratio": odds,
+                    "ci_low": low,
+                    "ci_high": high,
+                    "p_value": p_value,
+                }
+                for name, beta, odds, low, high, p_value in zip(
+                    result.feature_names,
+                    result.coefficients,
+                    result.odds_ratios,
+                    result.ci_low,
+                    result.ci_high,
+                    result.p_values,
+                    strict=True,
+                )
+            ]
+            context["result_json"] = json.dumps(
+                result.model_dump(mode="json"), ensure_ascii=False, indent=2
+            )
+        except ValueError as exc:
+            context["error"] = str(exc)
+        return _TEMPLATES.TemplateResponse(request, "research_stats.html", context)
 
 
 def _members_from_form(values: list[str]) -> list[dict[str, str]]:

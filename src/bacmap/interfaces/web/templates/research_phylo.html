@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Phylogenetic planning · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/research">研究</a><span class="crumbs__sep">/</span><span class="crumbs__here">Phylogenetic planning</span></nav>
+<header class="detailhead">
+  <h1 class="detailhead__title">系统发育规划</h1>
+  <p class="detailhead__lead">确定性 alignment profile → AI 可修改的 PhyloPlan → bacmap 校验 → BEAST2 XML / IQ-TREE 命令。建树仍由工作流执行。</p>
+</header>
+
+{% if error %}<p class="card__lead" role="alert"><strong>{{ error }}</strong></p>{% endif %}
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">输入</h2></div>
+  <form class="form" method="post" action="/research/phylo">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="profile_json" value="{{ profile_json or '' }}">
+    <input type="hidden" name="plan_json" value="{{ plan_json or '' }}">
+    <div class="field"><label class="field__label" for="ph-alignment">alignment FASTA 绝对路径</label>
+      <input class="field__control" id="ph-alignment" name="alignment" required
+             value="{{ alignment }}" placeholder="/data/core_alignment.fasta"></div>
+    <div class="field"><label class="field__label" for="ph-dates">dates TSV（可选）</label>
+      <input class="field__control" id="ph-dates" name="dates"
+             value="{{ dates }}" placeholder="/data/dates.tsv"></div>
+    <div class="field"><label class="field__label" for="ph-partitions">partition 候选（逗号分隔，可选）</label>
+      <input class="field__control" id="ph-partitions" name="partitions"
+             value="{{ partitions }}" placeholder="gene1,gene2"></div>
+    <div class="field"><label class="field__label" for="ph-goal">目标</label>
+      <select class="field__control" id="ph-goal" name="goal">
+        <option value="bayesian" {% if goal == 'bayesian' %}selected{% endif %}>BEAST2 Bayesian</option>
+        <option value="ml" {% if goal == 'ml' %}selected{% endif %}>IQ-TREE ML</option>
+      </select></div>
+    <div class="form__actions">
+      <button class="btn" type="submit" name="action" value="profile">生成 Profile</button>
+      <button class="btn" type="submit" name="action" value="plan">生成 Plan</button>
+      <button class="btn btn--primary" type="submit" name="action" value="xml">生成 BEAST2 XML</button>
+      <button class="btn" type="submit" name="action" value="iqtree">生成 IQ-TREE 命令</button>
+    </div>
+    <label class="membercheck" style="margin-top:12px">
+      <input type="checkbox" name="run_validation" value="1"> 生成 XML 后运行 `beast -validate`（若已安装）
+    </label>
+  </form>
+</section>
+
+{% if profile %}
+<section class="card">
+  <div class="card__head"><h2 class="card__title">Alignment profile</h2></div>
+  <table class="table">
+    <tbody>
+      <tr><th>taxa / sites</th><td>{{ profile.n_taxa }} × {{ profile.n_sites }}</td></tr>
+      <tr><th>variable / informative</th><td>{{ profile.variable_sites }} / {{ profile.informative_sites }}</td></tr>
+      <tr><th>missing</th><td>{{ profile.missing_pct }}%</td></tr>
+      <tr><th>dates</th><td>{% if profile.has_dates %}{{ profile.date_min }} – {{ profile.date_max }}{% else %}无{% endif %}</td></tr>
+      <tr><th>alignment sha256</th><td class="mono">{{ profile.alignment_sha256 }}</td></tr>
+    </tbody>
+  </table>
+  {% if profile.warnings %}<p class="card__lead">警告：{{ profile.warnings | join('; ') }}</p>{% endif %}
+</section>
+{% endif %}
+
+{% if plan %}
+<section class="card">
+  <div class="card__head"><h2 class="card__title">PhyloPlan</h2></div>
+  <table class="table">
+    <tbody>
+      <tr><th>plan_id</th><td class="mono">{{ plan.plan_id }}</td></tr>
+      <tr><th>analysis / tool</th><td>{{ plan.analysis }} / {{ plan.tool }}</td></tr>
+      <tr><th>model</th><td>{{ plan.substitution_model }} {{ plan.rate_heterogeneity | join('') }}</td></tr>
+      <tr><th>clock / prior</th><td>{{ plan.clock_model or '—' }} / {{ plan.tree_prior or '—' }}</td></tr>
+      <tr><th>chain / burn-in / sampling</th><td>{{ plan.chain_length }} / {{ plan.burn_in }} / {{ plan.sampling_every }}</td></tr>
+      <tr><th>seed / outgroup</th><td>{{ plan.seed }} / {{ plan.outgroup or '—' }}</td></tr>
+      <tr><th>rationale</th><td>{{ plan.rationale }}</td></tr>
+    </tbody>
+  </table>
+  {% if issues %}<p class="card__lead">校验问题：{{ issues | join('; ') }}</p>{% else %}<p class="card__lead">校验通过。</p>{% endif %}
+</section>
+{% endif %}
+
+{% if xml_result %}
+<section class="card">
+  <div class="card__head"><h2 class="card__title">BEAST2 XML</h2></div>
+  <p class="card__lead">
+    <a class="btn btn--primary" href="/research/phylo/download/{{ xml_name }}">下载 XML</a>
+  </p>
+  <table class="table">
+    <tbody>
+      <tr><th>template</th><td>{{ xml_result.template }}</td></tr>
+      <tr><th>xml sha256</th><td class="mono">{{ xml_result.xml_sha256 }}</td></tr>
+      <tr><th>plan sha256</th><td class="mono">{{ xml_result.plan_sha256 }}</td></tr>
+      <tr><th>validation</th><td>{{ xml_result.validation }}</td></tr>
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if iqtree_command %}
+<section class="card">
+  <div class="card__head"><h2 class="card__title">IQ-TREE 命令</h2></div>
+  <pre class="mono">{{ iqtree_command | join(' ') }}</pre>
+</section>
+{% endif %}
+{% endblock %}
