@@ -144,6 +144,13 @@
   `docs/reference/cli` 双语同步；`PLAN-agent-research.md` P2 勾选更新。
 - 测试基线：1838 → 1858。
 
+### Checklist 编辑与签字
+
+- Study 页新增 STROBE checklist 编辑器：逐项 status/evidence/note、保存草稿、签字确认、
+  重置；签字要求没有 `missing` 项（migration 8 `checklist_reviews`）。
+- 投稿包合并编辑后的 checklist，并在 manifest 记录 `checklist_review` 状态。
+- 测试基线：1852 → 1857（1 skipped：gapit live smoke）。
+
 ### Markdown 渲染与投稿包历史
 
 - Session 页安全渲染报告/论文草案 Markdown（转义原始 HTML、限制链接协议）。
@@ -264,7 +271,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1852（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1857（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 

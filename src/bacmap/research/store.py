@@ -12,6 +12,9 @@ from bacmap.research.models import (
     AnalysisSession,
     Artifact,
     ArtifactKind,
+    ChecklistOverride,
+    ChecklistReview,
+    ChecklistReviewStatus,
     Claim,
     ClaimStatus,
     ClaimType,
@@ -176,6 +179,18 @@ CREATE TABLE IF NOT EXISTS evidence_edges (
 )
 """
 
+CHECKLISTS_DDL = """
+CREATE TABLE IF NOT EXISTS checklist_reviews (
+    study_id      TEXT PRIMARY KEY,
+    overrides_json TEXT NOT NULL DEFAULT '[]',
+    status        TEXT NOT NULL,
+    reviewed_by   TEXT NOT NULL DEFAULT '',
+    reviewed_at   TEXT NOT NULL DEFAULT '',
+    note          TEXT NOT NULL DEFAULT '',
+    updated_at    TEXT NOT NULL
+)
+"""
+
 PACKAGES_DDL = """
 CREATE TABLE IF NOT EXISTS submission_packages (
     package_id      TEXT PRIMARY KEY,
@@ -304,6 +319,11 @@ RESEARCH_MIGRATIONS: tuple[Migration, ...] = (
         7,
         "research: submission package history",
         (PACKAGES_DDL,),
+    ),
+    Migration(
+        8,
+        "research: checklist edits and sign-off",
+        (CHECKLISTS_DDL,),
     ),
 )
 
@@ -1099,6 +1119,48 @@ class ResearchObjectStore:
         ).fetchall()
         return [_row_to_package(row) for row in rows]
 
+    def get_checklist_review(self, study_id: str) -> ChecklistReview | None:
+        row = self._conn.execute(
+            "SELECT * FROM checklist_reviews WHERE study_id = ?", (study_id,)
+        ).fetchone()
+        return None if row is None else _row_to_checklist_review(row)
+
+    def save_checklist_review(self, review: ChecklistReview) -> ChecklistReview:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO checklist_reviews"
+            " (study_id, overrides_json, status, reviewed_by, reviewed_at, note, updated_at)"
+            " VALUES (?,?,?,?,?,?,?)",
+            (
+                review.study_id,
+                json.dumps(
+                    [item.model_dump(mode="json") for item in review.overrides],
+                    ensure_ascii=False,
+                ),
+                review.status.value,
+                review.reviewed_by,
+                review.reviewed_at,
+                review.note,
+                review.updated_at or _now(),
+            ),
+        )
+        self._ledger(
+            "checklist",
+            review.study_id,
+            f"checklist.{review.status.value}",
+            review.reviewed_by,
+            {"n_overrides": len(review.overrides)},
+        )
+        updated = self.get_checklist_review(review.study_id)
+        if updated is None:
+            raise RuntimeError(f"checklist review disappeared: {review.study_id}")
+        return updated
+
+    def delete_checklist_review(self, study_id: str, actor: str = "") -> None:
+        self._conn.execute(
+            "DELETE FROM checklist_reviews WHERE study_id = ?", (study_id,)
+        )
+        self._ledger("checklist", study_id, "checklist.reset", actor, {})
+
     def _ledger(
         self,
         object_type: str,
@@ -1225,4 +1287,18 @@ def _row_to_package(row: sqlite3.Row) -> SubmissionPackageRecord:
         manifest_sha256=row["manifest_sha256"],
         n_files=int(row["n_files"]),
         blockers=list(json.loads(row["blockers_json"])),
+    )
+
+
+def _row_to_checklist_review(row: sqlite3.Row) -> ChecklistReview:
+    raw = json.loads(row["overrides_json"])
+    overrides = [ChecklistOverride.model_validate(item) for item in raw]
+    return ChecklistReview(
+        study_id=row["study_id"],
+        overrides=overrides,
+        status=ChecklistReviewStatus(row["status"]),
+        reviewed_by=row["reviewed_by"],
+        reviewed_at=row["reviewed_at"],
+        note=row["note"],
+        updated_at=row["updated_at"],
     )

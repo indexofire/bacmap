@@ -86,6 +86,7 @@ class SubmissionPackage(BaseModel):
     blockers: list[str]
     data_availability: str
     code_availability: str
+    checklist_review: dict[str, Any] = Field(default_factory=dict)
 
 
 def _sha256(path: Path) -> str:
@@ -363,6 +364,9 @@ def build_submission_package(
     home: Path | str,
     study_id: str,
     out_dir: Path | str,
+    *,
+    checklist: Checklist | None = None,
+    checklist_review: dict[str, Any] | None = None,
 ) -> SubmissionPackage:
     """Collect research artifacts and write a reproducible submission manifest."""
     home_path = Path(home)
@@ -382,7 +386,8 @@ def build_submission_package(
         experiments = store.list_experiments(study_id)
         sessions = store.list_sessions_by_study(study_id)
 
-    checklist = build_checklist(study, cohorts, plans, claims, experiments, sessions)
+    if checklist is None:
+        checklist = build_checklist(study, cohorts, plans, claims, experiments, sessions)
     readiness = publication_readiness(home_path, study_id)
     files: list[PackageFile] = []
     with ResearchStore(home_path) as research:
@@ -442,6 +447,7 @@ def build_submission_package(
         readiness=readiness,
         files=files,
         blockers=blockers,
+        checklist_review=dict(checklist_review or {}),
         data_availability=(
             "Data are local; availability must be decided by the human (D0-D2 only for export)."
         ),

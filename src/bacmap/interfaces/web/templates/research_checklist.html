@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}STROBE checklist · {{ study.study_id }} · bacmap{% endblock %}
+{% block content %}
+<nav class="crumbs"><a class="crumbs__link" href="/research">研究</a><span class="crumbs__sep">/</span><a class="crumbs__link" href="/research/studies/{{ study.study_id }}">{{ study.study_id }}</a><span class="crumbs__sep">/</span><span class="crumbs__here">STROBE checklist</span></nav>
+<header class="detailhead">
+  <h1 class="detailhead__title">STROBE checklist</h1>
+  <p class="detailhead__lead">{{ study.question }}</p>
+  <p class="detailhead__id mono">{{ study.study_id }}</p>
+  {% if review %}
+  <p class="card__lead">状态：<strong>{{ review.status.value }}</strong>
+    {% if review.reviewed_by %} · {{ review.reviewed_by }} · {{ review.reviewed_at[:19] }}{% endif %}
+  </p>
+  {% else %}<p class="card__lead">状态：draft（尚未保存编辑）</p>{% endif %}
+</header>
+
+{% if error %}<p class="card__lead" role="alert"><strong>{{ error }}</strong></p>{% endif %}
+
+<section class="card">
+  <div class="card__head"><h2 class="card__title">逐项编辑</h2></div>
+  <p class="card__lead">met={{ checklist.met }} · partial={{ checklist.partial }} · missing={{ checklist.missing }}。签字要求没有 missing 项。</p>
+  <form method="post" action="/research/studies/{{ study.study_id }}/checklist">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <table class="table checklist-table">
+      <thead><tr><th>item</th><th>section</th><th>requirement</th><th>status</th><th>evidence</th><th>note</th></tr></thead>
+      <tbody>
+      {% for item in checklist.items %}
+        <tr>
+          <td class="mono">{{ item.item_id }}</td>
+          <td>{{ item.section }}</td>
+          <td>{{ item.requirement }}</td>
+          <td>
+            <select name="status:{{ item.item_id }}">
+              {% for status in ['met','partial','missing','not_applicable'] %}
+              <option value="{{ status }}" {% if item.status == status %}selected{% endif %}>{{ status }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td><textarea name="evidence:{{ item.item_id }}" rows="2">{{ item.evidence | join('; ') }}</textarea></td>
+          <td><textarea name="note:{{ item.item_id }}" rows="2">{{ item.note }}</textarea></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <div class="field"><label class="field__label" for="cl-note">签字/编辑说明</label>
+      <textarea class="field__control" id="cl-note" name="note" rows="3">{{ review.note if review else '' }}</textarea></div>
+    <div class="form__actions">
+      <button class="btn" type="submit" name="action" value="save">保存草稿</button>
+      <button class="btn btn--primary" type="submit" name="action" value="sign">签字确认</button>
+      <button class="btn" type="submit" name="action" value="reset">重置为自动草案</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

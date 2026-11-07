@@ -23,7 +23,7 @@
 
 <section class="card">
   <div class="card__head"><h2 class="card__title">STROBE 草案</h2></div>
-  <p class="card__lead">met={{ checklist.met }} · partial={{ checklist.partial }} · missing={{ checklist.missing }}</p>
+  <p class="card__lead">met={{ checklist.met }} · partial={{ checklist.partial }} · missing={{ checklist.missing }}{% if package.checklist_review %} · checklist status <strong>{{ package.checklist_review.status }}</strong>{% if package.checklist_review.reviewed_by %} by {{ package.checklist_review.reviewed_by }}{% endif %}{% endif %}</p>
   <table class="table">
     <thead><tr><th>item</th><th>section</th><th>status</th><th>requirement</th></tr></thead>
     <tbody>

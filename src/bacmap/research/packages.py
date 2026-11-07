@@ -11,6 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from bacmap.research import reporting
+from bacmap.research.checklist import ChecklistService
 from bacmap.research.models import SubmissionPackageRecord
 from bacmap.research.store import ResearchObjectStore
 
@@ -39,7 +40,18 @@ class ResearchPackageService:
                 raise ValueError(f"no such study: {study_id}") from exc
         package_id = f"pkg-{uuid4().hex[:12]}"
         target = self.home / "research" / "packages" / study_id / package_id
-        package = reporting.build_submission_package(self.home, study_id, target)
+        checklist_service = ChecklistService(self.home)
+        checklist = checklist_service.merged(study_id)
+        review = checklist_service.get_review(study_id)
+        package = reporting.build_submission_package(
+            self.home,
+            study_id,
+            target,
+            checklist=checklist,
+            checklist_review=(
+                review.model_dump(mode="json") if review is not None else None
+            ),
+        )
         manifest = target / "submission_manifest.json"
         record = SubmissionPackageRecord(
             package_id=package_id,
