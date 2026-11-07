@@ -34,6 +34,20 @@
   </table>
 </section>
 
+{% if package.analyses %}
+<section class="card">
+  <div class="card__head"><h2 class="card__title">Supplementary analyses</h2></div>
+  <table class="table">
+    <thead><tr><th>analysis</th><th>type</th><th>title</th><th>result sha256</th></tr></thead>
+    <tbody>
+    {% for item in package.analyses %}
+      <tr><td class="mono">{{ item.analysis_id }}</td><td>{{ item.analysis_type }}</td><td>{{ item.title }}</td><td class="mono-dim">{{ item.result_sha256[:16] }}…</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 <section class="card">
   <div class="card__head"><h2 class="card__title">文件</h2></div>
   <table class="table">

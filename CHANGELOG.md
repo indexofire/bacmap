@@ -5,6 +5,13 @@
 
 ## [未发布]
 
+### 投稿包导出分析结果
+
+- 投稿包新增 `supplementary/analyses.json` 与 `analyses.tsv`，包含 Study 下所有
+  `research_analyses` 结果与 hash；manifest 增加 `analyses` 摘要列表。
+- 投稿包详情页显示 Supplementary analyses 表。
+- 测试基线：1873 → 1875（1 skipped：gapit live smoke）。
+
 ### 分析结果对象化
 
 - 新增 migration 9 `research_analyses`：保存 analysis_id、类型、输入路径 + SHA-256、
@@ -166,7 +173,7 @@
 #### 变更
 - MCP server instructions 统一由 `agent/instructions.py` 生成，并指向角色 prompts/resources。
 - `ArtifactKind` 增加 `figure_spec`、`figure_custom`、`figure_manifest`。
-- 测试基线：1761 → 1873（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
+- 测试基线：1761 → 1875（新增 agent harness/CLI、figure spec/attach 与 recipe 用例）。
 
 ### 物种→工具参考数据用户覆盖层（`tool_selection.yaml`）
 
