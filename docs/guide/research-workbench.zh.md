@@ -96,9 +96,10 @@ blockers；`ready=true` 仍需人工评审。
 9. Study 页与 `/research/studies/{id}/packages` 保存**投稿包历史**：每次构建记录
    package_id、label、created_at、文件数、blockers 与 manifest SHA-256；可查看
    manifest/checklist 或下载 ZIP；
-10. Study 页提供 **STROBE checklist 编辑器**：逐项编辑 status/evidence/note，保存草稿或
+10. Study/Session 页显示 **证据链**（`evidence_edges`）；
+11. Study 页提供 **STROBE checklist 编辑器**：逐项编辑 status/evidence/note，保存草稿或
     签字（签字要求没有 `missing` 项）；
-11. 投稿包页显示 manifest、checklist、文件与数据/代码可用性，并提供 ZIP 下载。
+12. 投稿包页显示 manifest、checklist、文件与数据/代码可用性，并提供 ZIP 下载。
 
 自然语言研究指令由外部 agent 经 MCP 处理（Pi/Hermes/DSH）；agent 可读取研究对象并提议
 下一步，写入目前仍在 Web/CLI/API。Web 保持为人工审核与结果查看界面。
@@ -621,3 +622,23 @@ Session 页用安全 Markdown 子集渲染 `report.md` 与 `manuscript.md`（标
 
 构建投稿包时会合并当前 overrides，manifest 携带编辑后的 checklist 与
 `checklist_review` 状态。签字是报告辅助，不替代 G0–G3 或人工发表评审。
+
+
+## 17. 证据链
+
+研究对象会自动写入 `evidence_edges`：
+
+| Edge | 含义 |
+|---|---|
+| `cohort --COHORT_OF--> study` | cohort 属于 study |
+| `plan --PLAN_OF--> study` / `plan --PLANS_COHORT--> cohort` | plan 来源 |
+| `session --PART_OF--> study` / `USES_COHORT` / `GENERATED_BY` | session 来源 |
+| `claim --CLAIM_OF--> study` / `SUPPORTED_BY--> session` | claim 证据 |
+| `experiment --EXPERIMENT_OF--> study` / `TESTS--> plan` | 执行账本 |
+| `checklist --CHECKLIST_OF--> study` | checklist 编辑/签字 |
+| `package --PACKAGE_OF--> study` | 投稿包 |
+| `request --REQUEST_OF--> study` | 已确认研究请求 |
+
+Edge 幂等（`ensure_edge`），在 Study/Session 页面显示，并可经 MCP
+`bacmap_research_evidence` 或 CLI `bacmap research evidence <identifier>` 读取。
+>>>>>>> 6522bc6 (feat: link research objects into an evidence graph)

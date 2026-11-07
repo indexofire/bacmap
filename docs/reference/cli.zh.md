@@ -185,6 +185,8 @@ bacmap research request show <request_id>
 bacmap research request approve <request_id> [--members JSON] [--spec JSON]
 bacmap research request reject <request_id> [--note TEXT]
 
+bacmap research evidence <identifier>
+
 bacmap research study create --question TEXT [--pathogen SCOPE] [--data-class 0-4]
 bacmap research study ls|list [--limit N]
 bacmap research study show <study_id>

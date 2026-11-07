@@ -740,6 +740,22 @@ def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpe
             [draft.model_dump(mode="json") for draft in drafts], ensure_ascii=False
         )
 
+    @server.tool(
+        name="bacmap_research_evidence",
+        description=(
+            "List evidence edges for a study/session/object identifier: source, edge type, "
+            "target, reason and timestamp. Read-only. D2."
+        ),
+    )
+    def research_evidence(identifier: str) -> str:
+        from bacmap.research.store import ResearchObjectStore
+
+        with ResearchObjectStore(_Path(engine.home)) as store:
+            edges = store.list_edges_for_id(identifier)
+        return json.dumps(
+            [edge.model_dump(mode="json") for edge in edges], ensure_ascii=False
+        )
+
     _register_request_tools(server, engine, profile)
     _register_phylo_tools(server, profile)
 

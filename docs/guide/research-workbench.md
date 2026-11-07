@@ -102,7 +102,8 @@ Run `bacmap start web` and open **研究 / Research**. The Web is the primary re
 9. the Study page and `/research/studies/{id}/packages` keep a **package history**: each build
    records package_id, label, created_at, file count, blockers and manifest SHA-256; open a
    package to view its manifest/checklist or download a ZIP;
-10. the Study page links to a **STROBE checklist editor**: edit status/evidence/note per item,
+10. Study/Session pages show the **evidence graph** (`evidence_edges`);
+11. the Study page links to a **STROBE checklist editor**: edit status/evidence/note per item,
     save a draft or sign off (signing requires no `missing` items);
 11. the package page shows the manifest, checklist, files and data/code availability, and offers
    a ZIP download.
@@ -670,3 +671,23 @@ The older `/research/studies/{study_id}/package` route remains as a quick rebuil
 Package builds merge the current overrides, so the manifest carries the edited checklist and
 `checklist_review` status. Sign-off is a reporting aid, not a replacement for G0–G3 or human
 publication review.
+
+
+## 17. Evidence graph
+
+Research objects are linked automatically in `evidence_edges`:
+
+| Edge | Meaning |
+|---|---|
+| `cohort --COHORT_OF--> study` | cohort belongs to a study |
+| `plan --PLAN_OF--> study` / `plan --PLANS_COHORT--> cohort` | plan provenance |
+| `session --PART_OF--> study` / `USES_COHORT` / `GENERATED_BY` | session provenance |
+| `claim --CLAIM_OF--> study` / `SUPPORTED_BY--> session` | claim evidence |
+| `experiment --EXPERIMENT_OF--> study` / `TESTS--> plan` | execution ledger |
+| `checklist --CHECKLIST_OF--> study` | checklist edit/sign-off |
+| `package --PACKAGE_OF--> study` | submission package |
+| `request --REQUEST_OF--> study` | approved research request |
+
+Edges are idempotent (`ensure_edge`), shown on the Study and Session pages, and readable over
+MCP with `bacmap_research_evidence` or CLI `bacmap research evidence <identifier>`.
+>>>>>>> 6522bc6 (feat: link research objects into an evidence graph)

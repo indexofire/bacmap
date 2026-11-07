@@ -183,6 +183,22 @@ class ResearchService:
                     "plan_id": request.plan_id,
                 },
             )
+            if request.study_id:
+                with ResearchObjectStore(self.home) as objects:
+                    objects.ensure_edge(
+                        "session", session_id, "PART_OF", "study",
+                        request.study_id, "research session belongs to study", actor,
+                    )
+                    if request.cohort_id:
+                        objects.ensure_edge(
+                            "session", session_id, "USES_COHORT", "cohort",
+                            request.cohort_id, "session uses cohort", actor,
+                        )
+                    if request.plan_id:
+                        objects.ensure_edge(
+                            "session", session_id, "GENERATED_BY", "plan",
+                            request.plan_id, "session executes analysis plan", actor,
+                        )
             return SessionView(
                 session=session,
                 stat=stat,
@@ -599,6 +615,10 @@ class ResearchObjectService:
 
         with ResearchObjectStore(self.home) as store:
             cohort = store.create_cohort(study_id, name, rules or {}, members, actor)
+            store.ensure_edge(
+                "cohort", cohort.cohort_id, "COHORT_OF", "study", study_id,
+                "cohort belongs to study", actor,
+            )
             store._ledger("cohort", cohort.cohort_id, "cohort.created", actor, {})
             return cohort
 
@@ -652,6 +672,14 @@ class ResearchObjectService:
 
         with ResearchObjectStore(self.home) as store:
             plan = store.create_plan(study_id, cohort_id, spec, actor)
+            store.ensure_edge(
+                "plan", plan.plan_id, "PLAN_OF", "study", study_id,
+                "analysis plan belongs to study", actor,
+            )
+            store.ensure_edge(
+                "plan", plan.plan_id, "PLANS_COHORT", "cohort", cohort_id,
+                "analysis plan uses cohort", actor,
+            )
             store._ledger("plan", plan.plan_id, "plan.created", actor, {})
             return plan
 
@@ -675,6 +703,16 @@ class ResearchObjectService:
             raise ResearchError("validation_error", str(exc)) from exc
         with ResearchObjectStore(self.home) as store:
             claim = store.create_claim(study_id, ct, wording, el, evidence or {}, actor)
+            store.ensure_edge(
+                "claim", claim.claim_id, "CLAIM_OF", "study", study_id,
+                f"{ct.value} claim", actor,
+            )
+            session_id = str((evidence or {}).get("session_id") or "")
+            if session_id:
+                store.ensure_edge(
+                    "claim", claim.claim_id, "SUPPORTED_BY", "session", session_id,
+                    "claim evidence session", actor,
+                )
             store._ledger("claim", claim.claim_id, "claim.created", actor, {})
             return claim
 
@@ -764,9 +802,13 @@ class ResearchObjectService:
                 deviation.strip(),
                 actor,
             )
-            store.add_edge(
+            store.ensure_edge(
                 "experiment", experiment.experiment_id, "TESTS", "plan", plan.plan_id,
                 f"experiment status={exp_status.value}", actor,
+            )
+            store.ensure_edge(
+                "experiment", experiment.experiment_id, "EXPERIMENT_OF", "study",
+                plan.study_id, "experiment belongs to study", actor,
             )
             store._ledger(
                 "experiment", experiment.experiment_id, f"experiment.{exp_status.value}",

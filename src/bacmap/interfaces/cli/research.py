@@ -676,6 +676,27 @@ def run_request_reject(args: argparse.Namespace) -> None:
     print(f"{request.request_id}  {request.status.value}")
 
 
+def run_evidence(args: argparse.Namespace) -> None:
+    from bacmap.research.store import ResearchObjectStore
+
+    with ResearchObjectStore(Path(args.home)) as store:
+        edges = store.list_edges_for_id(args.identifier)
+    if args.json:
+        print(
+            json.dumps(
+                [edge.model_dump(mode="json") for edge in edges],
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+    for edge in edges:
+        print(
+            f"{edge.src_type}:{edge.src_id} --{edge.edge_type}--> "
+            f"{edge.dst_type}:{edge.dst_id}  {edge.reason}"
+        )
+
+
 def _object_service(args: argparse.Namespace):
     from bacmap.research.service import ResearchObjectService
 
@@ -1424,6 +1445,14 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(req_reject)
     add_json(req_reject)
     req_reject.set_defaults(func=run_request_reject)
+
+    evidence = s.add_parser(
+        "evidence", help=T("list evidence edges", "列出证据链")
+    )
+    evidence.add_argument("identifier")
+    add_home(evidence)
+    add_json(evidence)
+    evidence.set_defaults(func=run_evidence)
 
     study = s.add_parser("study", help=T("Study object", "Study 对象"))
     study_sub = study.add_subparsers(dest="study_command", required=True)

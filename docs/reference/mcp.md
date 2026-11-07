@@ -155,6 +155,7 @@ Research tasks (ADR-23): `bacmap_create_plan` accepts `task_type=research`
 | `bacmap_research_reporting_checklist` | `study_id` | D2; deterministic STROBE draft |
 | `bacmap_research_request` | question, run_ids?, gene?, test_name?, analysis?, ... | D2+; writes a draft request only; human approves in Web |
 | `bacmap_research_requests` | `status?`, `limit?` | D2+; list request drafts |
+| `bacmap_research_evidence` | `identifier` | D2; evidence edges for a study/session/object |
 
 Research creation and custom figure attachment are CLI/Web/API only; MCP is read-only for
 research sessions. Custom figures are attached with `bacmap research figure attach` after the

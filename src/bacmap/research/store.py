@@ -936,6 +936,35 @@ class ResearchObjectStore:
             dst_type=dst_type, dst_id=dst_id, reason=reason, created_by=actor, created_at=now,
         )
 
+    def ensure_edge(
+        self,
+        src_type: str,
+        src_id: str,
+        edge_type: str,
+        dst_type: str,
+        dst_id: str,
+        reason: str,
+        actor: str,
+    ) -> EvidenceEdge:
+        row = self._conn.execute(
+            "SELECT * FROM evidence_edges WHERE src_type=? AND src_id=? AND"
+            " edge_type=? AND dst_type=? AND dst_id=?",
+            (src_type, src_id, edge_type, dst_type, dst_id),
+        ).fetchone()
+        if row is not None:
+            return _row_to_edge(row)
+        return self.add_edge(
+            src_type, src_id, edge_type, dst_type, dst_id, reason, actor
+        )
+
+    def list_edges_for_id(self, identifier: str) -> list[EvidenceEdge]:
+        rows = self._conn.execute(
+            "SELECT * FROM evidence_edges WHERE src_id = ? OR dst_id = ?"
+            " ORDER BY created_at",
+            (identifier, identifier),
+        ).fetchall()
+        return [_row_to_edge(row) for row in rows]
+
     def list_ledger(
         self, object_type: str | None = None, object_id: str | None = None, limit: int = 200
     ) -> list[dict]:
@@ -1059,6 +1088,11 @@ class ResearchObjectStore:
                 request_id,
             ),
         )
+        if study_id:
+            self.ensure_edge(
+                "request", request_id, "REQUEST_OF", "study", study_id,
+                f"research request {status.value}", actor,
+            )
         self._ledger(
             "request",
             request_id,
@@ -1091,6 +1125,10 @@ class ResearchObjectStore:
                 record.n_files,
                 json.dumps(record.blockers, ensure_ascii=False),
             ),
+        )
+        self.ensure_edge(
+            "package", record.package_id, "PACKAGE_OF", "study", record.study_id,
+            f"submission package with {record.n_files} files", record.created_by,
         )
         self._ledger(
             "package",
@@ -1301,4 +1339,18 @@ def _row_to_checklist_review(row: sqlite3.Row) -> ChecklistReview:
         reviewed_at=row["reviewed_at"],
         note=row["note"],
         updated_at=row["updated_at"],
+    )
+
+
+def _row_to_edge(row: sqlite3.Row) -> EvidenceEdge:
+    return EvidenceEdge(
+        edge_id=row["edge_id"],
+        src_type=row["src_type"],
+        src_id=row["src_id"],
+        edge_type=row["edge_type"],
+        dst_type=row["dst_type"],
+        dst_id=row["dst_id"],
+        reason=row["reason"],
+        created_by=row["created_by"],
+        created_at=row["created_at"],
     )

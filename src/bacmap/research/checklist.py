@@ -83,7 +83,12 @@ class ChecklistService:
             updated_at=datetime.now(UTC).isoformat(),
         )
         with ResearchObjectStore(self.home) as store:
-            return store.save_checklist_review(review)
+            saved = store.save_checklist_review(review)
+            store.ensure_edge(
+                "checklist", study_id, "CHECKLIST_OF", "study", study_id,
+                f"checklist status={saved.status.value}", actor,
+            )
+            return saved
 
     def sign(
         self,
@@ -113,7 +118,12 @@ class ChecklistService:
             updated_at=now,
         )
         with ResearchObjectStore(self.home) as store:
-            return store.save_checklist_review(review)
+            saved = store.save_checklist_review(review)
+            store.ensure_edge(
+                "checklist", study_id, "CHECKLIST_OF", "study", study_id,
+                f"checklist status={saved.status.value}", actor,
+            )
+            return saved
 
     def reset(self, study_id: str, *, actor: str = "web") -> None:
         with ResearchObjectStore(self.home) as store:

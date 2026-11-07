@@ -469,3 +469,13 @@ def test_checklist_edit_and_sign(web):
     assert review.status.value == "signed"
     assert review.reviewed_by == "web"
     assert "signed" in client.get(f"/research/studies/{study_id}").text
+
+
+def test_evidence_graph_on_study_and_session(web):
+    client, session_id, study_id, _ = web
+    study_page = client.get(f"/research/studies/{study_id}").text
+    assert "证据链" in study_page
+    assert "PART_OF" in study_page
+    session_page = client.get(f"/research/{session_id}").text
+    assert "证据链" in session_page
+    assert "GENERATED_BY" in session_page

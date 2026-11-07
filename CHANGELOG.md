@@ -7,6 +7,13 @@
 
 ### P4 完成：高级统计外部化（ADR-22）+ 研究任务类型（ADR-23）
 
+### Research 证据链（自 feat/agent-research-bridge 并入）
+
+- 研究对象自动写入 `evidence_edges`：cohort/plan/session/claim/experiment/checklist/package/
+  request 与 study 的关系；session 的 cohort/plan 来源；experiment 与 plan 的关系。
+- Edge 幂等；Study/Session 页面显示证据链表；MCP `bacmap_research_evidence` 与 CLI
+  `research evidence` 可读取。
+
 - **新增第六任务类型 `research`**（ADR-23，冻结）：类型化 `ResearchParams`
   （`analysis=session|advstats`），**仅经计划执行**（`bacmap_create_plan` → 人工
   确认 → 引擎）；`PlannableTask`/MCP `plannable_task_types`/`[plans.auto_confirm]

@@ -63,6 +63,7 @@ def _study_context(
         claims = store.list_claims(study_id)
         experiments = store.list_experiments(study_id=study_id)
         sessions = store.list_sessions_by_study(study_id)
+        edges = store.list_edges_for_id(study_id)
     session_rows = []
     with ResearchStore(engine.home) as research:
         for session in sessions:
@@ -93,6 +94,7 @@ def _study_context(
         "sessions": session_rows,
         "checklist": checklist,
         "checklist_review": checklist_review,
+        "edges": edges,
         "readiness": objects.publication_readiness(study_id),
     }
 
@@ -134,6 +136,10 @@ def _session_context(
                     report_html = rendered
                 else:
                     manuscript_html = rendered
+    from bacmap.research.store import ResearchObjectStore
+
+    with ResearchObjectStore(service.home) as store:
+        edges = store.list_edges_for_id(session_id)
     study = None
     if view.session.study_id:
         try:
@@ -148,6 +154,7 @@ def _session_context(
         "manifest": manifest,
         "study": study,
         "drafts": service.list_drafts(session_id),
+        "edges": edges,
         "report_html": report_html,
         "manuscript_html": manuscript_html,
         "note": str(view.session.payload.get("note") or ""),
