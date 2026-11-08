@@ -447,6 +447,43 @@ bacmap research stats logistic --data cohort.csv --outcome resistant \
 
 MCP（仅 local-trusted，D3）：`bacmap_research_logistic`。
 
+### 样本量与把握度（事先设计）
+
+两比例比较（P1 关联设计的推广）的正态近似，纯标准库、确定性：
+
+```bash
+# 设计新研究：暴露/非暴露组预期耐药比例 → 每组所需 n
+bacmap research stats power --p1 0.65 --p2 0.45 --power 0.8
+
+# 以基线比例 + 目标 OR 表达（p1 自动推导）
+bacmap research stats power --baseline 0.2 --odds 4
+
+# 已有设计 → 达到的把握度
+bacmap research stats power --p1 0.65 --p2 0.45 --n1 130 --n2 130
+
+# 以某会话的观察比例作为设计假设（明示标注，不是事后功效）
+bacmap research stats power --session rs-0123456789ab
+```
+
+输出为 `bacmap.power_two_proportions/1`：每组 n/总量、比例、alpha/power/ratio 与
+告警（极端比例 <0.05/>0.95 或每组 n<30 时提示改用精确法）。**把握度是设计输入**：
+比例应来自先验知识或既有会话的设计假设，绝不能把待检验数据的事后功效当证据
+（session 模式的 `achieved_power_at_current_n` 仅为描述性字段）。
+
+MCP（D2，只读计算）：`bacmap_research_power`。
+
+### 外部验证（Woolf 齐性检验）
+
+比较推导队列与独立验证队列的两个 2×2 关联是否一致：
+
+```bash
+bacmap research stats validate --derivation rs-aaa --validation rs-bbb
+```
+
+输出 `bacmap.external_validation/1`：各队列 OR/95% CI（0.5 校正）、固定合并 OR、
+Q 统计量与 χ²(df=1) p 值、一致/异质性结论。注意：**一致性 ≠ 复现成功**——验证队列
+可能把握度不足（配 `stats power` 评估）；异质性则不得直接合并，需解释差异来源。
+
 ### 投稿包
 
 ```bash

@@ -223,7 +223,7 @@ def build_checklist(
             "Explain how the study size was arrived at",
             "partial" if members else "missing",
             [f"{members} members in frozen cohorts"] if members else [],
-            "Power/sample-size planning is not yet implemented.",
+            "Plan and record with `bacmap research stats power` (a priori, two proportions).",
         ),
         _item(
             "11",

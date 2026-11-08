@@ -480,6 +480,49 @@ models are **not** implemented yet; do not let an agent fake them.
 
 Over MCP (local-trusted, D3): `bacmap_research_logistic`.
 
+### Sample size and power (a priori design)
+
+Deterministic normal approximation for comparing two proportions (the P1 association
+design generalised), pure stdlib:
+
+```bash
+# plan a new study: expected resistant proportions per group -> n per group
+bacmap research stats power --p1 0.65 --p2 0.45 --power 0.8
+
+# express the design as baseline prevalence + target OR (p1 is derived)
+bacmap research stats power --baseline 0.2 --odds 4
+
+# fixed design -> achieved power
+bacmap research stats power --p1 0.65 --p2 0.45 --n1 130 --n2 130
+
+# reuse a session's observed proportions as planning assumptions
+bacmap research stats power --session rs-0123456789ab
+```
+
+The output is `bacmap.power_two_proportions/1`: n per group and total, proportions,
+alpha/power/ratio and cautions (extreme proportions <0.05/>0.95 or n<30 per group
+suggest an exact method). **Power is a design input**: proportions must come from prior
+knowledge or documented planning assumptions — never present post-hoc power of the data
+being tested as evidence (the session mode's `achieved_power_at_current_n` is
+descriptive only).
+
+Over MCP (D2, read-only compute): `bacmap_research_power`.
+
+### External validation (Woolf homogeneity)
+
+Compare the derivation cohort's 2×2 association against an independent validation
+cohort:
+
+```bash
+bacmap research stats validate --derivation rs-aaa --validation rs-bbb
+```
+
+The output `bacmap.external_validation/1` carries each cohort's OR/95% CI (0.5
+correction), the fixed-effects pooled OR, the Q statistic with a chi-square (df=1)
+p-value, and a consistency verdict. **Consistency is not replication success** — the
+validation cohort may be underpowered (pair with `stats power`); heterogeneity means
+the estimates must not be pooled without explaining the difference.
+
 ### Submission package
 
 ```bash

@@ -402,6 +402,75 @@ def run_stats_logistic(args: argparse.Namespace) -> None:
         print(f"  warning: {warning}")
 
 
+def run_stats_power(args: argparse.Namespace) -> None:
+    from bacmap.research import power as power_mod
+
+    try:
+        payload = power_mod.compute(
+            p1=args.p1,
+            p2=args.p2,
+            baseline=args.baseline,
+            odds_ratio=args.odds,
+            n1=args.n1,
+            n2=args.n2,
+            alpha=args.alpha,
+            power=args.power,
+            ratio=args.ratio,
+            session_id=args.session,
+            home=Path(args.home),
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    except ResearchError as exc:
+        raise SystemExit(f"[{exc.code}] {exc.message}") from exc
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    if "achieved power" in payload["method"]:
+        print(f"achieved power = {payload['power']:.3f} (n1={payload['n1']}, n2={payload['n2']})")
+    else:
+        print(
+            f"n1={payload['n1']}  n2={payload['n2']}  total={payload['n_total']}"
+            f"  (p1={payload['p1']:g}, p2={payload['p2']:g}, alpha={payload['alpha']:g},"
+            f" power={payload['power']:g})"
+        )
+    observed = payload.get("observed")
+    if observed:
+        print(
+            f"  design input from session {payload.get('design_input_from_session')}: "
+            f"observed p1={observed['p1_resistant_given_gene_pos']:.3f}, "
+            f"p2={observed['p2_resistant_given_gene_neg']:.3f}, "
+            f"current-n power={observed['achieved_power_at_current_n']:.3f}"
+        )
+    for note in payload.get("caution", []):
+        print(f"  caution: {note}")
+
+
+def run_stats_validate(args: argparse.Namespace) -> None:
+    from bacmap.research import power as power_mod
+
+    try:
+        payload = power_mod.validate_sessions(
+            Path(args.home), args.derivation, args.validation, alpha=args.alpha
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    except ResearchError as exc:
+        raise SystemExit(f"[{exc.code}] {exc.message}") from exc
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    verdict = "consistent" if payload["consistent"] else "HETEROGENEOUS"
+    q, p = payload["q_statistic"], payload["p_value"]
+    print(f"external validation: {verdict} (Q={q:.3f}, p={p:.3g})")
+    print(f"  pooled OR = {payload['pooled_odds_ratio']:.3f}")
+    for cohort in payload["cohorts"]:
+        print(
+            f"  {cohort['cohort']:<12} OR={cohort['odds_ratio']:.3f}"
+            f" ({cohort['ci_low']:.3f}-{cohort['ci_high']:.3f}) n={cohort['n']}"
+        )
+
+
 def run_package(args: argparse.Namespace) -> None:
     try:
         package = reporting.build_submission_package(
@@ -1079,6 +1148,50 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     logistic.set_defaults(
         func=run_stats_logistic,
     )
+    stats_power = stats_sub.add_parser(
+        "power",
+        help=T(
+            "sample size / achieved power for two proportions (a priori design)",
+            "两比例比较的样本量/把握度（事先设计）",
+        ),
+    )
+    stats_power.add_argument("--p1", type=float, default=None, help=T(
+        "expected proportion, group 1 (exposed)", "组 1（暴露组）预期比例"))
+    stats_power.add_argument("--p2", type=float, default=None, help=T(
+        "expected proportion, group 2", "组 2 预期比例"))
+    stats_power.add_argument("--baseline", type=float, default=None, help=T(
+        "baseline proportion (with --odds derives p1)", "基线比例（配 --odds 推导 p1）"))
+    stats_power.add_argument("--odds", type=float, default=None, help=T(
+        "target odds ratio (with --baseline derives p1)", "目标 OR（配 --baseline 推导 p1）"))
+    stats_power.add_argument("--n1", type=int, default=None, help=T(
+        "group-1 n (with --n2: achieved power)", "组 1 n（配 --n2：求把握度）"))
+    stats_power.add_argument("--n2", type=int, default=None, help=T(
+        "group-2 n", "组 2 n"))
+    stats_power.add_argument("--alpha", type=float, default=0.05)
+    stats_power.add_argument("--power", type=float, default=0.80)
+    stats_power.add_argument("--ratio", type=float, default=1.0, help=T(
+        "n2/n1 allocation ratio", "n2/n1 样本分配比"))
+    stats_power.add_argument("--session", default="", help=T(
+        "use a research session's observed proportions as the design input",
+        "以某研究会话的观察比例作为设计输入"))
+    add_home(stats_power)
+    add_json(stats_power)
+    stats_power.set_defaults(func=run_stats_power)
+    stats_validate = stats_sub.add_parser(
+        "validate",
+        help=T(
+            "external validation: compare two session associations (Woolf Q)",
+            "外部验证：比较两个会话关联（Woolf Q 检验）",
+        ),
+    )
+    stats_validate.add_argument("--derivation", required=True, help=T(
+        "derivation-cohort session id", "推导队列 session id"))
+    stats_validate.add_argument("--validation", required=True, help=T(
+        "validation-cohort session id", "验证队列 session id"))
+    stats_validate.add_argument("--alpha", type=float, default=0.05)
+    add_home(stats_validate)
+    add_json(stats_validate)
+    stats_validate.set_defaults(func=run_stats_validate)
 
     package = s.add_parser(
         "package",

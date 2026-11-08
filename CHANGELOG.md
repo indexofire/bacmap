@@ -5,6 +5,24 @@
 
 ## [未发布]
 
+### P4 第一片：样本量/把握度与外部验证（确定性）
+
+- **`bacmap research stats power`**：两比例比较的事先样本量/把握度（正态近似，
+  纯标准库 `statistics.NormalDist`，无连续性校正并如实注明）。三种输入：
+  `--p1/--p2` 显式比例、`--baseline/--odds`（OR 推导暴露组比例）、`--session`
+  （以既有会话观察比例为设计假设，结果标注 `design_input_from_session` 且明示
+  **不是事后功效**）；给 `--n1/--n2` 则返回达到的把握度。极端比例（<0.05/>0.95）
+  或每组 n<30 输出 `caution` 提示精确法。输出 `bacmap.power_two_proportions/1`。
+- **`bacmap research stats validate`**：外部验证——推导队列 vs 验证队列两个 2×2
+  关联的 Woolf 齐性检验（Q 统计量、χ² df=1、固定合并 OR、各队列 OR/CI 带 0.5
+  校正）。文档明确"一致 ≠ 复现成功（验证队列可能把握度不足）"。
+  输出 `bacmap.external_validation/1`。
+- **MCP `bacmap_research_power`**（D2 只读计算）：与 CLI 同一编排（`power.compute`）
+  ——数值/session 参数，无路径，数据不出站。
+- STROBE 草案 item 10 note 指向 `stats power`；docs（research-workbench/cli/mcp
+  双语）与 PLAN P4 同步。
+- 测试基线：1886 → 1908（power 自洽/单调/换算 + session/validate 端到端 + CLI）。
+
 ### P1 收官（skills 目录约定）与 P2 B 档图片真实镜像实测
 
 - **`bacmap agent install --with-skills` 按各 harness 实测约定直写 skills**：

@@ -165,6 +165,10 @@ bacmap research phylo xml --profile FILE --plan FILE --alignment FILE -o XML [--
 bacmap research phylo iqtree --plan FILE --alignment FILE [--prefix P]
 
 bacmap research stats logistic --data FILE --outcome COL --predictors A,B
+bacmap research stats power --p1 P --p2 P [--alpha A] [--power P] [--ratio R]
+                             [--baseline P --odds OR] [--n1 N --n2 N]
+                             [--session ID] [--home DIR] [--json]
+bacmap research stats validate --derivation ID --validation ID [--alpha A] [--json]
 bacmap research package <study_id> --out DIR
 
 bacmap research request create --question TEXT [--run-id ID]... [--gene NAME]

@@ -327,6 +327,103 @@ def test_research_figure_render_cli(tmp_path: Path, monkeypatch, capsys):
     assert "planned" in err
 
 
+def test_research_stats_power_cli(monkeypatch, capsys):
+    code, out, _ = _run(
+        monkeypatch, capsys,
+        ["research", "stats", "power", "--p1", "0.65", "--p2", "0.45", "--json"],
+    )
+    assert code == 0
+    plan = json.loads(out)
+    assert plan["schema"] == "bacmap.power_two_proportions/1"
+    assert plan["n1"] == plan["n2"] and plan["n1"] > 0
+
+    code, out, _ = _run(
+        monkeypatch, capsys,
+        ["research", "stats", "power", "--p1", "0.65", "--p2", "0.45",
+         "--n1", "130", "--n2", "130", "--json"],
+    )
+    assert code == 0
+    assert json.loads(out)["power"] >= 0.80
+
+    code, out, _ = _run(
+        monkeypatch, capsys,
+        ["research", "stats", "power", "--baseline", "0.2", "--odds", "4", "--json"],
+    )
+    assert code == 0
+    assert json.loads(out)["p1"] == 0.5
+
+    code, _, err = _run(
+        monkeypatch, capsys,
+        ["research", "stats", "power", "--p1", "0.5", "--p2", "0.5", "--json"],
+    )
+    assert code != 0 and "nothing to detect" in err
+
+
+def test_research_stats_validate_cli(tmp_path: Path, monkeypatch, capsys):
+    home = _seed_home(tmp_path)
+    code, out, _ = _run(
+        monkeypatch, capsys,
+        ["research", "create", "--run-id", "run-1", "--gene", "blaKPC-33",
+         "--test-name", "meropenem", "--home", home, "--json"],
+    )
+    assert code == 0
+    first = json.loads(out)["session"]["session_id"]
+
+    # 第二个 run：同向但更弱的关联，用作验证队列
+    import sqlite3
+
+    from bacmap.store import runs as runs_store
+    from bacmap.store.lab_results import LabResultService
+
+    strains = [f"T{i}" for i in range(12)]
+    run = runs_store.create_run(
+        "bacmap", tmp_path / "workflows" / "bacmap", strains,
+        db_path=tmp_path / "runs.sqlite", task_id="task-2",
+    )
+    with sqlite3.connect(tmp_path / "runs.sqlite") as conn:
+        conn.execute(
+            "UPDATE analysis_runs SET run_id = ? WHERE run_id = ?", ("run-2", run.run_id)
+        )
+    with sqlite3.connect(tmp_path / "gom.sqlite") as conn:
+        for sid in strains[:3]:
+            conn.execute(
+                "INSERT INTO strain_amr_genes (strain_id, gene_name, database)"
+                " VALUES (?,?,?)",
+                (sid, "blaKPC-33", "card"),
+            )
+    with LabResultService(tmp_path / "data" / "bacmap.sqlite") as svc:
+        for sid in strains[:3]:
+            svc.add(sid, "mic", "meropenem", "0.25", interpretation="R")
+        for sid in strains[3:]:
+            svc.add(sid, "mic", "meropenem", "0.25", interpretation="S")
+
+    code, out, _ = _run(
+        monkeypatch, capsys,
+        ["research", "create", "--run-id", "run-2", "--gene", "blaKPC-33",
+         "--test-name", "meropenem", "--home", home, "--json"],
+    )
+    assert code == 0
+    second = json.loads(out)["session"]["session_id"]
+
+    code, out, _ = _run(
+        monkeypatch, capsys,
+        ["research", "stats", "validate", "--derivation", first,
+         "--validation", second, "--home", home, "--json"],
+    )
+    assert code == 0
+    payload = json.loads(out)
+    assert payload["schema"] == "bacmap.external_validation/1"
+    assert len(payload["cohorts"]) == 2
+    assert "consistent" in payload
+
+    code, _, err = _run(
+        monkeypatch, capsys,
+        ["research", "stats", "validate", "--derivation", first,
+         "--validation", "rs-nope", "--home", home, "--json"],
+    )
+    assert code != 0 and "not_found" in err
+
+
 def test_research_figure_template_cli(tmp_path: Path, monkeypatch, capsys):
     target = tmp_path / "figure_script.py"
     code, out, _ = _run(

@@ -663,6 +663,48 @@ def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpe
         )
 
     @server.tool(
+        name="bacmap_research_power",
+        description=(
+            "Sample size / achieved power for a two-proportion comparison (a priori "
+            "design): give p1/p2 (or baseline+odds_ratio), optional alpha/power/ratio; "
+            "or n1/n2 for achieved power; or a research session_id to reuse its "
+            "observed proportions as the design input. Deterministic normal "
+            "approximation, no data leaves the workstation. D2; read-only compute."
+        ),
+    )
+    def research_power(
+        p1: float | None = None,
+        p2: float | None = None,
+        baseline: float | None = None,
+        odds_ratio: float | None = None,
+        n1: int | None = None,
+        n2: int | None = None,
+        alpha: float = 0.05,
+        power: float = 0.80,
+        ratio: float = 1.0,
+        session_id: str = "",
+    ) -> str:
+        from bacmap.research import power as power_mod
+
+        try:
+            payload = power_mod.compute(
+                p1=p1,
+                p2=p2,
+                baseline=baseline,
+                odds_ratio=odds_ratio,
+                n1=n1,
+                n2=n2,
+                alpha=alpha,
+                power=power,
+                ratio=ratio,
+                session_id=session_id,
+                home=engine.home,
+            )
+        except (ValueError, ResearchError) as exc:
+            return json.dumps({"error": str(exc)}, ensure_ascii=False)
+        return json.dumps(payload, ensure_ascii=False)
+
+    @server.tool(
         name="bacmap_research_reporting_checklist",
         description=(
             "Return the deterministic STROBE-style checklist draft for a study: met/partial/"

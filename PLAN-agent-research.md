@@ -132,7 +132,10 @@ bacmap 不新增联网抓取；文献检索留在 agent，落库和引用判定�
 - [x] 多变量 logistic 回归（IRLS，第一切片）
 - [ ] 混合效应 / IPTW / 匹配 / 生存分析（后续）
 - [x] 缺失值摘要（回归丢弃计数 + profile 缺失率）
-- [ ] 样本量/把握度、外部验证（后续）
+- [x] 样本量/把握度（`stats power`：两比例正态近似，baseline+OR 推导、session 观察
+      比例作设计假设并明示非事后功效；MCP `bacmap_research_power` D2）
+- [x] 外部验证（`stats validate`：推导 vs 验证队列 2×2 的 Woolf 齐性检验 Q/χ²，
+      固定合并 OR；一致≠复现成功已写入文档）
 - [x] STROBE checklist、supplementary 清单、投稿包
 - [ ] 研究 plan 类型（是否新增 `research` 计划类型需另立 ADR）
 
