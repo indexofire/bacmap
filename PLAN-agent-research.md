@@ -127,17 +127,20 @@ bacmap 不新增联网抓取；文献检索留在 agent，落库和引用判定�
 - [x] `bacmap research phylo profile|plan|xml` CLI 与只读 MCP 工具（D3，仅 local-trusted）
 - [x] BEAUti 替代路径：AI 辅助参数、bacmap 渲染/校验 XML、人确认后运行
 
-### P4 论文级统计与报告（第一切片已落地；高级方法需新依赖/ADR）
+### P4 论文级统计与报告（P4 完成；高级统计外部化见 ADR-22/23）
 
 - [x] 多变量 logistic 回归（IRLS，第一切片）
-- [ ] 混合效应 / IPTW / 匹配 / 生存分析（后续）
+- [x] 混合效应 / IPTW / 匹配 / 生存分析（ADR-22 容器外部化：类型化 AnalysisSpec →
+      确定性 R 脚本 → `bacmap-stats:r45` 沙箱 → `bacmap.advstats_result/1`；
+      2026-11-09，真实镜像冒烟见 dev/research-framework-evidence.md §10.35）
 - [x] 缺失值摘要（回归丢弃计数 + profile 缺失率）
 - [x] 样本量/把握度（`stats power`：两比例正态近似，baseline+OR 推导、session 观察
       比例作设计假设并明示非事后功效；MCP `bacmap_research_power` D2）
 - [x] 外部验证（`stats validate`：推导 vs 验证队列 2×2 的 Woolf 齐性检验 Q/χ²，
       固定合并 OR；一致≠复现成功已写入文档）
 - [x] STROBE checklist、supplementary 清单、投稿包
-- [ ] 研究 plan 类型（是否新增 `research` 计划类型需另立 ADR）
+- [x] 研究 plan 类型（ADR-23：第六任务类型 `research`，`analysis=session|advstats`，
+      仅经计划执行；auto_confirm 可显式纳入；advstats 数据表进输入指纹）
 
 ### P5 图片运行时与风格（已落地；镜像发布属 CI）
 

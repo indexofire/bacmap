@@ -20,6 +20,7 @@ step 必须同模块——DBOS 恢复语义与测试 monkeypatch 契约）。其
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import logging
 from datetime import UTC, datetime
@@ -788,6 +789,196 @@ def mine_workflow(params: dict[str, Any]) -> dict[str, Any]:
         "artifacts": result["artifacts"],
         "workspace": result["workspace"],
     }
+
+
+# ---------------------------------------------------------------------------
+# research 工作流（v1.10.11，ADR-22/23：研究分析经计划确认后执行）
+# ---------------------------------------------------------------------------
+
+
+@DBOS.step()
+def _step_research_session(params: dict[str, Any]) -> dict[str, Any]:
+    """session：从既有 run 创建确定性 AMR 关联草案（P1 薄链路，无 LLM）。"""
+    from bacmap.research.models import CreateSessionRequest, ResearchProfile
+    from bacmap.research.service import ResearchService
+
+    _progress(params, "research_session")
+    home = Path(params["home"])
+    service = ResearchService(home)
+    try:
+        profile = ResearchProfile(params.get("profile", "research"))
+    except ValueError:
+        profile = ResearchProfile.RESEARCH
+    view = service.create_session(
+        CreateSessionRequest(
+            run_id=str(params.get("run_id", "")),
+            gene=str(params.get("gene", "")),
+            test_name=str(params.get("test_name", "")),
+            profile=profile,
+            note=str(params.get("note", "")),
+        ),
+        actor=str(params.get("submitted_by", "research")),
+    )
+    return {
+        "status": "SUCCEEDED",
+        "analysis": "session",
+        "session_id": view.session.session_id,
+        "n": view.stat.n if view.stat else None,
+        "artifacts": [a.path for a in view.artifacts],
+    }
+
+
+@DBOS.step()
+def _step_research_advstats(params: dict[str, Any]) -> dict[str, Any]:
+    """advstats（ADR-22）：类型化规格 → bacmap 渲染 R 脚本 → 固定镜像沙箱 → 归一。
+
+    脚本由 bacmap 从类型化参数渲染（非 agent 编写），计划确认即授权，无挖掘门；
+    spec/脚本/输出全部留 SHA-256，写入 ``research/advstats/<task_id>/``。
+    """
+    from bacmap.research import advstats
+    from bacmap.research.advstats import AnalysisSpec
+
+    _progress(params, "advstats_sandbox")
+    home = Path(params["home"])
+    task_id = str(params.get("task_id", ""))
+    workspace = home / "workspaces" / task_id
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    # 数据零拷贝登记（同 mine：SHA256 证据链）→ 只读挂载
+    source = Path(str(params.get("data_path", "")))
+    if not source.is_file():
+        return {
+            "status": "FAILED",
+            "analysis": "advstats",
+            "message": f"数据表不存在：{source}",
+        }
+    from bacmap.store.datasets import DatasetRegistry
+
+    registry = DatasetRegistry(home / "gom.sqlite")
+    try:
+        dataset = registry.register(
+            source,
+            registered_by=str(params.get("submitted_by", "research")),
+            data_class="D2",
+        )
+    finally:
+        registry.close()
+
+    spec: AnalysisSpec = advstats.AnalysisSpec(
+        method=params.get("method", "mixed_logistic"),
+        data_path=dataset.mount_guest,
+        outcome=str(params.get("outcome", "")),
+        treatment=str(params.get("treatment", "")),
+        predictors=list(params.get("predictors", []) or []),
+        confounders=list(params.get("confounders", []) or []),
+        group=str(params.get("group", "")),
+        time=str(params.get("time", "")),
+        event=str(params.get("event", "")),
+        alpha=float(params.get("alpha", 0.05)),
+    )
+    script = advstats.render_r_script(spec)
+    script_path = workspace / "advstats.R"
+    script_path.write_text(script, encoding="utf-8")
+
+    from bacmap.agent.sandbox import SandboxSpec
+
+    sandbox_spec = SandboxSpec(
+        image=str(params.get("image") or advstats.DEFAULT_IMAGE),
+        command=["Rscript", script_path.name],
+        workspace=workspace,
+        readonly_mounts={str(source): dataset.mount_guest},
+        allowed_readonly_roots=(source,),
+    )
+    try:
+        result = _run_sandbox(sandbox_spec)
+    except Exception as exc:  # 环境级失败带回可操作原因
+        logger.exception("advstats sandbox failed to start")
+        return {
+            "status": "FAILED",
+            "analysis": "advstats",
+            "message": f"沙箱启动失败：{type(exc).__name__}: {exc}",
+        }
+
+    out_dir = home / "research" / "advstats" / task_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha256(script.encode("utf-8")).hexdigest()
+    (out_dir / "advstats.R").write_text(script, encoding="utf-8")
+    if result.returncode != 0:
+        (out_dir / "stderr.log").write_text(result.stderr, encoding="utf-8")
+        return {
+            "status": "FAILED",
+            "analysis": "advstats",
+            "message": f"统计容器退出码 {result.returncode}：{result.stderr.strip()[-500:]}",
+            "script_sha256": digest,
+        }
+    payload_path = workspace / "result.json"
+    try:
+        payload = (
+            json.loads(payload_path.read_text(encoding="utf-8"))
+            if payload_path.is_file()
+            else {}
+        )
+    except json.JSONDecodeError:
+        payload = {}
+    if not payload:
+        return {
+            "status": "FAILED",
+            "analysis": "advstats",
+            "message": "统计容器未产出 result.json（脚本/镜像版本不匹配？）",
+            "script_sha256": digest,
+        }
+    summary = advstats.summarize(payload)
+    summary["task_id"] = task_id
+    summary["spec_sha256"] = hashlib.sha256(
+        json.dumps(
+            params, sort_keys=True, ensure_ascii=False, default=str
+        ).encode("utf-8")
+    ).hexdigest()
+    summary["script_sha256"] = digest
+    summary["image"] = sandbox_spec.image
+    (out_dir / "result.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    from bacmap.research.store import ResearchStore
+
+    with ResearchStore(home) as store:
+        store.ledger(
+            None,
+            "research.advstats",
+            str(params.get("submitted_by", "research")),
+            {
+                "task_id": task_id,
+                "method": summary["method"],
+                "ok": summary["ok"],
+                "script_sha256": digest,
+                "result": str(out_dir / "result.json"),
+            },
+        )
+    if not summary["ok"]:
+        return {
+            "status": "FAILED",
+            "analysis": "advstats",
+            "message": f"模型拟合失败：{summary.get('error', '')}",
+            "script_sha256": digest,
+            "result": str(out_dir / "result.json"),
+        }
+    return {
+        "status": "SUCCEEDED",
+        "analysis": "advstats",
+        "method": summary["method"],
+        "n": summary.get("n"),
+        "estimates": summary.get("estimates", []),
+        "diagnostics": summary.get("diagnostics", {}),
+        "script_sha256": digest,
+        "result": str(out_dir / "result.json"),
+    }
+
+
+@DBOS.workflow()
+def research_workflow(params: dict[str, Any]) -> dict[str, Any]:
+    if params.get("analysis") == "advstats":
+        return _step_research_advstats(params)
+    return _step_research_session(params)
 
 
 @DBOS.step()

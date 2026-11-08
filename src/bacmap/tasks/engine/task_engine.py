@@ -72,6 +72,7 @@ class DbosTaskEngine:
             TaskType.MINE: _wf.mine_workflow,
             TaskType.WRITE: _wf.write_workflow,
             TaskType.RECORD: _wf.record_workflow,
+            TaskType.RESEARCH: _wf.research_workflow,
         }
         if task_type not in workflows:
             raise NotImplementedError(f"unsupported task type: {task_type}")

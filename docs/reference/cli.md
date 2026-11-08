@@ -170,6 +170,9 @@ bacmap research stats power --p1 P --p2 P [--alpha A] [--power P] [--ratio R]
                              [--baseline P --odds OR] [--n1 N --n2 N]
                              [--session ID] [--home DIR] [--json]
 bacmap research stats validate --derivation ID --validation ID [--alpha A] [--json]
+bacmap research advstats render --method M --data FILE [--outcome C] [--treatment C]
+                                [--predictors A,B] [--confounders A,B] [--group C]
+                                [--time C] [--event C] [--output FILE]
 bacmap research package <study_id> --out DIR
 
 bacmap research request create --question TEXT [--run-id ID]... [--gene NAME]

@@ -32,10 +32,9 @@ from bacmap.store.migrations import migrate
 from bacmap.tasks.events import EventLog, EventType
 from bacmap.tasks.params import (
     AnalyzeParams,
-    CurateParams,
     MineParams,
     PlannableTask,
-    WriteParams,
+    ResearchParams,
     engine_params,
     task_type_of,
 )
@@ -43,7 +42,8 @@ from bacmap.tasks.spec import TASKS_MIGRATIONS, TaskEngine, TaskId
 
 MAX_TASKS_PER_PLAN = 10
 _MIN_HASH_PREFIX = 12
-PlanTask = AnalyzeParams | CurateParams | MineParams | WriteParams
+# v1.10.11（ADR-23）：PlanTask 即 PlannableTask（analyze/curate/mine/write/research）。
+PlanTask = PlannableTask
 _TASKS_ADAPTER: TypeAdapter[list[PlanTask]] = TypeAdapter(list[PlannableTask])
 
 
@@ -122,6 +122,9 @@ def _input_paths(tasks: Sequence[PlanTask]) -> list[str]:
             paths.extend(d for d in (t.fasta_dir, t.fastq_dir) if d)
         elif isinstance(t, MineParams):
             paths.extend(t.input_paths)
+        elif isinstance(t, ResearchParams) and t.data_path:
+            # advstats 的数据表进入计划输入指纹：确认时数据已变则冲突（v1.10.11）
+            paths.append(t.data_path)
     return sorted(set(paths))
 
 

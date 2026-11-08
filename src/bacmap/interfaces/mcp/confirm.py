@@ -49,7 +49,7 @@ def _task_types(cfg: dict[str, Any]) -> set[str]:
     raw = cfg.get("task_types", ["analyze"])
     if not isinstance(raw, list) or not all(isinstance(x, str) for x in raw):
         return set()
-    allowed = {"analyze", "curate", "mine", "write"}
+    allowed = {"analyze", "curate", "mine", "write", "research"}
     types = {x.strip().lower() for x in raw}
     return types if types <= allowed else set()
 

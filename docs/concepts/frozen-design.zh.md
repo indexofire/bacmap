@@ -1,4 +1,4 @@
-# BacMAP Standalone 框架设计（冻结版 v1.10.10）
+# BacMAP Standalone 框架设计（冻结版 v1.10.11）
 
 - **日期**：2026-10-09（v1.1–v1.4.7 同日修订，见第 10 节）
 - **状态**：冻结（Frozen）。第 8 节的验证项全部通过后，转为"已确认"
@@ -385,6 +385,29 @@ v1.2 起，"能力档位"与"部署位置"是两个独立维度：档位决定�
   - **嵌入式 Runtime**（在 bacmap Web 内驱动外部 Harness）不在 v1.5 必交付范围；如需实现，优先 ACP（Agent Client Protocol，Hermes/DSH 原生支持），Pi RPC 为后备
 - **否决**：继续在 bacmap 内维护完整对话 TUI（与 Harness 能力重复）；把确认/审批交给 Harness（不可信）；把任务内智能体交给 Harness（无法受门约束）；为每个 Harness 写核心业务插件（违反 ToolSpec 单一事实来源）。
 - **反转成本**：中——内置会话助手在移除前保持可用；移除后如需恢复，可由 pydantic-ai 重新挂接同一 MCP/应用服务契约。
+
+---
+
+### ADR-22 高级统计外部化 —— 冻结（v1.10.11 新增）
+- **背景**：P4 论文级统计需要混合效应 logistic、IPTW、倾向评分匹配、生存分析（KM/log-rank/Cox）。这些方法的成熟实现是 R 生态（lme4/survival/MatchIt/WeightIt）与 Python statsmodels；把 statsmodels 引入主环境违反"运行时精简"原则，在 bacmap 内手写 GLMM/加权估计不现实且不可信。
+- **决策**（与 ADR-20 生信外部化同构）：
+  - **bacmap 只编排与归一**：高级统计以类型化 `AnalysisSpec`（方法/列名/参数，未知字段拒绝）进入计划；bacmap 从规格**确定性渲染 R 脚本**（同一规格恒得同一脚本），在固定镜像 `docker://bacmap-stats:r45`（R + lme4/survival/MatchIt/WeightIt/survey/jsonlite，`docker/stats/` 构建资产）的既有沙箱内执行；容器输出的 JSON 归一为 `bacmap.advstats_result/1`（估计/诊断/失败原因原样回传）。
+  - **脚本非 agent 编写**：R 代码由 bacmap 渲染，agent 只提供类型化规格；因此**计划确认（人工）即授权，无挖掘门**；spec/脚本/输出全部留 SHA-256 并入 research ledger。
+  - **数据零拷贝登记**（同 mine）：数据表经 DatasetRegistry 登记（D2）后只读挂载进沙箱。
+  - **不进主环境**：主 bacmap 环境不依赖任何统计模型库；确定性统计（2×2/Fisher/logistic IRLS/MH/样本量/外部验证）仍内置（stdlib/numpy），不外部化。
+- **否决**：statsmodels/lme4 进主依赖（破坏精简）；agent 在 mine 开放路径自由编写统计脚本（绕过类型化边界与可复现渲染）；手写 GLMM（不可信）。
+- **反转成本**：低——渲染器与归一器独立于引擎；换实现（如 Python 容器）只需替换渲染目标与镜像。
+
+### ADR-23 研究任务类型（research）—— 冻结（v1.10.11 新增）
+- **背景**：Research Workbench 的操作此前散落在 CLI/Web/MCP 直连调用与"研究请求收件箱"（v1.10.9，人工在 Web 确认后才创建对象），没有统一经计划确认的执行入口；高级统计（ADR-22）也需要一个经确认的可执行载体。
+- **决策**：
+  - **新增第六任务类型 `research`**（analyze/curate/mine/write/record 之后）：参数为类型化 `ResearchParams`，两种分析——`session`（从既有 run 创建确定性 AMR 关联草案）与 `advstats`（ADR-22 高级统计）。
+  - **统一写入口径**：research 任务只能经计划（`bacmap_create_plan` → 人在 bacmap CLI/Web 确认 → 引擎执行）提交；`[plans.auto_confirm]` 的 `task_types` 可显式加入 `research`（默认不开），MCP `bacmap_capabilities.plannable_task_types` 同步。
+  - **advstats 数据表进入计划输入指纹**：确认时数据已变则冲突（与 fasta_dir/input_paths 同语义）。
+  - **无挖掘门**：脚本由 bacmap 渲染（非开放路径）；research session 为确定性计算。任务级门（curate 发布、mine 签字、write 导出）不变。
+  - **record 仍独立**：研究对象的创建（Study/Cohort/Plan/Claim）不经 research 任务——那是人对研究设计的操作，由 Web 收件箱/CLI 完成（v1.10.9 边界不变）。
+- **否决**：让 research 任务绕过计划直接执行（破坏写操作唯一入口）；把 Study/Cohort 对象创建塞进 research 任务（混淆"分析执行"与"研究设计"）。
+- **反转成本**：低——类型与工作流独立注册；移除即从 PlannableTask 联合中摘除。
 
 ---
 
@@ -786,5 +809,6 @@ bacmap/
 | v1.10.6 | 2026-11-04 | **配置模板与配置路径分层（ADR-03 修订）**：新增仓库根目录模板 `config.example.toml` 并纳入发行包；新增 CLI `bacmap config init|path`（`--user` 写 XDG、`--project` 写当前目录、默认写 `$BACMAP_HOME`）。配置解析顺序改为：`BACMAP_CONFIG` 显式路径 > 命令行/模块传入 home 的 `config.toml` > `$XDG_CONFIG_HOME/bacmap/config.toml`（默认 `~/.config/bacmap/config.toml`）> 内置默认值。源码检出中的项目根 `config.toml` 被 `.gitignore` 忽略，且**不会被自动发现**，必须显式 `BACMAP_CONFIG="$PWD/config.toml"`，保持“路径不由源码位置推导”的原则。pip/conda 安装可用 `bacmap config init --user` 把配置与数据分离。所有原直接读取 `$BACMAP_HOME/config.toml` 的路径（LLM、MCP Profile、auto-confirm、debug、备份）统一改经 `config_path()`；备份会包含实际生效的外部配置。测试基线 1693 → 1703 | 用户要求提供配置模板、pixi 项目本地配置不入库、conda/pip 使用用户配置目录 + 实施验证 |
 | v1.10.9 | 2026-11-07 | **研究请求提案（Agent → 人）**：新增 MCP `bacmap_research_request`/`bacmap_research_requests`（D2+，local-trusted）。提案只写 `research.sqlite` 的草案请求，不创建 Study/Cohort/Plan、不执行分析；人工在 Web“研究请求收件箱”确认后才创建对象/session。ADR-07/12 的执行边界不变：MCP 不获得分析执行或对象直写权。CLI 提供同构 `research request` 兜底。测试基线 1824 → 1831。 | 用户要求自然语言下达 research 指令 + Web 作为主审核界面 |
 | v1.10.10 | 2026-11-08 | **工作流面向全病原注册表泛化 + 校验/报告按物种路由**：①删除 `vpara.smk` 与打包私有库链路（`build_gspec_db.py`、`refs/vpara_virulence.fasta`、部署期建库）——VPA 毒力标记（tdh/trh/tlh）改用官方 gspec catalog `vpa_vf` 库，O/K 血清型用 `vpa_ok`（v1.4.9 的私有库实现被官方库取代，历史记录保留），registry VPA 默认库改为 `[vpa_vf, vpa_ok, vpa_pai]`；②删除 ECO ecoh 占位规则——O/H 能力状态/表型统一出自 `gspec/typing.json`（`ecoh_serotype_summary` 归一），不再逐菌占位文件；VPA 血清型 unavailable 语义由 collect_summary 按物种生成，`routing.report_inputs` 移除逐菌专用输入；③`run_gspec_typing` 对 no_scheme 的 gene 库保留 screen 基因命中（gspec ≥0.10 JSON 无 genes 键，从 hits/TSV 归一）；④Deterministic Verifier 按物种路由：MLST 期望位点取自 gmlst TSV 的 SCHEME 列（已登记方案用其位点表，未登记方案按实际位点全量校验，绝不套用别种位点表），serotype 尊重 `sistr_status=not_applicable`（非沙门菌不再假阴性）；⑤HTML 报告修复：基本信息"物种判定"读 gside `species` 键（旧 `verdict` 键兼容）、Contigs 数列索引、MLST alleles 剔除元列。ADR-20 原则不变且更彻底：种以下判定全部经 registry + 官方 gspec 库路由，无逐菌专用 smk 规则。真实单株验证：VPA 组装 → ST1762、tlh⁺/tdh⁻/trh⁻（vpa_vf）、O3:KUT（vpa_ok，O high/K low）、Verifier 四项全过。 | 用户裁定（vpara.smk 已无效；pipeline 从 SAL/ECO/VPA/SHI 四菌扩展为常见病原菌）+ 实施验证 |
+| v1.10.11 | 2026-11-09 | **P4 高级统计外部化（ADR-22）+ 研究任务类型（ADR-23）**：①新增 `TaskType.RESEARCH`（第六任务类型）与类型化 `ResearchParams`（`analysis=session|advstats`），经计划确认后执行——session 走 P1 确定性 AMR 关联；advstats 由 bacmap 从类型化 `AnalysisSpec` **确定性渲染 R 脚本**（glmer/WeightIt+survey/MatchIt/survfit+survdiff/coxph），在固定镜像 `docker://bacmap-stats:r45`（`docker/stats/` 构建资产）沙箱内拟合并归一为 `bacmap.advstats_result/1`；脚本非 agent 编写 → 计划确认即授权、无挖掘门；spec/脚本/输出 SHA-256 入 research ledger，数据表零拷贝登记（D2）并进入计划输入指纹；②`PlannableTask`/MCP `plannable_task_types`/`[plans.auto_confirm] task_types` 同步纳入 research；③确定性统计另增样本量/把握度（`stats power`，两比例正态近似）与外部验证（`stats validate`，Woolf Q）及 MCP `bacmap_research_power`；④新增 ADR-22/ADR-23（冻结）。主环境不新增统计模型依赖。 | 用户裁定（高级统计选容器外部化；统一新增 research 计划类型）+ 实施验证 |
 | v1.10.8 | 2026-11-07 | **物种→工具参考数据覆盖层（`tool_selection.yaml`）**：`pathogens.yaml` 保持包内默认值。新增 `$BACMAP_HOME/config/tool_selection.yaml`（`bacmap.tool_selection/1`），按工具分节：`gspec`（`mode`/`databases`）与 `gmlst`（`mode`/`modes`/`schemes`），支持 `replace`/`extend` 与物种级/单样本覆盖（优先级 sample > species > registry）。旧 `db_selection.yaml`（`bacmap.db_selection/1`）自动翻译为 gspec-only 并告警。新增 `core/tool_selection.py` 与 `core/tool_selection_validate.py`；`bacmap selection options|select|show|validate` CLI（`bacmap db` 保留为 gspec-only 别名）；只读 MCP 工具 `bio_tool_selection_options`（L1/READ/D0）。工作流在 DAG 解析期合并覆盖层：gspec 库（gene/cluster 分流）、gmlst MLST/cgMLST scheme、scheme-free tgMLST，以及 VPA `vpa_ok` 血清型回填。运行记录保存 `tool_selection_effective`/`tool_selection_sha256`。测试基线 1703 → 1761；ruff/mypy/contracts/docs-build 全绿。 | 用户裁定（用户自选物种→工具参考数据；gmlst 与 gspec 同一需求）+ 实施验证 |
 | v1.10.7 | 2026-11-04 | **外部工具依赖升级（gside/gspec/gmlst/gseek）**：pixi PyPI 依赖从 gside 0.1.4、gspec 0.5.6、gmlst 0.5.5 升级到 **gside 0.2.2、gspec 0.6.8、gmlst 0.6.1**，并显式加入 **gseek 0.10.4**（gside 0.2+ 的默认引擎依赖；gspec/gmlst 的可选 gseek 引擎同用）。接口复核：`gside species --mode/-f/-o`、`gspec screen/typing --db/-f/-o/-D`、`gmlst typing cgmlst -s/--format/-o`、`gmlst visual matrix --input/--output/--format` 均保持 bacmap 适配器所需签名。适配 gspec 0.6 的库重命名：`ecoli_dec→eco_dec`、`lm_doumith→lmo_sero`（registry、DEC 专用步骤、routing、测试与文档同步；历史冻结记录保留旧名）；同时补 Listeria MLST 声明 `lmonocytogenes_1`，未声明 scheme 的物种不再静默回退 salmonella_2，而是输出 scheme=none/ST=N/A。真实冒烟：本地 E. coli 组装经完整 analyze 成功（gside 0.2.2 → Escherichia_coli/high；gmlst 0.6.1 → ecoli_1 ST795；gspec 0.6.8 eco_dec → EPEC_atypical/high；ecoh 如实 no_scheme；analysis gate pass）。注意 gspec 0.6.7 起部分 provider 快照不再随 wheel 捆绑，需安装期 `gspec db fetch`。测试基线 1703 → 1703（无增量）。 | 用户要求升级外部依赖到最新 + CLI/解析器/单株冒烟验证 |

@@ -5,6 +5,30 @@
 
 ## [未发布]
 
+### P4 完成：高级统计外部化（ADR-22）+ 研究任务类型（ADR-23）
+
+- **新增第六任务类型 `research`**（ADR-23，冻结）：类型化 `ResearchParams`
+  （`analysis=session|advstats`），**仅经计划执行**（`bacmap_create_plan` → 人工
+  确认 → 引擎）；`PlannableTask`/MCP `plannable_task_types`/`[plans.auto_confirm]
+  task_types` 同步纳入；advstats 数据表进入计划输入指纹（确认时数据已变则冲突）。
+  - `session`：从既有 run 创建确定性 AMR 关联草案（P1 薄链路，引擎内执行）；
+  - `advstats`（ADR-22，冻结）：类型化 `AnalysisSpec`（方法/列名，未知字段拒绝）
+    → bacmap **确定性渲染 R 脚本**（`mixed_logistic`=lme4 glmer、`iptw`=WeightIt+
+    survey、`matching`=MatchIt、`survival_km`=survfit+survdiff、`cox`=coxph+cox.zph）
+    → `bacmap-stats:r45` 镜像沙箱拟合（数据零拷贝只读挂载、无网络）→ 归一
+    `bacmap.advstats_result/1`。脚本非 agent 编写：**计划确认即授权，无挖掘门**；
+    spec/脚本/输出 SHA-256 入 research ledger。
+- **新增 `research/advstats.py`**（渲染器/归一器）与 `docker/stats/r45` 构建资产
+  （R 4.5 + lme4/survival/MatchIt/WeightIt/survey/jsonlite）；主环境零统计模型依赖。
+- **CLI `bacmap research advstats render`**：渲染确定性 R 脚本供提交前人工审阅。
+- 新增 ADR-22/ADR-23 与 v1.10.11 修订记录（中英）；AGENTS.md（六类任务）、
+  research-workbench §12 / cli / mcp 双语同步。
+- 真实镜像冒烟：`bacmap-stats:r45` 容器内 Cox 拟合 120 例模拟队列
+  （n=120、events=71、tx HR=1.386 p=0.179、PH 全局 p=0.173），spec/script
+  SHA-256 与镜像名入 ledger。
+- 测试基线：1908 → 1929（advstats 规格/渲染/归一、research 工作流、计划指纹、
+  MCP research 计划）。
+
 ### P4 第一片：样本量/把握度与外部验证（确定性）
 
 - **`bacmap research stats power`**：两比例比较的事先样本量/把握度（正态近似，

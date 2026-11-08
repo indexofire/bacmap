@@ -471,6 +471,38 @@ def run_stats_validate(args: argparse.Namespace) -> None:
         )
 
 
+def run_advstats_render(args: argparse.Namespace) -> None:
+    from bacmap.research import advstats
+    from bacmap.research.advstats import AnalysisSpec
+
+    try:
+        spec = AnalysisSpec(
+            method=args.method,
+            data_path=args.data,
+            outcome=args.outcome,
+            treatment=args.treatment,
+            predictors=[p.strip() for p in args.predictors.split(",") if p.strip()],
+            confounders=[p.strip() for p in args.confounders.split(",") if p.strip()],
+            group=args.group,
+            time=args.time,
+            event=args.event,
+            alpha=args.alpha,
+        )
+        script = advstats.render_r_script(spec)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    if args.output:
+        target = Path(args.output).expanduser()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(script, encoding="utf-8")
+        if args.json:
+            print(json.dumps({"path": str(target)}, ensure_ascii=False))
+        else:
+            print(f"wrote {target}")
+    else:
+        print(script, end="")
+
+
 def run_package(args: argparse.Namespace) -> None:
     try:
         package = reporting.build_submission_package(
@@ -1192,6 +1224,42 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(stats_validate)
     add_json(stats_validate)
     stats_validate.set_defaults(func=run_stats_validate)
+
+    adv = s.add_parser(
+        "advstats",
+        help=T(
+            "advanced statistics (ADR-22: render/inspect the container script)",
+            "高级统计（ADR-22：渲染/审阅容器脚本）",
+        ),
+    )
+    adv_sub = adv.add_subparsers(dest="advstats_command", required=False)
+    adv_render = adv_sub.add_parser(
+        "render",
+        help=T("render the deterministic R script for review", "渲染确定性 R 脚本供审阅"),
+    )
+    adv_render.add_argument(
+        "--method",
+        required=True,
+        choices=["mixed_logistic", "iptw", "matching", "survival_km", "cox"],
+    )
+    adv_render.add_argument(
+        "--data", required=True, help=T("CSV/TSV absolute path", "CSV/TSV 绝对路径")
+    )
+    adv_render.add_argument("--outcome", default="", help=T("outcome column", "结局列"))
+    adv_render.add_argument(
+        "--treatment", default="", help=T("treatment column", "处理列")
+    )
+    adv_render.add_argument("--predictors", default="", help=T("comma-separated", "逗号分隔"))
+    adv_render.add_argument("--confounders", default="", help=T("comma-separated", "逗号分隔"))
+    adv_render.add_argument("--group", default="")
+    adv_render.add_argument("--time", default="")
+    adv_render.add_argument("--event", default="")
+    adv_render.add_argument("--alpha", type=float, default=0.05)
+    adv_render.add_argument(
+        "--output", default="", help=T("write to file (default: stdout)", "写入文件（默认 stdout）")
+    )
+    add_json(adv_render)
+    adv_render.set_defaults(func=run_advstats_render)
 
     package = s.add_parser(
         "package",

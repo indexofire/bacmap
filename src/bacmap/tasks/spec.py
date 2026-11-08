@@ -110,6 +110,7 @@ class TaskType(StrEnum):
     MINE = "mine"
     WRITE = "write"
     RECORD = "record"  # v1.7：元数据/化验/知识库记录（写操作仍只经任务层）
+    RESEARCH = "research"  # v1.10.11（ADR-23）：研究分析经计划确认后执行
 
 
 class TaskState(StrEnum):

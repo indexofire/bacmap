@@ -351,7 +351,7 @@ def _register_capabilities(server: MCPServer, profile: ProfileSpec) -> None:
                 "api": "mcp",
                 "profile": profile.profile.value,
                 "max_data_class": profile.max_data_class.name,
-                "plannable_task_types": ["analyze", "curate", "mine", "write"],
+                "plannable_task_types": ["analyze", "curate", "mine", "write", "research"],
                 "recommended_write_path": (
                     "bacmap_create_plan -> user confirms in bacmap CLI/Web -> "
                     "bacmap_get_plan -> bacmap_task_status"

@@ -62,7 +62,7 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟；默认 c
 | `store/` | GOM/知识库持久化 | 只依赖 core |
 | `tools/` | 工具注册表 + 27 个 bio_* 工具 | 只依赖 core/store |
 | `workflow/` | Snakemake 规则（10 个 .smk）与脚本 | pending_gspec/pending_external_tool 占位等外部工具；物种鉴定整体交 gside |
-| `tasks/` | DBOS 任务引擎、门、特征库 | 唯一导入 dbos 的模块（ADR-02） |
+| `tasks/` | DBOS 任务引擎、门、特征库 | 唯一导入 dbos 的模块（ADR-02）；六类任务（analyze/curate/mine/write/record/research，ADR-23） |
 | `agent/` | 意图分类、LLM 网关、任务内智能体（解读）、沙箱、仲裁 | 仅 `agent.llm` 导入 pydantic-ai |
 | `application/` | 应用服务（v1.5）：`PlanService` 版本化计划、统一错误 | 不得导入 interfaces/agent |
 | `interfaces/` | mcp/（MCPServer）、web/（FastAPI + /api/v1）、cli/（bacmap 命令）、tui/（Textual 任务台）、views.py（共享只读视图） | 最上层 |
@@ -98,6 +98,8 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟；默认 c
 > 库、O/K 血清型用 `vpa_ok`，与其它物种一样经通用 `gspec_typing` 规则 + registry
 > 库清单路由——pipeline 面向 `core/pathogens.yaml` 全部登记病原菌，不再有逐菌
 > 专用 smk 规则与打包私有库。
+> 高级统计（混合效应/IPTW/匹配/生存）自 v1.10.11 起外部化（ADR-22）：bacmap 从
+> 类型化规格渲染 R 脚本、在 `bacmap-stats:r45` 镜像沙箱执行；主环境无统计模型库。
 
 ## 工作流（改动前必读）
 

@@ -442,10 +442,47 @@ bacmap research stats logistic --data cohort.csv --outcome resistant \
 ```
 
 实现为确定性 IRLS（不依赖 scipy）：系数、OR、Wald 95% CI、双侧 p 值与诊断（事件数、
-收敛、分离告警）。缺失/非法行会被丢弃并计数。混合效应、IPTW、匹配与生存分析**尚未实现**；
-不允许 agent 伪造这些方法。
+收敛、分离告警）。缺失/非法行会被丢弃并计数。
 
 MCP（仅 local-trusted，D3）：`bacmap_research_logistic`。
+
+### 高级统计（ADR-22：容器外部化）
+
+混合效应 logistic、IPTW、倾向评分匹配、KM/log-rank、Cox **不在 bacmap 内实现**
+（主环境无统计模型库），而是一律经 `research` 计划（ADR-23）外部化执行：
+
+```json
+// bacmap_create_plan 任务形态
+{"task_type": "research", "analysis": "advstats", "method": "cox",
+ "data_path": "/abs/cohort.csv", "time": "days", "event": "died",
+ "predictors": ["tx", "age"]}
+```
+
+链路：类型化规格 → bacmap **确定性渲染 R 脚本**（可先
+`bacmap research advstats render --method cox ...` 审阅）→ 人在 bacmap 确认计划 →
+`bacmap-stats:r45` 镜像沙箱内拟合（数据表零拷贝只读挂载、无网络）→
+结果归一为 `bacmap.advstats_result/1`（估计/CI/p/诊断；失败原因原样回传）。
+脚本非 agent 编写：**计划确认即授权，无挖掘门**；spec/脚本/输出 SHA-256 入
+research ledger，数据表变化会使计划确认冲突。镜像本地构建：
+
+```bash
+podman --cgroup-manager=cgroupfs build -t bacmap-stats:r45 docker/stats/r45
+```
+
+方法与 R 引擎：`mixed_logistic`（lme4 glmer）、`iptw`（WeightIt+survey）、
+`matching`（MatchIt 1:1 nearest）、`survival_km`（survfit+survdiff）、
+`cox`（coxph+cox.zph）。
+
+### 研究会话任务（ADR-23：research 计划类型）
+
+`research` 计划也可直接创建确定性 AMR 关联草案（等价 CLI `research create`，但经
+计划确认与任务审计）：
+
+```json
+{"task_type": "research", "analysis": "session",
+ "run_id": "5468...", "gene": "CARB-23", "test_name": "meropenem",
+ "profile": "open-test"}
+```
 
 ### 样本量与把握度（事先设计）
 

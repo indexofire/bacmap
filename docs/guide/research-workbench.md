@@ -475,10 +475,50 @@ bacmap research stats logistic --data cohort.csv --outcome resistant \
 
 The implementation is deterministic IRLS (no scipy): coefficients, odds ratios, Wald 95%
 CIs, two-sided p-values and diagnostics (events, convergence, separation warning). Rows with
-missing/invalid values are dropped and counted. Mixed-effects, IPTW, matching and survival
-models are **not** implemented yet; do not let an agent fake them.
+missing/invalid values are dropped and counted.
 
 Over MCP (local-trusted, D3): `bacmap_research_logistic`.
+
+### Advanced statistics (ADR-22: externalised to containers)
+
+Mixed-effects logistic, IPTW, propensity matching, KM/log-rank and Cox are **not
+implemented inside bacmap** (the main environment carries no statistical-modelling
+library); they run through `research` plans (ADR-23):
+
+```json
+// bacmap_create_plan task shape
+{"task_type": "research", "analysis": "advstats", "method": "cox",
+ "data_path": "/abs/cohort.csv", "time": "days", "event": "died",
+ "predictors": ["tx", "age"]}
+```
+
+The chain: typed spec → bacmap **renders the R script deterministically** (preview with
+`bacmap research advstats render --method cox ...`) → a human confirms the plan in
+bacmap → the `bacmap-stats:r45` image fits the model in the sandbox (data table
+zero-copy read-only mounted, no network) → the result is normalised to
+`bacmap.advstats_result/1` (estimates/CIs/p/diagnostics; failures pass through verbatim).
+The script is not agent-written: **plan confirmation is the authorisation — no mining
+gate**; spec/script/output SHA-256 go to the research ledger, and a changed data table
+conflicts at confirmation. Build the image locally:
+
+```bash
+podman --cgroup-manager=cgroupfs build -t bacmap-stats:r45 docker/stats/r45
+```
+
+Methods and R engines: `mixed_logistic` (lme4 glmer), `iptw` (WeightIt+survey),
+`matching` (MatchIt 1:1 nearest), `survival_km` (survfit+survdiff), `cox`
+(coxph+cox.zph).
+
+### Research-session tasks (ADR-23: the research plan type)
+
+A `research` plan can also create a deterministic AMR association draft (equivalent to
+the CLI `research create`, but going through plan confirmation and task auditing):
+
+```json
+{"task_type": "research", "analysis": "session",
+ "run_id": "5468...", "gene": "CARB-23", "test_name": "meropenem",
+ "profile": "open-test"}
+```
 
 ### Sample size and power (a priori design)
 

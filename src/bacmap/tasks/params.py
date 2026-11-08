@@ -10,11 +10,14 @@ MCP/表单/CLI 只收 analyze/curate 的既有规则一致。
 from __future__ import annotations
 
 from pathlib import PurePosixPath
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from bacmap.tasks.spec import TaskType
+
+if TYPE_CHECKING:
+    from bacmap.research.advstats import AnalysisSpec
 
 
 def _check_sample_ids(values: list[str]) -> list[str]:
@@ -122,17 +125,113 @@ class WriteParams(BaseModel):
     )
 
 
+class ResearchParams(BaseModel):
+    """研究任务（ADR-23）：经计划确认后由 Research Workbench 执行。
+
+    两种分析：
+    - ``session``：从既有 run 创建确定性 AMR 关联草案（P1 薄链路）；
+    - ``advstats``：高级统计外部化（ADR-22）——类型化规格 → bacmap 渲染 R 脚本 →
+      固定镜像沙箱拟合 → 结果归一。脚本非 agent 编写，计划确认即授权，无挖掘门。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    task_type: Literal["research"] = "research"
+    analysis: Literal["session", "advstats"]
+    # session：
+    run_id: str = ""
+    gene: str = ""
+    test_name: str = ""
+    profile: Literal["open-test", "research", "publication"] = "research"
+    note: str = Field(default="", max_length=2000)
+    # advstats（字段语义见 research.advstats.AnalysisSpec）：
+    method: Literal[
+        "mixed_logistic", "iptw", "matching", "survival_km", "cox"
+    ] = "mixed_logistic"
+    data_path: str = ""
+    outcome: str = ""
+    treatment: str = ""
+    predictors: list[str] = Field(default_factory=list)
+    confounders: list[str] = Field(default_factory=list)
+    group: str = ""
+    time: str = ""
+    event: str = ""
+    alpha: float = 0.05
+    image: str = "docker://bacmap-stats:r45"
+
+    @field_validator("run_id", "gene", "test_name")
+    @classmethod
+    def _strip(cls, v: str) -> str:
+        return v.strip()
+
+    @field_validator("data_path")
+    @classmethod
+    def _absolute(cls, v: str) -> str:
+        if v and not PurePosixPath(v).is_absolute():
+            raise ValueError(f"data_path must be an absolute path: {v!r}")
+        return v
+
+    @model_validator(mode="after")
+    def _analysis_requirements(self) -> ResearchParams:
+        if self.analysis == "session":
+            if not (self.run_id and self.gene and self.test_name):
+                raise ValueError(
+                    "research/session requires run_id, gene and test_name"
+                )
+        else:
+            # advstats 的方法级校验复用 AnalysisSpec（单一实现）
+            from bacmap.research.advstats import AnalysisSpec
+
+            AnalysisSpec(
+                method=self.method,
+                data_path=self.data_path or "/input/data.csv",
+                outcome=self.outcome,
+                treatment=self.treatment,
+                predictors=self.predictors,
+                confounders=self.confounders,
+                group=self.group,
+                time=self.time,
+                event=self.event,
+                alpha=self.alpha,
+            )
+        return self
+
+    def advstats_spec(self, guest_data_path: str) -> AnalysisSpec:
+        """构造 AnalysisSpec（数据文件在沙箱内的 guest 路径）。"""
+        from bacmap.research.advstats import AnalysisSpec
+
+        return AnalysisSpec(
+            method=self.method,
+            data_path=guest_data_path,
+            outcome=self.outcome,
+            treatment=self.treatment,
+            predictors=self.predictors,
+            confounders=self.confounders,
+            group=self.group,
+            time=self.time,
+            event=self.event,
+            alpha=self.alpha,
+        )
+
+
 PlannableTask = Annotated[
-    AnalyzeParams | CurateParams | MineParams | WriteParams, Field(discriminator="task_type")
+    AnalyzeParams
+    | CurateParams
+    | MineParams
+    | WriteParams
+    | ResearchParams,
+    Field(discriminator="task_type"),
 ]
 
 
-def task_type_of(task: AnalyzeParams | CurateParams | MineParams | WriteParams) -> TaskType:
+def task_type_of(
+    task: AnalyzeParams | CurateParams | MineParams | WriteParams | ResearchParams,
+) -> TaskType:
     return TaskType(task.task_type)
 
 
 def engine_params(
-    task: AnalyzeParams | CurateParams | MineParams | WriteParams,
+    task: AnalyzeParams | CurateParams | MineParams | WriteParams | ResearchParams,
 ) -> dict[str, Any]:
     """转换为引擎参数字典（去掉判别字段与空值）。"""
     data = task.model_dump(mode="json", exclude={"task_type"}, exclude_none=True)

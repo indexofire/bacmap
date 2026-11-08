@@ -325,6 +325,56 @@ class TestPlanTools:
             },
         )
         assert out["state"] == "awaiting_confirmation" and out["version"] == 1
+
+    def test_research_plan_is_accepted(self, server, tmp_path):
+        data = tmp_path / "cohort.csv"
+        data.write_text("days,died,tx\n1,1,0\n", encoding="utf-8")
+        out = _call(
+            server,
+            "bacmap_create_plan",
+            {
+                "tasks": [
+                    {
+                        "task_type": "research",
+                        "analysis": "advstats",
+                        "method": "cox",
+                        "data_path": str(data),
+                        "time": "days",
+                        "event": "died",
+                        "predictors": ["tx"],
+                    }
+                ],
+                "rationale": "adr-23 research plan",
+            },
+        )
+        assert out["state"] == "awaiting_confirmation" and out["version"] == 1
+        # advstats 数据表进入输入指纹（ADR-23）
+        assert str(data) in out["inputs"]
+        session_plan = _call(
+            server,
+            "bacmap_create_plan",
+            {
+                "tasks": [
+                    {
+                        "task_type": "research",
+                        "analysis": "session",
+                        "run_id": "run-1",
+                        "gene": "g",
+                        "test_name": "meropenem",
+                    }
+                ],
+                "rationale": "session",
+            },
+        )
+        assert session_plan["state"] == "awaiting_confirmation"
+
+        with pytest.raises(Exception, match=r"(?i)run_id|gene|test_name|requires"):
+            _call(
+                server,
+                "bacmap_create_plan",
+                {"tasks": [{"task_type": "research", "analysis": "session"}], "rationale": "bad"},
+            )
+
         out = _call(server, "bacmap_get_plan", {"plan_id": "nope"})
         assert out["code"] == "not_found"
 
@@ -460,7 +510,9 @@ class TestCapabilitiesTool:
     def test_reports_profile_and_extension_status(self):
         out = _call(build_server(), "bacmap_capabilities", {})
         assert out["profile"] == "cloud" and out["max_data_class"] == "D1"
-        assert out["plannable_task_types"] == ["analyze", "curate", "mine", "write"]
+        assert out["plannable_task_types"] == [
+            "analyze", "curate", "mine", "write", "research",
+        ]
         assert out["tasks_extension"] == "unsupported_by_sdk"
         assert "bacmap_create_plan" in out["recommended_write_path"]
         assert out["bacmap_version"]
