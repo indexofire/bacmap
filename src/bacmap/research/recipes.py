@@ -68,7 +68,7 @@ _RECIPES: tuple[FigureRecipe, ...] = (
         language="svg",
         input_kind="association_table",
         output_formats=["svg"],
-        entrypoint="bacmap.research.render:render_figure_svg",
+        entrypoint="bacmap.research.render:render_association_svg",
         runtime=RecipeRuntime(kind="builtin", notes="deterministic SVG renderer"),
         status="stable",
         notes="PDF/PNG conversion belongs to the sandbox/export step, not this renderer.",
@@ -78,19 +78,19 @@ _RECIPES: tuple[FigureRecipe, ...] = (
         version="0.1.0",
         title="Forest plot",
         description=(
-            "Effect estimates with 95% confidence intervals, optional pooled estimate and "
-            "heterogeneity annotation."
+            "Effect estimates with 95% confidence intervals on a log axis with a "
+            "no-effect line; renders one row per effect in the FigureSpec."
         ),
-        language="python",
+        language="svg",
         input_kind="effect_estimates",
-        output_formats=["pdf", "svg", "png"],
-        packages=["matplotlib"],
-        sandbox_image="bacmap-figures:py312",
-        runtime=RecipeRuntime(
-            kind="container", image="bacmap-figures:py312", notes="pinned matplotlib"
+        output_formats=["svg"],
+        entrypoint="bacmap.research.render:render_forest_svg",
+        runtime=RecipeRuntime(kind="builtin", notes="deterministic SVG renderer"),
+        status="experimental",
+        notes=(
+            "Builtin SVG tier keeps the recipe offline-reproducible; journal-specific "
+            "forest styling belongs to the custom sandbox path."
         ),
-        status="planned",
-        notes="Needs a pinned matplotlib image and golden-file tests.",
     ),
     FigureRecipe(
         recipe_id="tree_rectangular",
@@ -162,12 +162,17 @@ _RECIPES: tuple[FigureRecipe, ...] = (
         recipe_id="strobe_flow",
         version="0.1.0",
         title="STROBE-style flow diagram",
-        description="Cohort inclusion/exclusion flow with counts from the frozen cohort.",
+        description=(
+            "Inclusion/exclusion flow with counts derived from the run roster and "
+            "the session statistics (STROBE item 13)."
+        ),
         language="svg",
         input_kind="cohort_flow",
-        output_formats=["pdf", "svg", "png"],
-        runtime=RecipeRuntime(kind="builtin", notes="deterministic SVG"),
-        status="planned",
+        output_formats=["svg"],
+        entrypoint="bacmap.research.render:render_flow_svg",
+        runtime=RecipeRuntime(kind="builtin", notes="deterministic SVG renderer"),
+        status="experimental",
+        notes="Counts come from runs.sqlite and the session stat; nothing is typed in.",
     ),
     FigureRecipe(
         recipe_id="custom",

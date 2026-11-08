@@ -324,12 +324,12 @@ roadmap and are never silently faked.
 | Recipe | Language | Status | Use |
 |---|---|---|---|
 | `association_bar` | SVG | stable | P1 2×2 association bars |
-| `forest` | Python/matplotlib | planned | effect estimates with 95% CI |
+| `forest` | SVG | experimental | effect estimates with 95% CI (log axis, no-effect line) |
+| `strobe_flow` | SVG | experimental | inclusion/exclusion flow (STROBE item 13) |
 | `heatmap` | Python/matplotlib+seaborn | planned | annotated matrices |
 | `pca` | Python/matplotlib | planned | ordination |
 | `volcano` | Python/matplotlib | planned | effect vs FDR |
 | `tree_rectangular` | R/ggtree | planned | render a Newick tree |
-| `strobe_flow` | SVG | planned | cohort flow |
 | `custom` | Python | experimental | agent-authored fallback in the `mine` sandbox |
 
 Rules:
@@ -337,7 +337,8 @@ Rules:
 1. choose a stable recipe when one expresses the result;
 2. `tree_rectangular` only renders a tree — inference (IQ-TREE/Gubbins, model, bootstrap,
    rooting) is a separate workflow step, never an AI-written script;
-3. planned recipes are not usable yet; do not pretend they ran;
+3. planned recipes are not usable yet; do not pretend they ran — the container recipes
+   (`heatmap`/`pca`/`volcano`/`tree_rectangular`) activate once CI publishes pinned images;
 4. if no recipe fits, use `custom` in the sandbox and attach the result with hashes;
 5. do not copy figures from papers. A published figure can be a human-provided style reference;
    translate the idea into a recipe/spec, never reproduce the image.
@@ -351,6 +352,53 @@ custom layout may come from an agent.
 | **A. Deterministic standard** | bacmap (`FigureSpec` + fixed renderer) | 2×2 bars, forest, flow | spec/data/output SHA-256 |
 | **B. Custom publication** | agent-authored script executed in the `mine` sandbox | journal-specific panels, annotations | spec/data/code/output SHA-256 + human sign-off |
 | **C. Paper skill** | agent guidance | figure choice, palette, caption, journal style | guidance only |
+
+### Deterministic rendering: figure render
+
+The three builtin SVG recipes (`association_bar`, `forest`, `strobe_flow`) need no external
+runtime — bacmap renders them deterministically from the session's FigureSpec:
+
+```bash
+bacmap research figure render rs-0123456789ab --recipe forest
+bacmap research figure render rs-0123456789ab --recipe strobe_flow
+```
+
+The output lands in `research/<session>/figure_<recipe>.svg`, is registered as a `figure`
+artifact and writes a `figure.rendered` ledger entry (recipe, renderer, output/spec hashes).
+Renderers consume the FigureSpec only and never re-read the stores, so one spec always yields
+the same figure. `strobe_flow` derives every count from the `runs.sqlite` roster and the
+session statistics (identified → excluded for missing genotype/phenotype → analysed n); no
+number is ever typed in by a human or an agent. Re-rendering a recipe is idempotent; a session
+may keep several standard figures at once (since schema v6 `research_artifacts` is keyed by
+session+kind+path).
+
+Recipes with container/pixi/host runtimes cannot use `render`: it refuses them explicitly
+(`volcano` is still planned, `custom` belongs to the sandbox) and points to the sandbox +
+`figure attach` path instead.
+
+### B-tier script template: figure template
+
+The `custom` fallback does not start from a blank page. The template is a self-contained
+script (stdlib + matplotlib only, no bacmap imports, so it runs inside the
+`bacmap-figures:py312` image):
+
+```bash
+bacmap research figure template --output figure_script.py
+```
+
+It demonstrates every contract requirement: numbers are read from `figure_spec.json` only;
+the output format must be allowed by `spec.style.formats` (violation exits); size, font and
+dpi come from `spec.style`; a provenance summary is printed at the end. A typical `mine`-path
+flow:
+
+1. export the contract with `bacmap research figure spec <session> > figure_spec.json`;
+2. hand the template and the contract to a mine task (no network, read-only mounts, image
+   `bacmap-figures:py312`);
+3. record the result as a draft with `figure draft`, and after human approval register it
+   with `bacmap research figure attach <session> --path figure.pdf --code figure_script.py`.
+
+The template covers format and provenance mechanics only; journal-grade layout still needs
+human judgement. Do not redraw a figure a deterministic recipe already expresses.
 
 Every session stores `figure_spec.json`; read it with:
 
@@ -373,6 +421,12 @@ bacmap research figure attach rs-0123456789ab \
 `attach` refuses a spec from another session, an output format the spec does not allow, or a
 missing script. The `figure_custom` and `figure_manifest` artifacts record `spec_sha256`,
 `data_sha256`, `code_sha256` and `output_sha256`.
+Since v1.4.42 `attach` also runs a **deterministic output quality gate** (pure stdlib):
+PDFs are checked for the header, page count and font embedding (fonts declared without
+`/FontFile*` and without Type3 inline glyphs are rejected; matplotlib's default Type3 and
+fonttype 42 both pass); PNGs for structure/CRC, color type and pHYs density (below the
+spec dpi or missing pHYs is rejected); SVGs for XML well-formedness, with DTD/ENTITY
+rejected. Failures come with actionable re-export hints.
 
 Custom scripts must run through the existing open path (`mine` plan: no network, read-only
 mounts, mining gate and human signature); the sandbox image must contain the plotting stack

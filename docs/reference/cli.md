@@ -151,7 +151,10 @@ bacmap research create --run-id ID --gene NAME --test-name NAME
                        [--by ACTOR] [--json]
 bacmap research artifact <session_id> {figure|report|manuscript|figure_spec|figure_custom|figure_manifest}
 bacmap research figure recipes [--executable-only] [--json]
+bacmap research figure runtimes [--json]
 bacmap research figure spec <session_id> [--json]
+bacmap research figure render <session_id> [--recipe ID] [--by ACTOR] [--json]
+bacmap research figure template [--output FILE] [--json]
 bacmap research figure draft <session_id> --path FILE [--note TEXT]
 bacmap research figure attach <session_id> --path FILE [--code FILE] [--spec FILE]
                               [--renderer agent-script|bacmap-deterministic] [--recipe ID]

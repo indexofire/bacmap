@@ -17,6 +17,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from bacmap import __version__
+from bacmap.research import figure_checks
 from bacmap.research.models import AnalysisSession, StatResult
 
 SCHEMA: Literal["bacmap.figure_spec/1"] = "bacmap.figure_spec/1"
@@ -175,6 +176,117 @@ def build_association_spec(session: AnalysisSession, stat: StatResult) -> Figure
     )
 
 
+def build_forest_spec(session: AnalysisSession, stat: StatResult) -> FigureSpec:
+    """Forest-plot contract: effect estimates with 95% CIs from the session stat.
+
+    The renderer draws one row per effect; today the association session emits a
+    single row, and stratified/logistic specs can add rows later without a
+    schema change.
+    """
+    effects = [
+        {
+            "label": f"{session.gene} × {session.test_name}",
+            "odds_ratio": stat.odds_ratio,
+            "ci_low": stat.ci_low,
+            "ci_high": stat.ci_high,
+            "p_value": stat.p_value,
+        }
+    ]
+    data = {
+        "gene": session.gene,
+        "test_name": session.test_name,
+        "n": stat.n,
+        "effects": effects,
+        "diagnostics": list(stat.diagnostics),
+        "label": session.label or session.status.value,
+    }
+    return FigureSpec(
+        figure_id=f"{session.session_id}-fig-forest",
+        recipe_id="forest",
+        kind="forest",
+        title=f"Forest plot — {session.gene} × {session.test_name}",
+        caption=(
+            "Odds ratio with 95% confidence interval (log scale) on a dashed "
+            "no-effect line at 1.0. Numbers come from the session statistics only."
+        ),
+        data=data,
+        source=FigureSource(
+            session_id=session.session_id,
+            run_id=session.run_id,
+            stat_sha256=stat_sha256(stat),
+            plan_id=session.plan_id,
+            data_class=session.data_class,
+        ),
+        constraints=[
+            "effect estimates and confidence intervals must match this spec exactly",
+            "draw the 95% confidence interval, not just the point estimate",
+            "use a log scale for odds ratios with a visible no-effect line at 1.0",
+            "use a colorblind-safe palette",
+            "prefer vector (PDF/SVG); raster output must be >= 300 dpi",
+            "no unrequested samples, genes or phenotypes",
+        ],
+    )
+
+
+def build_flow_spec(
+    session: AnalysisSession,
+    stat: StatResult,
+    *,
+    run_strains: int,
+    cohort_note: str = "",
+) -> FigureSpec:
+    """STROBE-style flow contract from counts bacmap actually holds.
+
+    ``run_strains`` is the run roster size; the exclusion count is derived, never
+    typed in by an agent. ``cohort_note`` is an annotation line, not a data row.
+    """
+    excluded = max(0, run_strains - stat.n)
+    data = {
+        "gene": session.gene,
+        "test_name": session.test_name,
+        "run_strains": run_strains,
+        "label": session.label or session.status.value,
+        "stages": [
+            {"label": "Isolates in run", "n": run_strains},
+            {"label": "Analysed (2×2 association)", "n": stat.n},
+        ],
+        "exclusions": [
+            {
+                "after": 0,
+                "label": "no AMR genotype or usable phenotype",
+                "n": excluded,
+            }
+        ],
+        "cohort_note": cohort_note,
+    }
+    return FigureSpec(
+        figure_id=f"{session.session_id}-fig-flow",
+        recipe_id="strobe_flow",
+        kind="flow",
+        title=f"Study flow — {session.gene} × {session.test_name}",
+        caption=(
+            "Inclusion/exclusion flow with counts from the run roster and the "
+            "session statistics (STROBE item 13). The exclusion count is derived; "
+            "nothing is estimated or added."
+        ),
+        data=data,
+        source=FigureSource(
+            session_id=session.session_id,
+            run_id=session.run_id,
+            stat_sha256=stat_sha256(stat),
+            plan_id=session.plan_id,
+            data_class=session.data_class,
+        ),
+        constraints=[
+            "stage and exclusion counts must match this spec exactly",
+            "every exclusion box must name its reason",
+            "show the run roster, the analysed n and the excluded n",
+            "prefer vector (PDF/SVG); raster output must be >= 300 dpi",
+            "no unrequested samples, genes or phenotypes",
+        ],
+    )
+
+
 def build_artifact(
     spec: FigureSpec,
     output: str | Path,
@@ -192,6 +304,12 @@ def build_artifact(
         raise ValueError(
             f"output format {suffix!r} is not allowed by the spec "
             f"({', '.join(spec.style.formats)})"
+        )
+    problems = figure_checks.validate_output(output_path, min_dpi=spec.style.dpi)
+    if problems:
+        raise ValueError(
+            "figure output failed the quality gate (PDF/PNG/SVG checks): "
+            + "; ".join(problems)
         )
     code_path = Path(code).expanduser().resolve() if code else None
     if code_path is not None and not code_path.is_file():

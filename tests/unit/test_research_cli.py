@@ -259,3 +259,85 @@ def test_research_stats_logistic_cli(tmp_path: Path, monkeypatch, capsys):
     payload = json.loads(out)
     assert payload["schema"] == "bacmap.logistic_regression/1"
     assert payload["result"]["converged"] is True
+
+
+def _seed_home(tmp_path: Path) -> str:
+    """Seed a minimal home so `research create` can compute a real stat."""
+    import sqlite3
+
+    from bacmap.store import runs as runs_store
+    from bacmap.store.genome_object_service import ensure_gom_schema
+    from bacmap.store.lab_results import LabResultService
+
+    home = tmp_path
+    wf = home / "workflows" / "bacmap" / "config"
+    wf.mkdir(parents=True)
+    (wf / "config.yaml").write_text("threads: 2\niqu_tree_seed: 42\n")
+    run = runs_store.create_run(
+        "bacmap", home / "workflows" / "bacmap", [f"S{i}" for i in range(12)],
+        db_path=home / "runs.sqlite", task_id="task-1",
+    )
+    with sqlite3.connect(home / "runs.sqlite") as conn:
+        conn.execute(
+            "UPDATE analysis_runs SET run_id = ? WHERE run_id = ?", ("run-1", run.run_id)
+        )
+    ensure_gom_schema(home / "gom.sqlite")
+    with sqlite3.connect(home / "gom.sqlite") as conn:
+        for sid in [f"S{i}" for i in range(5)]:
+            conn.execute(
+                "INSERT INTO strain_amr_genes (strain_id, gene_name, database)"
+                " VALUES (?,?,?)",
+                (sid, "blaKPC-33", "card"),
+            )
+    with LabResultService(home / "data" / "bacmap.sqlite") as svc:
+        for sid in [f"S{i}" for i in range(4)]:
+            svc.add(sid, "mic", "meropenem", "0.25", interpretation="R")
+        for sid in [f"S{i}" for i in range(4, 12)]:
+            svc.add(sid, "mic", "meropenem", "0.25", interpretation="S")
+    return str(home)
+
+
+def test_research_figure_render_cli(tmp_path: Path, monkeypatch, capsys):
+    home = _seed_home(tmp_path)
+    code, out, _ = _run(
+        monkeypatch, capsys,
+        ["research", "create", "--run-id", "run-1", "--gene", "blaKPC-33",
+         "--test-name", "meropenem", "--home", home, "--json"],
+    )
+    assert code == 0
+    session_id = json.loads(out)["session"]["session_id"]
+
+    for recipe in ("forest", "strobe_flow", "association_bar"):
+        code, out, _ = _run(
+            monkeypatch, capsys,
+            ["research", "figure", "render", session_id, "--recipe", recipe,
+             "--home", home, "--json"],
+        )
+        assert code == 0
+        payload = json.loads(out)
+        assert payload["recipe_id"] == recipe
+        assert (tmp_path / "research" / session_id / f"figure_{recipe}.svg").is_file()
+
+    code, _, err = _run(
+        monkeypatch, capsys,
+        ["research", "figure", "render", session_id, "--recipe", "volcano",
+         "--home", home, "--json"],
+    )
+    assert code != 0
+    assert "planned" in err
+
+
+def test_research_figure_template_cli(tmp_path: Path, monkeypatch, capsys):
+    target = tmp_path / "figure_script.py"
+    code, out, _ = _run(
+        monkeypatch, capsys,
+        ["research", "figure", "template", "--output", str(target), "--json"],
+    )
+    assert code == 0
+    assert json.loads(out)["path"] == str(target)
+    content = target.read_text(encoding="utf-8")
+    assert "bacmap.figure_spec/1" in content
+
+    code, out, _ = _run(monkeypatch, capsys, ["research", "figure", "template"])
+    assert code == 0
+    assert "matplotlib" in out

@@ -305,12 +305,12 @@ bacmap research create --run-id run-1 --gene blaKPC-33 --test-name meropenem \
 | Recipe | 语言 | 状态 | 用途 |
 |---|---|---|---|
 | `association_bar` | SVG | stable | P1 2×2 关联条形图 |
-| `forest` | Python/matplotlib | planned | 效应量 + 95% CI |
+| `forest` | SVG | experimental | 效应量 + 95% CI（log 轴 + 无效应线） |
+| `strobe_flow` | SVG | experimental | 队列纳入/排除流程图（STROBE 第 13 条） |
 | `heatmap` | Python/matplotlib+seaborn | planned | 带注释矩阵 |
 | `pca` | Python/matplotlib | planned | 排序图 |
 | `volcano` | Python/matplotlib | planned | 效应 vs FDR |
 | `tree_rectangular` | R/ggtree | planned | 渲染 Newick 树 |
-| `strobe_flow` | SVG | planned | 队列流程图 |
 | `custom` | Python | experimental | 沙箱中的 agent 自定义兜底 |
 
 规则：
@@ -318,7 +318,8 @@ bacmap research create --run-id run-1 --gene blaKPC-33 --test-name meropenem \
 1. 有稳定 recipe 能表达结果时，优先用 recipe；
 2. `tree_rectangular` 只负责渲染；建树（IQ-TREE/Gubbins、模型、bootstrap、生根）是独立的
    工作流步骤，绝不是 AI 临时写脚本；
-3. `planned` recipe 尚不可用，不得假装已运行；
+3. `planned` recipe 尚不可用，不得假装已运行；`heatmap`/`pca`/`volcano`/
+   `tree_rectangular` 等容器 recipe 待 CI 发布固定镜像后启用；
 4. 没有合适 recipe 时才用 `custom` 沙箱脚本，并按 hash 登记；
 5. 不要复制论文中的图。已发表图只能作为人工提供的风格参考；把想法翻译成 recipe/spec，
    绝不复现原图。
@@ -331,6 +332,47 @@ bacmap research create --run-id run-1 --gene blaKPC-33 --test-name meropenem \
 | **A. 确定性标准图** | bacmap（`FigureSpec` + 固定 renderer） | 2×2 条形图、森林图、流程图 | spec/data/output SHA-256 |
 | **B. 自定义发表图** | agent 写脚本，在 `mine` 沙箱执行 | 期刊定制面板、特殊标注 | spec/data/code/output SHA-256 + 人工签字 |
 | **C. Paper skill** | agent 指导 | 选图、配色、图注、期刊格式 | 仅指导 |
+
+### 确定性渲染：figure render
+
+三个 builtin SVG recipe（`association_bar`、`forest`、`strobe_flow`）不需要任何外部
+运行时，直接由 bacmap 从 session 的 FigureSpec 确定性渲染：
+
+```bash
+bacmap research figure render rs-0123456789ab --recipe forest
+bacmap research figure render rs-0123456789ab --recipe strobe_flow
+```
+
+输出写入 `research/<session>/figure_<recipe>.svg`，登记为 `figure` 产物并写
+`figure.rendered` ledger（recipe、renderer、output/spec hash）。渲染器只读 FigureSpec，
+不回读数据库，因此同一 spec 永远得到同一张图。`strobe_flow` 的计数全部派生自
+`runs.sqlite` 的 run 名册与 session 统计（纳入 → 无基因型/表型排除 → 分析 n），
+不接收人工或 agent 输入的数字。重复渲染同一 recipe 幂等覆盖；同一 session 可以
+同时保留多张标准图（v6 起 `research_artifacts` 以 session+kind+path 为主键）。
+
+容器/pixi/host 运行时的 recipe 不能用 `render`：`render` 会明确拒绝（例如 `volcano`
+仍是 planned，`custom` 走沙箱），提示改走沙箱 + `figure attach` 路径。
+
+### B 档脚本模板：figure template
+
+`custom` 兜底不必从零写起。模板是一个自包含脚本（仅标准库 + matplotlib，不导入
+bacmap，因此能在 `bacmap-figures:py312` 镜像里运行）：
+
+```bash
+bacmap research figure template --output figure_script.py
+```
+
+模板演示了契约的全部要求：数字只读 `figure_spec.json`；输出格式必须在
+`spec.style.formats` 内（违反即退出）；尺寸/字体/DPI 取自 `spec.style`；结束打印
+provenance 摘要。配合 `mine` 开放路径的典型用法：
+
+1. `bacmap research figure spec <session> > figure_spec.json` 导出契约；
+2. 把模板与契约交给 mine 任务（无网络、只读挂载，镜像 `bacmap-figures:py312`）；
+3. 产出后先 `figure draft` 记录草稿，人工认可再
+   `bacmap research figure attach <session> --path figure.pdf --code figure_script.py`。
+
+模板只证明格式与 provenance 流程；能否达到期刊排版仍需人工判断。能用确定性
+recipe 表达的图不要用脚本重画。
 
 每个 session 都保存 `figure_spec.json`；读取方式：
 
@@ -353,6 +395,11 @@ bacmap research figure attach rs-0123456789ab \
 `attach` 会拒绝来自其他 session 的契约、契约不允许的输出格式，以及缺失的脚本。
 `figure_custom` 与 `figure_manifest` 产物记录 `spec_sha256`、`data_sha256`、
 `code_sha256` 与 `output_sha256`。
+v1.4.42 起 `attach` 还做**产物质量门**（纯标准库、确定性）：PDF 检查文件头、
+页数与字体嵌入（声明字体却无 `/FontFile*` 亦非 Type3 内联字形 → 拒绝；matplotlib
+默认 Type3 与 fonttype 42 均合法）；PNG 检查结构/CRC、色彩类型与 pHYs 密度
+（低于契约 dpi 或缺 pHYs → 拒绝）；SVG 检查 XML 良构并拒绝 DTD/ENTITY。被拒产物
+会给出可操作的重导出提示。
 
 自定义脚本必须走既有开放路径（`mine` 计划：无网络、只读挂载、挖掘门 + 人工签字）；
 沙箱镜像需包含绘图栈（例如 matplotlib 或 R）。能用确定性 renderer 表达的标准图，

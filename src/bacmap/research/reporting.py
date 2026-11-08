@@ -393,7 +393,10 @@ def build_submission_package(
                     continue
                 session_dir = artifacts_dir / session.session_id
                 session_dir.mkdir(exist_ok=True)
-                dest = session_dir / f"{artifact.kind.value}{source.suffix.lower()}"
+                # Keep the source file name: a session can carry several figures
+                # of the same kind (e.g. figure.svg + figure_forest.svg) and a
+                # kind-based name would silently overwrite the earlier copy.
+                dest = session_dir / f"{source.stem}{source.suffix.lower()}"
                 shutil.copy2(source, dest)
                 files.append(
                     PackageFile(

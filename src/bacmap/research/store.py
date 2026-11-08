@@ -75,6 +75,19 @@ CREATE TABLE IF NOT EXISTS research_artifacts (
 )
 """
 
+# v6：同一 session 的同一 kind 允许多个产物（如 association_bar 与 forest 两张
+# 标准图）。SQLite 不能改主键，只能重建表；迁移在一个事务内完成。
+ARTIFACTS_V6_DDL = """
+CREATE TABLE research_artifacts_v6 (
+    session_id TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    path       TEXT NOT NULL,
+    sha256     TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, kind, path)
+)
+"""
+
 LEDGER_DDL = """
 CREATE TABLE IF NOT EXISTS research_ledger (
     seq          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -237,6 +250,18 @@ RESEARCH_MIGRATIONS: tuple[Migration, ...] = (
         "research: agent-proposed research requests",
         (REQUESTS_DDL,),
     ),
+    Migration(
+        6,
+        "research: artifacts keyed by (session_id, kind, path) so a session can"
+        " hold several figures of the same kind (builtin recipe renders)",
+        (
+            ARTIFACTS_V6_DDL,
+            "INSERT INTO research_artifacts_v6 (session_id, kind, path, sha256, created_at)"
+            " SELECT session_id, kind, path, sha256, created_at FROM research_artifacts",
+            "DROP TABLE research_artifacts",
+            "ALTER TABLE research_artifacts_v6 RENAME TO research_artifacts",
+        ),
+    ),
 )
 
 
@@ -382,7 +407,10 @@ class ResearchStore:
 
     def list_artifacts(self, session_id: str) -> list[Artifact]:
         rows = self._conn.execute(
-            "SELECT * FROM research_artifacts WHERE session_id = ? ORDER BY kind",
+            # rowid keeps insertion order within a kind: the creation-time
+            # artifact (e.g. figure.svg) stays first, later renders follow.
+            "SELECT * FROM research_artifacts WHERE session_id = ?"
+            " ORDER BY kind, rowid",
             (session_id,),
         ).fetchall()
         return [

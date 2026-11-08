@@ -11,13 +11,17 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
+from bacmap.research import recipes
 from bacmap.research.figures import (
     FigureArtifact,
     FigureSpec,
     Renderer,
     build_artifact,
     build_association_spec,
+    build_flow_spec,
+    build_forest_spec,
     load_spec,
+    spec_sha256,
     write_spec,
 )
 from bacmap.research.models import (
@@ -34,12 +38,15 @@ from bacmap.research.models import (
     SessionView,
 )
 from bacmap.research.render import (
-    render_figure_svg,
+    render_association_svg,
+    render_flow_svg,
+    render_forest_svg,
     render_manuscript_markdown,
     render_report_markdown,
 )
 from bacmap.research.stats import analyze_amr_association
 from bacmap.research.store import ResearchObjectStore, ResearchStore
+from bacmap.store import runs
 from bacmap.tools.spec import DataClass
 
 
@@ -98,24 +105,26 @@ class ResearchService:
         outdir.mkdir(parents=True, exist_ok=True)
 
         fig_path = outdir / "figure.svg"
-        fig_path.write_text(render_figure_svg(
-            AnalysisSession(
-                session_id=session_id,
-                run_id=run_id,
-                gene=gene,
-                test_name=test_name,
-                profile=p,
-                status=status,
-                data_class=int(DataClass.D2),
-                created_by=actor,
-                created_at=stat.created_at,
-                updated_at=stat.created_at,
-                label=label,
-                study_id=request.study_id,
-                cohort_id=request.cohort_id,
-                plan_id=request.plan_id,
-            ),
-            stat,
+        fig_path.write_text(render_association_svg(
+            build_association_spec(
+                AnalysisSession(
+                    session_id=session_id,
+                    run_id=run_id,
+                    gene=gene,
+                    test_name=test_name,
+                    profile=p,
+                    status=status,
+                    data_class=int(DataClass.D2),
+                    created_by=actor,
+                    created_at=stat.created_at,
+                    updated_at=stat.created_at,
+                    label=label,
+                    study_id=request.study_id,
+                    cohort_id=request.cohort_id,
+                    plan_id=request.plan_id,
+                ),
+                stat,
+            )
         ), encoding="utf-8")
         report_path = outdir / "report.md"
         manuscript_path = outdir / "manuscript.md"
@@ -355,6 +364,94 @@ class ResearchService:
                 },
             )
         return {"session_id": session_id, "path": str(dest), "sha256": digest, "note": note}
+
+    def render_figure(
+        self,
+        session_id: str,
+        recipe_id: str = "association_bar",
+        *,
+        actor: str = "cli",
+    ) -> dict[str, str]:
+        """Deterministically render a session figure with a builtin recipe.
+
+        Only executable ``builtin`` recipes run here; container/pixi/host recipes
+        and agent scripts keep the sandbox + ``attach`` path. The output is
+        ``research/<session_id>/figure_<recipe>.svg`` with a ``figure.rendered``
+        ledger entry, so the render is auditable like every other artifact.
+        """
+        try:
+            recipe = recipes.get_recipe(recipe_id)
+        except KeyError as exc:
+            raise ResearchError("validation_error", f"unknown figure recipe: {recipe_id}") from exc
+        if not recipe.executable:
+            raise ResearchError(
+                "validation_error", f"recipe {recipe_id} is planned and not executable"
+            )
+        if recipe.runtime.kind != "builtin":
+            raise ResearchError(
+                "validation_error",
+                f"recipe {recipe_id} runs outside bacmap ({recipe.runtime.kind}); "
+                "use the sandbox path and `figure attach`",
+            )
+        view = self.get_session(session_id)
+        if view.stat is None:
+            raise ResearchError("not_found", f"session {session_id} has no statistics")
+        session, stat = view.session, view.stat
+        if recipe_id == "association_bar":
+            spec = build_association_spec(session, stat)
+            svg = render_association_svg(spec)
+        elif recipe_id == "forest":
+            spec = build_forest_spec(session, stat)
+            svg = render_forest_svg(spec)
+        elif recipe_id == "strobe_flow":
+            run = runs.read_run(session.run_id, self.home / "runs.sqlite")
+            if run is None:
+                raise ResearchError("not_found", f"no such run: {session.run_id}")
+            cohort_note = ""
+            if session.cohort_id:
+                cohort_note = f"cohort {session.cohort_id}"
+            spec = build_flow_spec(
+                session, stat, run_strains=len(run.strain_ids), cohort_note=cohort_note
+            )
+            svg = render_flow_svg(spec)
+        else:  # pragma: no cover - guarded by the registry above
+            raise ResearchError("validation_error", f"recipe {recipe_id} has no builtin renderer")
+
+        outdir = self.home / "research" / session_id
+        outdir.mkdir(parents=True, exist_ok=True)
+        path = outdir / f"figure_{recipe_id}.svg"
+        path.write_text(svg, encoding="utf-8")
+        digest = _sha256(path)
+        created_at = datetime.now(UTC).isoformat()
+        with ResearchStore(self.home) as store:
+            store.put_artifact(
+                Artifact(
+                    session_id=session_id,
+                    kind=ArtifactKind.FIGURE,
+                    path=str(path),
+                    sha256=digest,
+                    created_at=created_at,
+                )
+            )
+            store.ledger(
+                session_id,
+                "figure.rendered",
+                actor,
+                {
+                    "recipe_id": recipe_id,
+                    "renderer": "bacmap-deterministic",
+                    "path": str(path),
+                    "sha256": digest,
+                    "spec_sha256": spec_sha256(spec),
+                },
+            )
+        return {
+            "session_id": session_id,
+            "recipe_id": recipe_id,
+            "path": str(path),
+            "sha256": digest,
+            "spec_sha256": spec_sha256(spec),
+        }
 
     def ledger(self, session_id: str) -> list[dict]:
         with ResearchStore(self.home) as store:

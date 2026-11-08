@@ -217,6 +217,44 @@ def run_figure_attach(args: argparse.Namespace) -> None:
         print(f"  code_sha256:   {artifact.code_sha256}")
 
 
+def run_figure_render(args: argparse.Namespace) -> None:
+    try:
+        result = _service(args).render_figure(
+            args.session_id, args.recipe, actor=args.by
+        )
+    except ResearchError as exc:
+        raise SystemExit(f"[{exc.code}] {exc.message}") from exc
+    if args.json:
+        _emit(result, True)
+        return
+    print(
+        T(
+            f"rendered {result['path']} ({result['recipe_id']}, deterministic)",
+            f"已渲染 {result['path']}（{result['recipe_id']}，确定性）",
+        )
+    )
+    print(f"  sha256:       {result['sha256']}")
+    print(f"  spec_sha256:  {result['spec_sha256']}")
+
+
+def run_figure_template(args: argparse.Namespace) -> None:
+    from bacmap.research import figure_template
+
+    if not args.output:
+        print(figure_template.render_template(), end="")
+        return
+    path = figure_template.write_template(args.output)
+    if args.json:
+        _emit({"path": str(path)}, True)
+        return
+    print(
+        T(
+            f"wrote B-tier figure template: {path}",
+            f"已写出 B 档图片脚本模板：{path}",
+        )
+    )
+
+
 def _load_profile(path: str) -> phylo.AlignmentProfile:
     raw = Path(path).expanduser().read_text(encoding="utf-8")
     return phylo.AlignmentProfile.model_validate(json.loads(raw))
@@ -935,6 +973,40 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(fig_att)
     add_json(fig_att)
     fig_att.set_defaults(func=run_figure_attach)
+    fig_render = fig_sub.add_parser(
+        "render",
+        help=T(
+            "render a session figure with a builtin recipe",
+            "用 builtin recipe 确定性渲染 session 图片",
+        ),
+    )
+    fig_render.add_argument("session_id")
+    fig_render.add_argument(
+        "--recipe",
+        default="association_bar",
+        help=T(
+            "builtin recipe id (see `figure recipes`)",
+            "builtin recipe id（见 `figure recipes`）",
+        ),
+    )
+    fig_render.add_argument("--by", default="cli")
+    add_home(fig_render)
+    add_json(fig_render)
+    fig_render.set_defaults(func=run_figure_render)
+    fig_tpl = fig_sub.add_parser(
+        "template",
+        help=T(
+            "write the B-tier custom figure script template",
+            "输出 B 档自定义图脚本模板",
+        ),
+    )
+    fig_tpl.add_argument(
+        "--output",
+        default="",
+        help=T("target file (default: print to stdout)", "目标文件（默认打印到 stdout）"),
+    )
+    add_json(fig_tpl)
+    fig_tpl.set_defaults(func=run_figure_template)
 
     phylo_p = s.add_parser(
         "phylo",
