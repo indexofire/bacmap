@@ -160,6 +160,67 @@ class TestVerifyAll:
         assert result.passed is True
         assert result.failed_count == 0
 
+    def test_vpa_result_passes_with_own_scheme_and_na_serotype(self):
+        """真实 VPA summary 形状：vparahaemolyticus_1 位点 + SISTR 不适用。
+
+        回归：此前校验器把 salmonella_2 位点表套在 VPA 上，等位基因全被
+        判 missing；非沙门菌的 SISTR not_applicable 也被当 Serovar missing。
+        """
+        v = DeterministicVerifier()
+        summary = {
+            "steps": {
+                "species": {
+                    "species": "Vibrio parahaemolyticus",
+                    "confidence": "high",
+                },
+                "mlst": "FILE\tSCHEME\tST\tdnaE\tgyrB\trecA\tdtdS\tpntA\tpyrC\ttnaA\n"
+                "contigs\tvparahaemolyticus_1\t1762\t176\t241\t61\t190\t50\t406\t20",
+                "serotype": {
+                    "sistr": "N/A",
+                    "sistr_status": "not_applicable",
+                    "sistr_reason": "SISTR 仅用于沙门菌血清型预测",
+                },
+                "amr": {"abricate_card": [{"GENE": "CARB-23"}, {"GENE": "tet(35)"}]},
+            }
+        }
+        result = v.verify_all(summary)
+        assert result.passed is True, [c.message for c in result.checks if not c.passed]
+        mlst = next(c for c in result.checks if c.name == "mlst")
+        assert mlst.passed is True and "7 loci" in mlst.message
+        sero = next(c for c in result.checks if c.name == "serotype")
+        assert sero.passed is True
+        assert sero.details.get("applicable") is False
+
+    def test_unknown_scheme_uses_actual_tsv_loci(self):
+        """未登记方案：按 TSV 实际位点全量校验，不套用别种位点表。"""
+        v = DeterministicVerifier()
+        summary = {
+            "steps": {
+                "species": {"species": "Listeria monocytogenes"},
+                "mlst": "FILE\tSCHEME\tST\tabcZ\tbglA\tcat\ns\tlmonocytogenes_1\t3\t1\t2\t3",
+                "serotype": {"sistr_status": "not_applicable"},
+                "amr": {},
+            }
+        }
+        result = v.verify_all(summary)
+        mlst = next(c for c in result.checks if c.name == "mlst")
+        assert mlst.passed is True
+
+    def test_unknown_scheme_missing_allele_fails(self):
+        v = DeterministicVerifier()
+        summary = {
+            "steps": {
+                "species": {"species": "Listeria monocytogenes"},
+                "mlst": "FILE\tSCHEME\tST\tabcZ\tbglA\tcat\ns\tlmo1\t3\t-\t2\t3",
+                "serotype": {"sistr_status": "not_applicable"},
+                "amr": {},
+            }
+        }
+        result = v.verify_all(summary)
+        mlst = next(c for c in result.checks if c.name == "mlst")
+        assert mlst.passed is False
+        assert mlst.details.get("missing_loci") == ["abcz"]
+
     def test_bad_species_fails(self):
         v = DeterministicVerifier()
         summary = {

@@ -54,7 +54,7 @@ pathogens:
     gside_labels: [V_parahaemolyticus]
     mlst_scheme: vparahaemolyticus_1
     cgmlst_scheme: vparahaemolyticus_3
-    gspec_screens: [vpara_virulence]
+    gspec_screens: [vpa_vf, vpa_ok, vpa_pai]
     snp_group: vpara
     plan: {snp: true, cgmlst: true, recombination: false}
   VCH:

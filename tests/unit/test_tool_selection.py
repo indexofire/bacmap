@@ -34,6 +34,13 @@ from bacmap.core.tool_selection_validate import (
 
 def _gspec_catalog() -> dict[str, DbCatalogEntry]:
     return {
+        "vpa_vf": DbCatalogEntry(
+            name="vpa_vf",
+            kind="gene",
+            typing=False,
+            installed=True,
+            source="catalog",
+        ),
         "vpara_virulence": DbCatalogEntry(
             name="vpara_virulence",
             kind="gene",
@@ -93,7 +100,11 @@ def _gmlst_catalog() -> dict[str, GmlstScheme]:
 class TestGapitMerge:
     def test_empty_uses_registry_defaults(self):
         selection = ToolSelection()
-        assert selection.effective_gspec_databases("VPA") == ["vpara_virulence"]
+        assert selection.effective_gspec_databases("VPA") == [
+            "vpa_vf",
+            "vpa_ok",
+            "vpa_pai",
+        ]
 
     def test_replace(self):
         selection = ToolSelection(
@@ -114,8 +125,9 @@ class TestGapitMerge:
             }
         )
         assert selection.effective_gspec_databases("VPA") == [
-            "vpara_virulence",
+            "vpa_vf",
             "vpa_ok",
+            "vpa_pai",
         ]
 
     def test_sample_override_wins(self):
@@ -268,8 +280,9 @@ class TestLoadWrite:
     def test_list_shorthand_extends_gspec(self):
         selection = load_selection_data({"species": {"VPA": ["vpa_ok"]}})
         assert selection.effective_gspec_databases("VPA") == [
-            "vpara_virulence",
+            "vpa_vf",
             "vpa_ok",
+            "vpa_pai",
         ]
 
     def test_unknown_field_rejected(self):
@@ -442,9 +455,9 @@ class TestOptions:
         )
         assert [row.code for row in doc.species] == ["VPA"]
         names = {db.name for db in doc.species[0].databases}
-        assert {"vpara_virulence", "vpa_ok", "vpa_pai"} <= names
+        assert {"vpa_vf", "vpa_ok", "vpa_pai"} <= names
         default = {db.name for db in doc.species[0].databases if db.default}
-        assert default == {"vpara_virulence"}
+        assert default == {"vpa_vf", "vpa_ok", "vpa_pai"}
         assert doc.species[0].gmlst.effective.modes == ["mlst", "cgmlst"]
         assert doc.gmlst_catalog_available is True
         assert doc.catalog_hash == catalog_hash(_gspec_catalog())
@@ -469,8 +482,8 @@ class TestOptions:
         )
         diff = diff_against_defaults(selection)
         assert [row.code for row in diff.species] == ["VPA"]
-        assert diff.species[0].removed == ["vpara_virulence"]
-        assert diff.species[0].added == ["vpa_ok"]
+        assert diff.species[0].removed == ["vpa_vf", "vpa_pai"]
+        assert diff.species[0].added == []  # vpa_ok 本就在默认清单
 
 
 class TestCatalogs:

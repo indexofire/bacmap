@@ -89,11 +89,15 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟；默认 c
 
 | 位置 | 占位值 | 等待 |
 |---|---|---|
-| `workflow/rules/dec_shigella.smk`、`vpara.smk` 血清型 | `pending_gspec` | gspec 血清型子命令 |
+| `workflow/rules/dec_shigella.smk` 血清型 | `pending_gspec` | gspec 血清型子命令 |
 | `workflow/rules/annotation.smk` | `pending_external_tool` | gspec 注释子命令 |
 
 > 物种与分类学鉴定已整体由 gside 承担（`species_identify` 规则 + `species_mode` 档位），
 > 原 `species_ani`/`species_sourmash`/`taxonomy`/`vpara_targets` 占位规则已删除（v1.4.10）。
+> v1.4.41 起 `vpara.smk` 亦已删除：VPA 毒力标记（tdh/trh/tlh）用官方 gspec `vpa_vf`
+> 库、O/K 血清型用 `vpa_ok`，与其它物种一样经通用 `gspec_typing` 规则 + registry
+> 库清单路由——pipeline 面向 `core/pathogens.yaml` 全部登记病原菌，不再有逐菌
+> 专用 smk 规则与打包私有库。
 
 ## 工作流（改动前必读）
 

@@ -30,46 +30,9 @@ def _deployed_dir() -> Path:
 
 
 DEPLOYED_DIR = _deployed_dir()  # 兼容导出；实际写入一律经 _deployed_dir()
-GSPEC_DB_NAME = "vpara_virulence"
-GSPEC_REF_FASTA = "refs/vpara_virulence.fasta"
-
-
-def _ensure_gspec_vpara_db(deployed: Path) -> None:
-    """部署期构建 vpara 毒力基因 gspec 自定义库（ADR-20）。
-
-    幂等：DB 已存在（manifest 在）即跳过；gspec 缺失/失败仅告警，不阻断部署
-    （该规则在缺少 DB 时会显式失败，见 vpara.smk / vpara_virulence.py）。
-    """
-    fasta = deployed / GSPEC_REF_FASTA
-    if not fasta.is_file():
-        return
-    datadir = BACMAP_HOME / "refs" / "gspec"
-    if (datadir / GSPEC_DB_NAME / "gspec-manifest.json").is_file():
-        return
-    script = deployed / "scripts" / "build_gspec_db.py"
-    if not script.is_file():
-        return
-    cmd = [
-        sys.executable,
-        str(script),
-        "--fasta",
-        str(fasta),
-        "--name",
-        GSPEC_DB_NAME,
-        "--datadir",
-        str(datadir),
-        "--manifest",
-        str(BACMAP_HOME / "refs" / "manifest.json"),
-    ]
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        logger.warning("gspec vpara db build skipped: %s", exc)
-        return
-    if proc.returncode != 0:
-        logger.warning("gspec vpara db build failed: %s", proc.stderr.strip()[:300])
-    else:
-        logger.info("gspec vpara db ready: %s", proc.stdout.strip()[:200])
+# v1.4.41：不再打包私有 vpara_virulence 库——VPA 毒力标记（tdh/trh/tlh）用官方
+# gspec catalog 的 ``vpa_vf`` 库（`gspec db install vpa_vf`），与 vpa_ok/vpa_pai
+# 等其它物种库同一 datadir、同一通用 gspec_typing 规则。
 
 
 def _tree_hash(root: Path) -> str:
@@ -149,8 +112,6 @@ def deploy(force: bool = False) -> Path:
         )
     cfg.write_text(rewritten)
 
-    _ensure_gspec_vpara_db(deployed)
-
     stamp.write_text(pkg_hash)
     return deployed
 
@@ -158,7 +119,6 @@ def deploy(force: bool = False) -> Path:
 def _env_with_src() -> dict[str, str]:
     """snakemake 及其 shell 子进程必须能 import bacmap（未 pip install 的部署形态）。"""
     import os
-    import sys
 
     env = dict(os.environ)
     src_root = str(Path(__file__).resolve().parents[2])

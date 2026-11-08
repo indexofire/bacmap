@@ -1,26 +1,12 @@
 import sys
 
 # DEC + Shigella 分析（project.md §7.3.2-3）
-# v1.4.7：ecoh/shigella 血清型判定外移外部工具（用户裁定），集成前输出占位；
-# v1.4.18：DEC 致病型判定外移 gspec（`eco_dec` 库）——bacmap 不再自判路径型。
+# v1.4.7：ecoh/shigella 血清型判定外移外部工具（用户裁定）；
+# v1.4.18：DEC 致病型判定外移 gspec（`eco_dec` 库）——bacmap 不再自判路径型；
 # v1.4.24：志贺菌血清型接 **ShigaTyper**（读段级外部工具；未来迁 gspec），
 #          且本文件各步骤仅在物种适用时由 report 依赖触发（SISTR 只属沙门菌）。
-
-rule dec_ecoh_serotype:
-    input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
-    output:
-        result = str(WORKDIR) + "/{sample}/dec/ecoh_serotype.json"
-    threads: 4
-    shell:
-        "mkdir -p $(dirname {output.result}) && "
-        "printf %s "
-        "'{{\"serotype\":\"N/A\",\"status\":\"unavailable\",\"o_type\":\"-\",\"h_type\":\"-\","
-        "\"o_antigen_hits\":[],\"h_antigen_hits\":[],"
-        "\"reason\":\"gspec ecoh 库未 build --typing（TYPING_NO_SCHEME）；O/H 判定待上游补齐\","
-        "\"interpretation\":\"E. coli O/H serotyping needs a gspec DB built with --typing; none available yet\"}}' "
-        "> {output.result}"
-
+# v1.4.41：ecoh O/H 占位规则删除——ECO 的 O/H 能力状态/表型统一出自
+#          gspec typing.json（collect_summary 归一），不再逐菌占位文件。
 
 rule dec_pathotype:
     input:

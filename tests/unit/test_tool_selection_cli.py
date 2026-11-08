@@ -12,6 +12,9 @@ from bacmap.interfaces.cli import selection as selection_cli
 
 def _gspec_catalog() -> dict[str, DbCatalogEntry]:
     return {
+        "vpa_vf": DbCatalogEntry(
+            name="vpa_vf", kind="gene", installed=True, source="catalog"
+        ),
         "vpara_virulence": DbCatalogEntry(
             name="vpara_virulence", kind="gene", installed=True, source="local"
         ),
@@ -172,7 +175,8 @@ def test_show_diff_json(tmp_path, monkeypatch, capsys):
     assert payload["schema"] == "bacmap.tool_selection_show/1"
     diff = payload["diff"]
     assert [row["code"] for row in diff["species"]] == ["VPA"]
-    assert diff["species"][0]["added"] == ["vpa_ok"]
+    assert diff["species"][0]["added"] == []  # vpa_ok 本就在默认清单
+    assert diff["species"][0]["removed"] == ["vpa_vf", "vpa_pai"]
 
 
 def test_options_json_uses_payload(tmp_path, monkeypatch, capsys):

@@ -85,7 +85,15 @@ if sistr_path is None:
     summary["steps"]["serotype"]["sistr_reason"] = "SISTR 仅用于沙门菌血清型预测"
 
 # gspec 分型（registry 驱动；lmo_sero 等带 typing scheme 的库给出表型）
-from bacmap.core.analysis.gspec_typing import summarize as summarize_gspec_typing  # noqa: E402
+from bacmap.core.analysis.gspec_typing import (  # noqa: E402
+    ecoh_serotype_summary as _ecoh_serotype_summary,
+)
+from bacmap.core.analysis.gspec_typing import (  # noqa: E402
+    summarize as summarize_gspec_typing,
+)
+from bacmap.core.analysis.gspec_typing import (  # noqa: E402
+    virulence_marks as _virulence_marks,
+)
 
 gspec_tp = summarize_gspec_typing(read_json(snakemake.input.gspec_typing, {}))
 summary["steps"]["gspec_typing"] = {
@@ -107,17 +115,15 @@ summary["steps"]["plasmid"] = {
     "plasmidfinder": parse_tsv(snakemake.input.plasmidfinder, []),
 }
 
-dec_serotype_path = opt_input("ectyper")
+dec_serotype = _ecoh_serotype_summary(gspec_tp["databases"].get("ecoh")) or {}
 pathotype_path = opt_input("pathotype")
 shigella_path = opt_input("shigella_serotype")
 _dec_applicable = any(
-    p is not None for p in (dec_serotype_path, pathotype_path, shigella_path)
-)
+    p is not None for p in (pathotype_path, shigella_path)
+) or dec_serotype != {}
 
 if _dec_applicable:
-    dec_serotype = read_json(dec_serotype_path, {}) if dec_serotype_path else {}
-    if not isinstance(dec_serotype, dict):
-        dec_serotype = {}
+    # ecoh O/H 能力状态/表型已由 gspec typing.json 归一（dec_serotype）。
     # DEC 致病型：gspec `eco_dec` 的 typing 结果（v1.4.18，判定外部化）
     from bacmap.core.analysis.dec_pathotype import (
         summarize as summarize_dec_pathotype,
@@ -183,27 +189,9 @@ else:
         "reason": "DEC 致病型 / 志贺菌血清型仅适用于大肠埃希菌与志贺菌",
     }
 
-vpa_serotype_path = opt_input("vpa_serotype")
-vpa_serotype = read_json(vpa_serotype_path, {}) if vpa_serotype_path else {}
-if not isinstance(vpa_serotype, dict):
-    vpa_serotype = {}
-if vpa_serotype.get("predicted_serotype"):
-    summary["steps"]["vpa_serotype"] = {
-        "predicted_serotype": vpa_serotype.get("predicted_serotype", "OUT:KUT"),
-        "o_locus": vpa_serotype.get("o_locus", "None"),
-        "k_locus": vpa_serotype.get("k_locus", "None"),
-        "o_confidence": vpa_serotype.get("o_confidence", "Unknown"),
-        "k_confidence": vpa_serotype.get("k_confidence", "Unknown"),
-    }
-elif vpa_serotype_path is not None:
-    # 占位规则：gspec 尚未给出表型时如实记录能力状态，不猜测。
-    summary["steps"]["vpa_serotype"] = {
-        "status": vpa_serotype.get("status", "unavailable"),
-        "reason": vpa_serotype.get("reason", ""),
-    }
-
-# vpa_ok（cluster, integrated typing）是 O/K 血清型的权威来源；占位规则仍保留
-# 兼容旧流程，但一旦 gspec 给出了表型，就以 gspec 的结果覆盖 unavailable 占位。
+# VPA O/K 血清型（gspec `vpa_ok` cluster 库是权威来源；未选库/无表型时如实
+# unavailable，不再由占位规则产出文件）。段仅在该样本物种声明了 vpa_ok 或
+# 为 VPA 时写出，与旧契约一致。
 _vpa_ok = gspec_tp["databases"].get("vpa_ok")
 if isinstance(_vpa_ok, dict) and _vpa_ok.get("status") == "ran":
     _phenotypes = _vpa_ok.get("phenotypes") if isinstance(_vpa_ok.get("phenotypes"), dict) else {}
@@ -223,11 +211,22 @@ if isinstance(_vpa_ok, dict) and _vpa_ok.get("status") == "ran":
             "k_confidence": str(_k.get("confidence") or "Unknown"),
             "source": "gspec:vpa_ok",
         }
+# VPA 毒力标记（tdh/trh/tlh）按基因名扫 gspec 各库（官方 vpa_vf 或用户
+# 显式选择的库；v1.4.41 前的私有 vpara_virulence 库同样命中）；
+# O/K 血清型的 unavailable 语义按样本物种（registry 解析）判定。
+from bacmap.core.pathogen_registry import resolve_species as _resolve_species  # noqa: E402
 
-vpa_virulence_path = opt_input("vpa_virulence")
-vpa_virulence = read_json(vpa_virulence_path, {}) if vpa_virulence_path else {}
-if isinstance(vpa_virulence, dict) and vpa_virulence:
-    summary["steps"]["vpa_virulence"] = vpa_virulence
+_sample_code = _resolve_species(
+    str(species_id.get("species") or species_id.get("verdict") or "")
+)
+_vpa_virulence = _virulence_marks(gspec_tp["databases"])
+if _vpa_virulence is not None:
+    summary["steps"]["vpa_virulence"] = _vpa_virulence
+if "vpa_serotype" not in summary["steps"] and _sample_code == "VPA":
+    summary["steps"]["vpa_serotype"] = {
+        "status": "unavailable",
+        "reason": "gspec 尚无副溶血性弧菌血清型数据库",
+    }
 
 annotation = read_json(snakemake.input.annotation, {})
 if isinstance(annotation, dict) and annotation.get("summary"):

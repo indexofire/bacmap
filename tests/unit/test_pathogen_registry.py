@@ -37,7 +37,7 @@ GOLDEN_AMRFINDER_ORGANISMS = {
 }
 GOLDEN_GSPEC_SCREENS = {
     "ECO": ["eco_dec", "ecoh"],
-    "VPA": ["vpara_virulence"],
+    "VPA": ["vpa_vf", "vpa_ok", "vpa_pai"],
     "LMO": ["lmo_sero"],
     "KPN": ["kpsc_k", "kpsc_o"],
     "ABA": ["ab_k", "ab_o"],

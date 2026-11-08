@@ -60,16 +60,20 @@ class TestGapitDbRouting:
         assert uses_gspec_db("V_parahaemolyticus", "eco_dec") is False
 
     def test_vpara_only_for_vpara(self):
-        assert uses_gspec_db("V_parahaemolyticus", "vpara_virulence") is True
-        assert uses_gspec_db("DEC", "vpara_virulence") is False
+        # v1.4.41：VPA 默认库为官方 gspec catalog 的 vpa_vf/vpa_ok/vpa_pai；
+        # 旧私有库名 vpara_virulence 仅在用户显式 override 时生效。
+        assert uses_gspec_db("V_parahaemolyticus", "vpa_vf") is True
+        assert uses_gspec_db("DEC", "vpa_vf") is False
 
 
 class TestReportInputsGating:
     """summary 依赖只含适用步骤：不适用者不进入 DAG（也就不会跑外部工具）。"""
 
     def test_ecoli(self):
+        # ecoh O/H 能力状态出自 gspec typing.json（collect_summary 归一），
+        # 不再有逐菌占位文件（v1.4.41）。
         extra = _extra("DEC")
-        assert extra == {"ectyper", "pathotype"}
+        assert extra == {"pathotype"}
 
     def test_salmonella(self):
         extra = _extra("SAL")
@@ -80,8 +84,10 @@ class TestReportInputsGating:
         assert extra == {"shigella_serotype"}
 
     def test_vpara(self):
+        # v1.4.41：毒力标记（vpara_virulence）与 O/K（vpa_ok）都由通用
+        # gspec_typing 聚合产物提供，无逐菌专用输入。
         extra = _extra("V_parahaemolyticus")
-        assert extra == {"vpa_serotype", "vpa_virulence"}
+        assert extra == set()
 
     def test_listeria_uses_none_of_them(self):
         # LMO 的血清群由 gspec lmo_sero 给出（走 gspec_typing），不额外起步骤
@@ -121,9 +127,9 @@ class TestSelectionAwareRouting:
                 "S1", "V_parahaemolyticus", "/w", selection=selection
             )
         ) - _COMMON
-        # vpa_ok/vpa_pai ride the generic gspec_typing aggregate; the factual
-        # vpa_serotype placeholder stays (gspec fills it when vpa_ok runs).
-        assert extra == {"vpa_serotype"}
+        # v1.4.41：replace 掉 vpara_virulence 后无任何逐菌专用输入；
+        # vpa_ok/vpa_pai 全部经 gspec_typing 聚合产物进入 summary。
+        assert extra == set()
 
     def test_extend_keeps_vpara_special_steps(self):
         from bacmap.core.tool_selection import (
@@ -144,7 +150,7 @@ class TestSelectionAwareRouting:
                 "S1", "V_parahaemolyticus", "/w", selection=selection
             )
         ) - _COMMON
-        assert extra == {"vpa_serotype", "vpa_virulence"}
+        assert extra == set()
 
     def test_sample_override_applies_to_special_steps(self):
         from bacmap.core.tool_selection import (

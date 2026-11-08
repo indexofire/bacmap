@@ -60,6 +60,17 @@ _KNOWN_SEROGROUPS = frozenset(
 
 _MLST_LOCI = ("aroC", "dnaN", "hemD", "hisD", "purE", "sucA", "thrA")
 
+# 每个 MLST 方案的期望位点（gmlst TSV 的 SCHEME 列 → loci）。
+# ``_MLST_LOCI`` 即 salmonella_2 的位点表；vparahaemolyticus_1 来自 gmlst 0.6.1
+# 真实输出的表头。未登记的方案回退为"按 TSV 实际位点全量校验"，绝不套用别种的位点表。
+_SCHEME_LOCI: dict[str, tuple[str, ...]] = {
+    "salmonella_2": _MLST_LOCI,
+    "vparahaemolyticus_1": ("dnaE", "gyrB", "recA", "dtdS", "pntA", "pyrC", "tnaA"),
+}
+
+# parse_mlst 会把 gmlst TSV 的元列（FILE/SCHEME）一并放进 alleles —— 校验前剔除。
+_MLST_META_COLUMNS = frozenset({"file", "scheme"})
+
 _CRITICAL_AMR_PATTERNS = [
     re.compile(r"^mcr-\d", re.IGNORECASE),
     re.compile(r"^bla(NDM|KPC|OXA-48|VIM|IMP)", re.IGNORECASE),
@@ -97,16 +108,26 @@ class DeterministicVerifier:
             return CheckResult("species", True, f"Species confirmed: {canon}")
         return CheckResult("species", False, f"Species NOT confirmed: {verdict!r}")
 
-    def verify_mlst(self, st: str, alleles: dict[str, str]) -> CheckResult:
+    def verify_mlst(
+        self,
+        st: str,
+        alleles: dict[str, str],
+        expected_loci: tuple[str, ...] | list[str] | None = None,
+    ) -> CheckResult:
         if not st or st in ("-", "N/A", ""):
             return CheckResult("mlst", False, f"MLST ST missing: {st!r}")
 
         if not st.lstrip("-").isdigit():
             return CheckResult("mlst", False, f"MLST ST not numeric: {st!r}")
 
+        # 无显式方案位点时沿用 salmonella_2 位点表（历史默认，保持既有调用兼容）；
+        # 按物种路由的入口（verify_all）会传入实际方案的位点。
+        loci = tuple(expected_loci) if expected_loci is not None else _MLST_LOCI
+        # parse_mlst 的键是小写（aroc/dnae…）；调用方可能给规范大小写（aroC/dnaE）。
+        values = {k.lower(): v for k, v in alleles.items()}
         missing = []
-        for locus in _MLST_LOCI:
-            val = alleles.get(locus, "-")
+        for locus in loci:
+            val = values.get(locus.lower(), "-")
             if val in ("-", "", "N/A"):
                 missing.append(locus)
 
@@ -121,7 +142,7 @@ class DeterministicVerifier:
         return CheckResult(
             "mlst",
             True,
-            f"MLST ST={st}, all 7 loci present",
+            f"MLST ST={st}, all {len(loci)} loci present",
             {"st": st, "alleles": alleles},
         )
 
@@ -184,13 +205,29 @@ class DeterministicVerifier:
         species_check = self.verify_species(collapse_binomial(verdict))
 
         mlst_raw = steps.get("mlst", "")
-        st, alleles = self._parse_mlst(mlst_raw)
-        mlst_check = self.verify_mlst(st, alleles)
+        st, alleles, scheme = self._parse_mlst(mlst_raw)
+        # 按方案路由位点：已登记方案用其位点表；未登记方案按 TSV 实际位点
+        # 全量校验（绝不把别种的位点表套在别的物种上 —— 那会把好结果判成
+        # missing，如对 vparahaemolyticus_1 套用 salmonella_2 位点）。
+        expected = _SCHEME_LOCI.get(scheme, tuple(sorted(alleles)))
+        mlst_check = self.verify_mlst(st, alleles, expected_loci=expected)
 
         sero_raw = steps.get("serotype", {})
-        serovar = sero_raw.get("sistr", "N/A") if isinstance(sero_raw, dict) else "N/A"
-        serogroup = sero_raw.get("serogroup", "") if isinstance(sero_raw, dict) else ""
-        sero_check = self.verify_serotype(serovar, serogroup)
+        if isinstance(sero_raw, dict) and sero_raw.get("sistr_status") == "not_applicable":
+            # 非沙门菌：SISTR 不适用（collect_summary 会写 not_applicable + 原因），
+            # 血清型未配置（如 VPA 等 gspec 血清型子命令）不是校验失败。
+            sero_check = CheckResult(
+                "serotype",
+                True,
+                "Serotype not applicable for this species (SISTR is Salmonella-only)",
+                {"applicable": False},
+            )
+        else:
+            serovar = (
+                sero_raw.get("sistr", "N/A") if isinstance(sero_raw, dict) else "N/A"
+            )
+            serogroup = sero_raw.get("serogroup", "") if isinstance(sero_raw, dict) else ""
+            sero_check = self.verify_serotype(serovar, serogroup)
 
         amr_raw = steps.get("amr", {})
         card_genes = []
@@ -213,9 +250,9 @@ class DeterministicVerifier:
         )
 
     @staticmethod
-    def _parse_mlst(mlst_text: str) -> tuple[str, dict[str, str]]:
+    def _parse_mlst(mlst_text: str) -> tuple[str, dict[str, str], str]:
         if not isinstance(mlst_text, str) or not mlst_text:
-            return "", {}
+            return "", {}, ""
         parsed = parse_mlst(mlst_text)
         raw_alleles = parsed.get("alleles", {})
 
@@ -223,9 +260,11 @@ class DeterministicVerifier:
         if st == "N/A":
             st = ""
 
+        scheme = str(raw_alleles.get("scheme", "") or "").strip()
         alleles: dict[str, str] = {}
-        for locus in _MLST_LOCI:
-            if locus.lower() in raw_alleles:
-                alleles[locus] = raw_alleles[locus.lower()]
+        for locus, value in raw_alleles.items():
+            if locus in _MLST_META_COLUMNS:
+                continue
+            alleles[locus.lower()] = value
 
-        return st, alleles
+        return st, alleles, scheme

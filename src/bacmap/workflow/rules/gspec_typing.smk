@@ -3,7 +3,8 @@
 # 运行期再由 gside verdict 选物种码过滤（低置信度/Unknown 不路由）。
 # gene 库走 screen + typing；cluster 库走 screen --format json（typing 已集成）。
 # 无 scheme 的库如实记 no_scheme（不猜测）。
-# eco_dec 由 dec_pathotype 规则专门处理；vpara_virulence 由 vpara 规则处理。
+# v1.4.41：vpara_virulence 也由本规则执行（毒力标记归一见 core gspec_typing）；
+# eco_dec 仍由 dec_pathotype 规则专门处理。
 
 import sys
 

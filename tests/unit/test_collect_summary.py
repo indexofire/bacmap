@@ -25,10 +25,11 @@ def _run(
     out = rep / "S1_summary.json"
 
     missing = str(tmp_path / "missing")
-    gspec_path = missing
-    if gspec_typing is not None:
-        gspec_path = str(tmp_path / "gspec_typing.json")
-        Path(gspec_path).write_text(json.dumps(gspec_typing), encoding="utf-8")
+    # gspec_typing 是常驻输入：缺省给真实形状的空结果（无库命中）。
+    if gspec_typing is None:
+        gspec_typing = {"status": "empty", "databases": {}}
+    gspec_path = str(tmp_path / "gspec_typing.json")
+    Path(gspec_path).write_text(json.dumps(gspec_typing), encoding="utf-8")
     attrs = {
         "qc_json": missing,
         "assembly_stats": missing,
@@ -38,12 +39,9 @@ def _run(
         "card": missing,
         "amrfinderplus": missing,
         "plasmidfinder": missing,
-        "ectyper": missing,
         "pathotype": missing,
         "gspec_typing": gspec_path,
         "shigella_serotype": missing,
-        "vpa_serotype": missing,
-        "vpa_virulence": missing,
         "annotation": missing,
         "species_id": str(sid),
     }
@@ -83,13 +81,24 @@ def test_non_salmonella_marks_sistr_not_applicable(tmp_path):
     summary = _run(
         tmp_path,
         {"verdict": "DEC", "detected_markers": [{"gene": "ipah"}]},
-        omit={"sistr", "pathotype", "shigella_serotype", "vpa_serotype", "vpa_virulence"},
+        omit={"sistr", "pathotype", "shigella_serotype"},
+        # ECO 的 gspec 库清单默认含 ecoh（无 typing scheme → 如实 no_scheme）
+        gspec_typing={
+            "status": "ran",
+            "databases": {
+                "ecoh": {
+                    "kind": "gene",
+                    "status": "no_scheme",
+                    "error": "database 'ecoh' carries no typing scheme",
+                }
+            },
+        },
     )
     assert summary["steps"]["serotype"]["sistr_status"] == "not_applicable"
     assert "vpa_serotype" not in summary["steps"]
     assert "vpa_virulence" not in summary["steps"]
-    # DEC 致病型仍适用（ECO 有 eco_dec）
-    # 本桩未提供 pathotype 文件 → 该子步骤不适用
+    # DEC 段适用（ecoh 库已跑）；桩未提供 pathotype 文件 → 该子步骤不适用
+    assert summary["steps"]["dec"]["ecoh_serotype"] == "N/A"
     assert summary["steps"]["dec"]["pathotype_status"] == "not_applicable"
 
 

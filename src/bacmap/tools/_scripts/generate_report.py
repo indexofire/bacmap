@@ -279,8 +279,9 @@ def _render_nli_section(sample_id: str) -> str:
 def generate_html(sample_id: str, summary: dict, verification, output_path: Path):
     steps = summary.get("steps", {})
 
-    sp = steps.get("species", {})
-    verdict = sp.get("verdict", "N/A") if isinstance(sp, dict) else str(sp)
+    # gside 版 summary 用 "species" 键（_extract_species 双键兼容旧 fixtures 的 verdict）。
+    verdict = _extract_species(summary) or "N/A"
+    species_confirmed = bool(verdict) and verdict != "N/A" and not verdict.startswith("not_")
 
     mlst_info = parse_mlst(steps.get("mlst", ""))
     st = mlst_info.get("st", "N/A")
@@ -304,7 +305,8 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
 
     asm_stats = steps.get("assembly", "")
     asm_parts = asm_stats.strip().split("\n")[-1].split("\t") if asm_stats else []
-    num_contigs = asm_parts[2] if len(asm_parts) > 2 else "?"
+    # stats 输出列：#file(0) format(1) type(2) num_seqs(3) sum_len(4) …
+    num_contigs = asm_parts[3] if len(asm_parts) > 3 else "?"
     total_len = asm_parts[4] if len(asm_parts) > 4 else "?"
 
     v_icon = "✅" if verification.passed else "❌"
@@ -316,7 +318,11 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
         for c in verification.checks
     )
 
-    allele_str = " ".join(f"{k}={v}" for k, v in alleles.items()) if alleles else "N/A"
+    # parse_mlst 会把 gmlst TSV 的元列（file/scheme）一并放进 alleles —— 展示前剔除。
+    mlst_alleles = {k: v for k, v in alleles.items() if k not in ("file", "scheme")}
+    allele_str = (
+        " ".join(f"{k}={v}" for k, v in mlst_alleles.items()) if mlst_alleles else "N/A"
+    )
 
     cgmlst_section = _render_cgmlst_section(sample_id, summary)
 
@@ -359,7 +365,7 @@ td.label {{ font-weight: bold; width: 180px; background: #f8f9fa; }}
 <h2>📋 基本信息</h2>
 <table>
 {_row("样本编号", sample_id)}
-{_row("物种判定", verdict, "Salmonella" in verdict)}
+{_row("物种判定", verdict, species_confirmed)}
 {_row("MLST ST", st)}
 {_row("MLST Alleles", allele_str)}
 {_row("血清型", serovar)}

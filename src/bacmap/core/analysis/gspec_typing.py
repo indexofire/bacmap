@@ -4,11 +4,17 @@
 ``{status, databases: {db: {status, schemes, confidence, genes, error}},
 serogroup, serogroup_scheme}``；`serogroup` 从 scheme 名含 ``serogroup`` 且给出
 表型者取（如 ``doumith_serogroup`` → L. monocytogenes 血清群）。
+
+``vpara_virulence`` / ``ecoh`` 的种以下判定也出自这里（v1.4.41 起无逐菌专用
+smk 规则）：毒力标记（tdh/trh/tlh）与 O/H 血清型都是 gspec 库筛查结论，
+bacmap 只做契约归一。
 """
 
 from __future__ import annotations
 
 from typing import Any
+
+_VPARA_VIRULENCE_MARKS = ("tdh", "trh", "tlh")
 
 
 def _db_entry(raw: Any) -> dict[str, Any]:
@@ -68,4 +74,78 @@ def summarize(payload: Any) -> dict[str, Any]:
         "databases": databases,
         "serogroup": serogroup,
         "serogroup_scheme": serogroup_scheme,
+    }
+
+
+def virulence_marks(databases: Any) -> dict[str, Any] | None:
+    """gspec 库筛查结果 → summary ``steps.vpa_virulence`` 契约（tdh/trh/tlh）。
+
+    按基因名扫**所有已运行库**的 genes（官方 ``vpa_vf`` 或用户显式选择的任何
+    含 tdh/trh/tlh 的库都命中；v1.4.41 前的私有 ``vpara_virulence`` 库同理）。
+    无库、库未运行或无命中 → None（summary 不写该段；库 unavailable 不算失败）。
+    保持既有键名（tool/database/tdh/trh/tlh/n_hits/hits），TUI 与 strain_index 零改动。
+    """
+    if not isinstance(databases, dict):
+        return None
+    merged: set[str] = set()
+    source = ""
+    status = ""
+    for name, entry in databases.items():
+        if not isinstance(entry, dict):
+            continue
+        # ran = 库带 scheme 且跑完；no_scheme = 库可筛查但无表型 scheme。
+        # 两者 screen 都成功，基因存在性结论（tdh/trh/tlh）均有效。
+        if entry.get("status") not in ("ran", "no_scheme"):
+            continue
+        genes = {str(g).strip().lower() for g in entry.get("genes", []) or []}
+        hits = genes & set(_VPARA_VIRULENCE_MARKS)
+        if hits:
+            merged |= hits
+            source = str(name)
+            status = str(entry.get("status", ""))
+    if not merged:
+        return None
+    return {
+        "tool": "gspec",
+        "database": source,
+        "status": status,
+        **{mark: (mark in merged) for mark in _VPARA_VIRULENCE_MARKS},
+        "n_hits": len(merged),
+        "hits": [{"gene": g} for g in sorted(merged)],
+    }
+
+
+def ecoh_serotype_summary(entry: Any) -> dict[str, Any] | None:
+    """``databases["ecoh"]`` → summary ``steps.dec`` 的 ecoh 血清型字段。
+
+    ecoh 库带 typing scheme 前不可判定（no_scheme/unavailable/failed）：如实记录
+    能力状态，不猜测表型；给出 scheme 表型后填 serotype/o_type/h_type。
+    库未登记（None）→ None。
+    """
+    if not isinstance(entry, dict):
+        return None
+    schemes_raw = entry.get("schemes")
+    schemes = schemes_raw if isinstance(schemes_raw, dict) else {}
+    oh = str(schemes.get("oh_serotype", "") or "")
+    o_type = str(schemes.get("o_type", "") or "")
+    h_type = str(schemes.get("h_type", "") or "")
+    status = str(entry.get("status", ""))
+    if oh or o_type or h_type:
+        return {
+            "serotype": oh or "-:-",
+            "o_type": o_type or "-",
+            "h_type": h_type or "-",
+            "interpretation": "gspec ecoh typing",
+            "status": status,
+        }
+    reason = str(entry.get("error", "") or "")
+    return {
+        "serotype": "N/A",
+        "o_type": "-",
+        "h_type": "-",
+        "interpretation": (
+            "E. coli O/H serotyping needs a gspec DB built with --typing; none available yet"
+        ),
+        "status": status or "unavailable",
+        "reason": reason,
     }

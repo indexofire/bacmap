@@ -32,9 +32,8 @@
 - ``skipped``    gspec 不在 PATH；
 - ``failed``     screen/typing 执行失败（带 stage/error）。
 
-``eco_dec`` 由 DEC 专用步骤处理；``vpara_virulence`` 由既有 vpara 规则处理，
-两者在此排除以避免重复执行。cluster 库的 typing 已在 screen 内完成，绝不再对
-TSV 跑 ``gspec typing``。
+``eco_dec`` 由 DEC 专用步骤处理，在此排除以避免重复执行；cluster 库的 typing
+已在 screen 内完成，绝不再对 TSV 跑 ``gspec typing``。
 """
 
 from __future__ import annotations
@@ -47,8 +46,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# 由专用步骤承担的库（避免重复执行）：DEC 走 run_dec_typing.py，vpara 走 vpara 规则。
-_HANDLED_ELSEWHERE = frozenset({"eco_dec", "vpara_virulence"})
+# 由 DEC 专用步骤承担的库（避免重复执行）：eco_dec 走 run_dec_typing.py。
+_HANDLED_ELSEWHERE = frozenset({"eco_dec"})
 
 _NO_SCHEME_CODES = frozenset({"TYPING_NO_SCHEME"})
 
@@ -80,7 +79,17 @@ def _first_genes(payload: dict[str, Any]) -> list[str]:
     files = payload.get("files")
     entry = files[0] if isinstance(files, list) and files and isinstance(files[0], dict) else {}
     genes = entry.get("genes")
-    return [str(g) for g in genes] if isinstance(genes, list) else []
+    if isinstance(genes, list):
+        return [str(g) for g in genes]
+    # gspec ≥0.10 的 screen JSON 没有 genes 键：从 hits 的 gene 字段去重收集
+    # （保持首次出现顺序），供毒力标记（tdh/trh/tlh）等判定使用。
+    seen: list[str] = []
+    for hit in entry.get("hits") or []:
+        if isinstance(hit, dict):
+            gene = str(hit.get("gene", "")).strip()
+            if gene and gene not in seen:
+                seen.append(gene)
+    return seen
 
 
 def _gspec_error(text: str | None) -> tuple[str, str] | None:
@@ -144,6 +153,22 @@ def _effective_databases(
     species_block = {"verdict": verdict, "code": code, "confidence": confidence}
     selection = load_selection(selection_path)
     return selection.effective_gspec_databases(code, sample=sample), species_block, True
+
+
+def _screen_tsv_genes(path: Path) -> list[str]:
+    """从 gene 库的 screen TSV 去重收集基因名（gspec ≥0.10 JSON 无 genes 键）。"""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    from bacmap.core.utils import parse_abricate_tsv
+
+    seen: list[str] = []
+    for row in parse_abricate_tsv(text):
+        gene = str(row.get("GENE", "")).strip()
+        if gene and gene not in seen:
+            seen.append(gene)
+    return seen
 
 
 def _catalog(datadir: str) -> dict[str, Any]:
@@ -286,6 +311,10 @@ def _screen_and_type(
         out: dict[str, Any] = {"kind": "gene", "status": status, "error": message or code}
         if status == "failed":
             out["stage"] = "typing"
+        if status == "no_scheme":
+            # 库可筛查（screen 已成功）、仅无表型 scheme —— 基因命中仍然有效
+            # （如 vpa_vf 的 tdh/trh/tlh 存在性判定只依赖 screen）。
+            out["genes"] = _screen_tsv_genes(screen)
         return out
     if tp.returncode != 0:
         return {"kind": "gene", "status": "failed", "stage": "typing",

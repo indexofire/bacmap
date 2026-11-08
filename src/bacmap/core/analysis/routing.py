@@ -5,9 +5,10 @@
 
 - SISTR 只做**沙门菌**血清型；
 - ShigaTyper（未来迁 gspec）只做**志贺菌**血清型；
-- `ecoh`（gspec）只做**大肠埃希菌** O/H；
 - `eco_dec`（gspec）只做**大肠埃希菌/志贺菌** DEC 致病型；
-- `vpara_virulence`/vpara 血清型只做**副溶血性弧菌**。
+- 其余种以下判定（`vpa_vf` 毒力标记、`ecoh` O/H、`vpa_ok` O/K、
+  `lmo_sero` 血清群等）统一走 `gspec_typing` 通用规则：库清单来自注册表 +
+  用户覆盖，结论由 collect_summary 从 typing.json 归一（v1.4.41）。
 
 本模块是纯函数（无 Snakemake 依赖），供 `rules/report.smk` 构造条件依赖，也便于单测。
 """
@@ -76,20 +77,13 @@ def report_inputs(
     engine = serotype_engine(species_value)
     if engine == "sistr":
         files["sistr"] = f"{base}/typing/sistr.json"
-    if engine == "ecoh":
-        files["ectyper"] = f"{base}/dec/ecoh_serotype.json"
     if engine == "shigatyper":
         files["shigella_serotype"] = f"{base}/dec/shigella_serotype.json"
     if uses_gspec_db(species_value, "eco_dec", selection=selection, sample=sample):
         files["pathotype"] = f"{base}/dec/pathotype.json"
-    # VPA 的血清型占位始终进 summary（事实性 unavailable）；若用户选了 vpa_ok，
-    # collect_summary 会用 gspec 的 O/K 表型覆盖它。
-    if resolve_species(species_value) == "VPA":
-        files["vpa_serotype"] = f"{base}/vpa/vpa_serotype.json"
-    if uses_gspec_db(
-        species_value, "vpara_virulence", selection=selection, sample=sample
-    ):
-        files["vpa_virulence"] = f"{base}/vpara/virulence.json"
+    # v1.4.41：vpara_virulence（gspec 通用筛查）与各占位血清型文件不再有专用
+    # 产物 —— 毒力标记与 O/K、ecoh 血清型结论都出自 gspec/typing.json，由
+    # collect_summary 归一；未声明对应库的物种不产生相应 summary 段。
     if selection is not None:
         code = resolve_species(species_value)
         if code is not None:

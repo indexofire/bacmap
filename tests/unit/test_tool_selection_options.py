@@ -10,6 +10,9 @@ from bacmap.tools import tool_catalog
 
 def _gspec_catalog() -> dict[str, DbCatalogEntry]:
     return {
+        "vpa_vf": DbCatalogEntry(
+            name="vpa_vf", kind="gene", installed=True, source="catalog"
+        ),
         "vpara_virulence": DbCatalogEntry(
             name="vpara_virulence", kind="gene", installed=True, source="local"
         ),
@@ -48,9 +51,9 @@ def test_options_payload_vpa(monkeypatch):
     assert payload["gmlst_catalog_available"] is True
     assert [row["code"] for row in payload["species"]] == ["VPA"]
     row = payload["species"][0]
-    assert row["defaults"] == ["vpara_virulence"]
+    assert row["defaults"] == ["vpa_vf", "vpa_ok", "vpa_pai"]
     names = {db["name"] for db in row["databases"]}
-    assert {"vpara_virulence", "vpa_ok", "vpa_pai"} <= names
+    assert {"vpa_vf", "vpa_ok", "vpa_pai"} <= names
     assert row["gmlst"]["effective"]["modes"] == ["mlst", "cgmlst"]
     assert row["gmlst"]["effective"]["schemes"]["cgmlst"] == "vparahaemolyticus_3"
 
