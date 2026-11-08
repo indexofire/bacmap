@@ -3,7 +3,7 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [未发布]
+## [0.1.3] - 2026-11-09
 
 ### P4 完成：高级统计外部化（ADR-22）+ 研究任务类型（ADR-23）
 
