@@ -36,9 +36,16 @@ def build_access(
         if gom_db.is_file():
             mounts[str(gom_db)] = "/data/gom.sqlite"
             ctx["gom_db"] = "/data/gom.sqlite"
+        # 一个 input_paths 恰好指向 home/results（或 gom.sqlite）时，宿主路径同 key
+        # 会覆盖上面的规范挂载、把 /data/results 挤掉（v1.4.40 前的实测坑）。
+        # 该数据经规范 guest 路径已可读，登记到 context 指向真实路径即可。
+        canonical = {str(results_dir): "/data/results", str(gom_db): "/data/gom.sqlite"}
         for ds in datasets:
-            mounts[ds.resolved_path] = ds.mount_guest
-            ctx["datasets"][ds.dataset_id] = ds.mount_guest
+            guest = canonical.get(ds.resolved_path)
+            if guest is None:
+                mounts[ds.resolved_path] = ds.mount_guest
+                guest = ds.mount_guest
+            ctx["datasets"][ds.dataset_id] = guest
     else:
         ctx["results_dir"] = str(results_dir)
         if gom_db.is_file():

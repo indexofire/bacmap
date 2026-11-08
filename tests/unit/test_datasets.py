@@ -226,6 +226,47 @@ class TestBuildAccess:
         assert ctx["results_dir"] == str(results)
         assert ctx["datasets"][ds.dataset_id] == ds.resolved_path
 
+    def test_dataset_colliding_with_results_keeps_canonical_mount(
+        self, tmp_path: Path
+    ):
+        """input_paths 指向 home/results 时不得挤掉 /data/results（v1.4.40 实测坑）。"""
+        results = tmp_path / "results"
+        results.mkdir()
+        (results / "s1").mkdir()
+        (results / "s1" / "report.json").write_text("{}", encoding="utf-8")
+        gom = tmp_path / "gom.sqlite"
+        gom.write_bytes(b"gom")
+        reg = DatasetRegistry(tmp_path / "registry.sqlite")
+        try:
+            ds = reg.register(results, registered_by="t")
+        finally:
+            reg.close()
+        mounts, ctx = build_access(
+            "podman", results_dir=results, gom_db=gom, datasets=[ds]
+        )
+        assert mounts[str(results)] == "/data/results"
+        assert mounts[str(gom)] == "/data/gom.sqlite"
+        assert "/input/" not in str(mounts.values())
+        # context 把该数据集指向它实际可读的规范路径，脚本不会被 /input 误导
+        assert ctx["datasets"][ds.dataset_id] == "/data/results"
+        assert ctx["results_dir"] == "/data/results"
+
+    def test_dataset_colliding_with_gom_keeps_canonical_mount(self, tmp_path: Path):
+        results = tmp_path / "results"
+        results.mkdir()
+        gom = tmp_path / "gom.sqlite"
+        gom.write_bytes(b"gom")
+        reg = DatasetRegistry(tmp_path / "registry.sqlite")
+        try:
+            ds = reg.register(gom, registered_by="t")
+        finally:
+            reg.close()
+        mounts, ctx = build_access(
+            "podman", results_dir=results, gom_db=gom, datasets=[ds]
+        )
+        assert mounts[str(gom)] == "/data/gom.sqlite"
+        assert ctx["datasets"][ds.dataset_id] == "/data/gom.sqlite"
+
 
 # ---------------------------------------------------------------------------
 # mine.input_paths / sandbox_run.datasets 端到端

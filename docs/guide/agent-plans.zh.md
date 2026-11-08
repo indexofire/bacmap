@@ -124,8 +124,12 @@ bacmap agent doctor
 - `install` 幂等；除非 `--force`，否则拒绝覆盖用户文件；
 - `.bacmap-agent.json` 记录生成的文件及其 hash；
 - `doctor` 报告缺失/被修改的文件以及 bacmap 版本漂移；
-- `--with-skills` 写入可移植的 `.bacmap/skills/<role>/SKILL.md`；把该目录放到
-  harness 发现 skills 的位置；
+- `--with-skills` 按 2026-11 实测的各 harness 目录约定直写：Hermes
+  `~/.hermes/skills/<role>/`（项目级 `./.hermes/skills` 需先 `hermes skills trust`）、
+  Pi `~/.pi/agent/skills/<role>/`、OpenCode/generic 走跨 agent 约定
+  `~/.agents/skills/<role>/`；DSH/Codex 无经验证的 skills 目录，保持
+  `.bacmap/skills/<role>/SKILL.md` 便携副本（DSH 用 MCP resources 或
+  `--inline-roles`）；
 - `--inline-skills`（或重复 `--inline-role ROLE`）把角色正文追加到指导文件。适用于不会把
   skills/resources 注入模型上下文的 harness（Pi 的 `--print` 模式是已实测例子）；
 - MCP 配置片段由 `--format mcp-config` 打印，不会自动写入。
@@ -239,16 +243,18 @@ conda run --no-capture-output -n bacmap bacmap start mcp \
 
 ### Hermes
 
-配置 MCP 服务器：
+配置 MCP 服务器。推荐经 `pixi run`（或 `conda run`）启动：任务执行会调用
+`snakemake`，裸的控制台入口脚本不会把环境 bin 放进 harness 的 PATH。
 
 ```yaml
 # ~/.hermes/config.yaml
 mcp_servers:
   bacmap:
-    command: /path/to/bacmap
-    args: ["start", "mcp"]
+    command: pixi
+    args: ["run", "--manifest-path", "/path/to/bacmap/pixi.toml", "-e", "default",
+           "bacmap", "start", "mcp"]
     # 本地/内网模型且已开启 [mcp] allow_local_trusted = true 时：
-    # args: ["start", "mcp", "--profile", "local-trusted"]
+    # args: [..., "bacmap", "start", "mcp", "--profile", "local-trusted"]
 ```
 
 模型凭据属于 Hermes，不属于 bacmap。按 Hermes 自己的方式配置（通常是 `/login`、`/model`
@@ -302,10 +308,11 @@ DSH 通过插件连接 MCP。补丁文件**按 profile 分层**：`$DSH_HOME/pro
     config:
       serverName: bacmap
       transport: stdio
-      command: /path/to/bacmap
-      args: ['start', 'mcp']
+      command: pixi
+      args: ['run', '--manifest-path', '/path/to/bacmap/pixi.toml', '-e', 'default',
+             'bacmap', 'start', 'mcp']
       # 本地可信 Profile：
-      # args: ['start', 'mcp', '--profile', 'local-trusted']
+      # args: [..., 'bacmap', 'start', 'mcp', '--profile', 'local-trusted']
       failOnStartupError: true
 ```
 
@@ -534,13 +541,19 @@ bacmap 无法控制被复制进 Harness 工作区的文件，也无法控制模�
 | `sandbox unavailable` | 安装 Apptainer/Podman；直通模式仅限开发 |
 | 任务失败信息被脱敏 | 受 cloud Profile 限制；改用 `local-trusted`，或在本地查看 `bacmap task show` |
 
-## 9. 已验证的客户端（2026-10）
+## 9. 已验证的客户端（2026-11）
 
 | Harness | 版本 | 发现 | 计划往返 |
 |---|---|---|---|
-| Hermes | 0.21.3（以及 0.17.0+52045） | `hermes mcp test bacmap` | 创建 → 人工确认 → 读回 `submitted` + task ID |
+| Hermes | 0.23.0 | `hermes mcp test bacmap` | 创建 → 人工确认 → 读回 `submitted` + task ID |
 | Pi | 1.4.0（内置 MCP ≥0.99） | `pi mcp list` | 同上 |
-| DSH | 0.2.1-rc.2 | 插件会拉起 MCP 服务器 | 同上 |
+| DSH | 0.2.2-rc.1 | 插件会拉起 MCP 服务器 | MCP 插件层已验证；浏览器对话层待人工实测 |
+
+2026-11 真实数据实测（8 株副溶血弧菌组装，Hermes 无头 `-z` + CLI 确认）：analyze 计划
+确认后执行至 `succeeded`；只读工具汇总各株 MLST/AMR；`mine` 计划在 rootless Podman
+沙箱执行、产出 `mine_report.json` 并停在挖掘门，人工签字（`task approve`）后
+`succeeded`。期间 agent 在 cloud Profile 下自纠 `input_data_class` D3→D2，且从未
+尝试自行确认计划。
 
 上游变通：
 
@@ -548,7 +561,12 @@ bacmap 无法控制被复制进 Harness 工作区的文件，也无法控制模�
   `CMAKE_POLICY_VERSION_MINIMUM=3.5`。该隔离运行时在你用
   `hermes auth add zai --type api-key --api-key <key>` 添加之前，不会读取
   `ZAI_API_KEY`/`GLM_API_KEY`。
-- **DSH**：新增条目必须包在 `insert:` 下；裸条目会被当作补丁并跳过。
+- **仓库移动后的 pixi 环境**：仓库改名/移动后，conda 入口脚本（`snakemake`、`bedtools`
+  等）的 shebang 仍指向旧绝对路径（`bad interpreter`）。`pixi clean --environment
+  default && pixi install` 重建即可。MCP 经 `pixi run` 启动（见 §3）也能保证任务执行时
+  环境 bin 在 PATH。
+- **DSH**：新增条目必须包在 `insert:` 下；裸条目会被当作补丁并跳过。Web UI 首次启动打印
+  带 `?token=…` 的 URL；浏览器之外的 curl 会撞上 browser-trust 限制，属预期行为。
 - **Pi**：如果看不到 MCP 工具，请检查 `pi --version`（≥0.99）。
 
 自动化测试套件用真实的 MCP 客户端覆盖了 stdio 计划往返；上表记录的是使用智谱编码套餐端点的、

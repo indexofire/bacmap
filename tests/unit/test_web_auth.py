@@ -41,7 +41,11 @@ class TestSession:
     def test_tampered_signature_rejected(self):
         value = issue_session("secret", ttl=60)
         sid, exp, sig = value.split(".")
-        assert not verify_session("secret", f"{sid}.{exp}.{sig[:-1]}0")
+        # 翻转成一个必然不同的字符：若把末位固定改成 "0"，而真签名恰好以
+        # "0" 结尾，篡改后的 token 与原 token 相同，测试会随机失败（1/16）。
+        flipped = "1" if sig[-1] == "0" else "0"
+        assert sig[-1] != flipped
+        assert not verify_session("secret", f"{sid}.{exp}.{sig[:-1]}{flipped}")
 
     def test_expired_rejected(self):
         value = issue_session("secret", ttl=-1)

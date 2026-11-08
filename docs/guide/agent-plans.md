@@ -131,8 +131,12 @@ bacmap agent doctor
 - `install` is idempotent; it refuses to overwrite a user file unless `--force`;
 - `.bacmap-agent.json` records the generated files and their hashes;
 - `doctor` reports missing/modified files and bacmap-version drift;
-- `--with-skills` writes portable `.bacmap/skills/<role>/SKILL.md`; place that directory where
-  your harness discovers skills;
+- `--with-skills` writes portable `.bacmap/skills/<role>/SKILL.md` copies for
+  harnesses without a verified skill directory (DSH, Codex), and writes directly
+  into the per-harness conventions verified in 2026-11 live installs otherwise:
+  Hermes `~/.hermes/skills/<role>/` (project scope `./.hermes/skills` needs
+  `hermes skills trust` once), Pi `~/.pi/agent/skills/<role>/`, and the
+  cross-agent `~/.agents/skills/<role>/` convention for OpenCode/generic;
 - `--inline-skills` (or repeated `--inline-role ROLE`) appends the role bodies to the
   instructions file. Use it when the harness does not inject skills/resources into the model
   context (Pi in `--print` mode is a verified example);
@@ -249,16 +253,19 @@ conda run --no-capture-output -n bacmap bacmap start mcp \
 
 ### Hermes
 
-Configure the MCP server:
+Configure the MCP server. Prefer launching through `pixi run` (or `conda run`): task
+execution shells out to `snakemake`, and a bare console-script shim does not put the
+env's bin on the harness PATH.
 
 ```yaml
 # ~/.hermes/config.yaml
 mcp_servers:
   bacmap:
-    command: /path/to/bacmap
-    args: ["start", "mcp"]
+    command: pixi
+    args: ["run", "--manifest-path", "/path/to/bacmap/pixi.toml", "-e", "default",
+           "bacmap", "start", "mcp"]
     # With a local/LAN model and [mcp] allow_local_trusted = true:
-    # args: ["start", "mcp", "--profile", "local-trusted"]
+    # args: [..., "bacmap", "start", "mcp", "--profile", "local-trusted"]
 ```
 
 Model credentials belong to Hermes, not bacmap. Configure them with Hermes itself (usually
@@ -315,10 +322,11 @@ treated as a patch and skipped.
     config:
       serverName: bacmap
       transport: stdio
-      command: /path/to/bacmap
-      args: ['start', 'mcp']
+      command: pixi
+      args: ['run', '--manifest-path', '/path/to/bacmap/pixi.toml', '-e', 'default',
+             'bacmap', 'start', 'mcp']
       # Trusted local profile:
-      # args: ['start', 'mcp', '--profile', 'local-trusted']
+      # args: [..., 'bacmap', 'start', 'mcp', '--profile', 'local-trusted']
       failOnStartupError: true
 ```
 
@@ -552,13 +560,20 @@ content it receives.
 | `sandbox unavailable` | Install Apptainer/Podman; passthrough is dev-only |
 | Redacted task failure | Cloud profile limit; use `local-trusted` or check `bacmap task show` locally |
 
-## 9. Verified clients (2026-10)
+## 9. Verified clients (2026-11)
 
 | Harness | Version | Discovery | Plan round trip |
 |---|---|---|---|
-| Hermes | 0.21.3 (and 0.17.0+52045) | `hermes mcp test bacmap` | create → human confirm → read back `submitted` + task ID |
+| Hermes | 0.23.0 | `hermes mcp test bacmap` | create → human confirm → read back `submitted` + task ID |
 | Pi | 1.4.0 (built-in MCP ≥0.99) | `pi mcp list` | same |
-| DSH | 0.2.1-rc.2 | plugin starts the MCP server | same |
+| DSH | 0.2.2-rc.1 | plugin starts the MCP server | MCP plugin layer verified; browser chat layer pending manual check |
+
+2026-11 real-data run (8 *V. parahaemolyticus* assemblies, Hermes headless `-z` + CLI
+confirm): analyze plan confirmed and executed to `succeeded`; read-only tools summarised
+MLST/AMR per sample; a `mine` plan ran in the rootless-Podman sandbox, produced
+`mine_report.json` and stopped at the mining gate until a human signature (`task approve` →
+`succeeded`). The agent self-corrected `input_data_class` D3→D2 under the cloud profile and
+never attempted to confirm a plan itself.
 
 Upstream workarounds:
 
@@ -566,7 +581,13 @@ Upstream workarounds:
   `CMAKE_POLICY_VERSION_MINIMUM=3.5` for the first launch. The isolated runtime ignores
   `ZAI_API_KEY`/`GLM_API_KEY` until you add it with
   `hermes auth add zai --type api-key --api-key <key>`.
-- **DSH**: new entries must be wrapped in `insert:`; a bare entry is treated as a patch and skipped.
+- **Moved pixi env**: after moving/renaming the repo, conda entry points keep stale shebangs
+  (`snakemake`, `bedtools`, …: `bad interpreter`). `pixi clean --environment default && pixi
+  install` rebuilds them. Launching MCP through `pixi run` (see §3) also keeps the env's bin
+  on PATH for task execution.
+- **DSH**: new entries must be wrapped in `insert:`; a bare entry is treated as a patch and
+  skipped. The web UI prints a `?token=…` URL on first start; curl from outside the browser
+  meets the browser-trust fence by design.
 - **Pi**: if MCP tools are missing, check `pi --version` (≥0.99).
 
 The automated test suite covers the stdio plan round trip with a real MCP client; the table above
