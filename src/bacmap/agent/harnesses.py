@@ -43,6 +43,14 @@ class HarnessSpec(BaseModel):
     )
     config_format: Literal["yaml", "json", "toml", "none"] = "none"
     config_path: dict[str, str] = Field(default_factory=dict)
+    skills: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "scope → skills directory relative to the install base (2026-11 "
+            "per-harness conventions, verified on live installs). Empty/unlisted "
+            "scopes fall back to the portable .bacmap/skills copy."
+        ),
+    )
     notes: str = ""
 
 
@@ -53,9 +61,12 @@ _HARNESSES: tuple[HarnessSpec, ...] = (
         instructions={"project": ".hermes.md", "user": ".hermes.md"},
         config_format="yaml",
         config_path={"user": ".hermes/config.yaml"},
+        skills={"project": ".hermes/skills", "user": ".hermes/skills"},
         notes=(
             "Hermes injects .hermes.md/AGENTS.md from the start directory; "
-            "MCP prompts/resources are also available."
+            "MCP prompts/resources are also available. Skills live in "
+            "~/.hermes/skills/<name>/SKILL.md (user) or ./.hermes/skills and "
+            "./.agents/skills (project; run `hermes skills trust` once)."
         ),
     ),
     HarnessSpec(
@@ -67,7 +78,12 @@ _HARNESSES: tuple[HarnessSpec, ...] = (
         },
         config_format="json",
         config_path={"user": ".pi/agent/mcp.json"},
-        notes="Pi appends APPEND_SYSTEM.md to its system prompt; MCP config is JSON.",
+        skills={"user": ".pi/agent/skills"},
+        notes=(
+            "Pi appends APPEND_SYSTEM.md to its system prompt; MCP config is JSON. "
+            "Skills are discovered from ~/.pi/agent/skills/<name>/SKILL.md "
+            "(user scope; verified with Pi 1.5.0)."
+        ),
     ),
     HarnessSpec(
         name="dsh",
@@ -76,8 +92,10 @@ _HARNESSES: tuple[HarnessSpec, ...] = (
         config_format="yaml",
         config_path={"user": ".dsh/profiles/<profile>/cordis.patch.yml"},
         notes=(
-            "DSH reads AGENTS.md via its agent-instructions plugin; "
-            "MCP config is a per-profile cordis patch."
+            "DSH reads AGENTS.md via its agent-instructions plugin; MCP config is a "
+            "per-profile cordis patch. DSH has no filesystem skill discovery (2026-11, "
+            "0.2.2-rc.1): use MCP resources (skill://bacmap/<role>/SKILL.md) or "
+            "--inline-roles; --with-skills writes the portable .bacmap/skills copy."
         ),
     ),
     HarnessSpec(
@@ -86,7 +104,11 @@ _HARNESSES: tuple[HarnessSpec, ...] = (
         instructions={"project": "AGENTS.md", "user": ".codex/AGENTS.md"},
         config_format="toml",
         config_path={"user": ".codex/config.toml"},
-        notes="Codex reads AGENTS.md; MCP config is TOML.",
+        notes=(
+            "Codex reads AGENTS.md; MCP config is TOML. No verified skills directory "
+            "(not installed locally): --with-skills writes the portable .bacmap/skills "
+            "copy — move it if your Codex version discovers skills."
+        ),
     ),
     HarnessSpec(
         name="opencode",
@@ -94,7 +116,12 @@ _HARNESSES: tuple[HarnessSpec, ...] = (
         instructions={"project": "AGENTS.md", "user": ".config/opencode/AGENTS.md"},
         config_format="json",
         config_path={"project": "opencode.json"},
-        notes="OpenCode reads AGENTS.md and supports agent skills; MCP config is JSON.",
+        skills={"project": ".agents/skills", "user": ".agents/skills"},
+        notes=(
+            "OpenCode reads AGENTS.md and discovers agentskills.io-format skills from "
+            ".agents/skills/<name>/SKILL.md (project) and ~/.agents/skills/ (user); "
+            "MCP config is JSON."
+        ),
     ),
     HarnessSpec(
         name="generic",
@@ -102,9 +129,11 @@ _HARNESSES: tuple[HarnessSpec, ...] = (
         instructions={"project": "AGENTS.md", "user": ".config/bacmap/AGENTS.md"},
         config_format="json",
         config_path={"project": "mcp.json"},
+        skills={"project": ".agents/skills", "user": ".agents/skills"},
         notes=(
             "Any MCP client: use server instructions and prompts/resources directly, "
-            "or install AGENTS.md."
+            "or install AGENTS.md. The cross-agent ~/.agents/skills convention is "
+            "used for --with-skills."
         ),
     ),
 )
@@ -322,8 +351,12 @@ def install(
     ]
     skills: list[str] = []
     if with_skills:
+        # 2026-11 实测约定：有约定目录的 harness 直写（Hermes ~/.hermes/skills、
+        # Pi ~/.pi/agent/skills、OpenCode/通用 ~/.agents/skills），其余保持
+        # .bacmap/skills 便携副本——doctor 按 manifest 记录的实际路径校验。
+        skills_rel = Path(spec.skills.get(scope) or SKILLS_REL)
         for role in roledef.list_roles():
-            skill_path = base / SKILLS_REL / role / "SKILL.md"
+            skill_path = base / skills_rel / role / "SKILL.md"
             skill_path.parent.mkdir(parents=True, exist_ok=True)
             text = export_skill(role)
             skill_path.write_text(text, encoding="utf-8")

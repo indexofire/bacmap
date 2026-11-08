@@ -75,11 +75,48 @@ def test_install_can_inline_role_bodies(tmp_path: Path):
     assert harnesses.doctor(tmp_path).ok
 
 
-def test_install_with_skills_writes_portable_skills(tmp_path: Path):
+def test_install_with_skills_writes_portable_copy_for_harness_without_convention(
+    tmp_path: Path,
+):
+    """DSH/Codex 无经验证的 skills 目录：保持 .bacmap/skills 便携副本。"""
     result = harnesses.install(
-        "generic", scope="project", target=tmp_path, with_skills=True
+        "dsh", scope="project", target=tmp_path, with_skills=True
     )
     assert len(result.skills) == len(roledef.list_roles())
+    assert (tmp_path / ".bacmap" / "skills" / "analyst" / "SKILL.md").is_file()
+    assert harnesses.doctor(tmp_path).ok
+
+
+def test_install_with_skills_uses_hermes_convention(tmp_path: Path):
+    """Hermes：skills 写 ~/.hermes/skills/<role>/SKILL.md（user）/ ./.hermes/skills（project）。"""
+    harnesses.install("hermes", scope="user", target=tmp_path, with_skills=True)
+    assert (tmp_path / ".hermes" / "skills" / "analyst" / "SKILL.md").is_file()
+    assert not (tmp_path / ".bacmap" / "skills").exists()
+    assert harnesses.doctor(tmp_path).ok
+
+
+def test_install_with_skills_uses_pi_convention(tmp_path: Path):
+    """Pi：用户级 skills 写 ~/.pi/agent/skills/<role>/SKILL.md（Pi 1.5.0 实测）。"""
+    harnesses.install("pi", scope="user", target=tmp_path, with_skills=True)
+    assert (tmp_path / ".pi" / "agent" / "skills" / "analyst" / "SKILL.md").is_file()
+    assert not (tmp_path / ".bacmap" / "skills").exists()
+
+
+def test_install_with_skills_uses_cross_agent_agents_dir(tmp_path: Path):
+    """OpenCode/generic：跨 agent 约定 .agents/skills/<role>/SKILL.md。"""
+    for name in ("opencode", "generic"):
+        harnesses.install(
+            name, scope="project", target=tmp_path / name, with_skills=True
+        )
+        assert (
+            tmp_path / name / ".agents" / "skills" / "analyst" / "SKILL.md"
+        ).is_file()
+        assert not (tmp_path / name / ".bacmap" / "skills").exists()
+
+
+def test_install_with_skills_falls_back_to_portable_for_unlisted_scope(tmp_path: Path):
+    """scope 未声明约定目录时回退便携副本（如 Pi 的 project scope）。"""
+    harnesses.install("pi", scope="project", target=tmp_path, with_skills=True)
     assert (tmp_path / ".bacmap" / "skills" / "analyst" / "SKILL.md").is_file()
 
 

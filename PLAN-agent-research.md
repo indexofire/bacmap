@@ -81,8 +81,17 @@ bacmap 不新增联网抓取；文献检索留在 agent，落库和引用判定�
 - [x] MCP server instructions 增补 prompts/resources 指引
 - [x] Pi 1.5.0 端到端验证（MCP 连接、只读 research/phylo/logistic、计划创建 + 人工确认、
   sandbox 缺失时的失败路径、内联 skill）
-- [ ] Hermes / DSH 端到端验证（后续）
-- [ ] `bacmap agent install --with-skills` 在各 harness 的 skills 目录约定（按实测再定）
+- [x] Hermes 端到端验证（0.23.0，无头 `-z` + 真实数据：MCP 连接、只读 research 工具、
+      analyze 计划→人工确认→8 株副溶血弧菌 `succeeded`、mine 沙箱→挖掘门→人工签字、
+      `.hermes.md` 指导注入；2026-11 记录见 docs/guide/agent-plans.md §9）
+- [x] DSH 端到端验证（0.2.2-rc.1：cordis.patch 插件合成 + MCP 服务器拉起 + 浏览器
+      对话层实测——用户会话中模型成功调用 `bacmap_capabilities`，会话记录证实全部
+      29 个 bacmap 工具（含 `bacmap_research_figure_recipes`）注入模型上下文）
+- [x] `bacmap agent install --with-skills` 在各 harness 的 skills 目录约定
+      （2026-11 实测：Hermes `~/.hermes/skills/`（真机安装后 `hermes skills list`
+      枚举到全部角色）；Pi `~/.pi/agent/skills/`；OpenCode/通用跨 agent
+      `~/.agents/skills/`；DSH 无文件系统 skills 机制 → 保持 `.bacmap/skills`
+      便携副本 + MCP resources/inline-roles；Codex 未实测同回退）
 
 ### P2 发表图契约（本分支）
 
@@ -90,9 +99,17 @@ bacmap 不新增联网抓取；文献检索留在 agent，落库和引用判定�
 - [x] 会话创建时生成 `figure_spec.json` 并登记 artifact
 - [x] `bacmap research figure spec|attach`
 - [x] `bacmap_research_figure_spec` 只读 MCP 工具
-- [x] 版本化 recipe 注册表（`association_bar` stable；forest/heatmap/pca/volcano/tree 为 planned）
-- [ ] B 档脚本模板 + `mine` 任务示例（需要沙箱镜像带 matplotlib/R）
-- [ ] PDF/PNG 校验（字体嵌入、DPI、色彩空间）
+- [x] 版本化 recipe 注册表（`association_bar` stable；`forest`/`strobe_flow`
+      experimental builtin SVG（`figure render` 确定性渲染）；`heatmap`/`pca`/
+      `volcano`/`tree_rectangular` 为 planned，待 CI 发布固定镜像）
+- [x] B 档脚本模板（`bacmap research figure template`；mine 沙箱用法与示例见
+      `docs/guide/research-workbench` §10）
+- [x] mine 任务在真实沙箱镜像上的实测（2026-11：本地 `podman --cgroup-manager=cgroupfs
+      build -t bacmap-figures:py312 docker/figures/py312` → mine 计划（driver 自动发现
+      挂载的 figure_spec）→ matplotlib 渲染 `figure_custom.pdf` → 挖掘门签字 →
+      `figure attach` 登记完整 provenance；CI registry 发布仍为多工作站可选项）
+- [x] PDF/PNG 校验（v1.4.42：`attach` 质量门——PDF 字体嵌入/页数、PNG pHYs dpi/
+      色彩类型/CRC、SVG 良构+拒 DTD；纯标准库，matplotlib Type3 现实已回归）
 
 ### P3 系统发育参数规划与 BEAST XML（后续）
 

@@ -10,6 +10,13 @@ docker build -t bacmap-figures:py312 docker/figures/py312
 docker build -t bacmap-figures:r4   docker/figures/r4
 ```
 
+Rootless Podman without a systemd session (common on workstations) hits a cgroup
+delegation error — build with the cgroupfs manager instead (verified 2026-11):
+
+```bash
+podman --cgroup-manager=cgroupfs build -t bacmap-figures:py312 docker/figures/py312
+```
+
 For Apptainer/Podman (the sandbox backends bacmap uses), convert or pull the image and record
 its digest with the artifact:
 

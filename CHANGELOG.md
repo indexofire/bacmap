@@ -5,6 +5,103 @@
 
 ## [未发布]
 
+### P1 收官（skills 目录约定）与 P2 B 档图片真实镜像实测
+
+- **`bacmap agent install --with-skills` 按各 harness 实测约定直写 skills**：
+  Hermes `~/.hermes/skills/<role>/SKILL.md`（项目级 `./.hermes/skills` 需先
+  `hermes skills trust`）、Pi `~/.pi/agent/skills/<role>/`、OpenCode/generic 走
+  跨 agent 约定 `~/.agents/skills/<role>/`；DSH/Codex 无经验证的文件系统 skills
+  机制，保持 `.bacmap/skills/` 便携副本（DSH 经 MCP resources / `--inline-roles`）。
+- 真机验证：用户级安装后 `hermes skills list` 枚举到全部 6 个 bacmap 角色
+  （analyst/curator/epidemiologist/literature/miner/writer，source=local，enabled）。
+- `HarnessSpec` 新增按 scope 的 `skills` 目录声明；doctor 沿 manifest 校验实际路径。
+- **B 档图片 mine 真实镜像实测通过**（PLAN P2）：本地
+  `podman --cgroup-manager=cgroupfs build -t bacmap-figures:py312`（镜像
+  `e25aa46bf9e6`，matplotlib 3.10.0）→ mine 计划（driver 从 `context.json` 自动
+  发现挂载的 figure_spec）→ 沙箱渲染 `figure_custom.pdf`（12,963 字节）→ 挖掘门
+  人工签字 → `bacmap research figure attach` 登记完整 provenance（spec/data/code/
+  output 四哈希 + `bacmap.figure_artifact/1` manifest）。`docker/figures/README.md`
+  补充 rootless Podman 无 systemd 会话时的 cgroupfs 构建方法。
+- **`attach` 产物质量门（PDF/PNG/SVG 校验，P2 收官）**：新增
+  `research/figure_checks.py`（纯标准库）——PDF 检查文件头/页数/字体嵌入（无
+  `/FontFile*` 且非 Type3 内联字形即拒；matplotlib 默认 Type3 与 fonttype 42 通过）；
+  PNG 检查签名/chunk CRC/IHDR 色彩类型与 pHYs 密度（低于契约 dpi 或缺 pHYs 即拒，
+  ppm 整数比较对齐 matplotlib 11811=300dpi 生态约定）；SVG 检查良构并拒绝
+  DTD/ENTITY（规避 XML 实体攻击面）。被拒产物给出可操作的重导出提示；真实沙箱
+  PDF/SVG 产物实证通过。
+- 文档 `docs/guide/agent-plans`、`docs/guide/research-workbench` 双语同步；
+  **PLAN P1/P2 全部完成**。
+- 测试基线：1867 → 1886（质量门用例；四门 + docs-build 全绿）。
+- 测试基线：1863 → 1867（harness skills 目录约定用例）。
+
+### 工作流面向全病原注册表泛化与按物种校验（v1.10.10）
+
+- **删除 `vpara.smk` 与打包私有库链路**（`build_gspec_db.py`、
+  `refs/vpara_virulence.fasta`、部署期建库）：VPA 毒力标记（tdh/trh/tlh）改用官方
+  gspec catalog 的 `vpa_vf` 库，O/K 血清型用 `vpa_ok`；registry VPA 默认库改为
+  `[vpa_vf, vpa_ok, vpa_pai]`。种以下判定全部经 registry + 官方 gspec 库路由，
+  **无逐菌专用 smk 规则与占位文件**，pipeline 面向 pathogens.yaml 全部登记病原菌。
+- **删除 ECO ecoh 占位规则**：O/H 能力状态/表型统一出自 `gspec/typing.json`
+  （`ecoh_serotype_summary` 归一）；VPA 血清型 unavailable 语义由 collect_summary
+  按物种生成；`routing.report_inputs` 移除逐菌专用文件输入。
+- **Deterministic Verifier 按物种路由**（修复非沙门菌假阴性）：MLST 期望位点取自
+  gmlst TSV 的 SCHEME 列（已登记方案用其位点表；未登记方案按实际位点全量校验，
+  绝不套用别种位点表——此前对 VPA 套用沙门菌位点致全 missing）；serotype 尊重
+  `sistr_status=not_applicable`。
+- **HTML 报告修复**：基本信息"物种判定"读 gside `species` 键（旧 `verdict` 键兼容，
+  此前 VPA 显示 N/A 而 Verifier 实为通过）；Contigs 数列索引（此前显示 "DNA"）；
+  MLST alleles 展示剔除 file/scheme 元列。
+- **`run_gspec_typing` 对 no_scheme gene 库保留 screen 基因命中**（gspec ≥0.10 的
+  screen JSON 无 genes 键，从 hits/TSV 归一）——毒力存在性判定只依赖 screen。
+- 真实单株验证：VPA 组装 → ST1762、tlh⁺/tdh⁻/trh⁻（vpa_vf）、O3:KUT（vpa_ok，
+  O high/K low）、报告与 Verifier 四项全过。
+- 冻结设计新增 v1.10.10 修订记录；AGENTS.md 已知占位表同步。
+- 测试基线：1860 → 1863。
+
+### Hermes / DSH 真实数据端到端验证与沙箱挂载修复
+
+- **Hermes 0.23.0 全链路实测通过**（无头 `-z`，智谱端点）：MCP 连接（29 工具）、
+  `.hermes.md` 指导注入、只读 research 工具（figure_recipes 可见 forest/strobe_flow
+  experimental）、analyze 计划 → 人工确认 → 8 株真实副溶血弧菌组装 `succeeded`
+  （MLST ST423/1762/1784/2157/2128/2799、CARD/毒力基因谱）、结果汇总引用
+  plan/task/run 标识。agent 在 cloud Profile 下自纠 D3→D2，从未自行确认计划。
+- **mine 开放路径实测通过**：rootless Podman 沙箱执行 → `mine_report.json` 产出 →
+  挖掘门 `awaiting_approval` → 人工签字（`task approve`）→ `succeeded`。
+- **修复沙箱挂载覆盖 bug**：`mine.input_paths` 指向 `home/results`（或 `gom.sqlite`）
+  时，数据集挂载与规范挂载在 `build_access` 内同 key 互相覆盖，导致容器内
+  `/data/results` 缺失。现同源数据集复用规范 guest 路径并在 `context.json` 中指向
+  真实可读路径；新增回归测试（tests/unit/test_datasets.py）。
+- **DSH 0.2.2-rc.1 浏览器对话层实测通过**：`cordis.patch.yml` 插件合成（`--dump-config`）
+  + 实例经 `pixi run` 拉起 bacmap MCP；用户 Web 会话中模型成功调用
+  `bacmap_capabilities`，会话记录证实全部 29 个工具（含 research 系列）注入模型
+  上下文（模型"列举不全"是回复行为，非链路问题）。文档（agent-plans 双语）改推
+  `pixi run` 包装启动 MCP；§9 验证表更新并记录"仓库移动后 pixi 环境入口 shebang
+  失效"的重建方法。
+- 测试基线：1858 → 1860。
+
+### 图片 recipe 第二批：builtin SVG 可执行 + 确定性渲染 + B 档模板
+
+- **`forest` 与 `strobe_flow` recipe 从 planned 升为 experimental（builtin SVG）**：
+  森林图（效应量 + 95% CI，log 轴 + OR=1 无效应虚线）与 STROBE 流程图（run 名册 →
+  排除“无基因型/可用表型” → 分析 n，计数全部由 `runs.sqlite` 与 session 统计派生）。
+  builtin renderer 只消费 `FigureSpec`，不回读数据库，同一 spec 恒得同一图。
+- **`bacmap research figure render <session> --recipe <id>`**：用 builtin recipe 确定性
+  渲染 session 图片，写出 `research/<session>/figure_<recipe>.svg`，登记 `figure`
+  产物并写 `figure.rendered` ledger（recipe/renderer/output+spec hash）；拒绝 planned
+  与非 builtin recipe（容器/pixi/host 仍走沙箱 + `figure attach`）。幂等可重复渲染。
+- **`bacmap research figure template [--output FILE]`**：输出 B 档自定义图脚本模板
+  （自包含：仅标准库 + matplotlib、不导入 bacmap、校验 `spec.style.formats` 允许的
+  输出格式、打印 provenance 摘要），配合 `mine` 沙箱与 `figure attach` 使用。
+- **research.sqlite 迁移 v6**：`research_artifacts` 主键从 (session_id, kind) 扩为
+  (session_id, kind, path)，一个 session 可同时保留多张标准图（association_bar 与
+  forest 等）；迁移前自动备份旧库。
+- 投稿包按源文件名复制产物，修复同 kind 同后缀产物互相覆盖的问题。
+- `heatmap`/`pca`/`volcano`/`tree_rectangular` 仍为 planned：容器 recipe 待 CI 发布
+  固定镜像后启用，不假装已运行。
+- 文档：`docs/guide/research-workbench`（recipe 表、figure render/template 章节）、
+  `docs/reference/cli` 双语同步；`PLAN-agent-research.md` P2 勾选更新。
+- 测试基线：1838 → 1858。
+
 ### Web Phylo / Logistic 页面
 
 - 新增 `/research/phylo`：alignment profile → PhyloPlan → 校验 → BEAST2 XML 下载 /
