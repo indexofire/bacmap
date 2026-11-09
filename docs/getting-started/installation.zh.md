@@ -5,6 +5,28 @@
 
 ## 1. 环境要求
 
+### 硬件配置（PLAN #10）
+
+| 档位 | CPU | 内存 | 磁盘 | 适用 |
+|---|---|---|---|---|
+| 最低 | 8 核 | 16 GB | 100 GB | 基础分析，无 GTDB-Tk、无本地 LLM |
+| 工作站 | 16 核 | 64 GB | 300 GB | 完整流程 + 本地 LLM（量化模型） |
+| 服务器 | 64 核 | 256 GB | 1 TB | GTDB-Tk full-tree、大批量处理 |
+
+### 本地 LLM（可选）
+
+| 方案 | GPU | 内存 | 说明 |
+|---|---|---|---|
+| 入门 | RTX 5060 Ti 16 GB | 64 GB | 经 Strata 跑量化 DeepSeek/Qwen 模型 |
+| 双机 | 2× DGX Spark | — | DeepSeek mini + 独立 x86_64 生信服务器 |
+
+> **注意**：生信工具在 ARM 架构可能存在构建问题——bacmap 服务器建议用 x86_64。
+> GPU 服务器可独立运行 LLM 推理（config.toml 中 `[llm.endpoints]` 设
+> `location = "lan"`）。LLM 与管线同机时，设 `[llm.resources] co_located = true`，
+> bacmap 会在管线重步骤时自动为 LLM 预留计算核。
+
+### 软件
+
 | 项目 | 推荐配置 | 原因 |
 |---|---|---|
 | 操作系统 | Linux x86_64 | 生信工具链为 Linux 原生 |
@@ -16,6 +38,17 @@
 如果你不运行本地 LLM，所有确定性功能仍可正常工作。只有可选的任务内解读/网关路径会降级（C3）。
 
 ## 2. 安装
+
+### 一键安装（Linux/macOS）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/indexofire/bacmap/main/scripts/setup.sh | bash
+```
+
+自动检查前置依赖、克隆仓库、`pixi install` 并运行 `bacmap doctor`。
+
+<details>
+<summary>手动安装（分步）</summary>
 
 ```bash
 git clone https://github.com/indexofire/bacmap && cd bacmap
@@ -107,6 +140,8 @@ args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "start", "mcp"]
 
 `--no-capture-output` 保证 MCP stdio 不被 conda 缓冲。完整客户端配置见
 [智能体与计划](../guide/agent-plans.zh.md)。
+
+</details>
 
 ## 3. 数据根目录与首次体检
 

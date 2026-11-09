@@ -5,6 +5,29 @@ analysis. It also explains the minimum configuration needed before real samples 
 
 ## 1. Requirements
 
+### Hardware tiers (PLAN #10)
+
+| Tier | CPU | RAM | Disk | Use case |
+|---|---|---|---|---|
+| Minimum | 8 cores | 16 GB | 100 GB | Basic analysis, no GTDB-Tk, no local LLM |
+| Workstation | 16 cores | 64 GB | 300 GB | Full pipeline + local LLM (quantised) |
+| Server | 64 cores | 256 GB | 1 TB | GTDB-Tk full-tree, heavy batch processing |
+
+### Local LLM (optional)
+
+| Setup | GPU | RAM | Notes |
+|---|---|---|---|
+| Entry | RTX 5060 Ti 16 GB | 64 GB | Quantised DeepSeek/Qwen models via Strata |
+| Dual | 2× DGX Spark | — | DeepSeek mini + separate x86_64 bioinformatics server |
+
+> **Note**: Bioinformatics tools may have ARM build issues — use x86_64 for the bacmap
+> server. GPU servers can run LLM inference separately (`[llm.endpoints]` with
+> `location = "lan"` in config.toml). When LLM and pipeline share one machine, set
+> `[llm.resources] co_located = true` and bacmap will automatically reserve cores for
+> LLM inference during heavy pipeline steps.
+
+### Software
+
 | Item | Recommended | Why |
 |---|---|---|
 | OS | Linux x86_64 | The bioinformatics toolchain is Linux-native |
@@ -17,6 +40,17 @@ If you do not run a local LLM, every deterministic function still works. Only th
 in-task interpretation/gateway paths degrade (C3).
 
 ## 2. Install
+
+### One-line install (Linux/macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/indexofire/bacmap/main/scripts/setup.sh | bash
+```
+
+This checks prerequisites, clones the repo, runs `pixi install` and `bacmap doctor`.
+
+<details>
+<summary>Manual install (step by step)</summary>
 
 ```bash
 git clone https://github.com/indexofire/bacmap && cd bacmap
@@ -109,6 +143,8 @@ args: ["run", "--no-capture-output", "-n", "bacmap", "bacmap", "start", "mcp"]
 
 `--no-capture-output` keeps MCP stdio unbuffered. Full client configuration is in
 [Agents and plans](../guide/agent-plans.md).
+
+</details>
 
 ## 3. Data root and first health check
 
