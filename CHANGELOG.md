@@ -12,8 +12,8 @@
 - 新增 `tools/dsh-bacmap-console`：DSH Web 侧栏内嵌 bacmap 控制台的本地 bundle
   （`/bacmap` 前缀反向代理剥除 X-Frame-Options/CSP frame-ancestors、URL 重写、
   经 DSH 连接鉴权放行；bacmap 未运行时给出提示页）。
-- 新增 `scripts/`：数据准备辅助脚本（FASTQ 配对重命名三部，含 README）；
-  非运行时组成部分，入库前手动执行。
+- 新增 `scripts/`：数据准备辅助脚本（`renamefq.py`——FASTQ 配对重命名，含
+  README）；非运行时组成部分，入库前手动执行。
 - `PLAN-agent-research.md` 移入 `dev/`（该方案 P0–P5 全部完成，转为本地归档，
   不再随仓库分发；`dev/` 按规则不入库）。
 
