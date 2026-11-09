@@ -17,7 +17,7 @@
 
 ### 分析结果对象化（自 feat/agent-research-bridge 并入）
 
-- 新增 migration 9 `research_analyses`：保存 analysis_id、类型、输入路径 + SHA-256、
+- 新增 migration 10 `research_analyses`：保存 analysis_id、类型、输入路径 + SHA-256、
   params、result、`result_sha256`、作者/时间，并自动写 `ANALYSIS_OF` 证据边。
 - Web stats 表单可填 Study 自动保存；phylo 页面新增“保存到 Study”；
   `/research/studies/{id}/analyses` 与 `/research/analyses/{id}` 查看历史/详情。
@@ -51,8 +51,9 @@
 - 真实镜像冒烟：`bacmap-stats:r45` 容器内 Cox 拟合 120 例模拟队列
   （n=120、events=71、tx HR=1.386 p=0.179、PH 全局 p=0.173），spec/script
   SHA-256 与镜像名入 ledger。
-- 测试基线：1908 → 1929（advstats 规格/渲染/归一、research 工作流、计划指纹、
-  MCP research 计划）。
+- 合并 `feat/agent-research-bridge` 增量 6 提交（见上）；跳过其内置
+  IPTW/KM/matching 实现（与 ADR-22 冲突，容器外部化为唯一路径）。
+- 测试基线：1908 → 1959（advstats/research 计划 + bridge 增量用例）。
 
 ### P4 第一片：样本量/把握度与外部验证（确定性）
 

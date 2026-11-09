@@ -699,8 +699,8 @@ MCP with `bacmap_research_evidence` or CLI `bacmap research evidence <identifier
 
 Deterministic results can be saved as first-class objects linked to a Study:
 
-- logistic / IPTW / matching / Kaplan-Meier (Web forms accept an optional Study and save
-  automatically; CLI accepts `--study`);
+- logistic / power / external-validation / advanced-statistics results（Web 表单可填
+  Study 自动保存；CLI 支持 `--study`；容器化的 advstats 经 `research` 计划另行留痕）；
 - phylogenetic profile/plan/XML (Web "保存到 Study" action; generic CLI save).
 
 Each record stores `analysis_id`, type, title, input paths + SHA-256, params, result JSON,

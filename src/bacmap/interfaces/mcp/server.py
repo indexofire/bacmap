@@ -723,6 +723,16 @@ def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpe
             checklist.model_dump(mode="json", by_alias=True), ensure_ascii=False
         )
 
+    _register_evidence_tools(server, engine, service)
+    _register_analysis_tools(server, engine, profile)
+    _register_request_tools(server, engine, profile)
+    _register_phylo_tools(server, profile)
+
+
+def _register_evidence_tools(server: MCPServer, engine: Any, service: Any) -> None:
+    """D2 evidence edges and figure drafts; read-only."""
+    from pathlib import Path as _Path
+
     @server.tool(
         name="bacmap_research_figure_drafts",
         description=(
@@ -732,10 +742,12 @@ def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpe
         ),
     )
     def research_figure_drafts(session_id: str) -> str:
+        from bacmap.research.models import ResearchError
+
         try:
             drafts = service.list_drafts(session_id)
         except ResearchError as exc:
-            return _err(exc)
+            return json.dumps({"error": exc.message}, ensure_ascii=False)
         return json.dumps(
             [draft.model_dump(mode="json") for draft in drafts], ensure_ascii=False
         )
@@ -755,10 +767,6 @@ def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpe
         return json.dumps(
             [edge.model_dump(mode="json") for edge in edges], ensure_ascii=False
         )
-
-    _register_analysis_tools(server, engine, profile)
-    _register_request_tools(server, engine, profile)
-    _register_phylo_tools(server, profile)
 
 
 def _register_request_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -> None:
@@ -847,7 +855,7 @@ def _register_analysis_tools(server: MCPServer, engine: Any, profile: ProfileSpe
     @server.tool(
         name="bacmap_research_analyses",
         description=(
-            "List persisted analysis results for a study (logistic/iptw/match/survival/phylo "
+            "List persisted analysis results for a study (logistic/power/phylo "
             "etc.), with result hashes and timestamps. Read-only. D2."
         ),
     )

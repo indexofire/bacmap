@@ -650,8 +650,8 @@ Edge 幂等（`ensure_edge`），在 Study/Session 页面显示，并可经 MCP
 
 确定性结果可以保存为一等对象并关联 Study：
 
-- logistic / IPTW / matching / Kaplan-Meier（Web 表单可填 Study 自动保存；CLI 支持
-  `--study`）；
+- logistic / power / external-validation / advanced-statistics 结果（Web 表单可填
+  Study 自动保存；CLI 支持 `--study`；容器化 advstats 经 `research` 计划另行留痕）；
 - 系统发育 profile/plan/XML（Web 的“保存到 Study”动作；CLI 通用保存）。
 
 每条记录包含 `analysis_id`、类型、标题、输入路径 + SHA-256、params、result JSON、
