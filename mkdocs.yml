@@ -95,6 +95,9 @@ nav:
       - Installation: getting-started/installation.md
       - Configuration: getting-started/configuration.md
       - Natural-language tutorial: getting-started/tutorial.md
+  - Tutorials:
+      - tutorial/index.md
+      - Local Strata + DeepSeek backend: tutorial/bacmap-strata-deepseek-tutorial.md
   - Guide:
       - guide/index.md
       - Interfaces: guide/interfaces.md
