@@ -1,6 +1,6 @@
 # 弹性工作流架构（PLAN #5）
 
-> 状态：设计提案（2026-11-09），待用户确认后进入实施。
+> 状态：设计提案（2026-11-09）；平台探测与长读/混合组装规则已在 0.1.5 落地。
 
 ## 问题
 
@@ -76,23 +76,26 @@ bacmap：静态校验（语法/规则名/路径白名单）
 | 检测结果 | 组装器 | 触发条件 | smk 规则 |
 |---|---|---|---|
 | illumina | spades/shovill（现有） | 中位读长 ≤400bp，仅有 R1/R2 | `assembly.smk` |
-| nanopore | flye `--nano-raw` | 中位读长 ≥1kb，分布宽，仅有 longread | `assembly_long.smk` |
+| nanopore | flye `--nano-hq`（R10.4.1 SUP，Q20+；旧 R9.4 可配 `--nano-raw`） | 中位读长 ≥1kb，分布宽，仅有 longread | `assembly_long.smk` |
 | pacbio_hifi | flye `--pacbio-hifi` | 中位读长 ≥5kb，分布均匀，仅有 longread | `assembly_long.smk` |
 | 混合（短+长） | unicycler | 同一样本同时有 R1/R2 + longread | `assembly_long.smk` |
-| 特殊 | trycycler | 用户在 samples.tsv platform 列写 "trycycler" | `assembly_long.smk` |
+| 特殊 | trycycler | 用户在 samples.tsv platform 列写 "trycycler"（需 R1/R2 + longread） | `assembly_long.smk` |
+
+trycycler 需单独安装：其 conda 包目前要求 Python <3.11，而 bacmap 运行在 Python 3.12；
+flye 与 unicycler 已随默认 pixi 环境安装。
 
 探测由 `bacmap detect` 或 `task submit --fastq-dir` 自动触发（`core/fastq_probe.py`），
 结果记入 samples.tsv 的 `platform` 列。用户可在 samples.tsv 的 `platform` 列覆盖
 探测结果（`ont` / `pacbio_hifi`）。
 
-### samples.tsv 新增列（v1.4.42）
+### samples.tsv 新增列（0.1.5）
 
 ```
-sample    species    R1    R2    longread              assembly    platform
-SAMP-001  SAL        ...   ...                        (空)        illumina
-SAMP-002  VPA        (空)  (空)  /path/ont_reads.fq    (空)        nanopore
-SAMP-003  VPA        ...   ...   /path/ont_reads.fq    (空)        ont
-SAMP-004  ECO        (空)  (空)                        .../fna     (空)
+sample    species    R1       R2       longread              assembly    platform
+SAMP-001  SAL        ...      ...                            (空)        illumina
+SAMP-002  VPA        (空)     (空)     /path/ont_reads.fq    (空)        nanopore
+SAMP-003  VPA        ...      ...      /path/ont_reads.fq    (空)        ont
+SAMP-004  ECO        (空)     (空)                            .../fna     (空)
 ```
 
 - `longread`：长读 FASTQ 路径（自动检测或手动填写）
@@ -113,7 +116,7 @@ SAMP-004  ECO        (空)  (空)                        .../fna     (空)
 ## 下一步实施（按优先级）
 
 1. ✅ FASTQ 平台探测（`core/fastq_probe.py`，已实现）
-2. ✅ `task submit --platform` 参数（覆盖探测）
+2. ✅ samples.tsv `platform` 列（可手工覆盖探测结果；无独立 CLI 开关）
 3. 路径 C：`research` 计划新增 `analysis=custom_smk`（生成→审核→沙箱→归档）
-4. flye/unicycler/trycycler smk 规则（新 `rules/assembly_long.smk`）
+4. ✅ flye/unicycler/trycycler smk 规则（新 `rules/assembly_long.smk`）
 5. 资源仲裁逻辑（`co_located=true` 时自动降核）

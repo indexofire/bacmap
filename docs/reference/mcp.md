@@ -50,7 +50,7 @@ plannable types.
 // bacmap_capabilities → (abridged)
 {
   "server": "bacmap",
-  "bacmap_version": "0.1.2",
+  "bacmap_version": "0.1.5",
   "api": "mcp",
   "profile": "cloud",
   "max_data_class": "D1",

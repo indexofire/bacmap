@@ -16,11 +16,13 @@ between runs, and curation never counts one isolate twice.
 Location: `$BACMAP_HOME/workflows/bacmap/config/samples.tsv`.
 
 ```tsv
-sample	species	R1	R2	assembly	isolate	platform	checksum
+sample	species	R1	R2	longread	assembly	isolate	platform	checksum
 SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>
-ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha256>
+ASM-STD-001	Salmonella				gs/ASM-STD-001/ASM-STD-001.fasta	ASM-STD-001	ont	<sha256>
 HZCPE-01__ilm__20261012	VPA	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R1.fastq.gz	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R2.fastq.gz			HZCPE-01	ilm	<sha256>
 HZCPE-01__ont__20261020	VPA	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R1.fastq.gz	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R2.fastq.gz			HZCPE-01	ont	<sha256>
+ONT-ONLY-001	VPA			gs/ONT-ONLY-001/ONT-ONLY-001.fastq.gz		ONT-ONLY-001	ont	<sha256>
+HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.fastq.gz	gs/HYBRID-001/HYBRID-001.fastq.gz		HYBRID-001	ont	<sha256>
 ```
 
 | Column | Meaning |
@@ -28,6 +30,7 @@ HZCPE-01__ont__20261020	VPA	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R
 | `sample` | **dataset ID**. Allowed: `A-Z a-z 0-9 . _ -`; never `.` or `..` |
 | `species` | 3-letter code or gside label/name; `UNK` for reads not yet identified |
 | `R1`/`R2` | paired FASTQ paths, relative to `BACMAP_HOME` or absolute |
+| `longread` | long-read FASTQ path (ONT/PacBio); alone → flye, with `R1`/`R2` → unicycler hybrid assembly |
 | `assembly` | assembled FASTA path; skips QC/assembly; reads win if both are set |
 | `isolate` | biological strain ID; defaults to the dataset ID for old tables |
 | `platform` | sequencing platform (`ilm`, `ont`, `pacbio`, …); `unknown` when not provided |
@@ -49,14 +52,18 @@ HZCPE-01__ont__20261020
 # Assembled FASTA; species auto-detected with gside unless --species is given
 bacmap task submit --type analyze --fasta-dir /data/genomes --species VPA
 
-# Reads; pairs are detected from *_R1/_R2 or *_1/_2
+# Reads; pairs are detected from *_R1/_R2 or *_1/_2;
+# unpaired files with median read length >=1 kb are registered as long reads
 bacmap task submit --type analyze --fastq-dir /data/run42 --species Salmonella
 ```
 
 Registration is a task step, not a direct file edit: it writes `samples.tsv`, registers isolates,
-and then submits the analysis. The registration function returns `added`, `reused`, `skipped` and
-`detected` to the workflow (the sample list is what gets analysed); the CLI returns the submitted
-`task_id`, and the resulting rows are visible in `samples.tsv`.
+and then submits the analysis. For long-read input, an unpaired FASTQ goes to the `longread`
+column; its platform (`ont`/`pacbio_hifi`) is probed and can be overridden in the `platform`
+column. A dataset with both `R1`/`R2` and `longread` is assembled with unicycler. The
+registration function returns `added`, `reused`, `skipped` and `detected` to the workflow (the
+sample list is what gets analysed); the CLI returns the submitted `task_id`, and the resulting
+rows are visible in `samples.tsv`.
 
 ```json
 {
@@ -72,8 +79,8 @@ and then submits the analysis. The registration function returns `added`, `reuse
 ### 2.2 Manual rows
 
 ```tsv
-sample	species	R1	R2	assembly	isolate	platform	checksum
-NEW-001	Salmonella	gs/NEW-001/NEW-001_R1.fastq.gz	gs/NEW-001/NEW-001_R2.fastq.gz			NEW-001	ilm
+sample	species	R1	R2	longread	assembly	isolate	platform	checksum
+NEW-001	Salmonella	gs/NEW-001/NEW-001_R1.fastq.gz	gs/NEW-001/NEW-001_R2.fastq.gz			NEW-001	ilm	
 ```
 
 Leave `checksum` empty if you add a row by hand; the next registration recomputes it. The pipeline

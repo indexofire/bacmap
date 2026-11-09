@@ -53,19 +53,22 @@ The standard `analyze` task requires sample IDs to be registered in
 `$BACMAP_HOME/workflows/bacmap/config/samples.tsv`:
 
 ```tsv
-sample	species	R1	R2	assembly	isolate	platform	checksum
+sample	species	R1	R2	longread	assembly	isolate	platform	checksum
 SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>
-ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha256>
+ASM-STD-001	Salmonella				gs/ASM-STD-001/ASM-STD-001.fasta	ASM-STD-001	ont	<sha256>
 HZCPE-01__ilm__20261012	VPA	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R1.fastq.gz	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R2.fastq.gz			HZCPE-01	ilm	<sha256>
+ONT-ONLY-001	VPA			gs/ONT-ONLY-001/ONT-ONLY-001.fastq.gz		ONT-ONLY-001	ont	<sha256>
+HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.fastq.gz	gs/HYBRID-001/HYBRID-001.fastq.gz		HYBRID-001	ont	<sha256>
 ```
 
 Rules:
 
 - `sample` is the **dataset ID**; allowed characters are `A-Z a-z 0-9 . _ -` and it may not be
   `.` or `..`.
-- `R1`/`R2` and `assembly` are relative to **`BACMAP_HOME`** (absolute paths also work).
-- Use **either** paired reads **or** one assembled FASTA per dataset. If both are present, reads
-  win.
+- `R1`/`R2`, `longread` and `assembly` are relative to **`BACMAP_HOME`** (absolute paths also work).
+- A dataset is **either** paired reads (`R1`/`R2`), **or** long reads (`longread`), **or** a
+  pre-assembled FASTA (`assembly`). With both paired reads and `longread`, bacmap runs hybrid
+  assembly (unicycler). If reads and `assembly` are both present, reads win.
 - `species` accepts a 3-letter code (`SAL`, `ECO`, `SHI`, `VPA`, …) or a gside label/name
   (`Salmonella`, `V_parahaemolyticus`, `E. coli`). Codes are preferred.
 - `isolate` is the biological strain; several datasets may point to one isolate. `platform`
@@ -79,7 +82,8 @@ Register a directory instead of editing the table:
 # Assembled FASTA: ids are derived from file names; species auto-detected with gside
 bacmap task submit --type analyze --fasta-dir /data/genomes
 
-# Reads: paired *_R1/_R2 (or *_1/_2) files; species defaults to UNK until the pipeline identifies it
+# Reads: paired *_R1/_R2 (or *_1/_2) files, plus unpaired long reads (median >=1 kb);
+# species defaults to UNK until the pipeline identifies it
 bacmap task submit --type analyze --fastq-dir /data/run42 --species Salmonella
 ```
 

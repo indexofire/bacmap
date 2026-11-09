@@ -56,17 +56,19 @@ This checks prerequisites, clones the repo, runs `pixi install` and `bacmap doct
 git clone https://github.com/indexofire/bacmap && cd bacmap
 pixi install --all    # all environments: Python 3.12 + Snakemake 9 + tools
 pixi shell            # activate it
-bacmap --version      # 0.1.2
+bacmap --version      # 0.1.5
 ```
 
 What `pixi install` provides:
 
-- **Snakemake and the toolchain**: fastp, shovill, bwa, minimap2, samtools, bcftools, blast,
-  bedtools, iqtree, and more (see `pixi.toml`).
+- **Snakemake and the toolchain**: fastp, shovill, flye, unicycler, bwa, minimap2, samtools,
+  bcftools, blast, bedtools, iqtree, and more (see `pixi.toml`).
 - **Common analysis tools** (ADR-20): `gside` (species identification), `gspec` (gene
   screening/typing), `gmlst` (MLST/cgMLST/MST).
 - **A separate `recomb` environment** with Gubbins for optional recombination detection, because
   its IQ-TREE pin conflicts with the main pipeline; run it with `pixi run -e recomb …`.
+- **Trycycler is not installed by default**: its conda package requires Python <3.11 while bacmap
+  runs on 3.12; provide a `trycycler` executable separately for the advanced `platform=trycycler` path.
 
 The development environment is separate:
 

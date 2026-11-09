@@ -64,7 +64,7 @@ class TestCollision:
         register_fastas(home, d, "VPA")
         rows = _tsv(home)
         header, row = rows[0], rows[1]
-        assert header[:5] == ["sample", "species", "R1", "R2", "assembly"]
+        assert header[:6] == ["sample", "species", "R1", "R2", "longread", "assembly"]
         record = dict(zip(header, row, strict=False))
         assert record["sample"] == "HZCPE-01__ilm__20261012"
         assert record["isolate"] == "HZCPE-01" and record["platform"] == "ilm"

@@ -39,7 +39,7 @@ class TestRegisterFastaDir:
         assert samples == ["a", "b"]  # 排序稳定；gz/txt 不收
         rows = _tsv(home).read_text().splitlines()
         header = rows[0].split("\t")
-        assert header[:5] == ["sample", "species", "R1", "R2", "assembly"]
+        assert header[:6] == ["sample", "species", "R1", "R2", "longread", "assembly"]
         assert {"isolate", "platform", "checksum"} <= set(header)
         records = [dict(zip(header, r.split("\t"), strict=False)) for r in rows[1:]]
         b = next(r for r in records if r["sample"] == "b")

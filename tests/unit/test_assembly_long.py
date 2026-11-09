@@ -107,6 +107,7 @@ class TestLongreadRegistration:
         _make_fastq(fq_dir / "SAMP-002_R1.fastq.gz", [150] * 100)
         _make_fastq(fq_dir / "SAMP-002_R2.fastq.gz", [150] * 100)
         result = register_fastqs_dir(home, fq_dir, species="SAL")
+        assert "SAMP-002" in result["samples"]
         _, header, rows = _load_table(home)
         row = next(r for r in rows if r[header.index("sample")] == "SAMP-002")
         assert row[header.index("longread")] == ""
@@ -130,3 +131,122 @@ class TestUnpairedLongreadScan:
         pairs = []
         results = _scan_unpaired_longreads(tmp_path, pairs)
         assert len(results) == 0  # 短读不进 longread
+
+
+SAMPLES_HEADER = (
+    "sample\tspecies\tR1\tR2\tlongread\tassembly\tisolate\tplatform\tchecksum"
+)
+
+
+@pytest.fixture
+def wf_home(tmp_path: Path, monkeypatch) -> Path:
+    """部署真实工作流到临时 home（dry-run 不执行外部工具）。"""
+    from bacmap.workflow import runner as wf_runner
+
+    monkeypatch.setattr(wf_runner, "WORKFLOWS_DIR", tmp_path / "workflows")
+    monkeypatch.setattr(wf_runner, "BACMAP_HOME", tmp_path)
+    wf_runner.deploy()
+    return tmp_path
+
+
+def _write_samples(home: Path, rows: list[list[str]]) -> None:
+    body = "\n".join("\t".join(row) for row in rows)
+    (home / "workflows" / "bacmap" / "config" / "samples.tsv").write_text(
+        SAMPLES_HEADER + "\n" + body + "\n", encoding="utf-8"
+    )
+
+
+def _dry(home: Path, sample: str):
+    from bacmap.workflow import runner as wf_runner
+
+    runner = wf_runner.WorkflowRunner(deployed_dir=home / "workflows" / "bacmap")
+    target = str(home / "results" / sample / "report" / f"{sample}_summary.json")
+    return runner.dry_run([target, "-p"])
+
+
+def _command(proc, needle: str) -> str:
+    return next(
+        line for line in proc.stdout.splitlines()
+        if line.startswith("Shell command:") and needle in line
+    )
+
+
+class TestAssemblyDagRouting:
+    def test_longread_only_uses_flye_nano_hq_without_genome_size(
+        self, wf_home: Path
+    ):
+        sid = "ONT-001"
+        d = wf_home / "gs" / sid
+        d.mkdir(parents=True)
+        _make_fastq(d / f"{sid}.fastq.gz", [3000] * 60)
+        _write_samples(
+            wf_home,
+            [[sid, "VPA", "", "", str(d / f"{sid}.fastq.gz"), "", sid, "ont", ""]],
+        )
+        proc = _dry(wf_home, sid)
+        assert proc.returncode == 0, proc.stderr[-800:]
+        assert "assembly_flye" in proc.stdout
+        assert "assembly_shovill" not in proc.stdout
+        assert "assembly_unicycler" not in proc.stdout
+        flye_cmd = _command(proc, "flye --nano-hq")
+        assert "--genome-size" not in flye_cmd  # flye 2.9+ 自动估计
+
+    def test_pacbio_hifi_uses_pacbio_flag(self, wf_home: Path):
+        sid = "HIFI-001"
+        d = wf_home / "gs" / sid
+        d.mkdir(parents=True)
+        _make_fastq(d / f"{sid}.fastq.gz", [15000] * 100)
+        _write_samples(
+            wf_home,
+            [
+                [sid, "VPA", "", "", str(d / f"{sid}.fastq.gz"), "", sid,
+                 "pacbio_hifi", ""]
+            ],
+        )
+        proc = _dry(wf_home, sid)
+        assert proc.returncode == 0, proc.stderr[-800:]
+        assert "--pacbio-hifi" in _command(proc, "flye --pacbio-hifi")
+
+    def test_hybrid_routes_to_unicycler(self, wf_home: Path):
+        sid = "HYB-001"
+        d = wf_home / "gs" / sid
+        d.mkdir(parents=True)
+        for mate in ("R1", "R2"):
+            (d / f"{sid}_{mate}.fastq.gz").write_bytes(b"")
+        lr = d / f"{sid}.fastq.gz"
+        _make_fastq(lr, [4000] * 60)
+        _write_samples(
+            wf_home,
+            [
+                [sid, "VPA", str(d / f"{sid}_R1.fastq.gz"),
+                 str(d / f"{sid}_R2.fastq.gz"), str(lr), "", sid, "ont", ""]
+            ],
+        )
+        proc = _dry(wf_home, sid)
+        assert proc.returncode == 0, proc.stderr[-800:]
+        assert "assembly_unicycler" in proc.stdout
+        assert "assembly_flye" not in proc.stdout
+        assert f"-l {lr}" in _command(proc, "unicycler")
+
+    def test_trycycler_platform_routes_to_trycycler(self, wf_home: Path):
+        sid = "TRY-001"
+        d = wf_home / "gs" / sid
+        d.mkdir(parents=True)
+        for mate in ("R1", "R2"):
+            (d / f"{sid}_{mate}.fastq.gz").write_bytes(b"")
+        lr = d / f"{sid}.fastq.gz"
+        _make_fastq(lr, [4000] * 60)
+        _write_samples(
+            wf_home,
+            [
+                [sid, "VPA", str(d / f"{sid}_R1.fastq.gz"),
+                 str(d / f"{sid}_R2.fastq.gz"), str(lr), "", sid, "trycycler", ""]
+            ],
+        )
+        proc = _dry(wf_home, sid)
+        assert proc.returncode == 0, proc.stderr[-800:]
+        assert "assembly_trycycler" in proc.stdout
+        cmd = _command(proc, "trycycler cluster")
+        assert "--assemblies" in cmd and "--reads" in cmd
+        assert "--min_identity 98.0" in cmd
+        assert "7_final_consensus.fasta" in cmd

@@ -150,7 +150,7 @@ Guidelines:
 
 ## 9. Versioning
 
-- Program version: `pyproject.toml` / `pixi.toml` (currently 0.1.2), changed only by explicit
+- Program version: `pyproject.toml` / `pixi.toml` (currently 0.1.5), changed only by explicit
   release decision.
 - Frozen design revision: the title and revision table in
   `docs/concepts/frozen-design.zh.md` (v1.10.0), independent of the program version.

@@ -54,17 +54,19 @@ curl -fsSL https://raw.githubusercontent.com/indexofire/bacmap/main/scripts/setu
 git clone https://github.com/indexofire/bacmap && cd bacmap
 pixi install --all    # 安装所有环境：Python 3.12 + Snakemake 9 + 工具
 pixi shell            # 激活环境
-bacmap --version      # 0.1.2
+bacmap --version      # 0.1.5
 ```
 
 `pixi install` 提供的内容：
 
-- **Snakemake 与工具链**：fastp、shovill、bwa、minimap2、samtools、bcftools、blast、
-  bedtools、iqtree 等（见 `pixi.toml`）。
+- **Snakemake 与工具链**：fastp、shovill、flye、unicycler、bwa、minimap2、samtools、
+  bcftools、blast、bedtools、iqtree 等（见 `pixi.toml`）。
 - **常用分析工具**（ADR-20）：`gside`（物种鉴定）、`gspec`（基因筛查/分型）、
   `gmlst`（MLST/cgMLST/MST）。
 - **独立的 `recomb` 环境**，内含 Gubbins，用于可选的重组检测。因为其与
   IQ-TREE 版本锁定与主管线冲突；请用 `pixi run -e recomb …` 运行。
+- **trycycler 不随默认环境安装**：其 conda 包要求 Python <3.11，而 bacmap 运行在
+  3.12；高级 `platform=trycycler` 路径需另行提供 `trycycler` 可执行文件。
 
 开发环境是独立的：
 

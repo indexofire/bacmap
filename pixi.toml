@@ -3,7 +3,7 @@ authors = ["indexofire <indexofire@gmail.com>"]
 channels = ["conda-forge", "bioconda"]
 name = "bacmap"
 platforms = ["linux-64"]
-version = "0.1.4"
+version = "0.1.5"
 
 # 环境分两层：default = 运行时（Python + 域依赖）；dev = 开发工具。
 # 生信 CLI 工具与 Snakemake 9 在迁移第 4 步（workflow 层）加入，避免骨架阶段拖入 4GB 依赖。
@@ -44,6 +44,8 @@ bracken = ">=2.9"
 mash = ">=2.3"
 mummer4 = "*"
 shigatyper = ">=2.0.5,<3"
+flye = ">=2.9.5,<3"
+unicycler = ">=0.5.1,<0.6"
 
 [pypi-dependencies]
 gmlst = "==0.6.1"

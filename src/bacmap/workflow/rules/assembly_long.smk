@@ -17,6 +17,9 @@ FLYE_MINLEN = config.get("tools", {}).get("flye", {}).get("minlen", 1000)
 # genome_size 可选：flye 2.9+ 自动估计；仅在用户显式配置时传入
 FLYE_GENOMESIZE = config.get("tools", {}).get("flye", {}).get("genome_size", "")
 UNICYCLER_MODE = config.get("tools", {}).get("unicycler", {}).get("mode", "normal")
+TRYCYCLER_MIN_IDENTITY = (
+    config.get("tools", {}).get("trycycler", {}).get("min_identity", 98.0)
+)
 
 # 样本分类（在 Snakefile 顶部由 SAMPLES_DF 定义）
 # LONGREAD_SAMPLES: 有 longread 列且非空
@@ -62,14 +65,13 @@ rule assembly_flye:
         outdir = str(WORKDIR) + "/{sample}/assembly/flye",
         platform_flag = lambda wc: _flye_platform_flag(wc.sample),
         minlen = FLYE_MINLEN,
-        genomesize = FLYE_GENOMESIZE,
+        # 空串表示不传 --genome-size（flye 2.9+ 自动估计）
+        genome_size_arg = f"--genome-size {FLYE_GENOMESIZE}" if FLYE_GENOMESIZE else "",
     shell:
         "mkdir -p {params.outdir} && "
         "flye {params.platform_flag} {input.reads} "
         "--out-dir {params.outdir} --threads {threads} "
-        "--min-overlap {params.minlen}"
-        + (" --genome-size {params.genomesize}" if params.genomesize else "")
-        + " && "
+        "--min-overlap {params.minlen} {params.genome_size_arg} && "
         "cp {params.outdir}/assembly.fasta {output.contigs}"
 
 
@@ -107,39 +109,58 @@ rule assembly_unicycler:
 
 
 rule assembly_trycycler:
-    """多组装器一致性合并（高级路径）：合并 flye + shovill + unicycler 的组装结果。
+    """多组装器一致性合并（高级路径）：以 flye + unicycler 组装结果为输入。
 
-    需要至少两个组装器的 contigs 作为输入。用户在 samples.tsv 的 platform 列
-    显式写 "trycycler" 触发此路径。
+    需要混合样本（R1/R2 + longread）或预先存在的多个组装结果。用户在
+    samples.tsv 的 platform 列显式写 "trycycler" 触发此路径。
+
+    注意：Trycycler 的 reconcile 步骤在真实数据上可能需要人工干预（删除/
+    修复异常 contig）。本规则按官方 Quick-start 顺序自动执行；若 reconcile
+    失败，请检查 clusters/cluster_* 并人工处理后重跑。trycycler 未随默认
+    pixi 环境安装（其 conda 包要求 Python <3.11），需另行提供可执行文件。
     """
     input:
-        contigs_list = lambda wc: _trycycler_inputs(wc)
+        contigs_list = lambda wc: _trycycler_inputs(wc),
+        reads = lambda wc: _longread_path(wc),
     output:
         contigs = str(WORKDIR) + "/{sample}/assembly/trycycler/contigs.fa"
     threads: config["threads"]
     params:
         outdir = str(WORKDIR) + "/{sample}/assembly/trycycler",
+        min_identity = TRYCYCLER_MIN_IDENTITY,
     shell:
+        "set -euo pipefail && "
         "mkdir -p {params.outdir}/clusters && "
-        "trycycler cluster "
-        + " ".join("--assemblies {0}".format(a) for a in {input.contigs_list}) + " "
+        "trycycler cluster --assemblies {input.contigs_list} --reads {input.reads} "
         "--out_dir {params.outdir}/clusters --threads {threads} && "
-        "trycycler consensus --clusters {params.outdir}/clusters "
-        "--out_dir {params.outdir} --threads {threads} && "
-        "cp {params.outdir}/consensus.fasta {output.contigs}"
+        "for c in {params.outdir}/clusters/cluster_*; do "
+        "trycycler reconcile --reads {input.reads} --cluster_dir \"$c\" "
+        "--min_identity {params.min_identity} --threads {threads} && "
+        "trycycler msa --cluster_dir \"$c\" --threads {threads}; "
+        "done && "
+        "trycycler partition --reads {input.reads} "
+        "--cluster_dirs {params.outdir}/clusters/cluster_* --threads {threads} && "
+        "for c in {params.outdir}/clusters/cluster_*; do "
+        "trycycler consensus --cluster_dir \"$c\" --threads {threads}; "
+        "done && "
+        "cat {params.outdir}/clusters/cluster_*/7_final_consensus.fasta "
+        "> {output.contigs}"
 
 
 def _trycycler_inputs(wc):
-    """收集 trycycler 的输入组装结果（至少两个组装器的 contigs）。"""
-    paths = []
-    for assembler_dir in ("flye", "shovill", "unicycler"):
-        p = Path(WORKDIR) / wc.sample / "assembly" / assembler_dir / "contigs.fa"
-        if p.is_file():
-            paths.append(str(p))
-    if len(paths) < 2:
-        # Snakemake DAG 解析时可能文件尚未生成，返回期望路径
-        paths = [
-            str(WORKDIR / wc.sample / "assembly" / d / "contigs.fa")
-            for d in ("flye", "shovill")
-        ]
-    return paths
+    """收集 trycycler 的输入组装结果（flye + unicycler，至少两个）。
+
+    Trycycler 需要同一基因组的多个独立组装。bacmap 用长读 flye 与混合
+    unicycler 两个结果作为输入；纯长读样本没有第二个组装器，需先人工提供
+    多个组装结果（本函数会给出明确错误）。
+    """
+    if wc.sample not in HYBRID_SAMPLES:
+        raise ValueError(
+            "trycycler requires multiple assemblies: use a hybrid sample "
+            "(R1/R2 + longread) or pre-populate assembly/flye + assembly/unicycler "
+            f"for sample {wc.sample!r}"
+        )
+    return [
+        str(WORKDIR / wc.sample / "assembly" / assembler / "contigs.fa")
+        for assembler in ("flye", "unicycler")
+    ]

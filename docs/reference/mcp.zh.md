@@ -49,7 +49,7 @@ bacmap start mcp --profile local-trusted  # 要求 [mcp] allow_local_trusted = t
 // bacmap_capabilities → （节选）
 {
   "server": "bacmap",
-  "bacmap_version": "0.1.2",
+  "bacmap_version": "0.1.5",
   "api": "mcp",
   "profile": "cloud",
   "max_data_class": "D1",

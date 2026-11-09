@@ -63,7 +63,8 @@ tools:
   unicycler:
     mode: "normal"
   trycycler:
-    min_identity: 0.95
+    # reconcile --min_identity 为百分比（Trycycler 默认 98.0）
+    min_identity: 98.0
   blastn:
     evalue: 1e-50
     word_size: 28

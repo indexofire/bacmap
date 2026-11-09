@@ -238,11 +238,14 @@ bacmap's trusted surfaces.
 `samples.tsv` is a data file, not `config.toml`:
 
 ```tsv
-sample	species	R1	R2	assembly	isolate	platform	checksum
+sample	species	R1	R2	longread	assembly	isolate	platform	checksum
 SAM-001	Salmonella	gs/SAM-001/SAM-001_R1.fastq.gz	gs/SAM-001/SAM-001_R2.fastq.gz			SAM-001	ilm	<sha256>
+ONT-ONLY-001	VPA			gs/ONT-ONLY-001/ONT-ONLY-001.fastq.gz		ONT-ONLY-001	ont	<sha256>
 ```
 
 See [Data & identity](../guide/data.md) for column semantics, naming, collisions and registration.
+`longread` holds ONT/PacBio FASTQ: alone it selects flye, together with `R1`/`R2` it selects
+unicycler hybrid assembly.
 
 ## 7. Directory and database layout
 

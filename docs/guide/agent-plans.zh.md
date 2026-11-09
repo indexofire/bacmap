@@ -404,7 +404,7 @@ HTTP 模式下 Harness 完全不需要 bacmap 的 conda/pixi 环境；它只访�
 // call bacmap_capabilities
 {
   "server": "bacmap",
-  "bacmap_version": "0.1.2",
+  "bacmap_version": "0.1.5",
   "api": "mcp",
   "profile": "cloud",
   "max_data_class": "D1",

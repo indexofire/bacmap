@@ -51,7 +51,7 @@ The full dialogue (including troubleshooting) is the [tutorial](tutorial.md); MC
 git clone <repo> bacmap && cd bacmap
 pixi install
 pixi shell
-bacmap --version          # 0.1.2
+bacmap --version          # 0.1.5
 bacmap doctor             # home, database, sandbox, LLM, disk, tools
 bacmap start web          # http://127.0.0.1:8800
 ```

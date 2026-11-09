@@ -137,7 +137,7 @@ bacmap record knowledge-import --title TITLE [--authors A] [--year Y] [--source 
 bacmap record knowledge-approve <entry_id>
 ```
 
-示例见[数据与身份](../guide/data.zh.md#5-记录元数据化验结果与知识库)。
+示例见[数据与身份](../guide/data.zh.md#5)。
 
 ## `bacmap research`
 

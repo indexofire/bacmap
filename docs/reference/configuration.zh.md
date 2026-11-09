@@ -237,11 +237,13 @@ allow_scripts = true
 `samples.tsv` 是数据文件，不是 `config.toml`：
 
 ```tsv
-sample	species	R1	R2	assembly	isolate	platform	checksum
+sample	species	R1	R2	longread	assembly	isolate	platform	checksum
 SAM-001	Salmonella	gs/SAM-001/SAM-001_R1.fastq.gz	gs/SAM-001/SAM-001_R2.fastq.gz			SAM-001	ilm	<sha256>
+ONT-ONLY-001	VPA			gs/ONT-ONLY-001/ONT-ONLY-001.fastq.gz		ONT-ONLY-001	ont	<sha256>
 ```
 
 列语义、命名、冲突与注册见[数据与身份](../guide/data.zh.md)。
+`longread` 存放 ONT/PacBio FASTQ：单独存在走 flye，与 `R1`/`R2` 同时存在走 unicycler 混合组装。
 
 ## 7. 目录与数据库布局
 

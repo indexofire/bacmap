@@ -22,9 +22,11 @@ isolate: HZCPE-01                  biological strain (stable)
 ## 2. `samples.tsv`（数据集登记表）
 
 ```tsv
-sample	species	R1	R2	assembly	isolate	platform	checksum
-SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	a1b2…
-ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	c3d4…
+sample	species	R1	R2	longread	assembly	isolate	platform	checksum
+SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>
+ASM-STD-001	Salmonella				gs/ASM-STD-001/ASM-STD-001.fasta	ASM-STD-001	ont	<sha256>
+ONT-ONLY-001	VPA			gs/ONT-ONLY-001/ONT-ONLY-001.fastq.gz		ONT-ONLY-001	ont	<sha256>
+HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.fastq.gz	gs/HYBRID-001/HYBRID-001.fastq.gz		HYBRID-001	ont	<sha256>
 ```
 
 | 列 | 语义 |
@@ -32,12 +34,14 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	c3d4�
 | `sample` | 数据集 ID；`^[A-Za-z0-9._-]+$`，不得为 `.`/`..` |
 | `species` | 物种代码或名称；未知时为 `UNK` |
 | `R1`、`R2` | 双端读段；相对于 `BACMAP_HOME` 或绝对路径 |
+| `longread` | 长读 FASTQ；单独存在走 flye，与 `R1`/`R2` 同时存在走 unicycler |
 | `assembly` | 预组装 FASTA；跳过 QC/组装 |
 | `isolate` | 生物学菌株；默认为数据集 ID |
 | `platform` | `ilm`、`ont`、`pacbio`、`unknown` |
 | `checksum` | 由登记流程维护的内容哈希 |
 
 登记会写入该行并登记菌株实体。数据集 ID 冲突且内容不同是硬错误，绝不静默覆盖。
+一个数据集可以是短读（`R1`/`R2`）、长读（`longread`）、混合（两者都有）或预组装 FASTA（`assembly`）。
 
 ## 3. 数据库
 

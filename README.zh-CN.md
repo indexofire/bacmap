@@ -6,7 +6,7 @@
 AI 智能体使用的 MCP 服务。数据不出本地网络。
 
 冻结设计：[docs/concepts/frozen-design.zh.md](docs/concepts/frozen-design.zh.md)（中文权威，修订
-**v1.10.7**）；[英文参考翻译](docs/concepts/frozen-design.md)。程序版本：**0.1.2**。
+**v1.10.12**）；[英文参考翻译](docs/concepts/frozen-design.md)。程序版本：**0.1.5**。
 
 ## 用自然语言操作（推荐入口）
 
@@ -29,8 +29,10 @@ MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小�
 
 ## 功能概览
 
-- **确定性管线** — Snakemake 9：QC → 组装 → 物种 → 分型/耐药 → 报告。物种鉴定、基因筛查/血清型、
-  MLST/cgMLST 分别交给 [gside](https://github.com/indexofire/gside)、`gspec`、`gmlst`（ADR-20）。
+- **确定性管线** — Snakemake 9：QC → 组装 → 物种 → 分型/耐药 → 报告。短读用 shovill，
+  ONT/PacBio 长读用 flye（`--nano-hq`/`--pacbio-hifi`），混合输入用 unicycler。物种鉴定、
+  基因筛查/血清型、MLST/cgMLST 分别交给 [gside](https://github.com/indexofire/gside)、
+  `gspec`、`gmlst`（ADR-20）。
 - **五类任务** — `analyze`、`curate`、`mine`、`write`、`record`。所有写入都经任务层；开放路径的
   脚本/草稿必须由人确认计划后才能执行。
 - **持久执行** — DBOS 工作流逐步检查点，进程崩溃后从最后完成的步骤恢复；Snakemake 用
@@ -49,7 +51,7 @@ MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小�
 git clone <repo> bacmap && cd bacmap
 pixi install            # 运行时环境（Python 3.12 + 生信工具链）
 pixi shell
-bacmap --version        # 0.1.2
+bacmap --version        # 0.1.5
 bacmap config init      # 可选：从 config.example.toml 生成配置
 bacmap doctor           # 只读体检
 bacmap start web        # http://127.0.0.1:8800

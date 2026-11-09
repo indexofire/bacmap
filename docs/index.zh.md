@@ -67,7 +67,7 @@ bacmap 的推荐用法不是先学命令，而是把目标告诉外部智能体�
 git clone <repo> bacmap && cd bacmap
 pixi install                 # 运行时环境（Python 3.12 + 生信工具）
 pixi shell
-bacmap --version             # 0.1.2
+bacmap --version             # 0.1.5
 bacmap doctor                # 只读体检；仅在硬性失败时返回码为 1
 bacmap start web             # http://127.0.0.1:8800
 ```
@@ -117,4 +117,4 @@ bacmap plan confirm <plan_id> --version 1 --hash <first-12-chars>
 ```
 
 权威设计是冻结文档 [冻结设计](concepts/frozen-design.zh.md)（中文版为权威，英文版为参考
-翻译）。程序版本与冻结文档修订相互独立：当前构建为 **0.1.2**，设计修订为 **v1.10.7**。
+翻译）。程序版本与冻结文档修订相互独立：当前构建为 **0.1.5**，设计修订为 **v1.10.12**。

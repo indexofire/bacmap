@@ -52,18 +52,21 @@ $BACMAP_HOME/
 `$BACMAP_HOME/workflows/bacmap/config/samples.tsv` 中：
 
 ```tsv
-sample	species	R1	R2	assembly	isolate	platform	checksum
+sample	species	R1	R2	longread	assembly	isolate	platform	checksum
 SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>
-ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha256>
+ASM-STD-001	Salmonella				gs/ASM-STD-001/ASM-STD-001.fasta	ASM-STD-001	ont	<sha256>
 HZCPE-01__ilm__20261012	VPA	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R1.fastq.gz	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R2.fastq.gz			HZCPE-01	ilm	<sha256>
+ONT-ONLY-001	VPA			gs/ONT-ONLY-001/ONT-ONLY-001.fastq.gz		ONT-ONLY-001	ont	<sha256>
+HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.fastq.gz	gs/HYBRID-001/HYBRID-001.fastq.gz		HYBRID-001	ont	<sha256>
 ```
 
 规则：
 
 - `sample` 是**数据集 ID**；允许字符为 `A-Z a-z 0-9 . _ -`，且不能是 `.` 或 `..`。
-- `R1`/`R2` 与 `assembly` 相对于 **`BACMAP_HOME`**（绝对路径也可用）。
-- 每个数据集使用**双端 reads** **或**一个组装好的 FASTA，二者择一。若两者都存在，reads
-  优先。
+- `R1`/`R2`、`longread` 与 `assembly` 相对于 **`BACMAP_HOME`**（绝对路径也可用）。
+- 一个数据集可以是**双端 reads**（`R1`/`R2`）、**长读**（`longread`）**或**一个组装好的
+  FASTA（`assembly`）。同时具有双端 reads 与 `longread` 时走混合组装（unicycler）。
+  若 reads 与 `assembly` 都存在，reads 优先。
 - `species` 接受三字母代码（`SAL`、`ECO`、`SHI`、`VPA` 等）或 gside 标签/名称
   （`Salmonella`、`V_parahaemolyticus`、`E. coli`）。优先使用代码。
 - `isolate` 是生物学菌株；多个数据集可以指向同一个菌株实体。`platform` 记录测序平台。
@@ -75,7 +78,8 @@ HZCPE-01__ilm__20261012	VPA	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R
 # 组装好的 FASTA：ID 由文件名推导；物种用 gside 自动鉴定
 bacmap task submit --type analyze --fasta-dir /data/genomes
 
-# Reads：成对的 *_R1/_R2（或 *_1/_2）文件；物种默认为 UNK，直到管线完成鉴定
+# Reads：成对的 *_R1/_R2（或 *_1/_2）文件，以及未配对的长读（中位读长 ≥1 kb）；
+# 物种默认为 UNK，直到管线完成鉴定
 bacmap task submit --type analyze --fastq-dir /data/run42 --species Salmonella
 ```
 

@@ -70,7 +70,7 @@ See the [tutorial](getting-started/tutorial.md) for the full walkthrough and
 git clone <repo> bacmap && cd bacmap
 pixi install                 # runtime environment (Python 3.12 + bioinformatics tools)
 pixi shell
-bacmap --version             # 0.1.2
+bacmap --version             # 0.1.5
 bacmap doctor                # read-only health check; exit code 1 only on hard failures
 bacmap start web             # http://127.0.0.1:8800
 ```
@@ -123,4 +123,4 @@ Development       environment, tests, contracts, adding capabilities
 The authoritative design is the frozen document
 [Frozen design](concepts/frozen-design.md) (Chinese version is authoritative; English is a
 reference translation). The program version and the frozen-document revision are independent:
-this build is **0.1.2**, the design revision is **v1.10.7**.
+this build is **0.1.5**, the design revision is **v1.10.12**.

@@ -17,6 +17,8 @@ def _contigs_src(wc):
     """
     if wc.sample in FASTA_SAMPLES:
         return assembly_path(wc)
+    if _col(wc.sample, "platform").strip().lower() == "trycycler":
+        return str(WORKDIR) + "/" + wc.sample + "/assembly/trycycler/contigs.fa"
     if wc.sample in LONG_ONLY_SAMPLES:
         return str(WORKDIR) + "/" + wc.sample + "/assembly/flye/contigs.fa"
     if wc.sample in HYBRID_SAMPLES:

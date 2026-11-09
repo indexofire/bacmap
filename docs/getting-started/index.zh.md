@@ -49,7 +49,7 @@
 git clone <repo> bacmap && cd bacmap
 pixi install
 pixi shell
-bacmap --version          # 0.1.2
+bacmap --version          # 0.1.5
 bacmap doctor             # 目录、数据库、沙箱、LLM、磁盘、工具
 bacmap start web          # http://127.0.0.1:8800
 ```

@@ -16,11 +16,13 @@ isolate (biological strain, stable)
 位置：`$BACMAP_HOME/workflows/bacmap/config/samples.tsv`。
 
 ```tsv
-sample	species	R1	R2	assembly	isolate	platform	checksum
+sample	species	R1	R2	longread	assembly	isolate	platform	checksum
 SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>
-ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	<sha256>
+ASM-STD-001	Salmonella				gs/ASM-STD-001/ASM-STD-001.fasta	ASM-STD-001	ont	<sha256>
 HZCPE-01__ilm__20261012	VPA	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R1.fastq.gz	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R2.fastq.gz			HZCPE-01	ilm	<sha256>
 HZCPE-01__ont__20261020	VPA	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R1.fastq.gz	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R2.fastq.gz			HZCPE-01	ont	<sha256>
+ONT-ONLY-001	VPA			gs/ONT-ONLY-001/ONT-ONLY-001.fastq.gz		ONT-ONLY-001	ont	<sha256>
+HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.fastq.gz	gs/HYBRID-001/HYBRID-001.fastq.gz		HYBRID-001	ont	<sha256>
 ```
 
 | 列 | 含义 |
@@ -28,6 +30,7 @@ HZCPE-01__ont__20261020	VPA	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R
 | `sample` | **数据集 ID**。允许字符：`A-Z a-z 0-9 . _ -`；永远不能是 `.` 或 `..` |
 | `species` | 三字母代码或 gside 标签/名称；尚未鉴定的 reads 用 `UNK` |
 | `R1`/`R2` | 成对 FASTQ 路径，相对于 `BACMAP_HOME` 或绝对路径 |
+| `longread` | 长读 FASTQ 路径（ONT/PacBio）；单独 → flye，与 `R1`/`R2` 同时存在 → unicycler 混合组装 |
 | `assembly` | 组装后的 FASTA 路径；跳过 QC/组装；两者都设置时 reads 优先 |
 | `isolate` | 生物学菌株 ID；旧表默认等于数据集 ID |
 | `platform` | 测序平台（`ilm`、`ont`、`pacbio` 等）；未提供时为 `unknown` |
@@ -49,11 +52,14 @@ HZCPE-01__ont__20261020
 # Assembled FASTA; species auto-detected with gside unless --species is given
 bacmap task submit --type analyze --fasta-dir /data/genomes --species VPA
 
-# Reads; pairs are detected from *_R1/_R2 or *_1/_2
+# Reads：成对的 *_R1/_R2（或 *_1/_2）文件；
+# 未配对且中位读长 ≥1 kb 的文件登记为长读
 bacmap task submit --type analyze --fastq-dir /data/run42 --species Salmonella
 ```
 
 登记是一个任务步骤，而不是直接编辑文件：它会写 `samples.tsv`、登记菌株实体，然后提交分析。
+长读输入时，未配对的 FASTQ 进入 `longread` 列；平台（`ont`/`pacbio_hifi`）由探测得出，
+可在 `platform` 列覆盖。同时具有 `R1`/`R2` 与 `longread` 的数据集用 unicycler 混合组装。
 登记函数会把 `added`、`reused`、`skipped` 和 `detected` 返回给工作流（实际分析的是返回的样本
 列表）；CLI 返回提交后的 `task_id`，登记结果可在 `samples.tsv` 中查看。
 
@@ -71,8 +77,8 @@ bacmap task submit --type analyze --fastq-dir /data/run42 --species Salmonella
 ### 2.2 手工添加行
 
 ```tsv
-sample	species	R1	R2	assembly	isolate	platform	checksum
-NEW-001	Salmonella	gs/NEW-001/NEW-001_R1.fastq.gz	gs/NEW-001/NEW-001_R2.fastq.gz			NEW-001	ilm
+sample	species	R1	R2	longread	assembly	isolate	platform	checksum
+NEW-001	Salmonella	gs/NEW-001/NEW-001_R1.fastq.gz	gs/NEW-001/NEW-001_R2.fastq.gz			NEW-001	ilm	
 ```
 
 手工添加行时可以留空 `checksum`；下一次登记会重新计算它。管线使用相对于 `BACMAP_HOME` 的路径，

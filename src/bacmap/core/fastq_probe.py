@@ -86,8 +86,8 @@ def classify(probe: FastqProbe) -> Platform:
 
 _PLATFORM_NOTES = {
     "illumina": "short, uniform reads — short-read assembly/QC path",
-    "nanopore": "long, broad reads — long-read-aware assembly (no built-in path yet)",
-    "pacbio_hifi": "long, uniform reads — HiFi assembly (no built-in path yet)",
+    "nanopore": "long, broad reads — flye --nano-hq assembly path",
+    "pacbio_hifi": "long, uniform reads — flye --pacbio-hifi assembly path",
     "unclear": "length distribution does not match a known platform cleanly",
 }
 

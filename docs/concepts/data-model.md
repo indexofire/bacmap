@@ -25,9 +25,11 @@ count the strain once.
 ## 2. `samples.tsv` (the dataset registry)
 
 ```tsv
-sample	species	R1	R2	assembly	isolate	platform	checksum
-SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	a1b2…
-ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	c3d4…
+sample	species	R1	R2	longread	assembly	isolate	platform	checksum
+SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>
+ASM-STD-001	Salmonella				gs/ASM-STD-001/ASM-STD-001.fasta	ASM-STD-001	ont	<sha256>
+ONT-ONLY-001	VPA			gs/ONT-ONLY-001/ONT-ONLY-001.fastq.gz		ONT-ONLY-001	ont	<sha256>
+HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.fastq.gz	gs/HYBRID-001/HYBRID-001.fastq.gz		HYBRID-001	ont	<sha256>
 ```
 
 | Column | Semantics |
@@ -35,13 +37,15 @@ ASM-STD-001	Salmonella		gs/ASM-STD-001/ASM-STD-001.fasta			ASM-STD-001	ont	c3d4�
 | `sample` | dataset ID; `^[A-Za-z0-9._-]+$`, not `.`/`..` |
 | `species` | code or name; `UNK` when unknown |
 | `R1`, `R2` | paired reads; relative to `BACMAP_HOME` or absolute |
+| `longread` | long-read FASTQ; alone runs flye, with `R1`/`R2` runs unicycler |
 | `assembly` | pre-assembled FASTA; skips QC/assembly |
 | `isolate` | biological strain; defaults to dataset ID |
 | `platform` | `ilm`, `ont`, `pacbio`, `unknown` |
 | `checksum` | registration-maintained content hash |
 
 Registration writes the row and registers the isolate. A dataset ID collision with different
-content is a hard error, never a silent overwrite.
+content is a hard error, never a silent overwrite. A dataset may be short reads (`R1`/`R2`),
+long reads (`longread`), hybrid (both), or a pre-assembled FASTA (`assembly`).
 
 ## 3. Databases
 

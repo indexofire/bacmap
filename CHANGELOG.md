@@ -3,6 +3,32 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.5] - 2026-11-09
+
+### 长读/混合组装规则（PLAN #4）
+
+- **新增 `workflow/rules/assembly_long.smk`**：三条组装规则，按 samples.tsv
+  输入形态自动路由：
+  - `assembly_flye`：纯长读组装——ONT R10.4.1 SUP → `--nano-hq`（Q20+ 默认），
+    旧 R9.4 可配 `ont_mode: raw`；PacBio HiFi → `--pacbio-hifi`；
+    基因组大小由 flye 2.9+ 自动估计（`genome_size` 可选配置）
+  - `assembly_unicycler`：混合组装（短读骨架 + 长读补洞/桥接）
+  - `assembly_trycycler`：多组装器一致性合并（高级路径）
+- **samples.tsv 新增 `longread` 列**：长读 FASTQ 路径（自动检测或手动填写），
+  位于 R2 与 assembly 之间；旧版表自动升级、行数据对齐
+- **`_scan_unpaired_longreads`**：目录扫描时自动检测未配对且中位读长 ≥1kb
+  的文件为长读（排除已配对的短读），探测平台填入 `platform` 列
+- **Snakefile 路由**：`_contigs_src()` 按输入形态分派到
+  shovill/flye/unicycler/直接 FASTA，下游规则无差别消费 `contigs.fasta`
+- config 新增 `flye`（minlen/ont_mode/genome_size）、`unicycler`（mode）、
+  `trycycler`（min_identity，百分比）参数
+- **依赖**：pixi conda 新增 `flye >=2.9.5`、`unicycler >=0.5.1`；trycycler 的
+  conda 包目前要求 Python <3.11（bacmap 为 3.12），未随默认环境安装，规则保留为
+  需另行提供可执行文件的高级路径
+- 测试基线：1989 → 2000（+11：长读检测/纯长读登记/混合自动检测/平台探测/
+  向后兼容/PacBio 识别/短读不误判，以及 4 个 DAG 路由测试：flye 省略
+  --genome-size、PacBio 标志、混合→unicycler、platform=trycycler 路由）
+
 ## [0.1.4] - 2026-11-09
 
 ### CLI 基础设施（PLAN #12/#13/#17/#18/#19）

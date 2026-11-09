@@ -6,8 +6,8 @@ A local pathogen-genomics workstation: deterministic analysis, a durable task en
 an immutable evidence chain, and an MCP server for external AI agents. Data stays on the machine.
 
 Frozen design: [docs/concepts/frozen-design.md](docs/concepts/frozen-design.md) (English reference;
-the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.10.7**).
-Program version: **0.1.2**.
+the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.10.12**).
+Program version: **0.1.5**.
 
 ## Operating in natural language (the intended entry point)
 
@@ -35,7 +35,9 @@ fallback and operations surface.
 ## What it does
 
 - **Deterministic pipeline** — Snakemake 9 runs QC → assembly → species → typing/AMR → report.
-  Species identification, gene screening/serotyping and MLST/cgMLST are delegated to
+  Short reads assemble with shovill, ONT/PacBio long reads with flye (`--nano-hq`/`--pacbio-hifi`),
+  and hybrid input with unicycler. Species identification, gene screening/serotyping and
+  MLST/cgMLST are delegated to
   [gside](https://github.com/indexofire/gside), `gspec` and `gmlst` (ADR-20).
 - **Five task types** — `analyze`, `curate`, `mine`, `write`, `record`. Every write goes through the
   task layer; open-path scripts/drafts require a human-confirmed plan.
@@ -55,7 +57,7 @@ fallback and operations surface.
 git clone <repo> bacmap && cd bacmap
 pixi install            # runtime environment (Python 3.12 + bioinformatics tools)
 pixi shell
-bacmap --version        # 0.1.2
+bacmap --version        # 0.1.5
 bacmap config init      # optional: create config from config.example.toml
 bacmap doctor           # health check
 bacmap start web        # http://127.0.0.1:8800
