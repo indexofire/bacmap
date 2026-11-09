@@ -105,6 +105,16 @@ def run_show(args: argparse.Namespace) -> None:
     service = _service(args)
     plan_id = _run(lambda: _resolve_plan_id(service, args.plan_id))
     rec = _run(lambda: service.get(plan_id, args.version))
+    # PLAN #3：流程图 SVG（可选输出）
+    if getattr(args, "diagram", ""):
+        from bacmap.research.plan_flow import render_plan_svg
+
+        svg = render_plan_svg(rec.tasks, rec.plan_id, rec.state.value)
+        Path(args.diagram).expanduser().write_text(svg, encoding="utf-8")
+        print(T(
+            f"diagram written to {args.diagram}",
+            f"流程图已写入 {args.diagram}",
+        ))
     if args.json:
         print(json.dumps(_as_json(rec), ensure_ascii=False, indent=2))
         return
@@ -197,6 +207,11 @@ def add_parser(
         type=int,
         default=None,
         help=T("defaults to the latest version", "默认最新版本"),
+    )
+    show.add_argument(
+        "--diagram",
+        default="",
+        help=T("write task flow SVG to this path", "任务流程图 SVG 写入此路径"),
     )
     add_home(show)
     add_json(show)
