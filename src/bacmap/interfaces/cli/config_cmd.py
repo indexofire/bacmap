@@ -16,7 +16,8 @@ def _template_path() -> Path:
     packaged = Path(__file__).resolve().parents[2] / "config.example.toml"
     if packaged.is_file():
         return packaged
-    return Path(__file__).resolve().parents[4] / "config.example.toml"
+    # 源码树布局：configs/config.example.toml（v0.1.4 起模板集中在 configs/）
+    return Path(__file__).resolve().parents[4] / "configs" / "config.example.toml"
 
 
 def _xdg_path() -> Path:

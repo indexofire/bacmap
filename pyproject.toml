@@ -35,7 +35,7 @@ bacmap = "bacmap.interfaces.cli.main:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/bacmap"]
 # 根目录模板同时打进 wheel（安装后 `bacmap config init` 仍能找到）。
-force-include = { "config.example.toml" = "bacmap/config.example.toml" }
+force-include = { "configs/config.example.toml" = "bacmap/config.example.toml" }
 
 [tool.ruff]
 target-version = "py312"

@@ -5,6 +5,16 @@
 
 ## [0.1.3] - 2026-11-09
 
+### 仓库整理（configs/、tools/、开发文档出库）
+
+- 配置模板集中到 `configs/`（`config.example.toml` 移入；`pyproject.toml`
+  force-include 与 `bacmap config path/init` 的源码树解析路径同步，打包路径不变）。
+- 新增 `tools/dsh-bacmap-console`：DSH Web 侧栏内嵌 bacmap 控制台的本地 bundle
+  （`/bacmap` 前缀反向代理剥除 X-Frame-Options/CSP frame-ancestors、URL 重写、
+  经 DSH 连接鉴权放行；bacmap 未运行时给出提示页）。
+- `PLAN-agent-research.md` 移入 `dev/`（该方案 P0–P5 全部完成，转为本地归档，
+  不再随仓库分发；`dev/` 按规则不入库）。
+
 ### P4 完成：高级统计外部化（ADR-22）+ 研究任务类型（ADR-23）
 
 ### Research 证据链（自 feat/agent-research-bridge 并入）

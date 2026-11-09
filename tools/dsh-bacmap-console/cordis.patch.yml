@@ -1,0 +1,10 @@
+- insert:
+    - id: bacmap-console
+      name: '@local/bacmap-console'
+      config:
+        upstream: http://127.0.0.1:8800
+        # The panel's Start button runs this in `startCwd`; keep the port in
+        # sync with `upstream` above. Point the command at the same pixi
+        # environment you use for `bacmap` by hand.
+        startCommand: /home/mark/.pixi/bin/pixi run --manifest-path /home/mark/repos/my-project/bacmap/pixi.toml bacmap start web
+        startCwd: /home/mark/repos/my-project/bacmap

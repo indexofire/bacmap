@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "bacmap 控制台",
+    "description": "将本地 bacmap Web 控制台嵌入左侧工具栏。"
+  }
+}
