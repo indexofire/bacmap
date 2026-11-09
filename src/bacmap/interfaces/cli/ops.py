@@ -342,6 +342,54 @@ def results_migrate(args: argparse.Namespace) -> None:
 
 
 def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
+    """运维命令：顶层平铺（兼容）+ ops 二级命令组（0.1.4，PLAN #17）。"""
+    # ---- ops 二级命令组（统一入口）----
+    ops = sub.add_parser(
+        "ops",
+        help=T(
+            "operations: doctor / backup / restore / results / events",
+            "运维：doctor / backup / restore / results / events",
+        ),
+    )
+    ops_sub = ops.add_subparsers(dest="ops_command", required=True)
+
+    o_doctor = ops_sub.add_parser(
+        "doctor", help=T("read-only health check", "只读体检"),
+    )
+    add_home(o_doctor)
+    add_json(o_doctor)
+    o_doctor.set_defaults(func=doctor)
+
+    o_backup = ops_sub.add_parser("backup", help=T("back up to zip", "备份到 zip"))
+    add_home(o_backup)
+    o_backup.add_argument("--out", required=True, help=T("output zip path", "输出 zip 路径"))
+    o_backup.add_argument(
+        "--with-results", action="store_true",
+        help=T("also back up results/", "连同 results/ 一起"),
+    )
+    o_backup.set_defaults(func=backup)
+
+    o_restore = ops_sub.add_parser("restore", help=T("restore from zip", "从 zip 恢复"))
+    add_home(o_restore)
+    o_restore.add_argument("--from", dest="src", required=True, help=T("backup zip", "备份 zip"))
+    o_restore.add_argument("--force", action="store_true")
+    o_restore.set_defaults(func=restore)
+
+    o_results = ops_sub.add_parser(
+        "results", help=T("migrate legacy result layouts", "迁移旧版结果布局"),
+    )
+    add_home(o_results)
+    o_results.add_argument("--dry-run", action="store_true")
+    o_results.set_defaults(func=results_migrate)
+
+    o_events = ops_sub.add_parser(
+        "events", help=T("prune event logs", "清理事件日志"),
+    )
+    add_home(o_events)
+    o_events.add_argument("--days", type=int, default=90)
+    o_events.set_defaults(func=events_prune)
+
+    # ---- 顶层平铺（兼容既有脚本，标记 deprecated in help）----
     d = sub.add_parser(
         "doctor",
         help=T(

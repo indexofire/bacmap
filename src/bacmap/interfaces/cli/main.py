@@ -359,13 +359,31 @@ def _run_sample_ls(args: argparse.Namespace) -> None:
     from bacmap.interfaces.views import sample_rows
 
     rows = sample_rows(_engine(args.home))
+    # 分页（PLAN #15）：显式给 --limit/--offset 时返回分页信封，否则保持纯列表（兼容）
+    offset = getattr(args, "offset", 0) or 0
+    limit = getattr(args, "limit", 0) or 0
+    if offset or limit:
+        total = len(rows)
+        if offset:
+            rows = rows[offset:]
+        if limit:
+            rows = rows[:limit]
+        if args.json:
+            _emit_json({"total": total, "offset": offset, "count": len(rows), "rows": rows})
+            return
     if args.json:
         _emit_json(rows)
         return
     from rich.table import Table
 
     c = _console()
-    table = Table(title=T(f"Samples ({len(rows)})", f"样本（{len(rows)}）"))
+    if offset or limit:
+        table = Table(title=T(
+            f"Samples ({len(rows)}/{total}, offset={offset})",
+            f"样本（{len(rows)}/{total}，偏移 {offset}）",
+        ))
+    else:
+        table = Table(title=T(f"Samples ({len(rows)})", f"样本（{len(rows)}）"))
     for col in ("sample_id", "species", "ST", "serovar", "AMR", "VF", "plasmid"):
         table.add_column(col)
     for r in rows:
@@ -572,7 +590,8 @@ def _epilog() -> str:
 
 _COMMAND_METAVAR = (
     "{start,overview,task,plan,record,run,gom,config,doctor,backup,"
-    "restore,results,events,isolate,sample,search,selection,db,research,agent}"
+    "restore,results,events,isolate,sample,search,selection,db,research,"
+    "agent,stats,detect,species,reference,completion,ops}"
 )
 
 
@@ -685,6 +704,7 @@ def build_parser() -> argparse.ArgumentParser:
     from bacmap.interfaces.cli.evidence import add_parser as add_evidence_parser
     from bacmap.interfaces.cli.isolates import add_parser as add_isolate_parser
     from bacmap.interfaces.cli.ops import add_parser as add_ops_parser
+    from bacmap.interfaces.cli.quickwin import add_parser as add_quickwin_parser
     from bacmap.interfaces.cli.records import add_parser as add_record_parser
     from bacmap.interfaces.cli.research import add_parser as add_research_parser
 
@@ -695,10 +715,13 @@ def build_parser() -> argparse.ArgumentParser:
     add_evidence_parser(sub, _add_home, _add_json)
     add_isolate_parser(sub, _add_home, _add_json)
     add_ops_parser(sub, _add_home, _add_json)
+    add_quickwin_parser(sub, _add_home, _add_json)
 
     p_sample = sub.add_parser("sample", help=T("sample queries", "样本查询"))
     sample_sub = p_sample.add_subparsers(dest="sample_command", required=True)
     s_ls = sample_sub.add_parser("ls", help=T("list completed samples", "列出已完成样本"))
+    s_ls.add_argument("--limit", type=int, default=0, help=T("0=all", "0=全部"))
+    s_ls.add_argument("--offset", type=int, default=0, help=T("skip N rows", "跳过 N 行"))
     _add_home(s_ls)
     _add_json(s_ls)
     s_ls.set_defaults(func=_run_sample_ls)

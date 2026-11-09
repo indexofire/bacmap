@@ -32,6 +32,31 @@ def _service(args: argparse.Namespace) -> PlanService:
     return PlanService(engine, Path(args.home) / "tasks.sqlite")
 
 
+def _resolve_plan_id(service: PlanService, raw: str) -> str:
+    """PLAN #12：完整 ID 直用；短前缀（plan list 显示 16 位）查库解析。"""
+    if len(raw) == 16:  # plan_id 恒为 16 hex
+        return raw
+    # 前缀匹配
+    with service._conn() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT plan_id FROM plans WHERE plan_id LIKE ? ORDER BY plan_id",
+            (raw + "%",),
+        ).fetchall()
+    if not rows:
+        from bacmap.application.errors import NotFound
+
+        raise NotFound(f"no such plan: {raw}")
+    if len(rows) > 1:
+        candidates = ", ".join(r["plan_id"][:12] for r in rows[:5])
+        raise SystemExit(
+            T(
+                f"Ambiguous plan prefix, lengthen it: {candidates}",
+                f"计划前缀多义，请加长：{candidates}",
+            )
+        )
+    return str(rows[0]["plan_id"])
+
+
 def _run(fn: Callable[[], Any]) -> Any:
     try:
         return fn()
@@ -77,7 +102,9 @@ def run_ls(args: argparse.Namespace) -> None:
 
 
 def run_show(args: argparse.Namespace) -> None:
-    rec = _run(lambda: _service(args).get(args.plan_id, args.version))
+    service = _service(args)
+    plan_id = _run(lambda: _resolve_plan_id(service, args.plan_id))
+    rec = _run(lambda: service.get(plan_id, args.version))
     if args.json:
         print(json.dumps(_as_json(rec), ensure_ascii=False, indent=2))
         return
@@ -95,7 +122,8 @@ def run_show(args: argparse.Namespace) -> None:
 
 def run_confirm(args: argparse.Namespace) -> None:
     service = _service(args)
-    rec = _run(lambda: service.get(args.plan_id, args.version))
+    plan_id = _run(lambda: _resolve_plan_id(service, args.plan_id))
+    rec = _run(lambda: service.get(plan_id, args.version))
     expected = args.hash
     if not expected:
         # 交互确认：先展示被确认的确切版本，再以其哈希确认（人看到什么就确认什么）。
@@ -121,9 +149,9 @@ def run_confirm(args: argparse.Namespace) -> None:
 
 
 def run_reject(args: argparse.Namespace) -> None:
-    out = _run(
-        lambda: _service(args).reject(args.plan_id, args.version, args.reason, _actor())
-    )
+    service = _service(args)
+    plan_id = _run(lambda: _resolve_plan_id(service, args.plan_id))
+    out = _run(lambda: service.reject(plan_id, args.version, args.reason, _actor()))
     print(
         T(
             f"plan {out.plan_id} v{out.version} rejected",
