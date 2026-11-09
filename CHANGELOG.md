@@ -3,7 +3,67 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [0.1.3] - 2026-11-09
+## [0.1.4] - 2026-11-09
+
+### CLI 基础设施（PLAN #12/#13/#17/#18/#19）
+
+- **`bacmap stats`**：全库统计汇总——任务/计划/运行/GOM/化验/知识库/研究会话/
+  文件大小，`--json` 支持（PLAN #18）
+- **`bacmap detect <dir>`**：FASTQ 平台探测（读长启发式：Illumina/ONT/PacBio/unclear），
+  纯标准库 gzip 支持，多文件多数投票（PLAN #4）
+- **`bacmap species list|resolve`**：物种注册表查询——3 字母码、显示名、gside
+  标签、MLST 方案、SNP 组；按码/名称/标签过滤（PLAN #13）
+- **`bacmap reference list`**：参考基因组清单与就绪状态（PLAN #19）
+- **`bacmap completion bash|zsh`**：shell 补全脚本输出（PLAN #12）
+- **`bacmap ops`** 命令组：doctor/backup/restore/results/events 收纳为二级命令，
+  旧顶层命令保留兼容（PLAN #17）
+- **plan 前缀解析**：`plan show/confirm/reject` 支持短前缀（同 task 命令）
+- **sample 分页**：`sample ls --limit/--offset`（PLAN #15）
+
+### i18n 双语言变量（PLAN #1）
+
+- `[ui] language`（全局默认）+ `[ui] cli_language`（CLI 专用覆盖）
+- 环境变量优先级：`BACMAP_CLI_LANG` > `BACMAP_LANG` > `cli_language` > `language`
+- 新增 `system_language()` 函数（供 Web/TUI 使用，不读 CLI 覆盖）
+
+### 安装与硬件需求（PLAN #2/#10）
+
+- **`scripts/setup.sh`**：一键安装脚本（curl 可执行）——检查 pixi → 克隆 → install → doctor
+- **`docs/getting-started/llm-install.md`**：LLM 可执行安装指令（贴给任意智能体即装）
+- 安装文档双语增加硬件需求表：最低 8核16G / 工作站 16核64G / 服务器 64核256G
+  （GTDB-Tk full-tree）+ 本地 LLM 配置（5060Ti 16G+64G / 2×DGX Spark）
+- 一键安装命令写入安装文档
+
+### 计划流程图 SVG（PLAN #3）
+
+- `plan show --diagram out.svg`：任务流→SVG 流程图（确定性渲染、离线无依赖）
+- 任务框（类型+摘要）→ 箭头 → 结尾状态节点
+
+### 架构设计文档（PLAN #5/#8/#11/#14）
+
+- **`docs/concepts/flexible-workflow.zh.md`**：两层弹性模型——固定层（registry 驱动
+  的确定性监测流程）+ 弹性层（AI 生成临时 smk → 人审 → 沙箱执行 → 一次性归档）
+- **`docs/concepts/gbrain.zh.md`**：GBrain 双核心——长期知识库 + 知识图谱
+- **`docs/concepts/accounts.zh.md`**：三模式用户管理——单用户/多用户（角色+审核）/多系统（联邦）
+- **`docs/guide/gene-investigation.zh.md`**：基因调查编排——六步端到端方案
+
+### 术语表与嵌入指南（PLAN #16/#20）
+
+- **`docs/concepts/glossary.zh.md`**：isolate/sample/task/plan/参考基因组等核心概念定义
+- **agent-plans §10**：bacmap 控制台嵌入各 harness——DSH（已实现）/ Hermes（Desktop
+  plugin）/ Pi（glimpseui WebView）+ 远程部署（SSH 隧道/token/VPN）
+
+### 仓库整理
+
+- `scripts/README.md` 更新（安装+数据准备分区）
+- 参考基因组管理链、物种命名流转链写入术语表
+
+### 下版本预告（0.2.0）
+
+- Vue 3 + Vite SPA 前端重设计（TresJS/Three.js + ECharts + D3.js）
+- flye/unicycler/trycycler smk 组装规则（长读/混合组装路径）
+
+- 测试基线：1959 → 1989（+30：fastq_probe/species/completion/stats/plan_flow/i18n_config）
 
 ### 仓库整理（configs/、tools/、scripts/、开发文档出库）
 
