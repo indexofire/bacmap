@@ -8,9 +8,19 @@ SHOVILL_DEPTH = config["tools"]["shovill"]["depth"]
 
 
 def _contigs_src(wc):
-    """contigs 的上游：reads 样本 → shovill 产物；assembly 直入样本 → 用户 FASTA。"""
+    """contigs 的上游：按输入形态路由到对应组装器。
+
+    - assembly 直入样本 → 用户 FASTA
+    - 纯长读（longread 列，无 R1/R2）→ flye（ONT/PacBio 平台探测）
+    - 混合（R1/R2 + longread）→ unicycler
+    - 纯短读（R1/R2，无 longread）→ shovill
+    """
     if wc.sample in FASTA_SAMPLES:
         return assembly_path(wc)
+    if wc.sample in LONG_ONLY_SAMPLES:
+        return str(WORKDIR) + "/" + wc.sample + "/assembly/flye/contigs.fa"
+    if wc.sample in HYBRID_SAMPLES:
+        return str(WORKDIR) + "/" + wc.sample + "/assembly/unicycler/contigs.fa"
     return str(WORKDIR) + "/" + wc.sample + "/assembly/shovill/contigs.fa"
 
 

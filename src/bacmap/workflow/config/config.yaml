@@ -53,6 +53,17 @@ tools:
     minlen: 500
     ram: 8
     depth: 100
+  flye:
+    minlen: 1000
+    # ONT 读类型：hq = R10.4.1 SUP（Q20+，默认）；raw = 旧 R9.4 低质量
+    ont_mode: "hq"
+    # genome_size：留空则由 flye 2.9+ 自动估计（推荐，细菌基因组准确）；
+    # 显式设置仅用于特殊场景（如极大基因组或估计偏差大时）
+    # genome_size: "5m"
+  unicycler:
+    mode: "normal"
+  trycycler:
+    min_identity: 0.95
   blastn:
     evalue: 1e-50
     word_size: 28

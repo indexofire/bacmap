@@ -73,16 +73,30 @@ bacmap：静态校验（语法/规则名/路径白名单）
 
 ## 平台分支规则（PLAN #4）
 
-| 检测结果 | 组装器 | 触发条件 |
-|---|---|---|
-| illumina | spades/shovill（现有） | 中位读长 ≤400bp |
-| nanopore | flye `--nano-raw` | 中位读长 ≥1kb，分布宽 |
-| pacbio_hifi | flye `--pacbio-hifi` | 中位读长 ≥5kb，分布均匀 |
-| 混合（短+长） | unicycler | 同一样本同时有 R1/R2 + 长读 |
-| 特殊 | trycycler | 用户显式指定 |
+| 检测结果 | 组装器 | 触发条件 | smk 规则 |
+|---|---|---|---|
+| illumina | spades/shovill（现有） | 中位读长 ≤400bp，仅有 R1/R2 | `assembly.smk` |
+| nanopore | flye `--nano-raw` | 中位读长 ≥1kb，分布宽，仅有 longread | `assembly_long.smk` |
+| pacbio_hifi | flye `--pacbio-hifi` | 中位读长 ≥5kb，分布均匀，仅有 longread | `assembly_long.smk` |
+| 混合（短+长） | unicycler | 同一样本同时有 R1/R2 + longread | `assembly_long.smk` |
+| 特殊 | trycycler | 用户在 samples.tsv platform 列写 "trycycler" | `assembly_long.smk` |
 
 探测由 `bacmap detect` 或 `task submit --fastq-dir` 自动触发（`core/fastq_probe.py`），
-结果记入任务参数。用户可用 `--platform` 覆盖探测结果。
+结果记入 samples.tsv 的 `platform` 列。用户可在 samples.tsv 的 `platform` 列覆盖
+探测结果（`ont` / `pacbio_hifi`）。
+
+### samples.tsv 新增列（v1.4.42）
+
+```
+sample    species    R1    R2    longread              assembly    platform
+SAMP-001  SAL        ...   ...                        (空)        illumina
+SAMP-002  VPA        (空)  (空)  /path/ont_reads.fq    (空)        nanopore
+SAMP-003  VPA        ...   ...   /path/ont_reads.fq    (空)        ont
+SAMP-004  ECO        (空)  (空)                        .../fna     (空)
+```
+
+- `longread`：长读 FASTQ 路径（自动检测或手动填写）
+- `platform`：测序平台（`ont`/`pacbio_hifi`/`illumina`/`trycycler`，自动探测可覆盖）
 
 ## 资源仲裁（PLAN #10）
 

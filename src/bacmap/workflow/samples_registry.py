@@ -24,7 +24,10 @@ from bacmap.tools._common import _validate_sample_id
 _FASTA_EXTS = {".fna", ".fasta", ".fa"}
 # `sample` 列语义 = dataset_id（历史列名保留，避免改 10 个 .smk 规则）；
 # isolate/platform 为 v1.8 身份模型列；checksum 用于同名冲突检测。
-_HEADER = ["sample", "species", "R1", "R2", "assembly", "isolate", "platform", "checksum"]
+_HEADER = [
+    "sample", "species", "R1", "R2", "longread",
+    "assembly", "isolate", "platform", "checksum",
+]
 _IDENTITY_COLUMNS = ("isolate", "platform", "checksum")
 
 _READ_STEMS = (".fastq.gz", ".fq.gz", ".fastq.bz2", ".fq.bz2", ".fastq", ".fq")
@@ -150,6 +153,13 @@ def _load_table(home: Path) -> tuple[Path, list[str], list[list[str]]]:
         header = list(_HEADER)
     if "assembly" not in header:  # v1.x 四列表升级
         header.append("assembly")
+    if "longread" not in header:  # v1.4.42 长读列（PLAN #4）
+        r2_idx = header.index("R2") + 1 if "R2" in header else len(header)
+        header.insert(r2_idx, "longread")
+        # 同步在已有行插入空值（位置对齐）
+        for parts in body:
+            if len(parts) >= r2_idx:
+                parts.insert(r2_idx, "")
     for col in _IDENTITY_COLUMNS:
         if col not in header:
             header.append(col)
@@ -231,6 +241,45 @@ def _ensure_isolates(home: Path, rows: list[list[str]], header: list[str]) -> No
         pass
 
 
+
+def _scan_unpaired_longreads(
+    fastq_dir: Path, pairs: list[tuple[Path, Path | None]]
+) -> list[tuple[Path, str]]:
+    """识别长读 FASTQ（读长≥1kb），返回 (path, platform) 列表。
+
+    排除已配对（R1+R2 都有）的文件；单端 "R1"（无 R2）也参与探测——
+    文件名尾部数字（如 ONT-001）会被 _MATE_PAT 误判为 mate 标记，
+    但读长探测（≥1kb）能正确区分长读与真正的单端短读。
+    """
+    from bacmap.core.fastq_probe import classify, probe_file
+
+    paired = set()
+    for r1, r2 in pairs:
+        if r2 is not None:
+            paired.add(r1.resolve())
+            paired.add(r2.resolve())
+        else:
+            # 单端（无 R2）：不排除，可能是长读（文件名误匹配 mate 模式）
+            pass
+
+    results: list[tuple[Path, str]] = []
+    seen: set[Path] = set()
+    for p in sorted(fastq_dir.rglob("*")):
+        if not p.is_file() or p.resolve() in paired or p.resolve() in seen:
+            continue
+        if ".fastq" not in p.name.lower() and ".fq" not in p.name.lower():
+            continue
+        seen.add(p.resolve())
+        try:
+            probe = probe_file(p, sample_reads=200)
+            if probe.median_len >= 1000:
+                platform = classify(probe)
+                if platform in ("nanopore", "pacbio_hifi"):
+                    results.append((p, platform))
+        except (OSError, ValueError):
+            continue
+    return results
+
 def register_fastas(
     home: Path, fasta_dir: Path, species: str = ""
 ) -> dict[str, Any]:
@@ -277,6 +326,7 @@ def register_fastas(
             "species": code,
             "R1": "",
             "R2": "",
+            "longread": "",
             "assembly": str(fa.resolve()),
             "isolate": isolate,
             "platform": platform,
@@ -301,14 +351,18 @@ def register_fastas(
 def register_fastqs_dir(
     home: Path, fastq_dir: Path, species: str = ""
 ) -> dict[str, Any]:
-    """reads 目录登记（R1/R2 列）。无法装配前识别物种：species 省略时登记 ``UNK``。
+    """reads 目录登记（R1/R2 列 + 长读自动检测→longread 列）。
+
+    短读配对→R1/R2；未配对且读长≥1kb→longread（PLAN #4 flye/unicycler 路径）。
 
     同名冲突策略同 ``register_fastas``：按 R1+R2 内容哈希判断。
     """
     pairs = scan_fastq_pairs(fastq_dir)
-    if not pairs:
+    # 长读检测放在早退之前：纯长读目录（无 R1/R2 配对）也合法
+    longreads = _scan_unpaired_longreads(fastq_dir, pairs)
+    if not pairs and not longreads:
         raise FileNotFoundError(
-            f"目录内未识别到 FASTQ 配对（*_R1/_R2 或 *_1/_2）：{fastq_dir}"
+            f"目录内未识别到 FASTQ 配对（*_R1/_R2 或 *_1/_2）或长读文件：{fastq_dir}"
         )
     tsv, header, rows = _load_table(home)
 
@@ -343,9 +397,44 @@ def register_fastqs_dir(
             "species": species or "UNK",
             "R1": str(r1.resolve()),
             "R2": str(r2.resolve()),
+            "longread": "",
             "assembly": "",
             "isolate": isolate,
             "platform": platform,
+            "checksum": sum_,
+        }
+        rows.append([record.get(col, "") for col in header])
+        samples.append(sid)
+        added += 1
+
+    # 长读登记（PLAN #4：_scan_unpaired_longreads 已在上方调用）
+    detected_platforms: dict[str, str] = {}
+    for lr_path, lr_platform in longreads:
+        stem = _strip_read_ext(lr_path.name)
+        sid, isolate, _ = parse_dataset_name(stem)
+        if not _validate_sample_id(sid):
+            skipped.append({"file": str(lr_path), "reason": f"非法 dataset id {sid!r}"})
+            continue
+        detected_platforms[sid] = lr_platform
+        sum_ = _checksum([lr_path])
+        row = _existing(rows, header, sid)
+        if row is not None:
+            # 已有短读记录 → 填充 longread 列（混合组装 unicycler 路径）
+            lr_idx = header.index("longread") if "longread" in header else -1
+            if lr_idx >= 0:
+                row[lr_idx] = str(lr_path.resolve())
+            samples.append(sid)
+            continue
+        # 纯长读样本（flye 路径）
+        record = {
+            "sample": sid,
+            "species": species or "UNK",
+            "R1": "",
+            "R2": "",
+            "longread": str(lr_path.resolve()),
+            "assembly": "",
+            "isolate": isolate,
+            "platform": lr_platform,
             "checksum": sum_,
         }
         rows.append([record.get(col, "") for col in header])
@@ -359,6 +448,6 @@ def register_fastqs_dir(
         "added": added,
         "reused": len(samples) - added,
         "skipped": skipped,
-        "detected": {},
+        "detected": {"longread_platforms": detected_platforms},
         "samples_tsv": str(tsv),
     }

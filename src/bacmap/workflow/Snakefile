@@ -59,7 +59,16 @@ def _col(sample: str, col: str) -> str:
 # （已组装 FASTA，samples.tsv 的 assembly 列）跳过 QC/组装，直接进 contigs 通道。
 READS_SAMPLES = [s for s in SAMPLES if _col(s, "R1") and _col(s, "R2")]
 FASTA_SAMPLES = [s for s in SAMPLES if _col(s, "assembly") and s not in READS_SAMPLES]
-_NO_INPUT = [s for s in SAMPLES if s not in READS_SAMPLES and s not in FASTA_SAMPLES]
+# v1.4.42（PLAN #4）长读入口：longread 列有值的样本
+LONGREAD_SAMPLES = [s for s in SAMPLES if _col(s, "longread") and s not in FASTA_SAMPLES]
+# 混合组装：同时有短读 (R1/R2) 和长读 (longread) 的样本
+HYBRID_SAMPLES = [s for s in SAMPLES if s in READS_SAMPLES and s in LONGREAD_SAMPLES]
+# 纯长读：只有 longread、无 R1/R2 的样本
+LONG_ONLY_SAMPLES = [s for s in LONGREAD_SAMPLES if s not in READS_SAMPLES]
+_NO_INPUT = [
+    s for s in SAMPLES
+    if s not in READS_SAMPLES and s not in FASTA_SAMPLES and s not in LONGREAD_SAMPLES
+]
 if _NO_INPUT:
     raise ValueError(
         "samples.tsv 输入不完整（R1/R2 或 assembly 至少其一）: " + ", ".join(_NO_INPUT)
@@ -76,6 +85,7 @@ def assembly_path(wc):
 
 include: "rules/qc.smk"
 include: "rules/assembly.smk"
+include: "rules/assembly_long.smk"
 include: "rules/species.smk"
 include: "rules/typing_amr.smk"
 include: "rules/gspec_typing.smk"
