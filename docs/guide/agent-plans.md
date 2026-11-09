@@ -572,6 +572,75 @@ content it receives.
 confirm): analyze plan confirmed and executed to `succeeded`; read-only tools summarised
 MLST/AMR per sample; a `mine` plan ran in the rootless-Podman sandbox, produced
 `mine_report.json` and stopped at the mining gate until a human signature (`task approve` →
+
+## 10. Embedding the bacmap console in your harness (PLAN #20)
+
+Running bacmap Web and your agent harness in separate windows works, but some users prefer
+a single window. Each harness has a different mechanism:
+
+### DSH: sidebar bundle (implemented)
+
+`tools/dsh-bacmap-console` is a DSH bundle that embeds the bacmap web console in the DSH
+sidebar. It reverse-proxies `http://127.0.0.1:8800` under the DSH origin (removing
+`X-Frame-Options` and rewriting CSP `frame-ancestors`), so no separate browser tab is
+needed.
+
+```bash
+# Already in the bacmap repo; link it into your DSH profile:
+ln -s /path/to/bacmap/tools/dsh-bacmap-console ~/.dsh/profiles/web/node_modules/@local/
+```
+
+### Hermes: Desktop plugin panel
+
+Hermes Desktop supports custom sidebar panels via `desktop/plugin.js` in a plugin
+package. A bacmap panel would:
+
+1. Register a `bacmap_console` panel in `plugin.yaml`
+2. In `desktop/plugin.js`, create an `<iframe>` pointing to `http://127.0.0.1:8800`
+   (CORS headers may need adjusting, or use Hermes's built-in proxy)
+3. The panel appears alongside Hermes's built-in panels
+
+This requires Hermes Desktop (not the CLI/TUI version).
+
+### Pi: glimpseui WebView window
+
+Pi extensions can use the [`glimpse`](https://github.com/hazat/glimpse) native WebView
+to open bacmap Web in a floating window with **bidirectional JSON communication**:
+
+```typescript
+// Pi extension (TypeScript)
+import { spawn } from "child_process";
+
+export default {
+  name: "bacmap-panel",
+  tools: [{
+    name: "bacmap_panel",
+    description: "Open the bacmap web console",
+    parameters: { type: "object", properties: { path: { type: "string" } } },
+    execute: async (params) => {
+      const url = `http://127.0.0.1:8800${params.path || "/"}`;
+      const proc = spawn("glimpse", ["--url", url]);
+      return { text: `bacmap console opened: ${url}` };
+    },
+  }],
+};
+```
+
+Install: `pi install npm:glimpseui`
+
+### Remote deployment (bacmap on server, agent on laptop)
+
+When bacmap runs on a server and the agent runs locally:
+
+1. **SSH tunnel** (simplest): `ssh -L 8800:localhost:8800 server` — both Web and MCP
+   accessible via `localhost`
+2. **Direct HTTP with token**: expose `bacmap start web` on the LAN (with
+   `BACMAP_WEB_TOKEN`), and point the harness's MCP config to
+   `http://server:8765/mcp` with the token
+3. **VPN/WireGuard**: full network access, no special configuration needed
+
+The DSH reverse-proxy approach works for remote bacmap too — just change the proxy
+target from `localhost:8800` to the server address.
 `succeeded`). The agent self-corrected `input_data_class` D3→D2 under the cloud profile and
 never attempted to confirm a plan itself.
 
