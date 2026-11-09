@@ -105,6 +105,7 @@ nav:
       - Data & Identity: guide/data.md
       - Agents & Plans: guide/agent-plans.md
       - Results & Evidence: guide/results.md
+      - Gene Investigation: guide/gene-investigation.md
       - Research Workbench: guide/research-workbench.md
   - Concepts:
       - concepts/index.md
@@ -112,6 +113,9 @@ nav:
       - Data Model: concepts/data-model.md
       - Task Engine & DBOS: concepts/task-engine.md
       - Security: concepts/security.md
+      - Flexible Workflow: concepts/flexible-workflow.md
+      - GBrain: concepts/gbrain.md
+      - Accounts & Multi-user: concepts/accounts.md
       - Frozen Design: concepts/frozen-design.md
   - Operations:
       - operations/index.md
