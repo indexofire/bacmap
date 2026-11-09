@@ -17,7 +17,7 @@
   门（分析 · 基线 · 挖掘 · 引用） ──► 人工签批 / 报告
         │
         ▼
-  CLI · Web 任务台 · TUI · MCP（Hermes / Pi / DSH / 任意 MCP 客户端）
+  CLI · Vue 3 控制台（/console/） · TUI · MCP（Hermes / Pi / DSH / 任意 MCP 客户端）
 ```
 
 ## 自然语言入口（从这里开始）
@@ -69,7 +69,7 @@ pixi install                 # 运行时环境（Python 3.12 + 生信工具）
 pixi shell
 bacmap --version             # 0.1.5
 bacmap doctor                # 只读体检；仅在硬性失败时返回码为 1
-bacmap start web             # http://127.0.0.1:8800
+bacmap start web             # http://127.0.0.1:8800/console/
 ```
 
 从 Web 控制台或 CLI 跑一次分析：
@@ -117,4 +117,4 @@ bacmap plan confirm <plan_id> --version 1 --hash <first-12-chars>
 ```
 
 权威设计是冻结文档 [冻结设计](concepts/frozen-design.zh.md)（中文版为权威，英文版为参考
-翻译）。程序版本与冻结文档修订相互独立：当前构建为 **0.1.5**，设计修订为 **v1.10.12**。
+翻译）。程序版本与冻结文档修订相互独立：当前构建为 **0.1.5**，设计修订为 **v1.10.14**。

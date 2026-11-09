@@ -34,10 +34,15 @@ Origin: http://127.0.0.1:8800
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/v1/capabilities` | API version, bacmap version, plannable types, features |
+| GET | `/api/v1/overview` | system overview (versions, paths, policy, sandbox, counts) |
 | GET | `/api/v1/samples?cursor=&limit=` | completed-sample page (only the page is parsed) |
+| GET | `/api/v1/search?q=&serotype=&mlst_st=&amr_gene=` | sample search by keyword/serotype/ST/gene |
 | GET | `/api/v1/tasks?limit=` | recent tasks |
-| GET | `/api/v1/tasks/{id}` | task status |
+| POST | `/api/v1/tasks` | submit analyze/curate (`task_type`, `samples`, `scope`) |
+| GET | `/api/v1/tasks/{id}` | task status and metadata |
+| POST | `/api/v1/tasks/{id}/approve` | approval signature (`approver`, `decision`, `signature`, `comment?`) |
 | POST | `/api/v1/tasks/{id}/cancel` | cancel a non-terminal task |
+| POST | `/api/v1/records/{kind}` | record task (`metadata`/`lab`/`knowledge-import`/`knowledge-approve`) |
 | GET | `/api/v1/plans?limit=` | latest version of each plan |
 | GET | `/api/v1/plans/{id}?version=` | plan detail |
 | POST | `/api/v1/plans/{id}/confirm` | confirm + submit |
@@ -67,6 +72,27 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 
 curl -s -H "Authorization: Bearer $TOKEN" \
   http://127.0.0.1:8800/api/v1/tasks/3f9c2a1b | jq .
+```
+
+### Submit and approve a task
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"task_type":"analyze","samples":["SAM-TYP-001"]}' \
+  http://127.0.0.1:8800/api/v1/tasks | jq '{task_id,state}'
+
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"approver":"jane","decision":"approve","signature":"jd-2026-11-09"}' \
+  http://127.0.0.1:8800/api/v1/tasks/<task_id>/approve | jq '{state,message}'
+```
+
+### Search and overview
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:8800/api/v1/search?q=Salmonella&mlst_st=11" | jq '.items[] | {sample_id,verdict,st}'
+curl -s -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8800/api/v1/overview | jq '{sandbox,versions,cloud_max_data_class}'
 ```
 
 ### Confirm a plan (bearer mode)

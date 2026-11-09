@@ -25,5 +25,8 @@ htmlcov/
 # mkdocs 构建产物
 site/
 
+# Vue 3 控制台依赖（构建产物 static/console 入库；node_modules 不入库）
+frontend/node_modules/
+
 # 本地 gold standard 数据（符号链接指向旧项目数据目录，4.1GB 基因组数据不入库）
 tests/fixtures/gold_standard

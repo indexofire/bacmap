@@ -14,14 +14,17 @@ pixi shell
 回退到没有 DBOS 的 Python）。
 
 ```bash
-pixi run -e dev test          # pytest；当前基线 1959 passed
+pixi run -e dev test          # pytest；当前基线 2015 passed
 pixi run -e dev lint          # ruff（src + tests）
 pixi run -e dev typecheck     # 对 src/bacmap 跑 mypy
 pixi run -e dev contracts     # import-linter（5 条契约）
 pixi run -e dev docs-build    # mkdocs（英文 + 中文）
+pixi run -e web web-install   # Vue 控制台的 npm ci
+pixi run -e web web-build     # 重建 static/console（产物需提交）
 ```
 
-五项全部通过，改动才算完成。CI 按相同顺序执行。
+这些门全部通过，改动才算完成。CI 按相同顺序执行；前端产物由 `web` job 重建并
+校验与源码一致。
 
 ## Debug 模式（仅开发）
 

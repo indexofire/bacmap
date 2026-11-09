@@ -36,3 +36,18 @@ jobs:
           cache: true
       - name: docs-build (mkdocs)
         run: pixi run -e dev docs-build
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          environments: web
+          cache: true
+      - name: install frontend dependencies
+        run: pixi run -e web web-install
+      - name: build console (Vue 3 + Vite)
+        run: pixi run -e web web-build
+      - name: verify committed console assets
+        run: git diff --exit-code -- src/bacmap/interfaces/web/static/console

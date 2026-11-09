@@ -11,7 +11,8 @@ from typing import Any
 CSP = (
     "default-src 'self'; "
     "script-src 'self'; "
-    "style-src 'self'; "
+    # Vue 3 控制台使用少量一次性 style 属性（间距/尺寸）；脚本仍禁止内联与 eval。
+    "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data:; "
     "font-src 'self'; "
     "connect-src 'self'; "

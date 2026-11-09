@@ -6,7 +6,7 @@
 AI 智能体使用的 MCP 服务。数据不出本地网络。
 
 冻结设计：[docs/concepts/frozen-design.zh.md](docs/concepts/frozen-design.zh.md)（中文权威，修订
-**v1.10.12**）；[英文参考翻译](docs/concepts/frozen-design.md)。程序版本：**0.1.5**。
+**v1.10.14**）；[英文参考翻译](docs/concepts/frozen-design.md)。程序版本：**0.1.5**。
 
 ## 用自然语言操作（推荐入口）
 
@@ -29,7 +29,8 @@ MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小�
 
 ## 功能概览
 
-- **确定性管线** — Snakemake 9：QC → 组装 → 物种 → 分型/耐药 → 报告。短读用 shovill，
+- **确定性管线** — Snakemake 9：QC → 组装 → QUAST 组装质控 → Bakta 基因注释 →
+  eggNOG-mapper 功能分类 → 物种 → 分型/耐药 → 报告。短读用 shovill，
   ONT/PacBio 长读用 flye（`--nano-hq`/`--pacbio-hifi`），混合输入用 unicycler。物种鉴定、
   基因筛查/血清型、MLST/cgMLST 分别交给 [gside](https://github.com/indexofire/gside)、
   `gspec`、`gmlst`（ADR-20）。
@@ -43,7 +44,8 @@ MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小�
   GOM 对象。
 - **仅 MCP 的智能体接入** — 26 个注册表工具 + 计划/任务/记录工具，按固定的 `cloud`（默认）或
   `local-trusted` 数据分级 Profile 裁剪。无内置对话（ADR-21）。
-- **多种界面** — Web 任务台、CLI、TUI、JSON API `/api/v1`、MCP（stdio / Streamable HTTP）。
+- **多种界面** — `/console/` 的 Vue 3 控制台（暗色仪表盘、图表、审批）、`/legacy` 旧 Jinja
+  任务台、CLI、TUI、JSON API `/api/v1`、MCP（stdio / Streamable HTTP）。
 
 ## 快速开始
 
@@ -54,7 +56,7 @@ pixi shell
 bacmap --version        # 0.1.5
 bacmap config init      # 可选：从 config.example.toml 生成配置
 bacmap doctor           # 只读体检
-bacmap start web        # http://127.0.0.1:8800
+bacmap start web        # http://127.0.0.1:8800/console/
 ```
 
 第一次分析：

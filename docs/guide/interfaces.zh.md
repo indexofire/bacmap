@@ -5,27 +5,39 @@
 
 ## 1. Web 控制台
 
+默认界面是 **Vue 3 控制台**（`/console/`，Vite 构建，暗色仪器式仪表盘）；`/` 会重定向到
+这里。原 Jinja 任务台保留在 `/legacy` 以兼容旧链接。SPA 以预构建静态资源提供：运行期
+不需要 Node/Bun（ADR-01）；Node 只在重新构建前端时使用。
+
 ```bash
-bacmap start web                            # 127.0.0.1:8800 by default
+bacmap start web                            # 默认 127.0.0.1:8800
 bacmap start web --host 127.0.0.1 --port 8800
+
+# 前端改动后重新构建（仅开发期）
+pixi run -e web web-install
+pixi run -e web web-build
 ```
 
-页面：
+控制台路由：
 
 | 路由 | 用途 |
 |---|---|
-| `/` | 任务列表与提交表单（analyze/curate） |
-| `/tasks/{id}` | 任务详情、实时状态片段、审批卡 |
-| `/plans`、`/plans/{id}` | 智能体提出的计划、完整参数、确认/拒绝 |
-| `/samples`、`/samples/{id}` | 已完成的样本、单样本检出结果 |
-| `/samples/{id}/report` | 内联 HTML 报告（加 `?download=1` 改为附件下载） |
-| `/search` | 按关键词/血清型/ST/基因检索 |
-| `/records` | 元数据、化验结果和知识库条目的录入表单 |
-| `/runs`、`/gom` | 不可变的运行记录与 GOM 对象 |
-| `/overview` | 系统概览（版本、路径、数据策略、沙箱） |
+| `/console/` | 仪表盘：KPI、7 天趋势、状态分布、待审批 |
+| `/console/tasks` | 任务列表、筛选与提交抽屉（analyze/curate） |
+| `/console/tasks/{id}` | 任务详情、事件时间线、审批卡、取消 |
+| `/console/plans`、`/console/plans/{id}` | 智能体提出的计划、完整参数、确认/拒绝 |
+| `/console/runs`、`/console/runs/{id}` | 不可变运行记录与来源比较 |
+| `/console/records` | 元数据、化验结果、知识导入/审核表单 |
+| `/console/overview` | 系统概览（版本、路径、数据策略、沙箱） |
+| `/console/search` | 按关键词/血清型/ST/基因检索样本 |
+| `/legacy` | 原 Jinja 任务台 |
+| `/samples`、`/samples/{id}` | 已完成样本与单样本检出结果（旧页） |
+| `/samples/{id}/report` | 内联 HTML 报告（`?download=1` 改为附件） |
+| `/gom` | GOM 对象（旧页） |
 | `/api/v1/*` | JSON API（见 [HTTP API 参考](../reference/api.zh.md)） |
 
-任务详情页每两秒轮询一次 `/tasks/{id}/fragment`；不使用外部 JavaScript 或 CDN（可离线使用）。
+任务详情页在非终态时每两秒轮询 `/api/v1/tasks/{id}`。所有资源（CSS、JS、图标、favicon）
+均为本地文件；不使用 CDN 或 webfont（可离线使用）。
 
 ### 提交任务
 

@@ -34,10 +34,15 @@ Origin: http://127.0.0.1:8800
 | 方法 | 路径 | 用途 |
 |---|---|---|
 | GET | `/api/v1/capabilities` | API 版本、bacmap 版本、可计划类型、特性 |
+| GET | `/api/v1/overview` | 系统概览（版本、路径、数据策略、沙箱、任务计数） |
 | GET | `/api/v1/samples?cursor=&limit=` | 已完成样本分页（仅解析当前页） |
+| GET | `/api/v1/search?q=&serotype=&mlst_st=&amr_gene=` | 按关键词/血清型/ST/基因检索样本 |
 | GET | `/api/v1/tasks?limit=` | 最近的任务 |
-| GET | `/api/v1/tasks/{id}` | 任务状态 |
+| POST | `/api/v1/tasks` | 提交 analyze/curate（`task_type`、`samples`、`scope`） |
+| GET | `/api/v1/tasks/{id}` | 任务状态与元数据 |
+| POST | `/api/v1/tasks/{id}/approve` | 审批签名（`approver`、`decision`、`signature`、`comment?`） |
 | POST | `/api/v1/tasks/{id}/cancel` | 取消非终态任务 |
+| POST | `/api/v1/records/{kind}` | 记录任务（`metadata`/`lab`/`knowledge-import`/`knowledge-approve`） |
 | GET | `/api/v1/plans?limit=` | 每个计划的最新版本 |
 | GET | `/api/v1/plans/{id}?version=` | 计划详情 |
 | POST | `/api/v1/plans/{id}/confirm` | 确认 + 提交 |
@@ -67,6 +72,27 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 
 curl -s -H "Authorization: Bearer $TOKEN" \
   http://127.0.0.1:8800/api/v1/tasks/3f9c2a1b | jq .
+```
+
+### 提交与审批任务
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"task_type":"analyze","samples":["SAM-TYP-001"]}' \
+  http://127.0.0.1:8800/api/v1/tasks | jq '{task_id,state}'
+
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"approver":"jane","decision":"approve","signature":"jd-2026-11-09"}' \
+  http://127.0.0.1:8800/api/v1/tasks/<task_id>/approve | jq '{state,message}'
+```
+
+### 检索与概览
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:8800/api/v1/search?q=Salmonella&mlst_st=11" | jq '.items[] | {sample_id,verdict,st}'
+curl -s -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8800/api/v1/overview | jq '{sandbox,versions,cloud_max_data_class}'
 ```
 
 ### 确认计划（bearer 模式）

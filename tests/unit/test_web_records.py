@@ -29,7 +29,7 @@ def test_page_lists_three_forms(setup):
     body = c.get("/records").text
     for frag in ("菌株元数据", "化验结果", "文献知识库", 'action="/records/metadata"'):
         assert frag in body
-    assert 'href="/records"' in c.get("/").text
+    assert 'href="/records"' in c.get("/legacy").text
 
 
 def test_metadata_form_creates_task(setup):

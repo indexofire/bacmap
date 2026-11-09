@@ -15,11 +15,13 @@ Never use the system Python for tests: `pixi run -e dev test` (without `-e dev`,
 back to a Python without DBOS).
 
 ```bash
-pixi run -e dev test          # pytest; current baseline 1959 passed
+pixi run -e dev test          # pytest; current baseline 2015 passed
 pixi run -e dev lint          # ruff (src + tests)
 pixi run -e dev typecheck     # mypy on src/bacmap
 pixi run -e dev contracts     # import-linter (5 contracts)
 pixi run -e dev docs-build    # mkdocs (English + Chinese)
+pixi run -e web web-install   # npm ci for the Vue console
+pixi run -e web web-build     # rebuild static/console (commit the result)
 ```
 
 All five must be green before a change is considered done. CI runs the same order.
@@ -154,7 +156,7 @@ Guidelines:
   release decision.
 - Frozen design revision: the title and revision table in
   `docs/concepts/frozen-design.zh.md` (v1.10.0), independent of the program version.
-- Test baseline: `AGENTS.md` rule 7 (currently 1857).
+- Test baseline: `AGENTS.md` rule 7 (currently 2015).
 
 ## 10. Commit checklist
 

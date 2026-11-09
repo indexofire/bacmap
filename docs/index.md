@@ -18,7 +18,7 @@ sequencing reads / assembled genomes
   gates (analysis · baseline · mining · citation) ──► human approval / report
         │
         ▼
-  CLI · Web task console · TUI · MCP (Hermes / Pi / DSH / any MCP client)
+  CLI · Vue 3 console (/console/) · TUI · MCP (Hermes / Pi / DSH / any MCP client)
 ```
 
 ## Natural-language entry point (start here)
@@ -72,7 +72,7 @@ pixi install                 # runtime environment (Python 3.12 + bioinformatics
 pixi shell
 bacmap --version             # 0.1.5
 bacmap doctor                # read-only health check; exit code 1 only on hard failures
-bacmap start web             # http://127.0.0.1:8800
+bacmap start web             # http://127.0.0.1:8800/console/
 ```
 
 Run an analysis from the Web console or CLI:
@@ -123,4 +123,4 @@ Development       environment, tests, contracts, adding capabilities
 The authoritative design is the frozen document
 [Frozen design](concepts/frozen-design.md) (Chinese version is authoritative; English is a
 reference translation). The program version and the frozen-document revision are independent:
-this build is **0.1.5**, the design revision is **v1.10.12**.
+this build is **0.1.5**, the design revision is **v1.10.14**.

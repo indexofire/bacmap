@@ -3,6 +3,46 @@
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 细菌基因组注释（QUAST → Bakta → eggNOG-mapper）
+
+- **`workflow/rules/annotation.smk` 替换占位实现**：组装后先跑 QUAST
+  （`assembly/qc` 报告），再跑 Bakta 基因注释（JSON/GFF3/FAA/TSV）与
+  eggNOG-mapper 功能分类（COG/GO/KEGG/CAZy/Pfam），合并为
+  `annotation/annotation.json`。
+- 新增 `core/annotation_parse.py`：Bakta stats/CDS 与 eggNOG `#query` 表解析、
+  COG/GO/KEGG 计数、Bakta 特征与 eggNOG query 关联；`collect_summary.py`
+  的 annotation 段增加 `status`/`bakta`/`eggnog`，并容忍无 identity 的注释特征。
+- 依赖新增 `bakta >=1.12`、`eggnog-mapper >=2.1.12`（conda）与
+  `quast >=5.2`（PyPI）；AMRFinderPlus 升级到 `>=4.2.7`，既作为 Bakta 1.12
+  内部 AMR 专家系统依赖，也保留直接 `amrfinder` 规则用于 AMR 基因 + 点突变检出。
+  gspec `ncbi` 提供同一 Reference Gene Catalog 的存在性筛查（不含点突变）；
+  `abricate` 依赖移除（CARD/VFDB/PlasmidFinder 早已由 gspec screen 承担）。
+  数据库不随 `pixi install` 下载，新增
+  `scripts/setup_annotation_dbs.py`，默认写入 `$BACMAP_HOME/refs/`，可用
+  `BACMAP_BAKTA_DB` / `BACMAP_EGGNOG_DATA_DIR` 覆盖。
+- `BACMAP_ANNOTATION_ENABLED=0` 时写 `disabled` 占位，不伪造注释结果；
+  ADR-20 不再等待 gspec 注释子命令（冻结文档 v1.10.14）。
+- 测试基线 2006 → 2015（+9：Bakta/eggNOG 解析合并 4、collect_summary 1、
+  DAG 启用/关闭 2、报告注释章节 2）。
+
+### Web 控制台重设计（Vue 3 + Vite SPA）
+
+- 新增 `frontend/`：Vue 3 + Vite + TypeScript 控制台，构建产物提交在
+  `src/bacmap/interfaces/web/static/console/`，由 FastAPI 托管；运行期零 Node（ADR-01）。
+- `/` 重定向到 `/console/`；原 Jinja 任务台保留 `/legacy`。控制台包含仪表盘
+  （KPI、7 天趋势、状态环图、待审批）、任务列表/提交抽屉/详情/审批/事件时间线、
+  计划确认/拒绝、运行记录与来源比较、数据记录表单、系统概览、样本检索。
+- 新增 `/api/v1` 端点：`POST /tasks`、`POST /tasks/{id}/approve`、
+  `POST /records/{kind}`、`GET /overview`、`GET /search`；`GET /tasks/{id}` 返回完整元数据。
+  任务提交者由服务端固定为 `web`，不接受客户端伪造。
+- 新增 pixi `web` 环境（仅 Node，独立求解避免主环境 libzlib 冲突）与
+  `web-install`/`web-build`/`web-dev` 任务；CI 增加 web job 重建产物并校验一致性。
+- 视觉延续 `DESIGN.md` 暗色 Linear 风格；ECharts 按需加载，无 3D、无 CDN/webfont。
+- 测试基线 2000 → 2006（+6：SPA 根重定向/静态资源、任务提交、审批校验、
+  概览/检索、记录提交）。
+
 ## [0.1.5] - 2026-11-09
 
 ### 长读/混合组装规则（PLAN #4）

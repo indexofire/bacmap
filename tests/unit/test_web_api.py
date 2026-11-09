@@ -68,6 +68,58 @@ class TestTasks:
         missing = c.get("/api/v1/tasks/nope")
         assert missing.status_code == 404 and missing.json()["code"] == "not_found"
 
+    def test_submit_returns_metadata(self, env):
+        _, c, _ = env
+        r = c.post(
+            "/api/v1/tasks",
+            json={"task_type": "analyze", "samples": "S1,S2", "submitted_by": "spa"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["task_type"] == "analyze" and body["submitted_by"] == "web"
+        assert body["state"] == "running"
+        assert c.get(f"/api/v1/tasks/{body['task_id']}").json()["task_type"] == "analyze"
+
+    def test_submit_rejects_open_path_and_bad_scope(self, env):
+        _, c, _ = env
+        assert c.post("/api/v1/tasks", json={"task_type": "mine", "samples": "S1"}).status_code == 400
+        assert (
+            c.post("/api/v1/tasks", json={"task_type": "analyze", "samples": "S1", "scope": "[]"}).status_code
+            == 400
+        )
+
+    def test_approve_validation(self, env):
+        engine, c, _ = env
+        tid = engine.submit(TaskType.CURATE, {"scope": {}}, "cli")
+        bad = c.post(
+            f"/api/v1/tasks/{tid}/approve",
+            json={"approver": "ann", "decision": "approve", "signature": "sig"},
+        )
+        assert bad.status_code == 409  # 仍在 running，审批门未到
+        missing = c.post(
+            "/api/v1/tasks/nope/approve",
+            json={"approver": "ann", "decision": "approve", "signature": "sig"},
+        )
+        assert missing.status_code == 404
+
+    def test_overview_and_search(self, env):
+        _, c, _ = env
+        overview = c.get("/api/v1/overview").json()
+        assert "BACMAP_HOME" in overview["paths"]
+        assert overview["cloud_max_data_class"] in ("D1", "D2")
+        hits = c.get("/api/v1/search?q=Salmonella").json()["items"]
+        assert {row["sample_id"] for row in hits} == {"S1", "S2", "S3"}
+
+    def test_record_submit(self, env):
+        _, c, _ = env
+        r = c.post(
+            "/api/v1/records/metadata",
+            json={"strain_id": "S1", "fields": {"collection_date": "2026-01-01"}},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["task_type"] == "record" and body["state"] == "running"
+
 
 class TestPlans:
     def test_list_get_confirm_reject(self, env):

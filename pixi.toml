@@ -32,8 +32,7 @@ numpy = "<2"
 # gspec 0.10 的 click CLI 需要 click>=8.2；>=8.5 与 gside/gspec 当前签名一致。
 click = ">=8.5"
 fastp = "1.3.5.*"
-abricate = ">=1.4.0,<2"
-ncbi-amrfinderplus = "3.12.*"
+ncbi-amrfinderplus = ">=4.2.7,<5"
 iqtree = "3.1.2.*"
 prodigal = ">=2.6.3,<3"
 kma = ">=1.4"
@@ -46,6 +45,8 @@ mummer4 = "*"
 shigatyper = ">=2.0.5,<3"
 flye = ">=2.9.5,<3"
 unicycler = ">=0.5.1,<0.6"
+bakta = ">=1.12,<2"
+eggnog-mapper = ">=2.1.12,<3"
 
 [pypi-dependencies]
 gmlst = "==0.6.1"
@@ -72,6 +73,7 @@ pydantic-ai-slim = { version = ">=2.0,<3", extras = ["openai"] }
 gside = "==0.2.2"
 textual = ">=0.80"
 bacmap = { path = ".", editable = true }
+quast = ">=5.2.0, <6"
 
 [feature.dev.dependencies]
 pytest = ">=8.0"
@@ -92,6 +94,15 @@ docs-build = { cmd = "mkdocs build" }
 typecheck = { cmd = "mypy src/bacmap", env = { PYTHONPATH = "$PIXI_PROJECT_ROOT/src" } }
 coverage = { cmd = "pytest --cov=bacmap --cov-report=term-missing", env = { PYTHONPATH = "$PIXI_PROJECT_ROOT/src" } }
 
+# Vue 3 控制台构建（ADR-01：Node 只在构建期；独立环境避免与主环境 libzlib 冲突）。
+[feature.web.dependencies]
+nodejs = ">=22"
+
+[feature.web.tasks]
+web-install = { cmd = "npm --prefix frontend ci --no-audit --no-fund" }
+web-build = { cmd = "npm --prefix frontend run build" }
+web-dev = { cmd = "npm --prefix frontend run dev" }
+
 # 重组检测（ADR-20：外部工具；不进默认环境，按需 `pixi run -e recomb ...`）。
 # 缺失时重组步骤写 status=skipped（不静默、不改判定）。
 [feature.recomb.dependencies]
@@ -99,5 +110,7 @@ gubbins = ">=3.3"
 
 [environments]
 dev = ["dev"]
+# Vue 3 控制台构建环境：只装 Node，不继承主环境（避免 libzlib 求解冲突）。
+web = { features = ["web"], no-default-feature = true }
 # 独立求解（不继承默认依赖）：gubbins 需 iqtree 2.0.3.*，与默认 iqtree 3.1.2.* 冲突。
 recomb = { features = ["recomb"], no-default-feature = true }

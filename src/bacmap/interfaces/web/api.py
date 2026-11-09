@@ -15,7 +15,7 @@ import time
 from collections.abc import Iterator
 from importlib.metadata import version as pkg_version
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
@@ -28,10 +28,18 @@ from bacmap.interfaces.views import (
     gom_object,
     list_gom_objects,
     list_runs,
+    overview_data,
     run_detail,
     sample_page,
+    sample_rows,
+    search_rows,
 )
 from bacmap.interfaces.web.auth import verify_csrf
+from bacmap.interfaces.web.payloads import (
+    approval_payload,
+    fields_from_text,
+    submit_task_payload,
+)
 from bacmap.research.discovery import ExploreRequest
 from bacmap.research.models import (
     ClaimCreate,
@@ -52,7 +60,7 @@ from bacmap.research.service import (
 )
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 from bacmap.tasks.events import EventLog
-from bacmap.tasks.spec import TaskId
+from bacmap.tasks.spec import TaskId, TaskType
 
 API_VERSION = "1"
 _STATUS = {"validation_error": 400, "not_found": 404, "conflict": 409}
@@ -69,6 +77,33 @@ class ConfirmBody(BaseModel):
 class RejectBody(BaseModel):
     version: int
     reason: str = Field(min_length=1, max_length=500)
+
+
+class TaskSubmitBody(BaseModel):
+    task_type: str
+    samples: list[str] | str = ""
+    scope: dict[str, Any] | str | None = None
+
+
+class ApprovalBody(BaseModel):
+    approver: str = Field(min_length=1, max_length=64)
+    decision: Literal["approve", "reject"]
+    signature: str = Field(min_length=1, max_length=256)
+    comment: str | None = None
+
+
+class RecordBody(BaseModel):
+    strain_id: str = ""
+    sample_id: str = ""
+    fields: dict[str, str] | str = ""
+    category: str = ""
+    test_name: str = ""
+    result: str = ""
+    unit: str = ""
+    title: str = ""
+    identifier: str = ""
+    content: str = ""
+    entry_id: str = ""
 
 
 def _require_csrf(request: Request) -> None:
@@ -89,6 +124,7 @@ def build_api_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
 
     _meta_routes(router, engine)
     _task_routes(router, engine)
+    _record_routes(router, engine)
     _plan_routes(router, PlanService(engine, engine.db))
     _event_routes(router, engine, EventLog(engine.db))
     _evidence_routes(router, engine)
@@ -103,7 +139,18 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
             "api_version": API_VERSION,
             "bacmap_version": pkg_version("bacmap"),
             "plannable_task_types": ["analyze", "curate"],
-            "features": ["plans", "tasks", "events.poll", "events.sse", "samples.cursor"],
+            "features": [
+                "plans",
+                "tasks",
+                "tasks.submit",
+                "tasks.approve",
+                "events.poll",
+                "events.sse",
+                "samples.cursor",
+                "overview",
+                "search",
+                "records",
+            ],
         }
 
     @router.get("/samples")
@@ -111,18 +158,56 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         items, next_cursor = sample_page(engine.home, cursor, _limit(limit))
         return {"items": items, "next_cursor": next_cursor}
 
+    @router.get("/overview")
+    def overview() -> dict[str, Any]:
+        return overview_data(engine)
+
+    @router.get("/search")
+    def search(
+        q: str = "",
+        serotype: str = "",
+        mlst_st: str = "",
+        amr_gene: str = "",
+    ) -> dict[str, Any]:
+        rows = search_rows(sample_rows(engine), q, serotype, mlst_st, amr_gene)
+        return {"items": rows}
+
 
 def _task_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
     @router.get("/tasks")
     def list_tasks(limit: int = 50) -> dict[str, Any]:
         return {"items": engine.list_tasks(_limit(limit))}
 
+    @router.post("/tasks")
+    def create_task(request: Request, body: TaskSubmitBody) -> dict[str, Any]:
+        _require_csrf(request)
+        tt, params = submit_task_payload(body.task_type, body.samples, body.scope)
+        try:
+            tid = engine.submit(tt, params, "web")
+        except (ValueError, NotImplementedError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return engine.get_task(tid)
+
     @router.get("/tasks/{task_id}")
     def get_task(task_id: str) -> dict[str, Any]:
         try:
-            return engine.status(TaskId(task_id)).model_dump(mode="json")
+            return engine.get_task(TaskId(task_id))
         except KeyError as exc:
             raise NotFound(f"no such task: {task_id}") from exc
+
+    @router.post("/tasks/{task_id}/approve")
+    def approve_task(request: Request, task_id: str, body: ApprovalBody) -> dict[str, Any]:
+        _require_csrf(request)
+        try:
+            engine.approve(
+                TaskId(task_id),
+                approval_payload(body.approver, body.decision, body.signature, body.comment),
+            )
+        except KeyError as exc:
+            raise NotFound(f"no such task: {task_id}") from exc
+        except ValueError as exc:
+            raise Conflict(str(exc)) from exc
+        return engine.get_task(TaskId(task_id))
 
     @router.post("/tasks/{task_id}/cancel")
     def cancel_task(request: Request, task_id: str) -> dict[str, Any]:
@@ -133,7 +218,51 @@ def _task_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
             raise NotFound(f"no such task: {task_id}") from exc
         except ValueError as exc:
             raise Conflict(str(exc)) from exc
-        return engine.status(TaskId(task_id)).model_dump(mode="json")
+        return engine.get_task(TaskId(task_id))
+
+
+def _record_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
+    """记录类任务（metadata/lab/knowledge）的 JSON 入口。"""
+
+    @router.post("/records/{kind}")
+    def create_record(request: Request, kind: str, body: RecordBody) -> dict[str, Any]:
+        _require_csrf(request)
+        params: dict[str, Any]
+        if kind == "metadata":
+            params = {
+                "kind": "metadata",
+                "strain_id": body.strain_id.strip(),
+                "sample_id": (body.sample_id.strip() or body.strain_id.strip()),
+                "fields": fields_from_text(body.fields),
+            }
+        elif kind == "lab":
+            params = {
+                "kind": "lab_result",
+                "strain_id": body.strain_id.strip(),
+                "category": body.category.strip(),
+                "test_name": body.test_name.strip(),
+                "result": body.result.strip(),
+                "unit": body.unit.strip(),
+            }
+        elif kind == "knowledge-import":
+            params = {
+                "kind": "knowledge_import",
+                "title": body.title.strip(),
+                "identifier": body.identifier.strip(),
+                "content": body.content.strip(),
+            }
+        elif kind == "knowledge-approve":
+            try:
+                params = {"kind": "knowledge_approve", "entry_id": int(body.entry_id)}
+            except ValueError as exc:
+                raise HTTPException(400, "entry_id 必须是整数") from exc
+        else:
+            raise HTTPException(404, "未知的记录类型")
+        try:
+            tid = engine.submit(TaskType.RECORD, params, "web")
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return engine.get_task(tid)
 
 
 def _plan_routes(router: APIRouter, plans: PlanService) -> None:

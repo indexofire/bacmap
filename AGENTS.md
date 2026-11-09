@@ -5,7 +5,7 @@ bacmap：本地病原菌基因组分析系统（单工作站、数据不出网�
 
 ## 黄金规则（违反任何一条即返工）
 
-1. **冻结文档是宪法**：`docs/concepts/frozen-design.zh.md`（v1.10.12）中标"冻结"的决策，
+1. **冻结文档是宪法**：`docs/concepts/frozen-design.zh.md`（v1.10.14）中标"冻结"的决策，
    修改必须在该文档第 10 节新增一条 `v1.10.x` 修订记录（原因、证据、迁移成本），
    并同步 `dev/research-framework-evidence.md` 的对应 §10.x 证据小节。
 2. **依赖方向契约（ADR-02）**：`core/store/tools` 不得导入
@@ -23,7 +23,7 @@ bacmap：本地病原菌基因组分析系统（单工作站、数据不出网�
 6. **生信分析外部化（ADR-20）**：只依赖基因组的分析一律外部工具
    （gside=物种鉴定、gspec=基因筛查/血清型、gmlst=MLST/cgMLST/MST），
    bacmap 只做编排、适配与"需结合本地数据的判定"。不要在 bacmap 里写生信算法。
-7. **测试基线不得回退**：当前 2000 passed。删测试来"通过"是最严重违规。
+7. **测试基线不得回退**：当前 2015 passed。删测试来"通过"是最严重违规。
    （v1.6.0 基线由 1546 调整为 1500、v1.6.1 再调整为 1489：前者因 ADR-21 移除内置会话助手时其专属测试随之删除，后者为清理仅被该助手使用的死代码；
    功能删除导致的合法调整，需在冻结文档修订记录与 CHANGELOG 中写明；不得借机删除保留功能的测试。）
 8. **dev/ 目录不入库**：开发调研资料（证据/辩论）仅本地阅读（已 gitignore），
@@ -47,6 +47,8 @@ pixi run -e dev test            # pytest —— 注意必须 -e dev（default �
 pixi run -e dev lint            # ruff（src + tests）
 pixi run -e dev typecheck       # mypy（src/bacmap，ADR-02/规则 3）
 pixi run -e dev contracts       # import-linter
+pixi run -e web web-install     # Vue 控制台 npm ci（首次/锁文件变化）
+pixi run -e web web-build       # 重建 static/console（产物随仓库提交）
 pixi shell                      # 激活后可用 bacmap / gside / gspec / gmlst / snakemake
 bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟；默认 cloud Profile）
 ```
@@ -61,11 +63,15 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟；默认 c
 | `core/` | 领域模型、表定义 | 最底层，不依赖任何上层 |
 | `store/` | GOM/知识库持久化 | 只依赖 core |
 | `tools/` | 工具注册表 + 27 个 bio_* 工具 | 只依赖 core/store |
-| `workflow/` | Snakemake 规则（10 个 .smk）与脚本 | pending_gspec/pending_external_tool 占位等外部工具；物种鉴定整体交 gside |
+| `workflow/` | Snakemake 规则（12 个 .smk）与脚本 | pending_gspec 占位等外部工具；物种鉴定整体交 gside |
 | `tasks/` | DBOS 任务引擎、门、特征库 | 唯一导入 dbos 的模块（ADR-02）；六类任务（analyze/curate/mine/write/record/research，ADR-23） |
 | `agent/` | 意图分类、LLM 网关、任务内智能体（解读）、沙箱、仲裁 | 仅 `agent.llm` 导入 pydantic-ai |
 | `application/` | 应用服务（v1.5）：`PlanService` 版本化计划、统一错误 | 不得导入 interfaces/agent |
-| `interfaces/` | mcp/（MCPServer）、web/（FastAPI + /api/v1）、cli/（bacmap 命令）、tui/（Textual 任务台）、views.py（共享只读视图） | 最上层 |
+| `interfaces/` | mcp/（MCPServer）、web/（FastAPI + /api/v1 + Vue 3 控制台）、cli/（bacmap 命令）、tui/（Textual 任务台）、views.py（共享只读视图） | 最上层 |
+
+前端源码在 `frontend/`（Vue 3 + Vite + TS）；构建产物落
+`src/bacmap/interfaces/web/static/console/`。Node 只在 `web` pixi 环境构建期使用，
+运行期由 FastAPI 托管静态文件（ADR-01：不引入运行时 Node）。
 
 ## v1.6 方向（ADR-21，改动前必读）
 
@@ -86,13 +92,19 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟；默认 c
 - 升级这些工具后必须复核：CLI 接口签名 + bacmap 侧解析器 + V10 式单株冒烟
 - 长读组装：`flye >=2.9.5`、`unicycler >=0.5.1` 已加入 conda 依赖（0.1.5）；
   `trycycler` 因 conda 包要求 Python <3.11（bacmap 为 3.12）需另行安装，规则保留为高级路径
+- 注释：`bakta >=1.12`、`eggnog-mapper >=2.1.12`（conda）与 `quast >=5.2`（PyPI）；
+  AMRFinderPlus 升级到 `>=4.2.7`，既作为 Bakta 1.12 内部 AMR 专家系统依赖，也保留
+  直接 `amrfinder` 规则用于 AMR 基因 + 点突变检出；gspec `ncbi` 提供同一
+  Reference Gene Catalog 的存在性筛查（不含点突变）。旧 `abricate` 依赖已移除
+  （相关规则早已改为 `gspec screen`）。
+  数据库用 `scripts/setup_annotation_dbs.py` 下载，路径可用 `BACMAP_BAKTA_DB` /
+  `BACMAP_EGGNOG_DATA_DIR` 覆盖；`BACMAP_ANNOTATION_ENABLED=0` 可关闭注释
 
 ## 已知占位（等外部能力就绪后替换）
 
 | 位置 | 占位值 | 等待 |
 |---|---|---|
 | `workflow/rules/dec_shigella.smk` 血清型 | `pending_gspec` | gspec 血清型子命令 |
-| `workflow/rules/annotation.smk` | `pending_external_tool` | gspec 注释子命令 |
 
 > 物种与分类学鉴定已整体由 gside 承担（`species_identify` 规则 + `species_mode` 档位），
 > 原 `species_ani`/`species_sourmash`/`taxonomy`/`vpara_targets` 占位规则已删除（v1.4.10）。

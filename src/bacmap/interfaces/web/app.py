@@ -13,9 +13,8 @@ import hmac
 import json
 import secrets
 from collections.abc import Mapping
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Form, HTTPException, Request, Response
@@ -41,9 +40,14 @@ from bacmap.interfaces.web.auth import (
     safe_next,
     verify_csrf,
 )
+from bacmap.interfaces.web.payloads import (
+    approval_payload,
+    fields_from_text,
+    submit_task_payload,
+)
 from bacmap.interfaces.web.static import STATIC_DIR
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
-from bacmap.tasks.spec import Approval, TaskId, TaskType
+from bacmap.tasks.spec import TaskId
 from bacmap.tools._common import _validate_sample_id
 
 
@@ -211,61 +215,24 @@ def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
         )
 
 
-def _submit_task_payload(
-    task_type: str, samples: str, scope: str
-) -> tuple[TaskType, dict[str, Any]]:
-    """提交表单 → (任务类型, 引擎参数)；非法值抛 HTTPException。"""
-    try:
-        tt = TaskType(task_type)
-    except ValueError as exc:
-        raise HTTPException(400, f"未知任务类型: {task_type}") from exc
-    # 表单仅提供 analyze|curate；mine/write 属开放路径，需 script/draft 参数，
-    # 不经本表单提交（防止伪造 POST 产生空任务）。
-    if tt not in (TaskType.ANALYZE, TaskType.CURATE):
-        raise HTTPException(400, f"任务类型 {tt.value!r} 不支持 Web 提交")
-    params: dict[str, Any] = {}
-    if samples.strip():
-        sample_list = [s.strip() for s in samples.replace("\n", ",").split(",") if s.strip()]
-        bad = [s for s in sample_list if not _validate_sample_id(s)]
-        if bad:
-            raise HTTPException(400, f"非法样本 ID: {bad!r}")
-        params["samples"] = sample_list
-    if scope.strip():
-        try:
-            parsed_scope = json.loads(scope)
-        except ValueError as exc:
-            raise HTTPException(400, "scope 不是合法 JSON") from exc
-        # 工作流按 dict 读取 scope（scope.get）；数组/标量会在任务线程里
-        # 变成含义不明的 FAILED，接口入口直接拒绝（v1.9.2）。
-        if not isinstance(parsed_scope, dict):
-            raise HTTPException(400, "scope 必须是 JSON 对象")
-        params["scope"] = parsed_scope
-    return tt, params
+def _build_legacy_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
+    """v0.2.0：/ 进入 Vue 控制台，旧 Jinja 任务台保留在 /legacy。"""
 
+    @app.get("/", response_class=HTMLResponse)
+    def index(request: Request) -> Response:
+        return RedirectResponse("/console/", status_code=307)
 
-def _approval_from_form(approver: str, decision: str, signature: str) -> Approval:
-    """审批表单 → Approval；非法 decision 抛 HTTPException。"""
-    if decision not in ("approve", "reject"):
-        raise HTTPException(400, "decision 必须是 approve|reject")
-    typed_decision: Literal["approve", "reject"] = (
-        "approve" if decision == "approve" else "reject"
-    )
-    return Approval(
-        approver=approver,
-        decision=typed_decision,
-        signature=signature,
-        at=datetime.now(UTC),
-    )
+    @app.get("/legacy", response_class=HTMLResponse)
+    def legacy_index(request: Request) -> HTMLResponse:
+        return _TEMPLATES.TemplateResponse(
+            request, "index.html", {"tasks": engine.list_tasks()}
+        )
 
 
 def _build_task_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     """任务列表/概览/提交/详情/轮询 fragment/审批。"""
 
-    @app.get("/", response_class=HTMLResponse)
-    def index(request: Request) -> HTMLResponse:
-        return _TEMPLATES.TemplateResponse(
-            request, "index.html", {"tasks": engine.list_tasks()}
-        )
+    _build_legacy_routes(app, engine)
 
     @app.get("/overview", response_class=HTMLResponse)
     def overview(request: Request) -> HTMLResponse:
@@ -281,7 +248,7 @@ def _build_task_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     ) -> RedirectResponse:
         if not verify_csrf(request, csrf):
             raise HTTPException(403, "CSRF 校验失败")
-        tt, params = _submit_task_payload(task_type, samples, scope)
+        tt, params = submit_task_payload(task_type, samples, scope)
         try:
             tid = engine.submit(tt, params, submitted_by="web")
         except (ValueError, NotImplementedError) as exc:
@@ -321,7 +288,7 @@ def _build_task_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
         if not verify_csrf(request, csrf):
             raise HTTPException(403, "CSRF 校验失败")
         try:
-            engine.approve(TaskId(task_id), _approval_from_form(approver, decision, signature))
+            engine.approve(TaskId(task_id), approval_payload(approver, decision, signature))
         except KeyError as exc:
             raise HTTPException(404, "任务不存在") from exc
         except ValueError as exc:
@@ -337,20 +304,6 @@ def _build_record_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     @app.get("/records", response_class=HTMLResponse)
     def records_page(request: Request) -> HTMLResponse:
         return _TEMPLATES.TemplateResponse(request, "records.html", {})
-
-    def _fields_from_text(raw: str) -> dict[str, str]:
-        out: dict[str, str] = {}
-        for line in raw.replace(",", "\n").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            if "=" not in line:
-                raise HTTPException(400, f"字段行需要 k=v 形式：{line!r}")
-            key, _, value = line.partition("=")
-            if not key.strip():
-                raise HTTPException(400, f"字段键为空：{line!r}")
-            out[key.strip()] = value.strip()
-        return out
 
     @app.post("/records/{kind}")
     def submit_record(
@@ -377,7 +330,7 @@ def _build_record_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
                 "kind": "metadata",
                 "strain_id": strain_id.strip(),
                 "sample_id": (sample_id.strip() or strain_id.strip()),
-                "fields": _fields_from_text(fields),
+                "fields": fields_from_text(fields),
             }
         elif kind == "lab":
             params = {
@@ -565,6 +518,22 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
     app.add_middleware(SecurityHeadersMiddleware)
     # 静态资源仅本地（CSS/图标/脚本；零外联，ADR-16）
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+    # v0.2.0：Vue 3 SPA 控制台（构建产物在 static/console；无 Node 运行时）。
+    console_index = STATIC_DIR / "console" / "index.html"
+
+    @app.get("/console", response_class=HTMLResponse, include_in_schema=False)
+    def console_root() -> Response:
+        return RedirectResponse("/console/", status_code=307)
+
+    @app.get("/console/{path:path}", response_class=HTMLResponse, include_in_schema=False)
+    def console(path: str = "") -> FileResponse:
+        if not console_index.is_file():
+            raise HTTPException(
+                503,
+                "前端尚未构建：在仓库根目录运行 `pixi run -e web web-build`",
+            )
+        return FileResponse(console_index)
 
     _build_auth_routes(app, cfg)
     _build_sample_routes(app, engine)

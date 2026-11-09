@@ -5,28 +5,40 @@ you can start a task in one and approve it in another.
 
 ## 1. Web console
 
+The default UI is the **Vue 3 console** at `/console/` (Vite build, dark instrument-style
+dashboard); `/` redirects there. The original Jinja console is kept at `/legacy` for
+compatibility. The SPA is served as prebuilt static assets: no Node/Bun is needed at runtime
+(ADR-01); Node is only used when rebuilding the frontend.
+
 ```bash
 bacmap start web                            # 127.0.0.1:8800 by default
 bacmap start web --host 127.0.0.1 --port 8800
+
+# Rebuild the console after frontend changes (development only)
+pixi run -e web web-install
+pixi run -e web web-build
 ```
 
-Pages:
+Console routes:
 
 | Route | Purpose |
 |---|---|
-| `/` | task list and submit form (analyze/curate) |
-| `/tasks/{id}` | task detail, live status fragment, approval card |
-| `/plans`, `/plans/{id}` | agent-proposed plans, full parameters, confirm/reject |
-| `/samples`, `/samples/{id}` | completed samples, per-sample findings |
+| `/console/` | dashboard: KPIs, 7-day trend, status distribution, pending approvals |
+| `/console/tasks` | task list, filters and submit drawer (analyze/curate) |
+| `/console/tasks/{id}` | task detail, event timeline, approval card, cancel |
+| `/console/plans`, `/console/plans/{id}` | agent-proposed plans, full parameters, confirm/reject |
+| `/console/runs`, `/console/runs/{id}` | immutable run records and source comparison |
+| `/console/records` | metadata, lab result, knowledge import/approval forms |
+| `/console/overview` | system overview (versions, paths, policy, sandbox) |
+| `/console/search` | sample search by keyword/serotype/ST/gene |
+| `/legacy` | original Jinja task console |
+| `/samples`, `/samples/{id}` | completed samples, per-sample findings (legacy pages) |
 | `/samples/{id}/report` | inline HTML report (`?download=1` for attachment) |
-| `/search` | keyword/serotype/ST/gene search |
-| `/records` | metadata, lab result and knowledge entry forms |
-| `/runs`, `/gom` | immutable run records and GOM objects |
-| `/overview` | system overview (versions, paths, policy, sandbox) |
+| `/gom` | GOM objects (legacy page) |
 | `/api/v1/*` | JSON API (see [HTTP API reference](../reference/api.md)) |
 
-The task detail page polls `/tasks/{id}/fragment` every two seconds; no external JavaScript or CDN
-is used (offline-friendly).
+The SPA polls `/api/v1/tasks/{id}` every two seconds while a task is non-terminal. All assets
+(CSS, JS, icons, favicon) are local; no CDN or webfont is used (offline-friendly).
 
 ### Submitting a task
 

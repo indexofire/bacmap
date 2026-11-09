@@ -1,10 +1,32 @@
 # bacmap Web 任务台设计系统（DESIGN.md）
 
-> 适用范围：`src/bacmap/interfaces/web/`（任务列表 / 提交 / 详情 / 审批）。
+> 适用范围：`src/bacmap/interfaces/web/` 与 `frontend/`（Vue 3 控制台 / 旧 Jinja 页）。
 > 硬约束：本地单机部署，**零外联**（ADR-16）——无 CDN、无 webfont、无外部图标包；
-> FastAPI + Jinja2 服务端渲染 + 手写本地 CSS + 极少量原生 JS。
+> 默认界面为 Vue 3 SPA（`/console/`），旧 Jinja 页保留 `/legacy`；构建产物本地托管。
 > 本文是唯一视觉决策来源：任何颜色 / 字号 / 间距 / 组件形态必须回溯到本文的 token；
 > 需要 token 之外的东西时，先扩表，再使用。
+
+## v0.2.0 控制台（Vue 3 SPA）
+
+0.2.0 起默认入口是 `/console/` 的 **Vue 3 + Vite** 控制台；`/` 重定向到 `/console/`，
+原 Jinja 任务台保留在 `/legacy`。视觉语言不换：仍为“月光下的值班台”，token 从本文
+§2–§7 继承到 `frontend/src/styles/tokens.css`，状态语义、等宽读数与发丝边框保持一致。
+
+- **为什么是 SPA**：任务详情轮询、计划确认、事件时间线、图表与筛选需要客户端状态；
+  Vue 3 + Vite 提供组件化与按路由拆包，同时构建产物是纯静态文件。
+- **运行期零 Node（ADR-01）**：Node 只在 `web` pixi 环境构建时使用；FastAPI 只托管
+  `src/bacmap/interfaces/web/static/console/` 的 `index.html` 与 assets。
+- **布局**：左侧 236px 固定导航（工作台 / 证据链 / 系统），顶部 60px 面包屑 + 全局搜索；
+  内容最大 1320px。≤900px 侧栏变抽屉，≤640px 表格转行卡。
+- **页面**：仪表盘（KPI、7 天趋势、状态环图、待审批、系统状态）、任务（筛选/提交抽屉/
+  详情/审批/事件时间线）、计划（列表/参数/哈希确认/拒绝）、运行记录（详情/来源比较）、
+  数据记录（元数据/化验/知识导入与审核）、系统概览、样本检索。
+- **图表**：ECharts 按需动态加载（饼图/柱图/折线），只使用状态语义色与单一靛蓝；
+  图表均有文字标题与 aria-label，颜色不是唯一编码。
+- **交互**：任务非终态时 2s 轮询 `/api/v1/tasks/{id}`；提交/审批/取消均有 busy 态与
+  toast；破坏性操作使用原生确认对话框；`prefers-reduced-motion` 下停用非必要动效。
+- **构建**：`pixi run -e web web-install && pixi run -e web web-build`；CI 的 `web` job
+  重建并校验提交的 `static/console` 与源码一致。
 
 ## 0. 参考与审计（redesign-skill：先审计后动手）
 
@@ -246,12 +268,13 @@ Dials（taste-skill §1，操作台修订）：VARIANCE 4 / MOTION 3 / DENSITY 6
 |----|------|----------|------|
 | 仅暗色主题（无 light mode） | 全站 | 用户指定 Linear 暗色原生方向；单工作站值班/监控场景长时盯暗面更省眼；本地工具无品牌双主题诉求 | 若实验室断要求亮色，按 §2 加 light token 表 + `prefers-color-scheme` 切换 |
 | 状态中文标签映射在 `_badges.html` 宏内维护 | templates/_badges.html | Jinja 环境不可改（app.py 仅允许加 static mount），宏是唯一事实源 | 后端若开放 env.globals 再上移 |
-| 详情页轮询间隔固定 2s，不可配置 | task_detail.html JS | 保持既有轮询契约，最小 JS | 需求出现时加 `data-interval` |
-| 无 Lighthouse 自动化门（本地内网工具） | QA 流程 | 用真浏览器 Playwright 断点 + 状态遍历替代； perfection 的构建/包体杠杆在本栈（无构建链）不适用 | 若页面数量增长再引入 |
+| 详情页轮询间隔固定 2s，不可配置 | `/console/tasks/{id}`（SPA）与旧 `task_detail.html` | 保持既有轮询契约，最小 JS | 需求出现时加路由 query 或配置项 |
+| 无 Lighthouse 自动化门（本地内网工具） | QA 流程 | 用真浏览器断点 + 状态遍历替代；本栈为本地控制台，包体不是首要指标 | 若页面数量增长再引入 |
 | Linear 的 Inter cv01/ss03 等宽特性不可用（零外联禁 webfont） | §3 | 用系统栈 + 等宽读数 + 字重 400/500/600 三档近似其 400/510/590 体系 | 若未来允许自托管字体再换 |
+| Vue 控制台允许一次性 inline style 属性 | `frontend/src/views/*` | 间距/尺寸等一次性布局值用 `style` 最直接；CSP 仅放宽 `style-src 'unsafe-inline'`，`script-src` 仍为 `'self'`（无内联脚本/eval） | 后续统一抽 utility class 后可移除 `'unsafe-inline'` |
 
 ## 11. 本地性合规（ADR-16 映射）
 
 - CSS/JS/图标/favicon 全部本地：`/static`（FastAPI StaticFiles）+ data-URI；页面发起的网络请求只有
-  本站 `/tasks/*/fragment` 轮询。无 CDN、无字体下载、无分析脚本、无图片外链。
+  本站 `/api/v1/*` 与 `/tasks/*/fragment`（旧页）轮询。无 CDN、无字体下载、无分析脚本、无图片外链。
 - 图标为 Lucide（ISC）路径数据的内联 SVG，`stroke="currentColor"`，线宽统一 1.5。

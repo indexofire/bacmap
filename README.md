@@ -6,7 +6,7 @@ A local pathogen-genomics workstation: deterministic analysis, a durable task en
 an immutable evidence chain, and an MCP server for external AI agents. Data stays on the machine.
 
 Frozen design: [docs/concepts/frozen-design.md](docs/concepts/frozen-design.md) (English reference;
-the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.10.12**).
+the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.10.14**).
 Program version: **0.1.5**.
 
 ## Operating in natural language (the intended entry point)
@@ -34,7 +34,8 @@ fallback and operations surface.
 
 ## What it does
 
-- **Deterministic pipeline** — Snakemake 9 runs QC → assembly → species → typing/AMR → report.
+- **Deterministic pipeline** — Snakemake 9 runs QC → assembly → QUAST assembly QC →
+  Bakta annotation → eggNOG-mapper functional classification → species → typing/AMR → report.
   Short reads assemble with shovill, ONT/PacBio long reads with flye (`--nano-hq`/`--pacbio-hifi`),
   and hybrid input with unicycler. Species identification, gene screening/serotyping and
   MLST/cgMLST are delegated to
@@ -49,7 +50,8 @@ fallback and operations surface.
   versions/seeds, and versioned GOM objects.
 - **MCP-only agent access** — 26 registry tools plus plan/task/record tools, filtered by a fixed
   `cloud` (default) or `local-trusted` data-class profile. No built-in chat (ADR-21).
-- **Interfaces** — Web task console, CLI, TUI, JSON API `/api/v1`, MCP (stdio / Streamable HTTP).
+- **Interfaces** — Vue 3 console at `/console/` (dark instrument dashboard, charts, approvals),
+  legacy Jinja console at `/legacy`, CLI, TUI, JSON API `/api/v1`, MCP (stdio / Streamable HTTP).
 
 ## Quick start
 
@@ -60,7 +62,7 @@ pixi shell
 bacmap --version        # 0.1.5
 bacmap config init      # optional: create config from config.example.toml
 bacmap doctor           # health check
-bacmap start web        # http://127.0.0.1:8800
+bacmap start web        # http://127.0.0.1:8800/console/
 ```
 
 First analysis:
@@ -103,7 +105,7 @@ Full bilingual site: <https://indexofire.github.io/bacmap/> (Chinese: `/zh/`).
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest (current baseline: 1703 passed)
+pixi run -e dev test        # pytest (current baseline: 2015 passed)
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter (5 contracts)

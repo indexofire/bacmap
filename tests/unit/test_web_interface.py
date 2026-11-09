@@ -88,8 +88,20 @@ class TestWebInterface:
         c, _ = client
         r = c.get("/")
         assert r.status_code == 200
-        assert "bacmap" in r.text
-        assert "暂无任务" in r.text or "SAM-" in r.text
+        assert "bacmap console" in r.text
+        assert 'id="app"' in r.text
+        legacy = c.get("/legacy")
+        assert legacy.status_code == 200
+        assert "暂无任务" in legacy.text or "SAM-" in legacy.text
+
+    def test_root_redirects_to_vue_console(self, client):
+        c, _ = client
+        r = c.get("/", follow_redirects=False)
+        assert r.status_code == 307
+        assert r.headers["location"] == "/console/"
+        assert c.get("/console", follow_redirects=False).headers["location"] == "/console/"
+        assert c.get("/console/tasks").status_code == 200
+        assert c.get("/static/console/index.html").status_code == 200
 
     def test_submit_analyze_polls_to_succeeded(self, client):
         c, _ = client
@@ -235,8 +247,8 @@ class TestAssistantRemoved:
         assert c.get("/assistant").status_code == 404
         assert c.post("/assistant", data={"sid": "", "text": "x"}).status_code == 404
         assert c.post("/assistant/execute", data={"sid": "nope"}).status_code == 404
-        assert "/assistant" not in c.get("/").text
-        assert 'href="/plans"' in c.get("/").text
+        assert "/assistant" not in c.get("/legacy").text
+        assert 'href="/plans"' in c.get("/legacy").text
 
 class TestWebCookieAuth:
     """v1.4.15：浏览器 cookie 会话 + CSRF（BACMAP_WEB_AUTH=cookie）。"""
