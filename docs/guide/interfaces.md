@@ -6,8 +6,9 @@ you can start a task in one and approve it in another.
 ## 1. Web console
 
 The default UI is the **Vue 3 console** at `/console/` (Vite build, dark instrument-style
-dashboard); `/` redirects there. The original Jinja console is kept at `/legacy` for
-compatibility. The SPA is served as prebuilt static assets: no Node/Bun is needed at runtime
+dashboard); `/` redirects there. The old Jinja task console has been removed: legacy paths
+(`/tasks`, `/plans`, `/samples`, `/gom`, …) return 307 redirects to their `/console/...`
+equivalents. The SPA is served as prebuilt static assets: no Node/Bun is needed at runtime
 (ADR-01); Node is only used when rebuilding the frontend.
 
 ```bash
@@ -36,10 +37,8 @@ Console routes:
 | `/console/research/studies/{id}` | Study, cohorts, plans and claims (read-only) |
 | `/console/overview` | system overview (versions, paths, policy, sandbox) |
 | `/console/search` | sample search by keyword/serotype/ST/gene |
-| `/legacy` | original Jinja task console |
-| `/samples`, `/samples/{id}` | legacy sample pages |
+| `/research` | advanced research tooling (phylogenetics, logistic, object writes; Jinja) |
 | `/samples/{id}/report` | inline HTML report (`?download=1` for attachment) |
-| `/gom` | legacy GOM page |
 | `/api/v1/*` | JSON API (see [HTTP API reference](../reference/api.md)) |
 
 The SPA polls `/api/v1/tasks/{id}` every two seconds while a task is non-terminal. All assets

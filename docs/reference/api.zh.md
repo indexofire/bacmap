@@ -35,6 +35,7 @@ Origin: http://127.0.0.1:8800
 |---|---|---|
 | GET | `/api/v1/capabilities` | API 版本、bacmap 版本、可计划类型、特性 |
 | GET | `/api/v1/overview` | 系统概览（版本、路径、数据策略、沙箱、任务计数） |
+| GET | `/api/v1/stats` | 数据库统计（任务/运行/GOM/菌株/血清型/MLST/AMR/研究/知识库） |
 | GET | `/api/v1/samples?cursor=&limit=` | 已完成样本分页（仅解析当前页） |
 | GET | `/api/v1/samples/{id}` | 样本 digest + 完整 steps + 报告就绪标记 |
 | GET | `/api/v1/search?q=&serotype=&mlst_st=&amr_gene=` | 按关键词/血清型/ST/基因检索样本 |

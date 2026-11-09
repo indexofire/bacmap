@@ -55,6 +55,13 @@ class TestCapabilities:
         assert "events.sse" in body["features"]
         assert "/" not in json.dumps({k: v for k, v in body.items() if k != "endpoints"})
 
+    def test_stats_endpoint(self, env):
+        _, c, _ = env
+        body = c.get("/api/v1/stats").json()
+        assert body["schema"] == "bacmap.stats/1"
+        assert "tasks" in body and "strains" in body and "gom" in body
+        assert body["results"]["sample_reports"] == 3
+
 
 class TestTasks:
     def test_list_detail_cancel(self, env):

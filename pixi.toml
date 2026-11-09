@@ -59,10 +59,10 @@ mappy = ">=2.24"
 pyhmmer = ">=0.10"
 pyyaml = ">=6.0"
 sourmash = ">=4.8"
-gspec = "==0.10.0"
-# gside 0.2+ 与 gspec 0.10 的可选 gseek 引擎共同使用 gseek 0.10.4；
+gspec = "==0.10.2"
+# gside 0.2+ 与 gspec 0.10 的可选 gseek 引擎共同使用 gseek 0.10.5；
 # 显式钉住，避免 extras 缺失时落回旧适配器。
-gseek = "==0.10.4"
+gseek = "==0.10.5"
 dbos = ">=2.0"
 mcp = ">=2.3,<3"
 fastapi = ">=0.110"
@@ -70,7 +70,9 @@ uvicorn = ">=0.29"
 jinja2 = ">=3.1"
 httpx = ">=0.27"
 pydantic-ai-slim = { version = ">=2.0,<3", extras = ["openai"] }
-gside = "==0.2.2"
+gside = "==0.2.3"
+# mNGS 宏基因组分析与监测报告（可选依赖；不进入默认分析路径）。
+gmeta = "==0.1.0"
 textual = ">=0.80"
 bacmap = { path = ".", editable = true }
 quast = ">=5.2.0, <6"

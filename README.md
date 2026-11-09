@@ -6,7 +6,7 @@ A local pathogen-genomics workstation: deterministic analysis, a durable task en
 an immutable evidence chain, and an MCP server for external AI agents. Data stays on the machine.
 
 Frozen design: [docs/concepts/frozen-design.md](docs/concepts/frozen-design.md) (English reference;
-the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.10.15**).
+the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.10.16**).
 Program version: **0.1.5**.
 
 ## Operating in natural language (the intended entry point)
@@ -51,7 +51,7 @@ fallback and operations surface.
 - **MCP-only agent access** — 26 registry tools plus plan/task/record tools, filtered by a fixed
   `cloud` (default) or `local-trusted` data-class profile. No built-in chat (ADR-21).
 - **Interfaces** — Vue 3 console at `/console/` (dark instrument dashboard, charts, approvals),
-  legacy Jinja console at `/legacy`, CLI, TUI, JSON API `/api/v1`, MCP (stdio / Streamable HTTP).
+  CLI, TUI, JSON API `/api/v1`, MCP (stdio / Streamable HTTP).
 
 ## Quick start
 
@@ -105,7 +105,7 @@ Full bilingual site: <https://indexofire.github.io/bacmap/> (Chinese: `/zh/`).
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest (current baseline: 2016 passed)
+pixi run -e dev test        # pytest (current baseline: 1995 passed)
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter (5 contracts)

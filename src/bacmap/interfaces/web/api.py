@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from bacmap.application.errors import ApplicationError, Conflict, NotFound
 from bacmap.application.plans import PlanService
+from bacmap.interfaces.stats_summary import gather_stats
 from bacmap.interfaces.views import (
     compare_run_records,
     gom_object,
@@ -149,6 +150,7 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
                 "events.sse",
                 "samples.cursor",
                 "overview",
+                "stats",
                 "search",
                 "records",
             ],
@@ -169,6 +171,10 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
     @router.get("/overview")
     def overview() -> dict[str, Any]:
         return overview_data(engine)
+
+    @router.get("/stats")
+    def stats() -> dict[str, Any]:
+        return gather_stats(engine.home)
 
     @router.get("/search")
     def search(

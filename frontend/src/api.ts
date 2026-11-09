@@ -1,5 +1,6 @@
 import type {
   Capabilities,
+  DatabaseStats,
   GomObject,
   Overview,
   PlanRecord,
@@ -78,6 +79,7 @@ function json(body: unknown): RequestInit {
 export const api = {
   capabilities: () => request<Capabilities>('/capabilities'),
   overview: () => request<Overview>('/overview'),
+  stats: () => request<DatabaseStats>('/stats'),
 
   listTasks: (limit = 200) =>
     request<{ items: TaskRow[] }>(`/tasks?limit=${limit}`).then((r) => r.items),

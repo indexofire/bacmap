@@ -6,7 +6,7 @@
 AI 智能体使用的 MCP 服务。数据不出本地网络。
 
 冻结设计：[docs/concepts/frozen-design.zh.md](docs/concepts/frozen-design.zh.md)（中文权威，修订
-**v1.10.15**）；[英文参考翻译](docs/concepts/frozen-design.md)。程序版本：**0.1.5**。
+**v1.10.16**）；[英文参考翻译](docs/concepts/frozen-design.md)。程序版本：**0.1.5**。
 
 ## 用自然语言操作（推荐入口）
 
@@ -44,8 +44,8 @@ MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小�
   GOM 对象。
 - **仅 MCP 的智能体接入** — 26 个注册表工具 + 计划/任务/记录工具，按固定的 `cloud`（默认）或
   `local-trusted` 数据分级 Profile 裁剪。无内置对话（ADR-21）。
-- **多种界面** — `/console/` 的 Vue 3 控制台（暗色仪表盘、图表、审批）、`/legacy` 旧 Jinja
-  任务台、CLI、TUI、JSON API `/api/v1`、MCP（stdio / Streamable HTTP）。
+- **多种界面** — `/console/` 的 Vue 3 控制台（暗色仪表盘、图表、审批）、CLI、TUI、
+  JSON API `/api/v1`、MCP（stdio / Streamable HTTP）。
 
 ## 快速开始
 

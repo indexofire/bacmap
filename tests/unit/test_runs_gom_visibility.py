@@ -128,13 +128,15 @@ class TestRunApi:
 
 
 class TestRunWeb:
-    def test_pages(self, seeded):
+    def test_legacy_pages_redirect_to_console(self, seeded):
+        """v0.2.0：旧 Jinja 运行/GOM 页移除，路径 307 到 SPA。"""
         _, c, run_id, _ = seeded
-        assert run_id[:8] in c.get("/runs").text
-        assert "bacmap" in c.get(f"/runs/{run_id}").text
-        listing = c.get("/gom").text
-        assert "S1" in listing and "steps" in listing
-        detail = c.get("/gom/obj-1").text
-        assert "Salmonella" in detail and "sample" in detail
-        assert c.get("/runs/nope").status_code == 404
-        assert c.get("/gom/nope").status_code == 404
+        for old, new in (
+            ("/runs", "/console/runs"),
+            (f"/runs/{run_id}", f"/console/runs/{run_id}"),
+            ("/gom", "/console/gom"),
+            ("/gom/obj-1", "/console/gom/obj-1"),
+        ):
+            r = c.get(old, follow_redirects=False)
+            assert r.status_code == 307, old
+            assert r.headers["location"] == new, old

@@ -88,13 +88,6 @@ function submitSearch() {
             <span>{{ item.label }}</span>
           </RouterLink>
         </div>
-        <div class="nav-group">
-          <div class="nav-group__label">兼容</div>
-          <a class="nav-link" href="/legacy">
-            <Icon name="external-link" />
-            <span>旧版界面</span>
-          </a>
-        </div>
       </nav>
 
       <div class="sidebar__foot">

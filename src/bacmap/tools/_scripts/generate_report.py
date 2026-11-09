@@ -157,7 +157,7 @@ def _cgmlst_caveats_html(caveats: list[str]) -> str:
     if not caveats:
         return ""
     items = "".join(f"<li>{c}</li>" for c in caveats)
-    return f'<div class="cgmlst-caveats"><strong>⚠️ Caveats:</strong><ul>{items}</ul></div>'
+    return f'<div class="cgmlst-caveats"><strong>Caveats:</strong><ul>{items}</ul></div>'
 
 
 def _render_cgmlst_section(sample_id: str, summary: dict) -> str:
@@ -259,7 +259,7 @@ def _render_nli_section(sample_id: str) -> str:
         for c in claims
     )
     return f"""
-<h2>⚠️ AI 解读自检（Layer 3 NLI Reflector）</h2>
+<h2>AI 解读自检（Layer 3 NLI Reflector）</h2>
 <table>
 <tr><th>指标</th><th>值</th></tr>
 {_row("人审标记", "NEEDS HUMAN REVIEW")}
@@ -284,20 +284,22 @@ def _render_annotation_section(summary: dict) -> str:
     if not quast and not (isinstance(ann, dict) and ann):
         return ""
 
-    parts: list[str] = ['<h2>🧬 组装质控与基因组注释</h2>']
+    parts: list[str] = ['<h2>组装质控与基因组注释</h2>']
     if quast:
         parts.append("<h3>QUAST 组装质控</h3>")
         parts.append(f'<pre class="quast">{html.escape(str(quast))}</pre>')
 
     if isinstance(ann, dict):
         status = ann.get("status", "ok")
+        rate_raw = float(ann.get("annotation_rate", 0) or 0)
+        rate_pct = rate_raw * 100 if rate_raw <= 1 else rate_raw
         parts.append("<h3>Bakta / eggNOG-mapper</h3>")
         parts.append(
             "<table>"
             + _row("注释状态", status)
             + _row("CDS 总数", ann.get("total_CDS", "—"))
             + _row("已注释 CDS", ann.get("annotated_CDS", "—"))
-            + _row("注释率", f"{float(ann.get('annotation_rate', 0)):.1%}")
+            + _row("注释率", f"{rate_pct:.1f}%")
             + "</table>"
         )
         bakta = ann.get("bakta", {})
@@ -375,12 +377,11 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     num_contigs = asm_parts[3] if len(asm_parts) > 3 else "?"
     total_len = asm_parts[4] if len(asm_parts) > 4 else "?"
 
-    v_icon = "✅" if verification.passed else "❌"
-    v_review = '<span class="warn">⚠️ 需要人工审核</span>' if verification.needs_human_review else ""
+    v_review = '<span class="warn">需要人工审核</span>' if verification.needs_human_review else ""
 
     check_rows = "".join(
         f'<tr><td>{c.name}</td><td class="{"ok" if c.passed else "fail"}">'
-        f"{'✅' if c.passed else '❌'} {c.message}</td></tr>"
+        f"{'PASS' if c.passed else 'FAIL'} · {c.message}</td></tr>"
         for c in verification.checks
     )
 
@@ -393,84 +394,215 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     cgmlst_section = _render_cgmlst_section(sample_id, summary)
     annotation_section = _render_annotation_section(summary)
 
+    annotation_block = (
+        f'<section class="card">{annotation_section}</section>'
+        if annotation_section
+        else ""
+    )
+    nli_section = _render_nli_section(sample_id)
+    nli_block = f'<section class="card">{nli_section}</section>' if nli_section else ""
+    cgmlst_block = (
+        f'<section class="card">{cgmlst_section}</section>' if cgmlst_section else ""
+    )
+    status_label = (
+        "ALL PASSED"
+        if verification.passed
+        else f"{verification.failed_count} FAILED"
+    )
+    status_class = "badge--ok" if verification.passed else "badge--fail"
+
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
-<head><meta charset="UTF-8"><title>{sample_id} 分析报告</title>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{sample_id} · 分析报告 · bacmap</title>
 <style>
-body {{ font-family: -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 900px; margin: 2em auto; padding: 0 1em; color: #333; }}
-h1 {{ color: #1a5276; border-bottom: 3px solid #2980b9; padding-bottom: 0.3em; }}
-h2 {{ color: #2874a6; margin-top: 1.5em; }}
-h3 {{ color: #2e86c1; }}
-table {{ border-collapse: collapse; width: 100%; margin: 0.5em 0; }}
-th, td {{ border: 1px solid #ddd; padding: 6px 10px; text-align: left; font-size: 0.9em; }}
-th {{ background: #ebf5fb; }}
-td.label {{ font-weight: bold; width: 180px; background: #f8f9fa; }}
-.ok {{ color: #27ae60; }}
-.fail {{ color: #e74c3c; }}
-.warn {{ color: #f39c12; font-weight: bold; }}
-.verdict-box {{ display: inline-block; padding: 8px 20px; border-radius: 6px; font-size: 1.2em; font-weight: bold; margin: 10px 0; }}
-.verdict-pass {{ background: #d4edda; color: #155724; }}
-.verdict-fail {{ background: #f8d7da; color: #721c24; }}
-.evidence {{ background: #f0f0f0; padding: 10px; border-radius: 5px; font-size: 0.85em; margin-top: 2em; }}
-.cgmlst-verdict-badge {{ display: inline-block; padding: 6px 16px; border-radius: 5px; font-weight: bold; font-size: 1.05em; margin: 6px 0; }}
-.cgmlst-verdict-outbreak {{ background: #f8d7da; color: #721c24; }}
-.cgmlst-verdict-related {{ background: #fff3cd; color: #856404; }}
-.cgmlst-verdict-unrelated {{ background: #d4edda; color: #155724; }}
-.cgmlst-verdict-undetermined {{ background: #e9ecef; color: #495057; }}
-.cgmlst-nearest td.dist {{ text-align: right; }}
-.cgmlst-caveats {{ background: #fff3cd; border-left: 4px solid #f39c12; padding: 8px 12px; margin: 0.5em 0; font-size: 0.88em; }}
-.cgmlst-caveats ul {{ margin: 4px 0 0 0; }}
-.quast {{ background: #f8f9fa; border: 1px solid #ddd; padding: 10px; overflow-x: auto; font-size: 0.82em; }}
-</style></head>
+  :root {{
+    --bg: #08090a;
+    --panel: #0f1011;
+    --surface: #191a1b;
+    --text-1: #f7f8f8;
+    --text-2: #d0d6e0;
+    --text-3: #8a8f98;
+    --text-4: #62666d;
+    --accent: #5e6ad2;
+    --link: #828fff;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-subtle: rgba(255, 255, 255, 0.05);
+    --ok: #5ad191;
+    --fail: #ff8589;
+    --warn: #eccf7a;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas,
+      "Noto Sans Mono CJK SC", monospace;
+  }}
+  * {{ box-sizing: border-box; }}
+  html {{ color-scheme: dark; }}
+  body {{
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--bg);
+    background-image: radial-gradient(60% 240px at 50% 0, rgba(94, 106, 210, 0.1), transparent 70%);
+    background-repeat: no-repeat;
+    color: var(--text-2);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }}
+  a {{ color: var(--link); text-decoration: none; }}
+  a:hover {{ text-decoration: underline; text-underline-offset: 3px; }}
+  code, pre {{
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: rgba(0, 0, 0, 0.24);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+  }}
+  code {{ padding: 1px 5px; }}
+  pre {{ padding: 12px; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }}
+  .page {{ width: 100%; max-width: 1180px; margin: 0 auto; padding: 40px 24px 64px; }}
+  .pagehead {{ margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }}
+  .eyebrow {{ color: var(--link); font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }}
+  h1 {{ margin: 8px 0 6px; color: var(--text-1); font-size: 28px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.2; }}
+  .meta {{ color: var(--text-3); font-size: 12.5px; }}
+  .meta .mono {{ color: var(--text-2); }}
+  .badge {{
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 24px; padding: 0 10px; margin-top: 12px;
+    border: 1px solid transparent; border-radius: 999px;
+    font-size: 11.5px; font-weight: 600;
+  }}
+  .badge::before {{ content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }}
+  .badge--ok {{ color: var(--ok); background: rgba(47, 190, 119, 0.12); border-color: rgba(47, 190, 119, 0.3); }}
+  .badge--fail {{ color: var(--fail); background: rgba(229, 72, 77, 0.12); border-color: rgba(229, 72, 77, 0.3); }}
+  .card {{
+    margin-bottom: 18px; padding: 22px 24px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  }}
+  .card h2 {{
+    margin: 0 0 14px; padding-bottom: 10px;
+    color: var(--text-1); font-size: 16px; font-weight: 600;
+    border-bottom: 1px solid var(--border-subtle);
+  }}
+  .card h3 {{ margin: 18px 0 8px; color: var(--text-1); font-size: 13.5px; font-weight: 600; }}
+  .card h3:first-child {{ margin-top: 0; }}
+  table {{ width: 100%; border-collapse: collapse; margin: 4px 0 6px; }}
+  th {{
+    padding: 8px 10px; border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-3); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.05em; text-align: left; text-transform: uppercase;
+  }}
+  td {{ padding: 9px 10px; border-bottom: 1px solid var(--border-subtle); color: var(--text-2); font-size: 13px; vertical-align: top; }}
+  tr:last-child td {{ border-bottom: 0; }}
+  td.label {{ width: 220px; color: var(--text-3); font-weight: 500; }}
+  .ok {{ color: var(--ok); }}
+  .fail {{ color: var(--fail); }}
+  .warn {{ color: var(--warn); font-weight: 600; }}
+  .muted {{ color: var(--text-3); }}
+  .mono {{ font-family: var(--font-mono); font-variant-numeric: tabular-nums; }}
+  .evidence {{ background: var(--panel); border-color: var(--border-subtle); }}
+  .evidence p {{ margin: 5px 0; color: var(--text-3); font-size: 12px; overflow-wrap: anywhere; }}
+  .evidence strong {{ color: var(--text-2); }}
+  .quast {{ max-height: 320px; }}
+  .cgmlst-verdict-badge {{
+    display: inline-block; margin: 6px 0; padding: 5px 12px;
+    border-radius: 999px; font-size: 12px; font-weight: 600;
+  }}
+  .cgmlst-verdict-outbreak {{ background: rgba(229, 72, 77, 0.12); color: var(--fail); }}
+  .cgmlst-verdict-related {{ background: rgba(232, 182, 74, 0.12); color: var(--warn); }}
+  .cgmlst-verdict-unrelated {{ background: rgba(47, 190, 119, 0.12); color: var(--ok); }}
+  .cgmlst-verdict-undetermined {{ background: rgba(138, 143, 152, 0.12); color: var(--text-3); }}
+  .cgmlst-nearest td.dist {{ text-align: right; font-family: var(--font-mono); }}
+  .cgmlst-caveats {{
+    margin: 8px 0; padding: 10px 12px;
+    background: rgba(232, 182, 74, 0.08); border-left: 3px solid var(--warn);
+    border-radius: 0 6px 6px 0; color: var(--warn); font-size: 12px;
+  }}
+  .cgmlst-caveats ul {{ margin: 4px 0 0; }}
+  @media (max-width: 720px) {{
+    .page {{ padding: 24px 14px 40px; }}
+    h1 {{ font-size: 22px; }}
+    .card {{ padding: 16px; }}
+    td.label {{ width: 130px; }}
+  }}
+  @media print {{
+    body {{ background: #fff; color: #222; }}
+    .card {{ background: #fff; border-color: #ddd; break-inside: avoid; }}
+    .card h2, h1, h3 {{ color: #111; }}
+    th {{ color: #555; }}
+    td {{ color: #222; }}
+    .badge {{ color: #111; border-color: #999; background: #f3f3f3; }}
+  }}
+</style>
+</head>
 <body>
-<h1>🧬 {sample_id} 全基因组分析报告</h1>
-<p>生成时间：{datetime.now().strftime("%Y-%m-%d %H:%M")}</p>
+<main class="page">
+  <header class="pagehead">
+    <div class="eyebrow">bacmap · 全基因组分析报告</div>
+    <h1>{sample_id}</h1>
+    <div class="meta">
+      生成时间 <span class="mono">{datetime.now().strftime("%Y-%m-%d %H:%M")}</span>
+      · 物种 <span class="mono">{verdict}</span>
+      · MLST <span class="mono">{st}</span>
+    </div>
+    <span class="badge {status_class}">Verifier: {status_label}</span>
+    {v_review}
+  </header>
 
-<div class="verdict-box {"verdict-pass" if verification.passed else "verdict-fail"}">
-{v_icon} Verifier: {"ALL PASSED" if verification.passed else f"{verification.failed_count} FAILED"} {v_review}
-</div>
+  <section class="card">
+    <h2>基本信息</h2>
+    <table>
+      {_row("样本编号", sample_id)}
+      {_row("物种判定", verdict, species_confirmed)}
+      {_row("MLST ST", st)}
+      {_row("MLST Alleles", allele_str)}
+      {_row("血清型", serovar)}
+      {_row("血清群", serogroup)}
+      {_row("抗原式", f"{o_antigen}:{h1}:{h2}")}
+      {_row("Contigs 数", num_contigs)}
+      {_row("组装总长度", f"{total_len} bp")}
+    </table>
+  </section>
 
-<h2>📋 基本信息</h2>
-<table>
-{_row("样本编号", sample_id)}
-{_row("物种判定", verdict, species_confirmed)}
-{_row("MLST ST", st)}
-{_row("MLST Alleles", allele_str)}
-{_row("血清型", serovar)}
-{_row("血清群", serogroup)}
-{_row("抗原式", f"{o_antigen}:{h1}:{h2}")}
-{_row("Contigs 数", num_contigs)}
-{_row("组装总长度", f"{total_len} bp")}
-</table>
+  <section class="card">
+    <h2>Deterministic Verifier 校验</h2>
+    <table>
+      <tr><th>检查项</th><th>结果</th></tr>
+      {check_rows}
+    </table>
+  </section>
 
-<h2>🔬 Deterministic Verifier 校验</h2>
-<table>
-<tr><th>检查项</th><th>结果</th></tr>
-{check_rows}
-</table>
+  {annotation_block}
+  {nli_block}
 
-{annotation_section}
+  <section class="card">
+    <h2>AMR 耐药基因（CARD）</h2>
+    {_gene_table(card_genes, "CARD AMR Genes")}
+  </section>
 
-{_render_nli_section(sample_id)}
+  <section class="card">
+    <h2>毒力基因（VFDB）</h2>
+    {_gene_table(vfdb_genes, "VFDB Virulence Genes")}
+  </section>
 
-<h2>💊 AMR 耐药基因 (CARD)</h2>
-{_gene_table(card_genes, "CARD AMR Genes")}
+  <section class="card">
+    <h2>质粒复制子（PlasmidFinder）</h2>
+    {_gene_table(plasmid_genes, "PlasmidFinder")}
+  </section>
 
-<h2>🦠 毒力基因 (VFDB)</h2>
-{_gene_table(vfdb_genes, "VFDB Virulence Genes")}
+  {cgmlst_block}
 
-<h2>🧬 质粒复制子 (PlasmidFinder)</h2>
-{_gene_table(plasmid_genes, "PlasmidFinder")}
-{cgmlst_section}
-
-<div class="evidence">
-<h3>📌 三元证据链 (project.md §4.5)</h3>
-<p><strong>strain_id:</strong> {sample_id}</p>
-<p><strong>pipeline_version:</strong> {summary.get("pipeline_version", "salmonella-workflow-v0.1")}</p>
-<p><strong>tool_versions:</strong> fastp, Shovill 1.1.0, blastn 2.17.0+, gspec, gmlst, Bakta 1.12, eggNOG-mapper, QUAST, AMRFinderPlus 4.2.7</p>
-<p><strong>database_versions:</strong> CARD 2026-Apr-3, VFDB 2026-Apr-3, PlasmidFinder 2026-Apr-3, PubMLST salmonella_2</p>
-</div>
-
+  <section class="card evidence">
+    <h2>三元证据链</h2>
+    <p><strong>strain_id:</strong> <span class="mono">{sample_id}</span></p>
+    <p><strong>pipeline_version:</strong> <span class="mono">{summary.get("pipeline_version", "salmonella-workflow-v0.1")}</span></p>
+    <p><strong>tool_versions:</strong> fastp, Shovill 1.1.0, blastn 2.17.0+, gspec, gmlst, Bakta 1.12, eggNOG-mapper, QUAST, AMRFinderPlus 4.2.7</p>
+    <p><strong>database_versions:</strong> CARD, VFDB, PlasmidFinder, PubMLST salmonella_2</p>
+  </section>
+</main>
 </body></html>"""
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

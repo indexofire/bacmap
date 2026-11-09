@@ -11,7 +11,6 @@ from fastapi.testclient import TestClient
 
 import bacmap.tasks.engine.dbos_engine as eng
 from bacmap.interfaces.web import create_app
-from bacmap.store import baseline
 from bacmap.store.strain_metadata import StrainMetadataService
 
 
@@ -84,16 +83,6 @@ def _poll_fragment(c: TestClient, tid: str, want: str, timeout_s: float = 30.0) 
 
 
 class TestWebInterface:
-    def test_index_returns_page(self, client):
-        c, _ = client
-        r = c.get("/")
-        assert r.status_code == 200
-        assert "bacmap console" in r.text
-        assert 'id="app"' in r.text
-        legacy = c.get("/legacy")
-        assert legacy.status_code == 200
-        assert "暂无任务" in legacy.text or "SAM-" in legacy.text
-
     def test_root_redirects_to_vue_console(self, client):
         c, _ = client
         r = c.get("/", follow_redirects=False)
@@ -103,126 +92,43 @@ class TestWebInterface:
         assert c.get("/console/tasks").status_code == 200
         assert c.get("/static/console/index.html").status_code == 200
 
-    def test_submit_analyze_polls_to_succeeded(self, client):
+    def test_legacy_paths_redirect_to_console(self, client):
         c, _ = client
-        r = c.post(
-            "/tasks/submit",
-            data={"task_type": "analyze", "samples": "SAM-001"},
-            follow_redirects=True,
-        )
-        assert r.status_code == 200
-        tid = str(r.url).rstrip("/").split("/")[-1]
-        body = _poll_fragment(c, tid, "succeeded")
-        assert "succeeded" in body
-
-    def test_curate_approve_publishes_baseline(self, client):
-        c, home = client
-        r = c.post(
-            "/tasks/submit",
-            data={"task_type": "curate", "scope": "{}"},
-            follow_redirects=True,
-        )
-        assert r.status_code == 200
-        tid = str(r.url).rstrip("/").split("/")[-1]
-        body = _poll_fragment(c, tid, "awaiting_approval")
-        assert "awaiting_approval" in body
-        assert "审批签名" in body
-
-        r2 = c.post(
-            f"/tasks/{tid}/approve",
-            data={"approver": "reviewer", "decision": "approve", "signature": "sig-web"},
-            follow_redirects=True,
-        )
-        assert r2.status_code == 200
-        assert "published baseline v1" in r2.text
-        releases = baseline.list_releases(home / "baseline.sqlite")
-        assert len(releases) == 1
-        assert releases[0]["n_strains"] == 1
-
-    def test_unknown_task_type_rejected(self, client):
-        c, _ = client
-        r = c.post("/tasks/submit", data={"task_type": "deploy", "samples": "X"})
-        assert r.status_code == 400
-
-    def test_analyze_without_samples_rejected(self, client):
-        c, _ = client
-        r = c.post("/tasks/submit", data={"task_type": "analyze", "samples": ""})
-        assert r.status_code == 400
-
-    def test_open_path_task_type_rejected(self, client):
-        c, _ = client
-        r = c.post("/tasks/submit", data={"task_type": "mine", "samples": "SAM-001"})
-        assert r.status_code == 400
-
-    def test_unknown_task_404(self, client):
-        c, _ = client
-        assert c.get("/tasks/nope").status_code == 404
-        assert c.get("/tasks/nope/fragment").status_code == 404
-
-    def test_overview_page(self, client):
-        c, home = client
-        from sqlite3 import connect
-
-        conn = connect(home / "tasks.sqlite")
-        conn.execute(
-            "INSERT INTO tasks (task_id, task_type, state, params_json, submitted_by,"
-            " created_at, updated_at, workflow_id, current_step)"
-            " VALUES ('ov-1','analyze','succeeded','{}','t','2026-01-01T00:00:00',"
-            "'2026-01-01T00:00:00','','analyze')"
-        )
-        conn.commit()
-        conn.close()
-        r = c.get("/overview")
-        assert r.status_code == 200
-        assert "系统概览" in r.text
-        assert "LLM 端点" in r.text
-        assert "D1" in r.text
-        assert "BACMAP_HOME" in r.text
-        assert "任务分布" in r.text
-        assert "succeeded" in r.text
+        for old, new in (
+            ("/tasks", "/console/tasks"),
+            ("/tasks/abc", "/console/tasks/abc"),
+            ("/plans", "/console/plans"),
+            ("/samples", "/console/samples"),
+            ("/runs", "/console/runs"),
+            ("/records", "/console/records"),
+            ("/gom", "/console/gom"),
+            ("/overview", "/console/overview"),
+            ("/search?q=SAM", "/console/search?q=SAM"),
+        ):
+            r = c.get(old, follow_redirects=False)
+            assert r.status_code == 307, old
+            assert r.headers["location"] == new, old
 
 
 class TestResultsPages:
-    """结果查询界面（深度补全：任务台之外的人工查询面）。"""
-
-    def test_samples_page_lists_completed(self, client):
+    def test_old_sample_detail_redirects_to_console(self, client):
         c, _ = client
-        r = c.get("/samples")
-        assert r.status_code == 200
-        assert "SAM-001" in r.text
-        assert "Salmonella" in r.text
-
-    def test_sample_detail_shows_species(self, client):
-        c, _ = client
-        r = c.get("/samples/SAM-001")
-        assert r.status_code == 200
-        assert "Salmonella" in r.text
-        assert "blaCTX-M-15" in r.text
-
-    def test_missing_sample_404(self, client):
-        c, _ = client
-        assert c.get("/samples/NOPE").status_code == 404
-
-    def test_search_finds_by_gene(self, client):
-        c, _ = client
-        r = c.get("/search", params={"query": "blaCTX-M-15"})
-        assert r.status_code == 200
-        assert "SAM-001" in r.text
+        r = c.get("/samples/SAM-001", follow_redirects=False)
+        assert r.status_code == 307
+        assert r.headers["location"] == "/console/samples/SAM-001"
 
     def test_report_file_route_404_when_absent(self, client):
         c, _ = client
-        assert c.get("/samples/SAM-001/report").status_code == 404
+        assert c.get("/samples/NOPE/report").status_code == 404
 
     def test_report_route_rejects_path_traversal(self, client):
         c, _ = client
-        # urllib 对 ..%2f 的处理因版本而异；用编码斜杠确保路径参数带 .. 语义
-        r = c.get("/samples/..%2f..%2fetc%2fpasswd/report")
-        assert r.status_code in (400, 404)
+        assert c.get("/samples/..%2f..%2fetc%2fpasswd/report").status_code in (400, 404)
 
     def test_sample_detail_rejects_path_traversal(self, client):
         c, _ = client
-        r = c.get("/samples/..%2f..%2fetc%2fpasswd")
-        assert r.status_code in (400, 404)
+        r = c.get("/samples/..%2f..%2fetc%2fpasswd", follow_redirects=False)
+        assert r.status_code in (400, 404, 307)
 
 
 class TestWebAuth:
@@ -240,15 +146,16 @@ class TestWebAuth:
 
 
 class TestAssistantRemoved:
-    """v1.6（ADR-21）：Web 内置助手页移除；计划确认留在 /plans。"""
+    """v1.6（ADR-21）：Web 内置助手页移除；旧 Jinja 入口不再渲染。"""
 
     def test_assistant_routes_gone(self, client):
         c, _ = client
         assert c.get("/assistant").status_code == 404
         assert c.post("/assistant", data={"sid": "", "text": "x"}).status_code == 404
         assert c.post("/assistant/execute", data={"sid": "nope"}).status_code == 404
-        assert "/assistant" not in c.get("/legacy").text
-        assert 'href="/plans"' in c.get("/legacy").text
+        assert "/assistant" not in c.get("/console/").text
+        assert c.get("/legacy", follow_redirects=False).status_code == 307
+
 
 class TestWebCookieAuth:
     """v1.4.15：浏览器 cookie 会话 + CSRF（BACMAP_WEB_AUTH=cookie）。"""
@@ -294,36 +201,35 @@ class TestWebCookieAuth:
         )
         assert r.headers["location"] == "/"
 
-    def test_post_without_csrf_forbidden(self, engine, monkeypatch):
+    def test_api_post_without_csrf_forbidden(self, engine, monkeypatch):
         c = self._client(engine, monkeypatch)
         c.post("/login", data={"token": "tok", "next": "/"})
         r = c.post(
-            "/tasks/submit",
-            data={"task_type": "analyze", "samples": "SAM-001"},
+            "/api/v1/tasks",
+            json={"task_type": "analyze", "samples": ["SAM-001"]},
             headers={"origin": "http://testserver"},
         )
         assert r.status_code == 403
 
-    def test_post_with_csrf_ok(self, engine, monkeypatch):
+    def test_api_post_with_csrf_ok(self, engine, monkeypatch):
         c = self._client(engine, monkeypatch)
         c.post("/login", data={"token": "tok", "next": "/"})
         csrf = c.cookies.get("bacmap_csrf")
         r = c.post(
-            "/tasks/submit",
-            data={"task_type": "analyze", "samples": "SAM-001", "csrf": csrf},
-            headers={"origin": "http://testserver"},
-            follow_redirects=False,
+            "/api/v1/tasks",
+            json={"task_type": "analyze", "samples": ["SAM-001"]},
+            headers={"origin": "http://testserver", "x-csrf-token": csrf},
         )
-        assert r.status_code == 303
+        assert r.status_code == 200
 
-    def test_post_cross_origin_rejected(self, engine, monkeypatch):
+    def test_api_post_cross_origin_rejected(self, engine, monkeypatch):
         c = self._client(engine, monkeypatch)
         c.post("/login", data={"token": "tok", "next": "/"})
         csrf = c.cookies.get("bacmap_csrf")
         r = c.post(
-            "/tasks/submit",
-            data={"task_type": "analyze", "samples": "SAM-001", "csrf": csrf},
-            headers={"origin": "http://evil.example"},
+            "/api/v1/tasks",
+            json={"task_type": "analyze", "samples": ["SAM-001"]},
+            headers={"origin": "http://evil.example", "x-csrf-token": csrf},
         )
         assert r.status_code == 403
 
@@ -448,34 +354,8 @@ class TestSampleReportDelivery:
         assert r.status_code == 200
         assert "attachment" in r.headers["content-disposition"].lower()
 
-    def test_detail_page_offers_both_links(self, engine):
+    def test_old_sample_detail_redirects_to_console(self, engine):
         c = self._client_with_report(engine)
-        r = c.get("/samples/SAM-001")
-        assert r.status_code == 200
-        assert "/samples/SAM-001/report" in r.text
-        assert "/samples/SAM-001/report?download=1" in r.text
-
-
-class TestApprovalConflict:
-    def test_approving_finished_task_returns_409(self, client):
-        c, _ = client
-        r = c.post(
-            "/tasks/submit",
-            data={"task_type": "analyze", "samples": "SAM-001"},
-            follow_redirects=True,
-        )
-        tid = str(r.url).rstrip("/").split("/")[-1]
-        _poll_fragment(c, tid, "succeeded")
-        r2 = c.post(
-            f"/tasks/{tid}/approve",
-            data={"approver": "reviewer", "decision": "approve", "signature": "sig"},
-        )
-        assert r2.status_code == 409
-
-
-class TestScopeValidation:
-    def test_non_object_scope_rejected(self, client):
-        c, _ = client
-        r = c.post("/tasks/submit", data={"task_type": "curate", "scope": "[1,2]"})
-        assert r.status_code == 400
-        assert "JSON 对象" in r.text
+        r = c.get("/samples/SAM-001", follow_redirects=False)
+        assert r.status_code == 307
+        assert r.headers["location"] == "/console/samples/SAM-001"

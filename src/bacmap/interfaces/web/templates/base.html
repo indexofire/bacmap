@@ -12,20 +12,14 @@
 <a class="skip-link" href="#main">跳到主要内容</a>
 <header class="topbar">
   <div class="topbar__inner">
-    <a class="brand" href="/">
+    <a class="brand" href="/console/">
       <span class="brand__mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
       <span class="brand__name">bacmap</span>
-      <span class="brand__tag">本地任务台</span>
+      <span class="brand__tag">研究工具</span>
     </a>
     <nav class="topnav" aria-label="主导航">
-      <a href="/" {% if request.url.path == '/' %}aria-current="page"{% endif %}>任务</a>
-      <a href="/plans" {% if request.url.path.startswith('/plans') %}aria-current="page"{% endif %}>计划</a>
-      <a href="/records" {% if request.url.path.startswith('/records') %}aria-current="page"{% endif %}>记录</a>
-      <a href="/runs" {% if request.url.path.startswith('/runs') %}aria-current="page"{% endif %}>运行</a>
+      <a href="/console/">控制台</a>
       <a href="/research" {% if request.url.path.startswith('/research') %}aria-current="page"{% endif %}>研究</a>
-      <a href="/gom" {% if request.url.path.startswith('/gom') %}aria-current="page"{% endif %}>GOM</a>
-      <a href="/overview" {% if request.url.path == '/overview' %}aria-current="page"{% endif %}>系统</a>
-      <a href="/samples" {% if request.url.path.startswith('/samples') %}aria-current="page"{% endif %}>样本</a>
     </nav>
     {% if auth_enabled and auth_mode == 'cookie' %}
     <form class="topbar__logout" method="post" action="/logout">

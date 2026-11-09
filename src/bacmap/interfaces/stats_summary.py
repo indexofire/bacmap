@@ -100,10 +100,52 @@ def gather_stats(home: str | Path) -> dict[str, Any]:
                 "isolates": _count(conn, "SELECT COUNT(DISTINCT strain_id) FROM strain_amr_genes"),
                 "amr_genes": _count(conn, "SELECT COUNT(*) FROM strain_amr_genes"),
             }
+            out["strains"] = {
+                "total": _count(conn, "SELECT COUNT(*) FROM strain_genotype_index") or 0,
+                "species": [
+                    {"name": r[0], "count": r[1]}
+                    for r in _rows(
+                        conn,
+                        "SELECT species, COUNT(*) AS n FROM strain_genotype_index"
+                        " WHERE species != '' GROUP BY species ORDER BY n DESC LIMIT 12",
+                    )
+                ],
+                "serotypes": [
+                    {"name": r[0], "count": r[1]}
+                    for r in _rows(
+                        conn,
+                        "SELECT serotype, COUNT(*) AS n FROM strain_genotype_index"
+                        " WHERE serotype != '' GROUP BY serotype ORDER BY n DESC LIMIT 12",
+                    )
+                ],
+                "mlst": [
+                    {"name": r[0], "count": r[1]}
+                    for r in _rows(
+                        conn,
+                        "SELECT mlst_st, COUNT(*) AS n FROM strain_genotype_index"
+                        " WHERE mlst_st != '' GROUP BY mlst_st ORDER BY n DESC LIMIT 12",
+                    )
+                ],
+                "amr_top": [
+                    {"name": r[0], "count": r[1]}
+                    for r in _rows(
+                        conn,
+                        "SELECT gene_name, COUNT(*) AS n FROM strain_amr_genes"
+                        " GROUP BY gene_name ORDER BY n DESC LIMIT 15",
+                    )
+                ],
+            }
         finally:
             conn.close()
     else:
         out["gom"] = {**info, "genome_objects": 0, "isolates": 0, "amr_genes": 0}
+        out["strains"] = {
+            "total": 0,
+            "species": [],
+            "serotypes": [],
+            "mlst": [],
+            "amr_top": [],
+        }
 
     data_db = root / "data" / "bacmap.sqlite"
     info = _file_info(data_db)

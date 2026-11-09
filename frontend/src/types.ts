@@ -211,3 +211,41 @@ export interface Capabilities {
   plannable_task_types: string[]
   features: string[]
 }
+
+export interface CountItem {
+  name: string
+  count: number
+}
+
+export interface DatabaseStats {
+  schema: string
+  home: string
+  tasks: {
+    total: number
+    by_state: Record<string, number>
+    plans: number
+    [key: string]: unknown
+  }
+  runs: { total: number; [key: string]: unknown }
+  gom: { genome_objects: number; isolates: number; amr_genes: number; [key: string]: unknown }
+  strains: {
+    total: number
+    species: CountItem[]
+    serotypes: CountItem[]
+    mlst: CountItem[]
+    amr_top: CountItem[]
+  }
+  lab_results: { total: number; strains: number; [key: string]: unknown }
+  knowledge: { entries: number; [key: string]: unknown }
+  research: {
+    sessions: number
+    studies: number
+    cohorts: number
+    claims: number
+    requests: number
+    analyses: number
+    advstats_results: number
+    [key: string]: unknown
+  }
+  results: { sample_reports: number; [key: string]: unknown }
+}

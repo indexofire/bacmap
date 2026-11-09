@@ -55,7 +55,7 @@ onMounted(() => void load())
       <div class="pagehead__actions">
         <a class="btn btn--ghost" :href="`/research/studies/${id}`">
           <Icon name="external-link" />
-          旧版操作页
+          高级操作页
         </a>
         <button class="btn btn--ghost" type="button" :disabled="loading" @click="load">
           <Icon name="refresh" />

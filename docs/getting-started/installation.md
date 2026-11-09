@@ -66,6 +66,8 @@ What `pixi install` provides:
   (see `pixi.toml`).
 - **Common analysis tools** (ADR-20): `gside` (species identification), `gspec` (gene
   screening/typing), `gmlst` (MLST/cgMLST/MST).
+- **Optional mNGS**: `gmeta` 0.1.0 (metagenomic profiling and surveillance reports) is installed
+  as a dependency but not wired into the default bacterial isolate pipeline.
 - **AMR screening** uses gspec's `card`/`vfdb`/`plasmidfinder` plus NCBI
   **AMRFinderPlus** (genes + point mutations). AMRFinderPlus 4.2.7+ is also Bakta's
   internal AMR expert-system dependency; gspec's `ncbi` database provides presence-only
@@ -85,7 +87,7 @@ The development environment is separate:
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest (current baseline: 2016 passed)
+pixi run -e dev test        # pytest (current baseline: 1995 passed)
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter dependency contracts

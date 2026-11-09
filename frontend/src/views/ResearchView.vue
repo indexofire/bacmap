@@ -118,7 +118,7 @@ onMounted(() => void load())
         </button>
         <a class="btn btn--ghost" href="/research">
           <Icon name="external-link" />
-          旧版研究页
+          高级研究页
         </a>
       </div>
     </div>

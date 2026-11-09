@@ -64,6 +64,8 @@ bacmap --version      # 0.1.5
   （见 `pixi.toml`）。
 - **常用分析工具**（ADR-20）：`gside`（物种鉴定）、`gspec`（基因筛查/分型）、
   `gmlst`（MLST/cgMLST/MST）。
+- **可选 mNGS**：`gmeta` 0.1.0（宏基因组分析与监测报告）已作为依赖安装，但未接入
+  默认细菌分离株管线。
 - **AMR 筛查**使用 gspec 的 `card`/`vfdb`/`plasmidfinder`，以及 NCBI
   **AMRFinderPlus**（基因 + 点突变）。AMRFinderPlus 4.2.7+ 同时是 Bakta 内部
   AMR 专家系统依赖；gspec `ncbi` 数据库提供同一 Reference Gene Catalog 的存在性
@@ -81,7 +83,7 @@ bacmap --version      # 0.1.5
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest（当前基线：2016 passed）
+pixi run -e dev test        # pytest（当前基线：1995 passed）
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter 依赖契约

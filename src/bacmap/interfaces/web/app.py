@@ -10,7 +10,6 @@ create_app(engine) 与 build_server(engine) 同构——引擎注入，测试可
 from __future__ import annotations
 
 import hmac
-import json
 import secrets
 from collections.abc import Mapping
 from pathlib import Path
@@ -24,13 +23,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.background import BackgroundTask
 
 from bacmap.interfaces._security import SecurityHeadersMiddleware
-from bacmap.interfaces.views import (
-    load_summaries,
-    overview_data,
-    report_path,
-    sample_digest,
-    search_rows,
-)
+from bacmap.interfaces.views import report_path
 from bacmap.interfaces.web.auth import (
     CSRF_COOKIE,
     SESSION_COOKIE,
@@ -40,14 +33,8 @@ from bacmap.interfaces.web.auth import (
     safe_next,
     verify_csrf,
 )
-from bacmap.interfaces.web.payloads import (
-    approval_payload,
-    fields_from_text,
-    submit_task_payload,
-)
 from bacmap.interfaces.web.static import STATIC_DIR
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
-from bacmap.tasks.spec import TaskId
 from bacmap.tools._common import _validate_sample_id
 
 
@@ -151,25 +138,7 @@ def _build_auth_routes(app: FastAPI, cfg: WebAuthConfig) -> None:
 
 
 def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
-    """样本列表/详情/内联报告/搜索页。"""
-
-    @app.get("/samples", response_class=HTMLResponse)
-    def samples_page(request: Request) -> HTMLResponse:
-        rows = [sample_digest(s) for s in load_summaries(engine)]
-        return _TEMPLATES.TemplateResponse(request, "samples.html", {"rows": rows})
-
-    @app.get("/samples/{sample_id}", response_class=HTMLResponse)
-    def sample_detail(request: Request, sample_id: str) -> HTMLResponse:
-        if not _validate_sample_id(sample_id):
-            raise HTTPException(400, "非法样本 ID")
-        summary = next(
-            (s for s in load_summaries(engine) if s["_sample_id"] == sample_id), None
-        )
-        if summary is None:
-            raise HTTPException(404, "样本不存在")
-        d = sample_digest(summary)
-        d["has_report"] = report_path(engine, sample_id).is_file()
-        return _TEMPLATES.TemplateResponse(request, "sample_detail.html", {"d": d})
+    """样本 HTML 报告（其余样本页面由 Vue SPA 提供）。"""
 
     @app.get("/samples/{sample_id}/report")
     def sample_report(sample_id: str, download: int = 0) -> FileResponse:
@@ -178,9 +147,8 @@ def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
         path = report_path(engine, sample_id)
         if not path.is_file():
             raise HTTPException(404, "该样本尚未生成 HTML 报告")
-        # 默认**内联查看**（用户点"查看"的预期）；`?download=1` 才作为附件下载。
-        # 报告是自包含 HTML（内联 <style>），用 sandbox CSP 隔离：禁脚本、禁外联、
-        # 唯一不透明源（即使报告里混入不可信文本也无法读取同源 cookie/发起请求）。
+        # 默认内联查看；?download=1 才作为附件下载。报告是自包含 HTML，
+        # 用 sandbox CSP 隔离：禁脚本、禁外联，避免读取同源 cookie。
         csp = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:"
         return FileResponse(
             path,
@@ -190,317 +158,72 @@ def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
             headers={"Content-Security-Policy": csp},
         )
 
-    @app.get("/search", response_class=HTMLResponse)
-    def search_page(
-        request: Request,
-        query: str = "",
-        serotype: str = "",
-        mlst_st: str = "",
-        amr_gene: str = "",
-    ) -> HTMLResponse:
-        rows = [sample_digest(s) for s in load_summaries(engine)]
-        hits = search_rows(
-            rows, query=query, serotype=serotype, mlst_st=mlst_st, amr_gene=amr_gene
-        )
-        return _TEMPLATES.TemplateResponse(
-            request,
-            "search.html",
-            {
-                "hits": hits,
-                "query": query,
-                "serotype": serotype,
-                "mlst_st": mlst_st,
-                "amr_gene": amr_gene,
-            },
-        )
 
+def _build_redirect_routes(app: FastAPI) -> None:  # noqa: C901
+    """旧 HTML 路径 → Vue SPA 客户端路由（保留书签，不再渲染旧模板）。"""
 
-def _build_legacy_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
-    """v0.2.0：/ 进入 Vue 控制台，旧 Jinja 任务台保留在 /legacy。"""
+    def _q(request: Request) -> str:
+        return f"?{request.url.query}" if request.url.query else ""
 
-    @app.get("/", response_class=HTMLResponse)
-    def index(request: Request) -> Response:
+    @app.get("/legacy", include_in_schema=False)
+    def legacy_redirect() -> RedirectResponse:
         return RedirectResponse("/console/", status_code=307)
 
-    @app.get("/legacy", response_class=HTMLResponse)
-    def legacy_index(request: Request) -> HTMLResponse:
-        return _TEMPLATES.TemplateResponse(
-            request, "index.html", {"tasks": engine.list_tasks()}
-        )
+    @app.get("/tasks", include_in_schema=False)
+    def tasks_redirect() -> RedirectResponse:
+        return RedirectResponse("/console/tasks", status_code=307)
 
+    @app.get("/tasks/{task_id}", include_in_schema=False)
+    def task_redirect(task_id: str, request: Request) -> RedirectResponse:
+        return RedirectResponse(f"/console/tasks/{task_id}{_q(request)}", status_code=307)
 
-def _build_task_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
-    """任务列表/概览/提交/详情/轮询 fragment/审批。"""
+    @app.get("/tasks/{task_id}/fragment", include_in_schema=False)
+    def task_fragment_redirect(task_id: str) -> RedirectResponse:
+        return RedirectResponse(f"/console/tasks/{task_id}", status_code=307)
 
-    _build_legacy_routes(app, engine)
+    @app.get("/plans", include_in_schema=False)
+    def plans_redirect() -> RedirectResponse:
+        return RedirectResponse("/console/plans", status_code=307)
 
-    @app.get("/overview", response_class=HTMLResponse)
-    def overview(request: Request) -> HTMLResponse:
-        return _TEMPLATES.TemplateResponse(request, "overview.html", overview_data(engine))
+    @app.get("/plans/{plan_id}", include_in_schema=False)
+    def plan_redirect(plan_id: str, request: Request) -> RedirectResponse:
+        return RedirectResponse(f"/console/plans/{plan_id}{_q(request)}", status_code=307)
 
-    @app.post("/tasks/submit")
-    def submit_task(
-        request: Request,
-        task_type: str = Form(...),
-        samples: str = Form(""),
-        scope: str = Form(""),
-        csrf: str = Form(""),
-    ) -> RedirectResponse:
-        if not verify_csrf(request, csrf):
-            raise HTTPException(403, "CSRF 校验失败")
-        tt, params = submit_task_payload(task_type, samples, scope)
-        try:
-            tid = engine.submit(tt, params, submitted_by="web")
-        except (ValueError, NotImplementedError) as exc:
-            raise HTTPException(400, str(exc)) from exc
-        return RedirectResponse(f"/tasks/{tid}", status_code=303)
+    @app.get("/records", include_in_schema=False)
+    def records_redirect() -> RedirectResponse:
+        return RedirectResponse("/console/records", status_code=307)
 
-    def _status_or_404(task_id: str):
-        try:
-            return engine.status(TaskId(task_id))
-        except KeyError as exc:
-            raise HTTPException(404, "任务不存在") from exc
+    @app.get("/runs", include_in_schema=False)
+    def runs_redirect() -> RedirectResponse:
+        return RedirectResponse("/console/runs", status_code=307)
 
-    def _render_task_page(request: Request, task_id: str, template: str) -> HTMLResponse:
-        """task 详情页与轮询 fragment 共用渲染（仅模板不同）。"""
-        st = _status_or_404(task_id)
-        return _TEMPLATES.TemplateResponse(
-            request, template, {"st": st, "task_id": task_id}
-        )
+    @app.get("/runs/{run_id}", include_in_schema=False)
+    def run_redirect(run_id: str, request: Request) -> RedirectResponse:
+        return RedirectResponse(f"/console/runs/{run_id}{_q(request)}", status_code=307)
 
-    @app.get("/tasks/{task_id}", response_class=HTMLResponse)
-    def task_detail(request: Request, task_id: str) -> HTMLResponse:
-        return _render_task_page(request, task_id, "task_detail.html")
+    @app.get("/gom", include_in_schema=False)
+    def gom_redirect() -> RedirectResponse:
+        return RedirectResponse("/console/gom", status_code=307)
 
-    @app.get("/tasks/{task_id}/fragment", response_class=HTMLResponse)
-    def task_fragment(request: Request, task_id: str) -> HTMLResponse:
-        return _render_task_page(request, task_id, "task_fragment.html")
+    @app.get("/gom/{object_id}", include_in_schema=False)
+    def gom_object_redirect(object_id: str, request: Request) -> RedirectResponse:
+        return RedirectResponse(f"/console/gom/{object_id}{_q(request)}", status_code=307)
 
-    @app.post("/tasks/{task_id}/approve")
-    def approve_task(
-        request: Request,
-        task_id: str,
-        approver: str = Form(...),
-        decision: str = Form(...),
-        signature: str = Form(...),
-        csrf: str = Form(""),
-    ) -> RedirectResponse:
-        if not verify_csrf(request, csrf):
-            raise HTTPException(403, "CSRF 校验失败")
-        try:
-            engine.approve(TaskId(task_id), approval_payload(approver, decision, signature))
-        except KeyError as exc:
-            raise HTTPException(404, "任务不存在") from exc
-        except ValueError as exc:
-            # 重复审批 / 任务已终态：状态冲突（409），不能把状态机拒绝当 500。
-            raise HTTPException(409, str(exc)) from exc
-        return RedirectResponse(f"/tasks/{task_id}", status_code=303)
+    @app.get("/samples", include_in_schema=False)
+    def samples_redirect() -> RedirectResponse:
+        return RedirectResponse("/console/samples", status_code=307)
 
+    @app.get("/samples/{sample_id}", include_in_schema=False)
+    def sample_redirect(sample_id: str) -> RedirectResponse:
+        return RedirectResponse(f"/console/samples/{sample_id}", status_code=307)
 
-def _build_record_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
-    """数据记录页（v1.7）：元数据 / 化验 / 知识库——写操作只经任务层（record 任务）。"""
-    from bacmap.tasks.spec import TaskType
+    @app.get("/search", include_in_schema=False)
+    def search_redirect(request: Request) -> RedirectResponse:
+        return RedirectResponse(f"/console/search{_q(request)}", status_code=307)
 
-    @app.get("/records", response_class=HTMLResponse)
-    def records_page(request: Request) -> HTMLResponse:
-        return _TEMPLATES.TemplateResponse(request, "records.html", {})
-
-    @app.post("/records/{kind}")
-    def submit_record(
-        request: Request,
-        kind: str,
-        strain_id: str = Form(""),
-        sample_id: str = Form(""),
-        fields: str = Form(""),
-        category: str = Form(""),
-        test_name: str = Form(""),
-        result: str = Form(""),
-        unit: str = Form(""),
-        title: str = Form(""),
-        identifier: str = Form(""),
-        content: str = Form(""),
-        entry_id: str = Form(""),
-        csrf: str = Form(""),
-    ) -> RedirectResponse:
-        if not verify_csrf(request, csrf):
-            raise HTTPException(403, "CSRF 校验失败")
-        params: dict[str, Any] = {}
-        if kind == "metadata":
-            params = {
-                "kind": "metadata",
-                "strain_id": strain_id.strip(),
-                "sample_id": (sample_id.strip() or strain_id.strip()),
-                "fields": fields_from_text(fields),
-            }
-        elif kind == "lab":
-            params = {
-                "kind": "lab_result",
-                "strain_id": strain_id.strip(),
-                "category": category.strip(),
-                "test_name": test_name.strip(),
-                "result": result.strip(),
-                "unit": unit.strip(),
-            }
-        elif kind == "knowledge-import":
-            params = {
-                "kind": "knowledge_import",
-                "title": title.strip(),
-                "identifier": identifier.strip(),
-                "content": content.strip(),
-            }
-        elif kind == "knowledge-approve":
-            try:
-                params = {"kind": "knowledge_approve", "entry_id": int(entry_id)}
-            except ValueError as exc:
-                raise HTTPException(400, "entry_id 必须是整数") from exc
-        else:
-            raise HTTPException(404, "未知的记录类型")
-        try:
-            tid = engine.submit(TaskType.RECORD, params, "web")
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
-        return RedirectResponse(f"/tasks/{tid}", status_code=303)
-
-
-def _build_evidence_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
-    """运行记录与 GOM 的只读页面（v1.7.1，ADR-18/13）。"""
-    import json as _json
-
-    from bacmap.interfaces.views import (
-        compare_run_records,
-        gom_object,
-        list_gom_objects,
-        list_runs,
-        run_detail,
-    )
-
-    @app.get("/runs", response_class=HTMLResponse)
-    def runs_page(request: Request) -> HTMLResponse:
-        return _TEMPLATES.TemplateResponse(
-            request, "runs.html", {"runs": list_runs(engine.home, 50)}
-        )
-
-    @app.get("/runs/{run_id}", response_class=HTMLResponse)
-    def run_page(request: Request, run_id: str, other: str | None = None) -> Any:
-        run = run_detail(engine.home, run_id)
-        if run is None:
-            raise HTTPException(404, "运行记录不存在")
-        compare = compare_run_records(engine.home, run_id, other) if other else None
-        return _TEMPLATES.TemplateResponse(
-            request,
-            "run_detail.html",
-            {
-                "run": run,
-                "compare": compare,
-                "tool_versions": _json.dumps(
-                    run.get("tool_versions", {}), ensure_ascii=False, indent=2
-                ),
-                "ref_databases": _json.dumps(
-                    run.get("ref_databases", []), ensure_ascii=False, indent=2
-                ),
-                "resolved_config": _json.dumps(
-                    run.get("resolved_config", {}), ensure_ascii=False, indent=2
-                ),
-            },
-        )
-
-    @app.get("/gom", response_class=HTMLResponse)
-    def gom_page(request: Request, type: str | None = None) -> HTMLResponse:
-        return _TEMPLATES.TemplateResponse(
-            request,
-            "gom.html",
-            {"objects": list_gom_objects(engine.home, type, 100), "type": type or ""},
-        )
-
-    @app.get("/gom/{object_id}", response_class=HTMLResponse)
-    def gom_detail_page(request: Request, object_id: str, version: int | None = None) -> Any:
-        obj = gom_object(engine.home, object_id, version)
-        if obj is None:
-            raise HTTPException(404, "GOM 对象不存在")
-        return _TEMPLATES.TemplateResponse(
-            request,
-            "gom_detail.html",
-            {
-                "obj": obj,
-                "payload": _json.dumps(obj["payload"], ensure_ascii=False, indent=2),
-            },
-        )
-
-
-def _build_plan_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
-    """计划审阅与确认（v1.5.1，ADR-21 可信确认面）：外部 Harness 建计划，人在此确认。"""
-    from bacmap.application.errors import ApplicationError, NotFound
-    from bacmap.application.plans import PlanRecord, PlanService
-
-    service = PlanService(engine, engine.db)
-
-    def _render(request: Request, plan: PlanRecord, error: str = "", status: int = 200) -> Any:
-        task_json = [
-            json.dumps(t.model_dump(mode="json", exclude_none=True), ensure_ascii=False)
-            for t in plan.tasks
-        ]
-        return _TEMPLATES.TemplateResponse(
-            request,
-            "plan_detail.html",
-            {"plan": plan, "task_json": task_json, "error": error},
-            status_code=status,
-        )
-
-    def _get_or_404(plan_id: str, version: int | None = None) -> PlanRecord:
-        try:
-            return service.get(plan_id, version)
-        except NotFound as exc:
-            raise HTTPException(404, "计划不存在") from exc
-
-    @app.get("/plans", response_class=HTMLResponse)
-    def plans(request: Request) -> HTMLResponse:
-        return _TEMPLATES.TemplateResponse(
-            request, "plans.html", {"plans": service.list_plans(50)}
-        )
-
-    @app.get("/plans/{plan_id}", response_class=HTMLResponse)
-    def plan_detail(request: Request, plan_id: str, version: int | None = None) -> Any:
-        return _render(request, _get_or_404(plan_id, version))
-
-    @app.post("/plans/{plan_id}/confirm")
-    def confirm_plan(
-        request: Request,
-        plan_id: str,
-        version: int = Form(...),
-        plan_hash: str = Form(...),
-        confirmer: str = Form(...),
-        csrf: str = Form(""),
-    ) -> Any:
-        if not verify_csrf(request, csrf):
-            raise HTTPException(403, "CSRF 校验失败")
-        who = confirmer.strip()[:64]
-        if not who:
-            raise HTTPException(400, "需要确认人")
-        try:
-            service.confirm(plan_id, version, plan_hash, f"web:{who}")
-        except NotFound as exc:
-            raise HTTPException(404, "计划不存在") from exc
-        except ApplicationError as exc:
-            return _render(request, _get_or_404(plan_id, version), exc.message, 409)
-        return RedirectResponse(f"/plans/{plan_id}?version={version}", status_code=303)
-
-    @app.post("/plans/{plan_id}/reject")
-    def reject_plan(
-        request: Request,
-        plan_id: str,
-        version: int = Form(...),
-        reason: str = Form(...),
-        csrf: str = Form(""),
-    ) -> Any:
-        if not verify_csrf(request, csrf):
-            raise HTTPException(403, "CSRF 校验失败")
-        try:
-            service.reject(plan_id, version, reason.strip()[:500], "web")
-        except NotFound as exc:
-            raise HTTPException(404, "计划不存在") from exc
-        except ApplicationError as exc:
-            return _render(request, _get_or_404(plan_id, version), exc.message, 409)
-        return RedirectResponse(f"/plans/{plan_id}?version={version}", status_code=303)
+    @app.get("/overview", include_in_schema=False)
+    def overview_redirect() -> RedirectResponse:
+        return RedirectResponse("/console/overview", status_code=307)
 
 
 def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI:
@@ -535,12 +258,13 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
             )
         return FileResponse(console_index)
 
+    @app.get("/", include_in_schema=False)
+    def root() -> RedirectResponse:
+        return RedirectResponse("/console/", status_code=307)
+
     _build_auth_routes(app, cfg)
     _build_sample_routes(app, engine)
-    _build_task_routes(app, engine)
-    _build_plan_routes(app, engine)
-    _build_record_routes(app, engine)
-    _build_evidence_routes(app, engine)
+    _build_redirect_routes(app)
 
     from bacmap.interfaces.web.research import build_research_routes
 

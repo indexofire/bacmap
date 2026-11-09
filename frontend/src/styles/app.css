@@ -272,7 +272,7 @@
 
 .content {
   width: 100%;
-  max-width: var(--content-max);
+  max-width: none;
   margin: 0 auto;
   padding: var(--sp-6) var(--sp-6) var(--sp-12);
 }

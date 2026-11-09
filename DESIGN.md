@@ -2,22 +2,28 @@
 
 > 适用范围：`src/bacmap/interfaces/web/` 与 `frontend/`（Vue 3 控制台 / 旧 Jinja 页）。
 > 硬约束：本地单机部署，**零外联**（ADR-16）——无 CDN、无 webfont、无外部图标包；
-> 默认界面为 Vue 3 SPA（`/console/`），旧 Jinja 页保留 `/legacy`；构建产物本地托管。
+> 默认界面为 Vue 3 SPA（`/console/`）；旧 Jinja 任务台已移除，旧路径 307 到 `/console/...`；
+> 构建产物本地托管。
 > 本文是唯一视觉决策来源：任何颜色 / 字号 / 间距 / 组件形态必须回溯到本文的 token；
 > 需要 token 之外的东西时，先扩表，再使用。
 
 ## v0.2.0 控制台（Vue 3 SPA）
 
 0.2.0 起默认入口是 `/console/` 的 **Vue 3 + Vite** 控制台；`/` 重定向到 `/console/`，
-原 Jinja 任务台保留在 `/legacy`。视觉语言不换：仍为“月光下的值班台”，token 从本文
-§2–§7 继承到 `frontend/src/styles/tokens.css`，状态语义、等宽读数与发丝边框保持一致。
+旧 Jinja 任务台已移除（旧路径 307 到 `/console/...`）。视觉语言不换：仍为“月光下的值班台”，
+token 从本文 §2–§7 继承到 `frontend/src/styles/tokens.css`，状态语义、等宽读数与发丝边框保持一致。
 
 - **为什么是 SPA**：任务详情轮询、计划确认、事件时间线、图表与筛选需要客户端状态；
   Vue 3 + Vite 提供组件化与按路由拆包，同时构建产物是纯静态文件。
 - **运行期零 Node（ADR-01）**：Node 只在 `web` pixi 环境构建时使用；FastAPI 只托管
   `src/bacmap/interfaces/web/static/console/` 的 `index.html` 与 assets。
 - **布局**：左侧 236px 固定导航（工作台 / 证据链 / 系统），顶部 60px 面包屑 + 全局搜索；
-  内容最大 1320px。≤900px 侧栏变抽屉，≤640px 表格转行卡。
+  内容区 **full width**（左右 24px，不再居中限宽），搜索框与内容右边缘对齐；≤900px 侧栏变
+  抽屉，≤640px 表格转行卡。
+- **仪表盘**：任务 KPI/趋势/状态之外，增加数据库概览（菌株、GOM、AMR 命中、样本报告、
+  研究会话、知识库、运行记录、化验结果）以及物种/血清型/MLST/AMR 的分布条形图。
+- **报告**：单样本 HTML 报告采用同一暗色 token（近黑画布、亮度分层、状态色、等宽读数），
+  不再是旧式浅色表格；打印时切换为浅色。
 - **页面**：仪表盘（KPI、7 天趋势、状态环图、待审批、系统状态）、任务（筛选/提交抽屉/
   详情/审批/事件时间线）、计划（列表/参数/哈希确认/拒绝）、样本（列表/摘要/基因/注释/
   HTML 报告）、运行记录（详情/来源比较）、数据记录（元数据/化验/知识导入与审核）、
@@ -274,7 +280,7 @@ Dials（taste-skill §1，操作台修订）：VARIANCE 4 / MOTION 3 / DENSITY 6
 | 无 Lighthouse 自动化门（本地内网工具） | QA 流程 | 用真浏览器断点 + 状态遍历替代；本栈为本地控制台，包体不是首要指标 | 若页面数量增长再引入 |
 | Linear 的 Inter cv01/ss03 等宽特性不可用（零外联禁 webfont） | §3 | 用系统栈 + 等宽读数 + 字重 400/500/600 三档近似其 400/510/590 体系 | 若未来允许自托管字体再换 |
 | Vue 控制台允许一次性 inline style 属性 | `frontend/src/views/*` | 间距/尺寸等一次性布局值用 `style` 最直接；CSP 仅放宽 `style-src 'unsafe-inline'`，`script-src` 仍为 `'self'`（无内联脚本/eval） | 后续统一抽 utility class 后可移除 `'unsafe-inline'` |
-| 高级研究工具仍保留旧版 `/research` | 系统发育、logistic、Study/Cohort/Plan/Claim 写操作 | 本批只迁移只读总览与会话详情；写操作需要更多确认/审计交互，下一批迁移 | SPA 增加对应表单与 CSRF 流程后移除旧版入口 |
+| 高级研究工具保留 Jinja 页面 `/research` | 系统发育、logistic、Study/Cohort/Plan/Claim 写操作 | 本批只迁移只读总览与会话详情；写操作需要更多确认/审计交互，下一批迁移 | SPA 增加对应表单与 CSRF 流程后移除该入口 |
 
 ## 11. 本地性合规（ADR-16 映射）
 
