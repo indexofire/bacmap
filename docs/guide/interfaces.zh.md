@@ -26,14 +26,19 @@ pixi run -e web web-build
 | `/console/tasks` | 任务列表、筛选与提交抽屉（analyze/curate） |
 | `/console/tasks/{id}` | 任务详情、事件时间线、审批卡、取消 |
 | `/console/plans`、`/console/plans/{id}` | 智能体提出的计划、完整参数、确认/拒绝 |
+| `/console/samples`、`/console/samples/{id}` | 已完成样本与单样本结果/注释 |
 | `/console/runs`、`/console/runs/{id}` | 不可变运行记录与来源比较 |
 | `/console/records` | 元数据、化验结果、知识导入/审核表单 |
+| `/console/gom`、`/console/gom/{id}` | GOM 对象、不可变版本与载荷 |
+| `/console/research` | 研究会话与 Study/Cohort/Plan/Claim 总览 |
+| `/console/research/sessions/{id}` | 研究统计、图、产物与证据链 |
+| `/console/research/studies/{id}` | Study、Cohort、Plan、Claim（只读） |
 | `/console/overview` | 系统概览（版本、路径、数据策略、沙箱） |
 | `/console/search` | 按关键词/血清型/ST/基因检索样本 |
 | `/legacy` | 原 Jinja 任务台 |
-| `/samples`、`/samples/{id}` | 已完成样本与单样本检出结果（旧页） |
+| `/samples`、`/samples/{id}` | 旧样本页 |
 | `/samples/{id}/report` | 内联 HTML 报告（`?download=1` 改为附件） |
-| `/gom` | GOM 对象（旧页） |
+| `/gom` | 旧 GOM 页 |
 | `/api/v1/*` | JSON API（见 [HTTP API 参考](../reference/api.zh.md)） |
 
 任务详情页在非终态时每两秒轮询 `/api/v1/tasks/{id}`。所有资源（CSS、JS、图标、favicon）

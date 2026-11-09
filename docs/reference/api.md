@@ -36,6 +36,7 @@ Origin: http://127.0.0.1:8800
 | GET | `/api/v1/capabilities` | API version, bacmap version, plannable types, features |
 | GET | `/api/v1/overview` | system overview (versions, paths, policy, sandbox, counts) |
 | GET | `/api/v1/samples?cursor=&limit=` | completed-sample page (only the page is parsed) |
+| GET | `/api/v1/samples/{id}` | sample digest + full steps + report-ready flag |
 | GET | `/api/v1/search?q=&serotype=&mlst_st=&amr_gene=` | sample search by keyword/serotype/ST/gene |
 | GET | `/api/v1/tasks?limit=` | recent tasks |
 | POST | `/api/v1/tasks` | submit analyze/curate (`task_type`, `samples`, `scope`) |

@@ -34,6 +34,48 @@ const router = createRouter({
       meta: { title: '计划详情' },
     },
     {
+      path: '/samples',
+      name: 'samples',
+      component: () => import('./views/SamplesView.vue'),
+      meta: { title: '样本' },
+    },
+    {
+      path: '/samples/:id',
+      name: 'sample-detail',
+      component: () => import('./views/SampleDetailView.vue'),
+      meta: { title: '样本详情' },
+    },
+    {
+      path: '/gom',
+      name: 'gom',
+      component: () => import('./views/GomView.vue'),
+      meta: { title: 'GOM' },
+    },
+    {
+      path: '/gom/:id',
+      name: 'gom-detail',
+      component: () => import('./views/GomDetailView.vue'),
+      meta: { title: 'GOM 对象' },
+    },
+    {
+      path: '/research',
+      name: 'research',
+      component: () => import('./views/ResearchView.vue'),
+      meta: { title: '研究' },
+    },
+    {
+      path: '/research/sessions/:id',
+      name: 'research-session',
+      component: () => import('./views/ResearchSessionView.vue'),
+      meta: { title: '研究会话' },
+    },
+    {
+      path: '/research/studies/:id',
+      name: 'research-study',
+      component: () => import('./views/ResearchStudyView.vue'),
+      meta: { title: 'Study' },
+    },
+    {
       path: '/runs',
       name: 'runs',
       component: () => import('./views/RunsView.vue'),

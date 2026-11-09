@@ -30,6 +30,7 @@ from bacmap.interfaces.views import (
     list_runs,
     overview_data,
     run_detail,
+    sample_detail,
     sample_page,
     sample_rows,
     search_rows,
@@ -157,6 +158,13 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
     def list_samples(cursor: str | None = None, limit: int = 50) -> dict[str, Any]:
         items, next_cursor = sample_page(engine.home, cursor, _limit(limit))
         return {"items": items, "next_cursor": next_cursor}
+
+    @router.get("/samples/{sample_id}")
+    def get_sample(sample_id: str) -> dict[str, Any]:
+        data = sample_detail(engine.home, sample_id)
+        if data is None:
+            raise NotFound(f"no such sample: {sample_id}")
+        return data
 
     @router.get("/overview")
     def overview() -> dict[str, Any]:

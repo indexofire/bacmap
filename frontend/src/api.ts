@@ -1,8 +1,17 @@
 import type {
   Capabilities,
+  GomObject,
   Overview,
   PlanRecord,
+  ResearchClaim,
+  ResearchCohort,
+  ResearchLedgerEntry,
+  ResearchPlan,
+  ResearchSession,
+  ResearchSessionView,
+  ResearchStudy,
   RunRow,
+  SampleDetail,
   SampleRow,
   TaskEvent,
   TaskRow,
@@ -134,4 +143,67 @@ export const api = {
 
   createRecord: (kind: string, body: Record<string, unknown>) =>
     request<TaskRow>(`/records/${encodeURIComponent(kind)}`, json(body)),
+
+  listSamples: (cursor?: string, limit = 50) => {
+    const q = new URLSearchParams({ limit: String(limit) })
+    if (cursor) q.set('cursor', cursor)
+    return request<{ items: SampleRow[]; next_cursor: string | null }>(
+      `/samples?${q.toString()}`,
+    )
+  },
+  getSample: (id: string) => request<SampleDetail>(`/samples/${encodeURIComponent(id)}`),
+
+  listGom: (type?: string, limit = 100) => {
+    const q = new URLSearchParams({ limit: String(limit) })
+    if (type) q.set('type', type)
+    return request<{ items: GomObject[] }>(`/gom/objects?${q.toString()}`).then((r) => r.items)
+  },
+  getGom: (id: string, version?: number) =>
+    request<GomObject>(
+      `/gom/objects/${encodeURIComponent(id)}${version ? `?version=${version}` : ''}`,
+    ),
+
+  listResearchSessions: (limit = 50) =>
+    request<{ items: ResearchSession[] }>(`/research/sessions?limit=${limit}`).then((r) => r.items),
+  createResearchSession: (body: {
+    run_id: string
+    gene: string
+    test_name: string
+    profile?: string
+    study_id?: string
+    cohort_id?: string
+    plan_id?: string
+    note?: string
+  }) => request<ResearchSessionView>('/research/sessions', json(body)),
+  getResearchSession: (id: string) =>
+    request<ResearchSessionView>(`/research/sessions/${encodeURIComponent(id)}`),
+  getResearchLedger: (id: string) =>
+    request<{ items: ResearchLedgerEntry[] }>(
+      `/research/sessions/${encodeURIComponent(id)}/ledger`,
+    ).then((r) => r.items),
+  listResearchStudies: (limit = 50) =>
+    request<{ items: ResearchStudy[] }>(`/research/studies?limit=${limit}`).then((r) => r.items),
+  getResearchStudy: (id: string) =>
+    request<ResearchStudy>(`/research/studies/${encodeURIComponent(id)}`),
+  listResearchCohorts: (studyId?: string, limit = 100) => {
+    const q = new URLSearchParams({ limit: String(limit) })
+    if (studyId) q.set('study_id', studyId)
+    return request<{ items: ResearchCohort[] }>(`/research/cohorts?${q.toString()}`).then(
+      (r) => r.items,
+    )
+  },
+  listResearchPlans: (studyId?: string, limit = 100) => {
+    const q = new URLSearchParams({ limit: String(limit) })
+    if (studyId) q.set('study_id', studyId)
+    return request<{ items: ResearchPlan[] }>(`/research/plans?${q.toString()}`).then(
+      (r) => r.items,
+    )
+  },
+  listResearchClaims: (studyId?: string, limit = 100) => {
+    const q = new URLSearchParams({ limit: String(limit) })
+    if (studyId) q.set('study_id', studyId)
+    return request<{ items: ResearchClaim[] }>(`/research/claims?${q.toString()}`).then(
+      (r) => r.items,
+    )
+  },
 }

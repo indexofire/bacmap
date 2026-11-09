@@ -311,6 +311,26 @@ def sample_rows(engine: DbosTaskEngine) -> list[dict[str, Any]]:
     return [sample_digest(s) for s in load_summaries(engine)]
 
 
+def sample_detail(home: Path | str, sample_id: str) -> dict[str, Any] | None:
+    """单样本详情：digest + 完整 steps + 报告就绪标记（路径穿越安全）。"""
+    if not sample_id or sample_id in {".", ".."}:
+        return None
+    if "/" in sample_id or "\\" in sample_id or "\x00" in sample_id:
+        return None
+    base = Path(home) / "results" / sample_id
+    summary_file = base / "report" / f"{sample_id}_summary.json"
+    data = _read_summary(summary_file)
+    if data is None:
+        return None
+    digest = sample_digest(data)
+    digest["has_report"] = (base / "report" / f"{sample_id}_report.html").is_file()
+    return {
+        "digest": digest,
+        "steps": data.get("steps", {}),
+        "summary": data,
+    }
+
+
 def report_path(engine: DbosTaskEngine, sample_id: str) -> Path:
     return Path(engine.home) / "results" / sample_id / "report" / f"{sample_id}_report.html"
 

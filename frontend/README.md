@@ -28,7 +28,7 @@ frontend/
 │   ├── composables/        # 轮询、Toast
 │   ├── lib/                # ECharts 按需加载、格式化
 │   ├── styles/             # tokens.css + app.css（全局设计系统）
-│   └── views/              # Dashboard/Tasks/TaskDetail/Plans/.../Search
+│   └── views/              # Dashboard/Tasks/TaskDetail/Plans/Samples/GOM/Research/.../Search
 └── vite.config.ts          # base=/static/console/，outDir=../src/.../static/console
 ```
 

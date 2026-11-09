@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { api } from '../api'
@@ -118,10 +118,10 @@ onMounted(() => {
               <td data-label="CARD" class="mono">{{ row.n_card }}</td>
               <td data-label="VFDB" class="mono">{{ row.n_vfdb }}</td>
               <td data-label="">
-                <a class="btn btn--ghost btn--sm" :href="`/samples/${row.sample_id}`">
+                <RouterLink class="btn btn--ghost btn--sm" :to="`/samples/${row.sample_id}`">
                   <Icon name="eye" />
                   样本页
-                </a>
+                </RouterLink>
               </td>
             </tr>
           </tbody>

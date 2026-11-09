@@ -182,6 +182,14 @@ class TestSamples:
         p2 = c.get(f"/api/v1/samples?limit=2&cursor={p1['next_cursor']}").json()
         assert [s["sample_id"] for s in p2["items"]] == ["S3"] and p2["next_cursor"] is None
 
+    def test_sample_detail(self, env):
+        _, c, _ = env
+        body = c.get("/api/v1/samples/S1").json()
+        assert body["digest"]["sample_id"] == "S1"
+        assert body["digest"]["verdict"] == "Salmonella"
+        assert body["digest"]["has_report"] is False
+        assert c.get("/api/v1/samples/nope").status_code == 404
+
     def test_page_parses_only_requested_rows(self, env, monkeypatch):
         import bacmap.interfaces.views as views
 

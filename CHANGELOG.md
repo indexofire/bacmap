@@ -33,15 +33,29 @@
   `src/bacmap/interfaces/web/static/console/`，由 FastAPI 托管；运行期零 Node（ADR-01）。
 - `/` 重定向到 `/console/`；原 Jinja 任务台保留 `/legacy`。控制台包含仪表盘
   （KPI、7 天趋势、状态环图、待审批）、任务列表/提交抽屉/详情/审批/事件时间线、
-  计划确认/拒绝、运行记录与来源比较、数据记录表单、系统概览、样本检索。
+  计划确认/拒绝、样本列表/详情（基因/注释/HTML 报告）、运行记录与来源比较、
+  数据记录表单、GOM 对象/版本/载荷、研究会话（统计/图/产物/证据链）与
+  Study/Cohort/Plan/Claim 只读总览、系统概览、样本检索。
 - 新增 `/api/v1` 端点：`POST /tasks`、`POST /tasks/{id}/approve`、
-  `POST /records/{kind}`、`GET /overview`、`GET /search`；`GET /tasks/{id}` 返回完整元数据。
-  任务提交者由服务端固定为 `web`，不接受客户端伪造。
+  `POST /records/{kind}`、`GET /overview`、`GET /search`、`GET /samples/{id}`；
+  `GET /tasks/{id}` 返回完整元数据。任务提交者由服务端固定为 `web`，不接受客户端伪造。
 - 新增 pixi `web` 环境（仅 Node，独立求解避免主环境 libzlib 冲突）与
   `web-install`/`web-build`/`web-dev` 任务；CI 增加 web job 重建产物并校验一致性。
 - 视觉延续 `DESIGN.md` 暗色 Linear 风格；ECharts 按需加载，无 3D、无 CDN/webfont。
 - 测试基线 2000 → 2006（+6：SPA 根重定向/静态资源、任务提交、审批校验、
   概览/检索、记录提交）。
+
+### Web 控制台续作（样本 / GOM / 研究）
+
+- 新增样本列表与详情页：`GET /api/v1/samples/{id}` 返回 digest、完整 steps 与
+  报告就绪标记；详情页展示物种/MLST/血清型、CARD/VFDB/质粒基因、Bakta/eggNOG
+  注释摘要与 QUAST 报告，并链接 HTML 报告。
+- 新增 GOM 对象列表/详情：类型筛选、版本、菌株、载荷键与 JSON 载荷。
+- 新增研究总览与会话详情：会话、Study/Cohort/Plan/Claim 只读表格；会话详情展示
+  统计表、OR/CI/p、标准图、报告/论文 Markdown、产物列表与 ledger；支持新建会话。
+- 侧栏导航增加研究、样本、GOM；高级研究工具（系统发育、logistic、对象写操作）
+  仍保留旧版 `/research`。
+- 测试基线 2015 → 2016（+1：样本详情 API）。
 
 ## [0.1.5] - 2026-11-09
 

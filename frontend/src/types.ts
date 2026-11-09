@@ -98,6 +98,113 @@ export interface SampleRow {
   plasmids: string[]
 }
 
+export interface SampleDetail {
+  digest: SampleRow & { has_report: boolean }
+  steps: Record<string, unknown>
+  summary: Record<string, unknown>
+}
+
+export interface GomObject {
+  object_id: string
+  object_type: string
+  version: number
+  strain_id?: string
+  created_at: string
+  payload_keys?: string[]
+  payload?: Record<string, unknown>
+  [key: string]: unknown
+}
+
+export interface ResearchSession {
+  session_id: string
+  run_id: string
+  gene: string
+  test_name: string
+  profile: string
+  status: string
+  data_class: number
+  created_by: string
+  created_at: string
+  updated_at: string
+  label: string
+  study_id: string
+  cohort_id: string
+  plan_id: string
+  note: string
+  [key: string]: unknown
+}
+
+export interface ResearchStat {
+  session_id: string
+  table: Record<string, number>
+  odds_ratio: number | null
+  ci_low: number | null
+  ci_high: number | null
+  p_value: number | null
+  n: number
+  diagnostics: string[]
+  [key: string]: unknown
+}
+
+export interface ResearchArtifact {
+  session_id: string
+  kind: string
+  path: string
+  sha256: string
+  created_at: string
+}
+
+export interface ResearchSessionView {
+  session: ResearchSession
+  stat: ResearchStat | null
+  artifacts: ResearchArtifact[]
+}
+
+export interface ResearchStudy {
+  study_id: string
+  question: string
+  pathogen_scope: string
+  data_class: number
+  status: string
+  [key: string]: unknown
+}
+
+export interface ResearchCohort {
+  cohort_id: string
+  study_id: string
+  name?: string
+  status: string
+  n_members?: number
+  [key: string]: unknown
+}
+
+export interface ResearchPlan {
+  plan_id: string
+  study_id: string
+  status: string
+  [key: string]: unknown
+}
+
+export interface ResearchClaim {
+  claim_id: string
+  study_id: string
+  claim_type: string
+  evidence_level: string
+  status: string
+  wording: string
+  [key: string]: unknown
+}
+
+export interface ResearchLedgerEntry {
+  seq?: number
+  object_type?: string
+  object_id?: string
+  action?: string
+  actor?: string
+  created_at?: string
+  [key: string]: unknown
+}
+
 export interface Capabilities {
   api_version: string
   bacmap_version: string

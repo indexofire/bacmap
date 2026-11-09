@@ -20,13 +20,16 @@ const groups = [
       { to: '/', label: '仪表盘', icon: 'dashboard', exact: true },
       { to: '/tasks', label: '任务', icon: 'tasks' },
       { to: '/plans', label: '计划', icon: 'plans' },
+      { to: '/research', label: '研究', icon: 'chart' },
     ],
   },
   {
     label: '证据链',
     items: [
+      { to: '/samples', label: '样本', icon: 'records' },
       { to: '/runs', label: '运行记录', icon: 'runs' },
-      { to: '/records', label: '数据记录', icon: 'records' },
+      { to: '/records', label: '数据记录', icon: 'file-text' },
+      { to: '/gom', label: 'GOM', icon: 'server' },
     ],
   },
   {

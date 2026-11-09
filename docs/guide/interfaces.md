@@ -27,14 +27,19 @@ Console routes:
 | `/console/tasks` | task list, filters and submit drawer (analyze/curate) |
 | `/console/tasks/{id}` | task detail, event timeline, approval card, cancel |
 | `/console/plans`, `/console/plans/{id}` | agent-proposed plans, full parameters, confirm/reject |
+| `/console/samples`, `/console/samples/{id}` | completed samples and per-sample results/annotation |
 | `/console/runs`, `/console/runs/{id}` | immutable run records and source comparison |
 | `/console/records` | metadata, lab result, knowledge import/approval forms |
+| `/console/gom`, `/console/gom/{id}` | GOM objects, immutable versions and payload |
+| `/console/research` | research sessions and Study/Cohort/Plan/Claim overview |
+| `/console/research/sessions/{id}` | research statistics, figure, artifacts and ledger |
+| `/console/research/studies/{id}` | Study, cohorts, plans and claims (read-only) |
 | `/console/overview` | system overview (versions, paths, policy, sandbox) |
 | `/console/search` | sample search by keyword/serotype/ST/gene |
 | `/legacy` | original Jinja task console |
-| `/samples`, `/samples/{id}` | completed samples, per-sample findings (legacy pages) |
+| `/samples`, `/samples/{id}` | legacy sample pages |
 | `/samples/{id}/report` | inline HTML report (`?download=1` for attachment) |
-| `/gom` | GOM objects (legacy page) |
+| `/gom` | legacy GOM page |
 | `/api/v1/*` | JSON API (see [HTTP API reference](../reference/api.md)) |
 
 The SPA polls `/api/v1/tasks/{id}` every two seconds while a task is non-terminal. All assets
