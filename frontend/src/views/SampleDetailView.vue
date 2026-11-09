@@ -1,18 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import { api } from '../api'
 import type { SampleDetail } from '../types'
 import { jsonText } from '../lib/format'
 
 const route = useRoute()
+const router = useRouter()
 const id = String(route.params.id)
 const data = ref<SampleDetail | null>(null)
 const loading = ref(true)
 const error = ref('')
+const activeTab = ref<'detail' | 'report'>(route.query.tab === 'report' ? 'report' : 'detail')
+
+const reportSrc = `/samples/${encodeURIComponent(id)}/report?embed=1`
+const reportDownload = `/samples/${encodeURIComponent(id)}/report?download=1`
 
 const digest = computed(() => data.value?.digest)
+const showReport = computed(() => activeTab.value === 'report' && Boolean(digest.value?.has_report))
 const annotation = computed(() => {
   const steps = data.value?.steps ?? {}
   const ann = steps.annotation
@@ -36,11 +42,25 @@ async function load() {
   error.value = ''
   try {
     data.value = await api.getSample(id)
+    if (activeTab.value === 'report' && !data.value.digest.has_report) activeTab.value = 'detail'
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载样本详情失败'
   } finally {
     loading.value = false
   }
+}
+
+function openReport() {
+  if (!digest.value?.has_report) return
+  activeTab.value = 'report'
+  void router.replace({ query: { ...route.query, tab: 'report' } })
+}
+
+function openDetail() {
+  activeTab.value = 'detail'
+  const query = { ...route.query }
+  delete query.tab
+  void router.replace({ query })
 }
 
 onMounted(() => void load())
@@ -57,16 +77,16 @@ onMounted(() => void load())
           </RouterLink>
         </div>
         <h1 class="pagehead__title">{{ id }}</h1>
-        <p class="pagehead__sub">分析结果详情、耐药/毒力基因与注释摘要。</p>
+        <p class="pagehead__sub">分析结果详情、耐药/毒力基因、注释摘要与完整 HTML 报告。</p>
       </div>
       <div class="pagehead__actions">
-        <a v-if="digest?.has_report" class="btn btn--ghost" :href="`/samples/${id}/report`" target="_blank" rel="noopener">
+        <button v-if="digest?.has_report" class="btn btn--primary" type="button" @click="openReport">
           <Icon name="file-text" />
-          HTML 报告
-        </a>
-        <a v-if="digest?.has_report" class="btn btn--ghost" :href="`/samples/${id}/report?download=1`">
+          查看报告
+        </button>
+        <a v-if="digest?.has_report" class="btn btn--ghost" :href="reportDownload">
           <Icon name="arrow-right" />
-          下载
+          下载报告
         </a>
         <button class="btn btn--ghost" type="button" :disabled="loading" @click="load">
           <Icon name="refresh" />
@@ -79,7 +99,36 @@ onMounted(() => void load())
     <div v-if="loading" class="card card--pad"><div class="skeleton" style="height: 220px" /></div>
 
     <template v-else-if="digest">
-      <div class="detail-grid">
+      <div class="filters" style="margin-bottom: 14px">
+        <button
+          type="button"
+          class="chip"
+          :class="{ 'is-active': activeTab === 'detail' }"
+          @click="openDetail"
+        >
+          概览
+        </button>
+        <button
+          v-if="digest.has_report"
+          type="button"
+          class="chip"
+          :class="{ 'is-active': showReport }"
+          @click="openReport"
+        >
+          完整报告
+        </button>
+      </div>
+
+      <section v-if="showReport" class="card report-embed">
+        <div class="card__head">
+          <h2 class="card__title">完整分析报告</h2>
+          <span class="card__hint">暗色主题 · 自包含 HTML</span>
+          <a class="btn btn--ghost btn--sm" :href="reportDownload">下载 HTML</a>
+        </div>
+        <iframe class="report-frame" :src="reportSrc" title="样本完整分析报告" />
+      </section>
+
+      <div v-else class="detail-grid">
         <div class="stack">
           <section class="card card--pad">
             <h2 class="card__title" style="margin-bottom: 14px">结果概要</h2>
@@ -168,3 +217,24 @@ onMounted(() => void load())
     </template>
   </div>
 </template>
+
+<style scoped>
+.report-embed {
+  overflow: hidden;
+}
+
+.report-frame {
+  display: block;
+  width: 100%;
+  height: max(760px, calc(100vh - 250px));
+  border: 0;
+  background: var(--bg);
+  color-scheme: dark;
+}
+
+@media (max-width: 720px) {
+  .report-frame {
+    height: max(640px, calc(100vh - 220px));
+  }
+}
+</style>

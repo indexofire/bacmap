@@ -15,7 +15,7 @@ Never use the system Python for tests: `pixi run -e dev test` (without `-e dev`,
 back to a Python without DBOS).
 
 ```bash
-pixi run -e dev test          # pytest; current baseline 1995 passed
+pixi run -e dev test          # pytest; current baseline 1998 passed
 pixi run -e dev lint          # ruff (src + tests)
 pixi run -e dev typecheck     # mypy on src/bacmap
 pixi run -e dev contracts     # import-linter (5 contracts)

@@ -27,7 +27,7 @@ pixi run -e web web-build
 | `/console/tasks` | 任务列表、筛选与提交抽屉（analyze/curate） |
 | `/console/tasks/{id}` | 任务详情、事件时间线、审批卡、取消 |
 | `/console/plans`、`/console/plans/{id}` | 智能体提出的计划、完整参数、确认/拒绝 |
-| `/console/samples`、`/console/samples/{id}` | 已完成样本与单样本结果/注释 |
+| `/console/samples`、`/console/samples/{id}` | 已完成样本、单样本结果/注释与内嵌“完整报告”页签 |
 | `/console/runs`、`/console/runs/{id}` | 不可变运行记录与来源比较 |
 | `/console/records` | 元数据、化验结果、知识导入/审核表单 |
 | `/console/gom`、`/console/gom/{id}` | GOM 对象、不可变版本与载荷 |
@@ -37,8 +37,12 @@ pixi run -e web web-build
 | `/console/overview` | 系统概览（版本、路径、数据策略、沙箱） |
 | `/console/search` | 按关键词/血清型/ST/基因检索样本 |
 | `/research` | 高级研究工具（系统发育、logistic、对象写操作；Jinja） |
-| `/samples/{id}/report` | 内联 HTML 报告（`?download=1` 改为附件） |
+| `/samples/{id}/report` | 报告 HTML 源（`?embed=1` 内嵌）；直接访问 307 到 `/console/samples/{id}?tab=report`，`?download=1` 改为附件 |
 | `/api/v1/*` | JSON API（见 [HTTP API 参考](../reference/api.zh.md)） |
+
+样本详情页提供“概览 / 完整报告”两个页签，报告在页签内的沙箱 iframe 中渲染，不另开页面。
+旧模板生成的报告（无 `bacmap-report` 版本标记）会在首次访问时自动重渲染为暗色主题。
+仪表盘对 `/api/v1/stats` 失败做降级：任务区照常加载，数据库统计显示不可用提示而不是全 0。
 
 任务详情页在非终态时每两秒轮询 `/api/v1/tasks/{id}`。所有资源（CSS、JS、图标、favicon）
 均为本地文件；不使用 CDN 或 webfont（可离线使用）。

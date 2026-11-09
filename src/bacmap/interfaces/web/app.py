@@ -1,16 +1,18 @@
-"""bacmap Web 任务页（ADR-14）。
+"""bacmap Web 应用（ADR-14）。
 
-FastAPI + Jinja2 + 内联轮询 JS（离线无 CDN 依赖，满足 C1）。
+FastAPI 托管 Vue 3 控制台（静态产物）、JSON API `/api/v1`、登录/认证与样本 HTML 报告。
+旧 Jinja 任务台已移除，旧路径 307 重定向到 `/console/...`；高级研究写操作暂留 Jinja。
 路由一律同步 def——引擎的 DBOS 同步 API 不得在事件循环内调用
 （retrieve_workflow 会 RuntimeError），FastAPI 把同步路由放线程池执行。
-页面：任务列表 / 提交（analyze|curate）/ 详情+状态轮询 / 审批签名 / 系统概览（只读）。
 create_app(engine) 与 build_server(engine) 同构——引擎注入，测试可换。
 """
 
 from __future__ import annotations
 
 import hmac
+import logging
 import secrets
+import threading
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -68,6 +70,48 @@ class _Templates(Jinja2Templates):
 
 
 _TEMPLATES = _Templates(directory=str(Path(__file__).parent / "templates"))
+
+logger = logging.getLogger(__name__)
+
+# 报告模板版本标记：旧模板生成的 HTML 在首次访问时原地重渲染。
+_REPORT_MARKER = b'name="bacmap-report" content="2"'
+_REPORT_LOCK = threading.Lock()
+
+
+def _report_is_current(path: Path) -> bool:
+    try:
+        with path.open("rb") as fh:
+            return _REPORT_MARKER in fh.read(4096)
+    except OSError:
+        return False
+
+
+def _ensure_current_report(engine: DbosTaskEngine, sample_id: str, path: Path) -> None:
+    """把旧版浅色报告升级为当前暗色模板（有 summary 才重渲染）。
+
+    只读请求触发一次幂等写入；失败时保留旧文件继续可读。
+    """
+    if _report_is_current(path):
+        return
+    summary = path.parent / f"{sample_id}_summary.json"
+    if not summary.is_file():
+        return
+    if not _REPORT_LOCK.acquire(blocking=False):
+        return  # 另一个请求正在重渲染；先返回现有文件
+    try:
+        if _report_is_current(path):
+            return
+        from bacmap.tools.pipeline import generate_report
+
+        out = generate_report(
+            {"sample_id": sample_id, "results_dir": str(Path(engine.home) / "results")}
+        )
+        if not _report_is_current(path):
+            logger.warning("报告重渲染未生效 sample=%s out=%s", sample_id, out[:300])
+    except Exception:
+        logger.warning("报告重渲染失败 sample=%s", sample_id, exc_info=True)
+    finally:
+        _REPORT_LOCK.release()
 
 
 
@@ -138,24 +182,34 @@ def _build_auth_routes(app: FastAPI, cfg: WebAuthConfig) -> None:
 
 
 def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
-    """样本 HTML 报告（其余样本页面由 Vue SPA 提供）。"""
+    """样本 HTML 报告：内嵌到 SPA 样本页，旧深链重定向回面板。"""
 
     @app.get("/samples/{sample_id}/report")
-    def sample_report(sample_id: str, download: int = 0) -> FileResponse:
+    def sample_report(sample_id: str, download: int = 0, embed: int = 0) -> Response:
         if not _validate_sample_id(sample_id):
             raise HTTPException(400, "非法样本 ID")
         path = report_path(engine, sample_id)
         if not path.is_file():
             raise HTTPException(404, "该样本尚未生成 HTML 报告")
-        # 默认内联查看；?download=1 才作为附件下载。报告是自包含 HTML，
-        # 用 sandbox CSP 隔离：禁脚本、禁外联，避免读取同源 cookie。
-        csp = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+        _ensure_current_report(engine, sample_id, path)
+        # 直接打开旧 URL 不再单独成页：跳到 SPA 的“完整报告”页签。
+        if not download and not embed:
+            return RedirectResponse(f"/console/samples/{sample_id}?tab=report", status_code=307)
+        # 报告是自包含 HTML，用 sandbox CSP 隔离：禁脚本、禁外联、禁同源读取；
+        # 只允许同源页面把它嵌入（样本详情的报告页签）。
+        csp = (
+            "sandbox; default-src 'none'; style-src 'unsafe-inline'; "
+            "img-src data:; frame-ancestors 'self'"
+        )
         return FileResponse(
             path,
             media_type="text/html",
             filename=f"{sample_id}_report.html",
             content_disposition_type="attachment" if download else "inline",
-            headers={"Content-Security-Policy": csp},
+            headers={
+                "Content-Security-Policy": csp,
+                "X-Frame-Options": "SAMEORIGIN",
+            },
         )
 
 

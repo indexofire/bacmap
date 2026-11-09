@@ -12,6 +12,19 @@ sys.path.insert(0, str(_PROJECT_ROOT / "src" / "bacmap" / "tools" / "_scripts"))
 import generate_report as gr  # noqa: E402
 
 
+def test_report_template_is_dark_and_versioned(tmp_path):
+    """v0.2.0：报告使用暗色 token，并带版本标记供 Web 自动升级旧报告。"""
+    from bacmap.core.verify.deterministic_verifier import DeterministicVerifier
+
+    summary = {"steps": {}}
+    out = tmp_path / "S1_report.html"
+    gr.generate_html("S1", summary, DeterministicVerifier().verify_all(summary), out)
+    text = out.read_text(encoding="utf-8")
+    assert 'name="bacmap-report" content="2"' in text
+    assert "--bg: #08090a" in text
+    assert "max-width: 900px" not in text  # 旧浅色模板已淘汰
+
+
 def test_annotation_section_renders_quast_and_top_genes():
     summary = {
         "steps": {

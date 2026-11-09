@@ -117,6 +117,14 @@ class TestResultsPages:
         assert r.status_code == 307
         assert r.headers["location"] == "/console/samples/SAM-001"
 
+    def test_report_deep_link_redirects_to_console_tab(self, client):
+        c, home = client
+        rep = home / "results" / "SAM-001" / "report" / "SAM-001_report.html"
+        rep.write_text("<html><body>ok</body></html>", encoding="utf-8")
+        r = c.get("/samples/SAM-001/report", follow_redirects=False)
+        assert r.status_code == 307
+        assert r.headers["location"] == "/console/samples/SAM-001?tab=report"
+
     def test_report_file_route_404_when_absent(self, client):
         c, _ = client
         assert c.get("/samples/NOPE/report").status_code == 404
@@ -279,14 +287,15 @@ class TestWebHardening:
         assert "content-security-policy" in r.headers
 
     def test_report_inline_by_default_and_sandboxed(self, client):
-        """v1.4.25：默认内联查看（sandbox CSP 隔离），下载走 ?download=1。"""
+        """v0.2.0：报告内嵌 SPA（?embed=1），下载走 ?download=1。"""
         c, home = client
         rep = home / "results" / "SAM-001" / "report" / "SAM-001_report.html"
         rep.write_text("<html><body>ok</body></html>", encoding="utf-8")
-        r = c.get("/samples/SAM-001/report")
+        r = c.get("/samples/SAM-001/report?embed=1")
         assert r.status_code == 200
         assert "inline" in r.headers.get("content-disposition", "").lower()
         assert "sandbox" in r.headers.get("content-security-policy", "")
+        assert r.headers.get("x-frame-options") == "SAMEORIGIN"
         r2 = c.get("/samples/SAM-001/report?download=1")
         assert "attachment" in r2.headers.get("content-disposition", "")
 
@@ -340,13 +349,42 @@ class TestSampleReportDelivery:
 
     def test_inline_by_default_with_sandbox_csp(self, engine):
         c = self._client_with_report(engine)
-        r = c.get("/samples/SAM-001/report")
+        r = c.get("/samples/SAM-001/report?embed=1")
         assert r.status_code == 200
         assert "attachment" not in r.headers.get("content-disposition", "").lower()
         assert "inline" in r.headers["content-disposition"].lower()
         csp = r.headers["content-security-policy"]
         assert "sandbox" in csp and "default-src 'none'" in csp
+        assert "frame-ancestors 'self'" in csp
+        assert r.headers["x-frame-options"] == "SAMEORIGIN"
         assert "报告" in r.text
+
+    def test_legacy_report_regenerated_on_first_view(self, engine, monkeypatch):
+        rep = Path(engine.home) / "results" / "SAM-001" / "report"
+        rep.mkdir(parents=True, exist_ok=True)
+        html = rep / "SAM-001_report.html"
+        html.write_text("<html><body>old theme</body></html>", encoding="utf-8")
+        (rep / "SAM-001_summary.json").write_text("{}", encoding="utf-8")
+        calls: list[dict[str, object]] = []
+
+        def fake_generate(args: dict[str, object]) -> str:
+            calls.append(args)
+            html.write_text(
+                '<html><head><meta name="bacmap-report" content="2"></head>'
+                "<body>new theme</body></html>",
+                encoding="utf-8",
+            )
+            return '{"sample_id": "SAM-001"}'
+
+        monkeypatch.setattr("bacmap.tools.pipeline.generate_report", fake_generate)
+        c = TestClient(create_app(engine, auth_token=None))
+        r = c.get("/samples/SAM-001/report?embed=1")
+        assert r.status_code == 200
+        assert "new theme" in r.text
+        assert calls and str(calls[0]["results_dir"]).endswith("results")
+        again = c.get("/samples/SAM-001/report?embed=1")
+        assert again.text.count("new theme") == 1
+        assert len(calls) == 1  # 标记命中后不再重渲染
 
     def test_download_flag_forces_attachment(self, engine):
         c = self._client_with_report(engine)

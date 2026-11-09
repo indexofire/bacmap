@@ -67,14 +67,14 @@ const trend = computed(() => {
 const dbKpis = computed(() => {
   const s = stats.value
   return [
-    { label: '菌株总数', value: s?.strains.total ?? 0, icon: 'records', foot: 'strain_genotype_index' },
-    { label: '基因组对象', value: s?.gom.genome_objects ?? 0, icon: 'server', foot: 'GOM 不可变对象' },
-    { label: 'AMR 基因命中', value: s?.gom.amr_genes ?? 0, icon: 'alert-triangle', foot: 'CARD/VFDB/NCBI 命中行' },
-    { label: '样本报告', value: s?.results.sample_reports ?? 0, icon: 'file-text', foot: '已完成分析样本' },
-    { label: '研究会话', value: s?.research.sessions ?? 0, icon: 'chart', foot: 'AMR 关联 / 高级统计' },
-    { label: '知识库条目', value: s?.knowledge.entries ?? 0, icon: 'terminal', foot: '已审核知识条目' },
-    { label: '运行记录', value: s?.runs.total ?? 0, icon: 'runs', foot: 'runs.sqlite' },
-    { label: '化验结果', value: s?.lab_results.total ?? 0, icon: 'check-circle', foot: 'lab_results' },
+    { label: '菌株总数', value: s ? s.strains.total : '—', icon: 'records', foot: 'strain_genotype_index' },
+    { label: '基因组对象', value: s ? s.gom.genome_objects : '—', icon: 'server', foot: 'GOM 不可变对象' },
+    { label: 'AMR 基因命中', value: s ? s.gom.amr_genes : '—', icon: 'alert-triangle', foot: 'CARD/VFDB/NCBI 命中行' },
+    { label: '样本报告', value: s ? s.results.sample_reports : '—', icon: 'file-text', foot: '已完成分析样本' },
+    { label: '研究会话', value: s ? s.research.sessions : '—', icon: 'chart', foot: 'AMR 关联 / 高级统计' },
+    { label: '知识库条目', value: s ? s.knowledge.entries : '—', icon: 'terminal', foot: '已审核知识条目' },
+    { label: '运行记录', value: s ? s.runs.total : '—', icon: 'runs', foot: 'runs.sqlite' },
+    { label: '化验结果', value: s ? s.lab_results.total : '—', icon: 'check-circle', foot: 'lab_results' },
   ]
 })
 
@@ -175,14 +175,20 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [taskItems, overviewData, statsData] = await Promise.all([
+    // 任务与数据库统计独立加载：统计接口不可用时，任务区仍然可用。
+    const [taskRes, overviewRes, statsRes] = await Promise.allSettled([
       api.listTasks(200),
       api.overview(),
       api.stats(),
     ])
-    tasks.value = taskItems
-    overview.value = overviewData
-    stats.value = statsData
+    const failures: string[] = []
+    if (taskRes.status === 'fulfilled') tasks.value = taskRes.value
+    else failures.push('任务列表加载失败')
+    if (overviewRes.status === 'fulfilled') overview.value = overviewRes.value
+    else failures.push('系统概览不可用')
+    if (statsRes.status === 'fulfilled') stats.value = statsRes.value
+    else failures.push('数据库统计不可用（如服务刚升级，请重启 bacmap web）')
+    if (failures.length) error.value = failures.join('；')
     loading.value = false
     await renderCharts()
   } catch (err) {
@@ -384,6 +390,13 @@ watch([statusItems, trend], () => {
         </div>
         <section v-else class="card">
           <EmptyState
+            v-if="!stats"
+            title="数据库统计不可用"
+            :hint="error || '统计接口没有返回数据；请重启 bacmap web 后刷新。'"
+            icon="chart"
+          />
+          <EmptyState
+            v-else
             title="暂无菌株统计"
             hint="完成一次分析并写入 GOM 后，物种、血清型、MLST 与 AMR 分布会出现在这里。"
             icon="chart"

@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -416,6 +417,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="bacmap-report" content="2">
 <title>{sample_id} · 分析报告 · bacmap</title>
 <style>
   :root {{
@@ -606,7 +608,10 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
 </body></html>"""
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(html, encoding="utf-8")
+    # 原子替换：Web 首次访问会原地重渲染旧报告，避免读到半写的 HTML。
+    tmp_path = output_path.with_name(f".{output_path.name}.{os.getpid()}.tmp")
+    tmp_path.write_text(html, encoding="utf-8")
+    tmp_path.replace(output_path)
 
 
 def _distance_color(d: int, max_d: int) -> str:
