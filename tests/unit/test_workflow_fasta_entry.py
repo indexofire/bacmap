@@ -89,6 +89,30 @@ class TestFastaEntryDag:
         assert proc.returncode == 0, (proc.stderr + proc.stdout)[-800:]
         assert "snp_calling" not in proc.stdout  # 无 reads 样本：SNP 群组不激活
 
+    def test_annotation_dag_runs_quast_bakta_eggnog(self, wf_home: Path):
+        asm_dir = wf_home / "gs" / "ASM-ANN"
+        asm_dir.mkdir(parents=True)
+        (asm_dir / "ASM-ANN.fasta").write_text(">c1\nACGTACGT\n", encoding="utf-8")
+        _write_samples(wf_home, ["ASM-ANN\tSalmonella\t\t\tgs/ASM-ANN/ASM-ANN.fasta"])
+        proc = _dry(wf_home, "ASM-ANN")
+        assert proc.returncode == 0, proc.stderr[-800:]
+        assert "assembly_qc_quast" in proc.stdout
+        assert "bakta_annotate" in proc.stdout
+        assert "eggnog_annotate" in proc.stdout
+        assert "genome_annotation" in proc.stdout
+
+    def test_annotation_can_be_disabled(self, wf_home: Path, monkeypatch):
+        monkeypatch.setenv("BACMAP_ANNOTATION_ENABLED", "0")
+        asm_dir = wf_home / "gs" / "ASM-OFF"
+        asm_dir.mkdir(parents=True)
+        (asm_dir / "ASM-OFF.fasta").write_text(">c1\nACGTACGT\n", encoding="utf-8")
+        _write_samples(wf_home, ["ASM-OFF\tSalmonella\t\t\tgs/ASM-OFF/ASM-OFF.fasta"])
+        proc = _dry(wf_home, "ASM-OFF")
+        assert proc.returncode == 0, proc.stderr[-800:]
+        assert "bakta_annotate" not in proc.stdout
+        assert "eggnog_annotate" not in proc.stdout
+        assert "genome_annotation" in proc.stdout
+
 
 class TestFastqsEvidenceChain:
     def test_assembly_fasta_in_input_files(self, wf_home: Path):

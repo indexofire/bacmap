@@ -60,9 +60,18 @@ bacmap --version      # 0.1.5
 `pixi install` 提供的内容：
 
 - **Snakemake 与工具链**：fastp、shovill、flye、unicycler、bwa、minimap2、samtools、
-  bcftools、blast、bedtools、iqtree 等（见 `pixi.toml`）。
+  bcftools、blast、bedtools、iqtree、**bakta**、**eggnog-mapper**、**QUAST** 等
+  （见 `pixi.toml`）。
 - **常用分析工具**（ADR-20）：`gside`（物种鉴定）、`gspec`（基因筛查/分型）、
   `gmlst`（MLST/cgMLST/MST）。
+- **AMR 筛查**使用 gspec 的 `card`/`vfdb`/`plasmidfinder`，以及 NCBI
+  **AMRFinderPlus**（基因 + 点突变）。AMRFinderPlus 4.2.7+ 同时是 Bakta 内部
+  AMR 专家系统依赖；gspec `ncbi` 数据库提供同一 Reference Gene Catalog 的存在性
+  筛查（不含点突变）。不再需要 `abricate`。
+- **注释数据库**不随 `pixi install` 下载：Bakta light ≈4 GB，eggNOG-mapper 数十 GB。
+  首次使用请运行 `pixi run python scripts/setup_annotation_dbs.py`；可用
+  `BACMAP_BAKTA_DB` / `BACMAP_EGGNOG_DATA_DIR` 覆盖路径。不需要注释时设置
+  `BACMAP_ANNOTATION_ENABLED=0`（管线写 `disabled` 占位，绝不伪造注释结果）。
 - **独立的 `recomb` 环境**，内含 Gubbins，用于可选的重组检测。因为其与
   IQ-TREE 版本锁定与主管线冲突；请用 `pixi run -e recomb …` 运行。
 - **trycycler 不随默认环境安装**：其 conda 包要求 Python <3.11，而 bacmap 运行在
@@ -72,7 +81,7 @@ bacmap --version      # 0.1.5
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest（当前基线：1703 passed）
+pixi run -e dev test        # pytest（当前基线：2015 passed）
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter 依赖契约

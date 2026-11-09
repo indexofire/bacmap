@@ -276,6 +276,72 @@ def _render_nli_section(sample_id: str) -> str:
 """
 
 
+def _render_annotation_section(summary: dict) -> str:
+    """QUAST 组装质控 + Bakta/eggNOG 注释摘要（无数据时返回空串）。"""
+    steps = summary.get("steps", {})
+    quast = steps.get("assembly_quast", "")
+    ann = steps.get("annotation", {})
+    if not quast and not (isinstance(ann, dict) and ann):
+        return ""
+
+    parts: list[str] = ['<h2>🧬 组装质控与基因组注释</h2>']
+    if quast:
+        parts.append("<h3>QUAST 组装质控</h3>")
+        parts.append(f'<pre class="quast">{html.escape(str(quast))}</pre>')
+
+    if isinstance(ann, dict):
+        status = ann.get("status", "ok")
+        parts.append("<h3>Bakta / eggNOG-mapper</h3>")
+        parts.append(
+            "<table>"
+            + _row("注释状态", status)
+            + _row("CDS 总数", ann.get("total_CDS", "—"))
+            + _row("已注释 CDS", ann.get("annotated_CDS", "—"))
+            + _row("注释率", f"{float(ann.get('annotation_rate', 0)):.1%}")
+            + "</table>"
+        )
+        bakta = ann.get("bakta", {})
+        if isinstance(bakta, dict) and bakta:
+            rows = "".join(
+                f"<tr><td>{html.escape(str(k))}</td><td>{html.escape(str(v))}</td></tr>"
+                for k, v in bakta.items()
+            )
+            parts.append(f"<h3>Bakta 特征计数</h3><table><tr><th>类型</th><th>数量</th></tr>{rows}</table>")
+        egg = ann.get("eggnog", {})
+        if isinstance(egg, dict) and egg:
+            cog = egg.get("cog_category_counts", {})
+            cog_text = ", ".join(f"{k}:{v}" for k, v in cog.items()) if isinstance(cog, dict) else "—"
+            parts.append(
+                "<table>"
+                + _row("eggNOG 查询", egg.get("queries", "—"))
+                + _row("eggNOG 已注释", egg.get("annotated", "—"))
+                + _row("COG 分类", cog_text or "—")
+                + _row("GO terms", egg.get("go_term_count", "—"))
+                + _row("KEGG KO", egg.get("kegg_ko_count", "—"))
+                + _row("KEGG Pathway", egg.get("kegg_pathway_count", "—"))
+                + _row("CAZy", egg.get("cazy_count", "—"))
+                + _row("Pfam", egg.get("pfam_count", "—"))
+                + "</table>"
+            )
+        top = ann.get("top_genes", [])
+        if isinstance(top, list) and top:
+            rows = "".join(
+                "<tr>"
+                f"<td>{html.escape(str(g.get('gene', '')))}</td>"
+                f"<td>{html.escape(str(g.get('product', '')))}</td>"
+                f"<td>{html.escape(str(g.get('source', '')))}</td>"
+                "</tr>"
+                for g in top
+                if isinstance(g, dict)
+            )
+            parts.append(
+                "<h3>重点基因（前 20）</h3>"
+                "<table><tr><th>基因</th><th>产物</th><th>来源</th></tr>"
+                f"{rows}</table>"
+            )
+    return "\n".join(parts)
+
+
 def generate_html(sample_id: str, summary: dict, verification, output_path: Path):
     steps = summary.get("steps", {})
 
@@ -325,6 +391,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     )
 
     cgmlst_section = _render_cgmlst_section(sample_id, summary)
+    annotation_section = _render_annotation_section(summary)
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -353,6 +420,7 @@ td.label {{ font-weight: bold; width: 180px; background: #f8f9fa; }}
 .cgmlst-nearest td.dist {{ text-align: right; }}
 .cgmlst-caveats {{ background: #fff3cd; border-left: 4px solid #f39c12; padding: 8px 12px; margin: 0.5em 0; font-size: 0.88em; }}
 .cgmlst-caveats ul {{ margin: 4px 0 0 0; }}
+.quast {{ background: #f8f9fa; border: 1px solid #ddd; padding: 10px; overflow-x: auto; font-size: 0.82em; }}
 </style></head>
 <body>
 <h1>🧬 {sample_id} 全基因组分析报告</h1>
@@ -381,6 +449,8 @@ td.label {{ font-weight: bold; width: 180px; background: #f8f9fa; }}
 {check_rows}
 </table>
 
+{annotation_section}
+
 {_render_nli_section(sample_id)}
 
 <h2>💊 AMR 耐药基因 (CARD)</h2>
@@ -397,7 +467,7 @@ td.label {{ font-weight: bold; width: 180px; background: #f8f9fa; }}
 <h3>📌 三元证据链 (project.md §4.5)</h3>
 <p><strong>strain_id:</strong> {sample_id}</p>
 <p><strong>pipeline_version:</strong> {summary.get("pipeline_version", "salmonella-workflow-v0.1")}</p>
-<p><strong>tool_versions:</strong> fastp, Shovill 1.1.0, blastn 2.17.0+, gmlst 0.1.0, SISTR 1.1.3, abricate 1.4.0</p>
+<p><strong>tool_versions:</strong> fastp, Shovill 1.1.0, blastn 2.17.0+, gspec, gmlst, Bakta 1.12, eggNOG-mapper, QUAST, AMRFinderPlus 4.2.7</p>
 <p><strong>database_versions:</strong> CARD 2026-Apr-3, VFDB 2026-Apr-3, PlasmidFinder 2026-Apr-3, PubMLST salmonella_2</p>
 </div>
 

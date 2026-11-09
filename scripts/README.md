@@ -18,3 +18,4 @@ directories before ingestion.
 | `renamefq.py` | Normalise paired FASTQ names to `<sample>_R1/R2.fastq.gz` |
 | `extract_genes.sh` | Extract gene CDS intervals from GFF file(s) |
 | `json2tsv.py` | Flatten NCBI datasets JSON into a TSV table |
+| `setup_annotation_dbs.py` | Download Bakta and eggNOG-mapper databases into `$BACMAP_HOME/refs/` (Bakta light ≈4 GB; eggNOG ≈tens of GB) |

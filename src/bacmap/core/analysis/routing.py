@@ -63,6 +63,7 @@ def report_inputs(
     base = f"{workdir}/{sample}"
     files: dict[str, str] = {
         "assembly_stats": f"{base}/assembly/assembly_stats.tsv",
+        "quast": f"{base}/assembly/quast/transposed_report.tsv",
         "species_id": f"{base}/species/species_id.json",
         "mlst": f"{base}/typing/mlst.tsv",
         "vfdb": f"{base}/amr/abricate_vfdb.tsv",

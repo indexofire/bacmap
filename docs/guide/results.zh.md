@@ -14,6 +14,8 @@ $BACMAP_HOME/results/
 │       ├── <dataset>/               # per-sample files
 │       │   ├── qc/
 │       │   ├── assembly/
+│       │   │   └── quast/           # QUAST report.tsv / transposed_report.tsv
+│       │   ├── annotation/          # Bakta + eggNOG + annotation.json
 │       │   ├── species/
 │       │   ├── typing/
 │       │   ├── amr/
@@ -61,6 +63,10 @@ ls "$BACMAP_HOME/results/runs/<task_id>/SAM-TYP-001/report/"
 ```
 
 报告是自包含的（内联样式，无外部请求），因此可以归档并离线查看。PDF 生成是可选项，需要本地转换器。
+
+summary JSON 现在包含 `steps.assembly_quast`（QUAST 转置报告）与 `steps.annotation`
+（`status`、`total_CDS`、`annotated_CDS`、`annotation_rate`、`bakta` 计数、
+`eggnog` 的 COG/GO/KEGG 计数，以及 `top_genes`）。
 
 报告会在每次分析结束时自动生成。重新运行一次分析就会重新生成它们；不存在用于报告的 MCP 直接写入工具。
 

@@ -429,25 +429,39 @@ def _extract_mlst(payload: dict[str, Any]) -> tuple[str, str]:
 
 
 def _extract_amr_genes(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """AMR 基因命中（abricate CARD/VFDB；含覆盖率/一致度/产物）。"""
+    """AMR 基因命中（gspec CARD/VFDB/NCBI；含覆盖率/一致度/产物）。"""
     amr_genes: list[dict[str, Any]] = []
     amr_data = payload.get("amr", {})
     if isinstance(amr_data, dict):
-        for db_name in ("abricate_card", "abricate_vfdb"):
+        for db_name in ("abricate_card", "abricate_vfdb", "gspec_ncbi", "amrfinderplus"):
             hits = amr_data.get(db_name, [])
             if isinstance(hits, list):
-                db_label = db_name.replace("abricate_", "")
+                db_label = {
+                    "abricate_card": "card",
+                    "abricate_vfdb": "vfdb",
+                    "gspec_ncbi": "ncbi",
+                    "amrfinderplus": "amrfinderplus",
+                }[db_name]
                 for hit in hits:
                     if isinstance(hit, dict):
-                        gene = hit.get("GENE", "").strip()
+                        gene = str(hit.get("GENE") or hit.get("Gene symbol") or "").strip()
                         if gene:
                             amr_genes.append(
                                 {
                                     "gene": gene,
                                     "database": db_label,
-                                    "coverage": float(hit.get("%COVERAGE", 0) or 0),
-                                    "identity": float(hit.get("%IDENTITY", 0) or 0),
-                                    "product": hit.get("PRODUCT", ""),
+                                    "coverage": float(
+                                        hit.get("%COVERAGE")
+                                        or hit.get("% Coverage of reference sequence")
+                                        or 0
+                                    ),
+                                    "identity": float(
+                                        hit.get("%IDENTITY")
+                                        or hit.get("% Identity to reference sequence")
+                                        or 0
+                                    ),
+                                    "product": hit.get("PRODUCT")
+                                    or hit.get("Description", ""),
                                 }
                             )
     return amr_genes

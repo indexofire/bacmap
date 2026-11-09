@@ -65,6 +65,23 @@ tools:
   trycycler:
     # reconcile --min_identity 为百分比（Trycycler 默认 98.0）
     min_identity: 98.0
+  # 细菌基因组注释（v1.10.14）：QUAST → Bakta → eggNOG-mapper。
+  # 数据库路径默认在 $BACMAP_HOME/refs/，可用环境变量覆盖：
+  #   BACMAP_BAKTA_DB、BACMAP_EGGNOG_DATA_DIR、BACMAP_ANNOTATION_ENABLED=0
+  annotation:
+    enabled: true
+    bakta:
+      # 空串 = $BACMAP_HOME/refs/bakta/db-light
+      db: ""
+      min_contig_length: 1
+      skip_plot: true
+    eggnog:
+      # 空串 = $BACMAP_HOME/refs/eggnog
+      data_dir: ""
+      tax_scope: "Bacteria"
+      mode: "diamond"
+  quast:
+    min_contig: 500
   blastn:
     evalue: 1e-50
     word_size: 28
@@ -81,6 +98,7 @@ tools:
     organism: "Salmonella"
     min_coverage: 0.5
   abricate:
+    # 历史键名：实际用于 gspec screen 的 card/vfdb/plasmidfinder 阈值
     minid: 80
     mincov: 60
 

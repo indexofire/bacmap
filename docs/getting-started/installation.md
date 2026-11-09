@@ -62,9 +62,20 @@ bacmap --version      # 0.1.5
 What `pixi install` provides:
 
 - **Snakemake and the toolchain**: fastp, shovill, flye, unicycler, bwa, minimap2, samtools,
-  bcftools, blast, bedtools, iqtree, and more (see `pixi.toml`).
+  bcftools, blast, bedtools, iqtree, **bakta**, **eggnog-mapper**, **QUAST**, and more
+  (see `pixi.toml`).
 - **Common analysis tools** (ADR-20): `gside` (species identification), `gspec` (gene
   screening/typing), `gmlst` (MLST/cgMLST/MST).
+- **AMR screening** uses gspec's `card`/`vfdb`/`plasmidfinder` plus NCBI
+  **AMRFinderPlus** (genes + point mutations). AMRFinderPlus 4.2.7+ is also Bakta's
+  internal AMR expert-system dependency; gspec's `ncbi` database provides presence-only
+  screening of the same Reference Gene Catalog. `abricate` is no longer required.
+- **Annotation databases** are downloads, not part of `pixi install`: Bakta (light ≈4 GB) and
+  eggNOG-mapper (tens of GB). Fetch them once with
+  `pixi run python scripts/setup_annotation_dbs.py`; override paths with
+  `BACMAP_BAKTA_DB` / `BACMAP_EGGNOG_DATA_DIR`. If you do not need annotation, set
+  `BACMAP_ANNOTATION_ENABLED=0` (the pipeline writes a `disabled` placeholder, never fake
+  annotations).
 - **A separate `recomb` environment** with Gubbins for optional recombination detection, because
   its IQ-TREE pin conflicts with the main pipeline; run it with `pixi run -e recomb …`.
 - **Trycycler is not installed by default**: its conda package requires Python <3.11 while bacmap
@@ -74,7 +85,7 @@ The development environment is separate:
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest (current baseline: 1703 passed)
+pixi run -e dev test        # pytest (current baseline: 2015 passed)
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter dependency contracts

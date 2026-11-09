@@ -17,14 +17,20 @@ def _run(
     species_id: dict,
     omit: set[str] | None = None,
     gspec_typing: dict | None = None,
+    annotation: dict | None = None,
 ) -> dict:
     rep = tmp_path / "results" / "S1" / "report"
     rep.mkdir(parents=True, exist_ok=True)
     sid = tmp_path / "species.json"
     sid.write_text(json.dumps(species_id))
     out = rep / "S1_summary.json"
-
     missing = str(tmp_path / "missing")
+    ann_path = tmp_path / "annotation.json"
+    if annotation is not None:
+        ann_path.write_text(json.dumps(annotation))
+    else:
+        ann_path = Path(missing)
+
     # gspec_typing 是常驻输入：缺省给真实形状的空结果（无库命中）。
     if gspec_typing is None:
         gspec_typing = {"status": "empty", "databases": {}}
@@ -33,6 +39,7 @@ def _run(
     attrs = {
         "qc_json": missing,
         "assembly_stats": missing,
+        "quast": missing,
         "mlst": missing,
         "sistr": missing,
         "vfdb": missing,
@@ -42,7 +49,7 @@ def _run(
         "pathotype": missing,
         "gspec_typing": gspec_path,
         "shigella_serotype": missing,
-        "annotation": missing,
+        "annotation": str(ann_path),
         "species_id": str(sid),
     }
     for key in omit or ():
@@ -135,3 +142,30 @@ def test_non_dec_species_marks_dec_not_applicable(tmp_path):
     )
     assert summary["steps"]["dec"]["status"] == "not_applicable"
     assert summary["steps"]["serotype"]["sistr"] == "N/A"
+
+
+def test_annotation_summary_included(tmp_path):
+    annotation = {
+        "schema": "bacmap.annotation/1",
+        "status": "ok",
+        "summary": {
+            "total_CDS": 100,
+            "annotated_CDS": 80,
+            "annotation_rate": 0.8,
+            "bakta": {"cds": 100, "rrna": 3, "trna": 20},
+            "eggnog": {"queries": 100, "annotated": 75, "cog_category_counts": {"J": 10}},
+        },
+        "features": [
+            {"gene": "gyrA", "product": "DNA gyrase subunit A", "identity": 100, "source": "bakta"},
+            {"gene": "S1_0002", "product": "hypothetical protein", "identity": 100, "source": "bakta"},
+            {"gene": "S1_0003", "product": "beta-lactamase", "identity": None, "source": "bakta"},
+        ],
+    }
+    summary = _run(tmp_path, {"verdict": "Salmonella"}, annotation=annotation)
+    step = summary["steps"]["annotation"]
+    assert step["status"] == "ok"
+    assert step["total_CDS"] == 100
+    assert step["annotation_rate"] == 0.8
+    assert step["bakta"]["rrna"] == 3
+    assert step["eggnog"]["cog_category_counts"] == {"J": 10}
+    assert [g["gene"] for g in step["top_genes"]] == ["gyrA", "S1_0003"]

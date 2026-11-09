@@ -1,4 +1,6 @@
+import os
 import sys
+from pathlib import Path
 
 # Step 5-9: MLST + AMR + 毒力 + 质粒 + 血清型 (project.md §7.1 steps 5-9)
 
@@ -10,7 +12,6 @@ _TABLES = get_workflow_tables()
 
 ABRICATE_MINID = config["tools"]["abricate"]["minid"]
 ABRICATE_MINCOV = config["tools"]["abricate"]["mincov"]
-_SEROTYPE_ENGINES = _TABLES.serotype_engines
 GMLST_BIN = "gmlst"
 
 _AMRFINDER_ORGANISMS = _TABLES.amrfinder_organisms
@@ -48,11 +49,23 @@ def _tgmlst_enabled(sample):
 def _amr_org_flag(sample):
     code = _sample_code(sample)
     return f"--organism {_AMRFINDER_ORGANISMS[code]}" if code in _AMRFINDER_ORGANISMS else ""
-_AMRFINDER_DB_BASE = Path(PROJECT_ROOT / "data/db/amrfinderplus")
-# amrfinder -d 需要指向具体版本目录(amrfinder_update 会建 <base>/<version>/)
-_AMRFINDER_DB_VERSIONS = sorted(p for p in _AMRFINDER_DB_BASE.iterdir() if p.is_dir()) if _AMRFINDER_DB_BASE.exists() else []
-AMRFINDER_DB = str(_AMRFINDER_DB_VERSIONS[-1]) if _AMRFINDER_DB_VERSIONS else str(_AMRFINDER_DB_BASE)
+
+
+# AMRFinderPlus database: base directory may contain version subdirs created by
+# `amrfinder_update`; pick the latest. Override with BACMAP_AMRFINDER_DB.
+_AMRFINDER_DB_BASE = Path(
+    os.environ.get("BACMAP_AMRFINDER_DB", str(PROJECT_ROOT / "data/db/amrfinderplus"))
+)
+_AMRFINDER_DB_VERSIONS = (
+    sorted(p for p in _AMRFINDER_DB_BASE.iterdir() if p.is_dir())
+    if _AMRFINDER_DB_BASE.exists()
+    else []
+)
+AMRFINDER_DB = (
+    str(_AMRFINDER_DB_VERSIONS[-1]) if _AMRFINDER_DB_VERSIONS else str(_AMRFINDER_DB_BASE)
+)
 AMRFINDER_MINCOV = config["tools"]["amrfinderplus"]["min_coverage"]
+
 
 rule typing_mlst:
     input:
@@ -150,6 +163,12 @@ rule amr_abricate_plasmidfinder:
         "> {output.result}"
 
 rule amr_amrfinderplus:
+    """NCBI AMRFinderPlus: AMR genes + point mutations (curated per-family cutoffs).
+
+    gspec also ships the AMRFinderPlus Reference Gene Catalog as `ncbi`, but that
+    is presence-only (no point mutations) and uses more permissive 80/80 defaults;
+    the dedicated binary is kept for mutation-aware AMR calls.
+    """
     input:
         contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
     output:
@@ -157,10 +176,15 @@ rule amr_amrfinderplus:
     params:
         db = AMRFINDER_DB,
         mincov = AMRFINDER_MINCOV,
-        org_flag = lambda wc: _amr_org_flag(wc.sample)
+        org_flag = lambda wc: _amr_org_flag(wc.sample),
     threads: 4
     shell:
+        "set -euo pipefail; "
+        "if [ ! -e {params.db} ]; then "
+        "echo \"AMRFinderPlus database not found: {params.db}\" >&2; "
+        "echo \"Run amrfinder_update --database {params.db} or set BACMAP_AMRFINDER_DB\" >&2; "
+        "exit 2; fi; "
         "mkdir -p $(dirname {output.result}) && "
         "amrfinder -n {input.contigs} -d {params.db} {params.org_flag} "
         "--coverage_min {params.mincov} --threads {threads} "
-        "-o {output.result} || touch {output.result}"
+        "-o {output.result}"

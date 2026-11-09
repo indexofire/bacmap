@@ -255,7 +255,18 @@ def create_run(
             json.dumps(resolved, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest(),
         tool_versions=probe_tool_versions(
-            ["snakemake", "fastp", "spades.py", "blastn", "gmlst", "abricate", "iqtree"]
+            [
+                "snakemake",
+                "fastp",
+                "spades.py",
+                "blastn",
+                "gspec",
+                "gmlst",
+                "bakta",
+                "amrfinder",
+                "quast.py",
+                "iqtree",
+            ]
         ),
         input_files={str(p): file_sha256(p) for p in (input_files or []) if Path(p).is_file()},
         seeds=seeds,

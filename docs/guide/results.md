@@ -14,6 +14,8 @@ $BACMAP_HOME/results/
 │       ├── <dataset>/               # per-sample files
 │       │   ├── qc/
 │       │   ├── assembly/
+│       │   │   └── quast/           # QUAST report.tsv / transposed_report.tsv
+│       │   ├── annotation/          # Bakta + eggNOG + annotation.json
 │       │   ├── species/
 │       │   ├── typing/
 │       │   ├── amr/
@@ -63,6 +65,10 @@ Open it from the Web:
 
 The report is self-contained (inline style, no external requests), so it can be archived and viewed
 offline. PDF generation is optional and needs a local converter.
+
+The summary JSON now includes `steps.assembly_quast` (QUAST transposed report) and
+`steps.annotation` (`status`, `total_CDS`, `annotated_CDS`, `annotation_rate`,
+`bakta` counts, `eggnog` COG/GO/KEGG counts, and `top_genes`).
 
 Reports are generated automatically at the end of every analysis. Re-running an analysis
 regenerates them; there is no direct MCP write tool for reports.

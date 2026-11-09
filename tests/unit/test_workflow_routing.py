@@ -11,6 +11,7 @@ from bacmap.core.analysis.routing import report_inputs, serotype_engine, uses_gs
 _COMMON = {
     "qc_json",
     "assembly_stats",
+    "quast",
     "species_id",
     "mlst",
     "vfdb",

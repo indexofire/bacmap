@@ -53,6 +53,10 @@ summary["steps"]["qc"] = {
 asm_text = read_file(snakemake.input.assembly_stats, "")
 summary["steps"]["assembly"] = asm_text
 
+quast_text = read_file(snakemake.input.quast, "")
+if quast_text:
+    summary["steps"]["assembly_quast"] = quast_text
+
 species_id = read_json(snakemake.input.species_id, {})
 if not isinstance(species_id, dict):
     species_id = {}
@@ -234,12 +238,16 @@ if isinstance(annotation, dict) and annotation.get("summary"):
     top_genes = []
     _features = annotation.get("features", [])
     for feat in (_features if isinstance(_features, list) else [])[:20]:
-        ident = feat.get("identity", 0) if isinstance(feat, dict) else 0
+        ident = feat.get("identity") if isinstance(feat, dict) else None
         if (
             isinstance(feat, dict)
             and feat.get("gene")
-            and isinstance(ident, (int, float))
-            and ident >= 80
+            and not feat.get("hypothetical")
+            and "hypothetical" not in str(feat.get("product", "")).lower()
+            and (
+                ident is None
+                or (isinstance(ident, (int, float)) and ident >= 80)
+            )
         ):
             top_genes.append({
                 "gene": feat["gene"],
@@ -248,9 +256,12 @@ if isinstance(annotation, dict) and annotation.get("summary"):
                 "source": feat.get("source", ""),
             })
     summary["steps"]["annotation"] = {
+        "status": annotation.get("status", "ok"),
         "total_CDS": ann_summary.get("total_CDS", 0),
         "annotated_CDS": ann_summary.get("annotated_CDS", 0),
         "annotation_rate": ann_summary.get("annotation_rate", 0),
+        "bakta": ann_summary.get("bakta", {}),
+        "eggnog": ann_summary.get("eggnog", {}),
         "top_genes": top_genes,
     }
 

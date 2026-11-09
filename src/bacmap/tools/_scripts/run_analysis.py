@@ -131,9 +131,13 @@ def interpret_summary(sample: str) -> None:
 
     amr = summary.get("steps", {}).get("amr", {})
     if isinstance(amr, dict):
-        amrfp = amr.get("amrfinderplus", [])
+        amrfp = amr.get("amrfinderplus") or amr.get("gspec_ncbi", [])
         if amrfp:
-            genes = [r.get("Gene symbol", "?") for r in amrfp if isinstance(r, dict)]
+            genes = [
+                r.get("Gene symbol") or r.get("GENE") or "?"
+                for r in amrfp
+                if isinstance(r, dict)
+            ]
             print(f"  💊 AMR genes ({len(genes)}): {', '.join(genes[:10])}")
         else:
             print("  💊 AMR genes: none found (susceptible)")

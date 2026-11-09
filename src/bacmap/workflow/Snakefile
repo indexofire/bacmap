@@ -118,6 +118,7 @@ rule all:
     input:
         expand(str(WORKDIR) + "/{sample}/report/{sample}_summary.json", sample=SAMPLES),
         expand(str(WORKDIR) + "/{sample}/annotation/annotation.json", sample=SAMPLES),
+        expand(str(WORKDIR) + "/{sample}/assembly/quast/report.tsv", sample=SAMPLES),
         expand(
             str(WORKDIR) + "/snp/{group}/snp_summary.json",
             group=_ACTIVE_GROUPS

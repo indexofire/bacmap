@@ -92,7 +92,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str], str, str, list[str]]] = [
         ),
         "生信工具未安装或不在 PATH 中",
         "运行 pixi install 安装工具链",
-        ["pixi install", "which fastp shovill blastn abricate"],
+        ["pixi install", "which fastp shovill blastn gspec bakta quast.py"],
     ),
     (
         "missing_db",
