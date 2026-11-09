@@ -19,10 +19,10 @@ from bacmap.core.species_codes import UNK
 from bacmap.core.tool_selection import (
     DEFAULT_SELECTION_REL,
     LEGACY_SELECTION_REL,
-    GapitSelection,
     GmlstMode,
     GmlstPlan,
     GmlstSelection,
+    GspecSelection,
     SelectionError,
     SpeciesSelection,
     ToolSelection,
@@ -445,7 +445,7 @@ def _update_entry(
     selection: ToolSelection,
     code: str,
     *,
-    gspec: GapitSelection | None = None,
+    gspec: GspecSelection | None = None,
     gmlst: GmlstSelection | None = None,
 ) -> ToolSelection:
     current = _entry_for(selection, code)
@@ -489,7 +489,7 @@ def _interactive_gspec(args: Any, selection: ToolSelection, code: str) -> ToolSe
     return _update_entry(
         selection,
         code,
-        gspec=GapitSelection(mode=args.mode, databases=chosen),
+        gspec=GspecSelection(mode=args.mode, databases=chosen),
     )
 
 
@@ -563,7 +563,7 @@ def _apply_noninteractive(
         selection = _update_entry(
             selection,
             code,
-            gspec=GapitSelection(mode=args.mode, databases=chosen),
+            gspec=GspecSelection(mode=args.mode, databases=chosen),
         )
     if tool in ("gmlst", "all") and str(getattr(args, "modes", "") or "").strip():
         modes = _parse_modes(str(args.modes))

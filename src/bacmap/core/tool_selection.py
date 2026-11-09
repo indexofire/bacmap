@@ -78,7 +78,7 @@ class SelectionDefaults(BaseModel):
         return value
 
 
-class GapitSelection(BaseModel):
+class GspecSelection(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     mode: Literal["extend", "replace"] | None = None
@@ -117,14 +117,14 @@ class GmlstSelection(BaseModel):
 class SpeciesSelection(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    gspec: GapitSelection | None = None
+    gspec: GspecSelection | None = None
     gmlst: GmlstSelection | None = None
 
 
 class SampleSelection(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    gspec: GapitSelection | None = None
+    gspec: GspecSelection | None = None
     gmlst: GmlstSelection | None = None
 
 

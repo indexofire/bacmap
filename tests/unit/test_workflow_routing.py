@@ -51,7 +51,7 @@ class TestSerotypeEngine:
         assert serotype_engine("not_a_species") == ""
 
 
-class TestGapitDbRouting:
+class TestGspecDbRouting:
     def test_eco_dec_only_where_declared(self):
         assert uses_gspec_db("DEC", "eco_dec") is True
         # 志贺菌的血清型走 ShigaTyper；registry 未为其声明 eco_dec
@@ -105,7 +105,7 @@ class TestReportInputsGating:
 class TestSelectionAwareRouting:
     def test_replace_removes_vpara_special_steps(self):
         from bacmap.core.tool_selection import (
-            GapitSelection,
+            GspecSelection,
             SpeciesSelection,
             ToolSelection,
         )
@@ -113,7 +113,7 @@ class TestSelectionAwareRouting:
         selection = ToolSelection(
             species={
                 "VPA": SpeciesSelection(
-                    gspec=GapitSelection(mode="replace", databases=["vpa_ok", "vpa_pai"])
+                    gspec=GspecSelection(mode="replace", databases=["vpa_ok", "vpa_pai"])
                 )
             }
         )
@@ -133,7 +133,7 @@ class TestSelectionAwareRouting:
 
     def test_extend_keeps_vpara_special_steps(self):
         from bacmap.core.tool_selection import (
-            GapitSelection,
+            GspecSelection,
             SpeciesSelection,
             ToolSelection,
         )
@@ -141,7 +141,7 @@ class TestSelectionAwareRouting:
         selection = ToolSelection(
             species={
                 "VPA": SpeciesSelection(
-                    gspec=GapitSelection(mode="extend", databases=["vpa_ok"])
+                    gspec=GspecSelection(mode="extend", databases=["vpa_ok"])
                 )
             }
         )
@@ -154,7 +154,7 @@ class TestSelectionAwareRouting:
 
     def test_sample_override_applies_to_special_steps(self):
         from bacmap.core.tool_selection import (
-            GapitSelection,
+            GspecSelection,
             SampleSelection,
             SpeciesSelection,
             ToolSelection,
@@ -163,12 +163,12 @@ class TestSelectionAwareRouting:
         selection = ToolSelection(
             species={
                 "VPA": SpeciesSelection(
-                    gspec=GapitSelection(mode="replace", databases=["vpa_ok"])
+                    gspec=GspecSelection(mode="replace", databases=["vpa_ok"])
                 )
             },
             samples={
                 "S1": SampleSelection(
-                    gspec=GapitSelection(databases=["vpara_virulence"])
+                    gspec=GspecSelection(databases=["vpara_virulence"])
                 )
             },
         )

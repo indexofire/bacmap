@@ -9,7 +9,7 @@ def _payload(status: str, databases: dict) -> dict:
     return {"status": status, "databases": databases}
 
 
-class TestSummarizeGapitTyping:
+class TestSummarizeGspecTyping:
     def test_serogroup_extracted_from_doumith(self):
         out = summarize(
             _payload(

@@ -62,7 +62,7 @@ def _fake_run(typing_out: dict[str, str], *, screen_fail: set[str] | None = None
     return _run
 
 
-class TestRunGapitTyping:
+class TestRunGspecTyping:
     def test_skipped_when_gspec_missing(self, tmp_path, monkeypatch):
         mod = _load()
         monkeypatch.setattr(mod.shutil, "which", lambda name: None)
