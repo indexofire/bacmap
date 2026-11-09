@@ -78,9 +78,12 @@
 # [ui] 界面显示
 # ─────────────────────────────────────────────────────────────────
 [ui]
-# language：CLI 帮助与提示文案的显示语言。可选 "en"（默认）| "zh"。
-# 环境变量 BACMAP_LANG 显式设置时优先于本文件（与 BACMAP_DEBUG 同构）。
+# 显示语言（en / zh）。
+# - language：全局默认（CLI/Web/文档都读它）
+# - cli_language：CLI 专用覆盖（省略时 CLI 回落到 language）
+# 环境变量优先级：BACMAP_CLI_LANG > BACMAP_LANG > cli_language > language > "en"
 language = "en"
+# cli_language = "zh"
 
 # ─────────────────────────────────────────────────────────────────
 # [mcp] MCP 服务端开关

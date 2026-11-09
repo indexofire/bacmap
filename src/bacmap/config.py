@@ -192,11 +192,50 @@ def _ui_language_from_env() -> str | None:
     return raw if raw in _UI_LANGUAGES else None
 
 
+def _cli_language_from_env() -> str | None:
+    """CLI 专用覆盖：``BACMAP_CLI_LANG`` > ``[ui] cli_language`` > 回落 ui_language()。"""
+    raw = (os.environ.get("BACMAP_CLI_LANG") or "").strip().lower()
+    return raw if raw in _UI_LANGUAGES else None
+
+
 def ui_language() -> str:
-    """CLI 文案显示语言：``BACMAP_LANG`` > ``[ui] language`` > 内置默认 ``"en"``。
+    """CLI 文案显示语言：``BACMAP_CLI_LANG`` > ``[ui] cli_language`` > ``BACMAP_LANG``
+    > ``[ui] language`` > 内置默认 ``"en"``。
 
     取值仅 ``"en"`` | ``"zh"``（大小写不敏感）。环境变量或配置非法/缺失时
     确定性回落默认值（与 ``debug_mode`` 的容错口径一致），不逐次告警。
+    0.1.4（PLAN #1）：新增 ``cli_language`` 专用覆盖，与全局 ``language`` 独立。
+    """
+    cli_env = _cli_language_from_env()
+    if cli_env is not None:
+        return cli_env
+    from_env = _ui_language_from_env()
+    if from_env is not None:
+        return from_env
+    path = config_path()
+    if path.is_file():
+        try:
+            with path.open("rb") as fh:
+                data = tomllib.load(fh)
+        except (OSError, tomllib.TOMLDecodeError):
+            return "en"
+        section = data.get("ui")
+        if isinstance(section, dict):
+            # cli_language 优先于 language（CLI 专用覆盖）
+            for key in ("cli_language", "language"):
+                raw = section.get(key)
+                if isinstance(raw, str):
+                    normalized = raw.strip().lower()
+                    if normalized in _UI_LANGUAGES:
+                        return normalized
+    return "en"
+
+
+def system_language() -> str:
+    """系统级语言（Web/TUI/文档等）：``BACMAP_LANG`` > ``[ui] language`` > ``"en"``。
+
+    与 ``ui_language()`` 的区别：不读 ``cli_language`` / ``BACMAP_CLI_LANG``
+    （那是 CLI 专用覆盖）。Web 前端未来经 vue-i18n 使用此值。
     """
     from_env = _ui_language_from_env()
     if from_env is not None:
