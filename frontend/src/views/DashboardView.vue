@@ -52,41 +52,60 @@ const pending = computed(() => tasks.value.filter((t) => t.state === 'awaiting_a
 const shownPending = computed(() => pending.value.slice(0, 4))
 const unlistedPending = computed(() => Math.max(0, awaitingCount.value - shownPending.value.length))
 
-const chartPalette = computed(() =>
-  resolvedTheme.value === 'light'
-    ? {
-        tooltipBg: '#ffffff',
-        tooltipBorder: '#e4e7ec',
-        text: '#344054',
-        muted: '#667085',
-        axis: '#e4e7ec',
-        split: '#eef0f3',
-        pieBorder: '#ffffff',
-        bar: '#5e6ad2',
-        running: '#2e90fa',
-        await: '#f79009',
-        ok: '#12b76a',
-        fail: '#f04438',
-        cancel: '#98a2b3',
-        pending: '#98a2b3',
-      }
-    : {
-        tooltipBg: '#202123',
-        tooltipBorder: 'rgba(255,255,255,.12)',
-        text: '#d0d6e0',
-        muted: '#8a8f98',
-        axis: '#2a2b2e',
-        split: 'rgba(255,255,255,.06)',
-        pieBorder: '#191a1b',
-        bar: '#5e6ad2',
-        running: '#6aa1ff',
-        await: '#e8b64a',
-        ok: '#2fbe77',
-        fail: '#e5484d',
-        cancel: '#5c6167',
-        pending: '#8a8f98',
-      },
-)
+const chartPalette = computed(() => {
+  if (resolvedTheme.value === 'light') {
+    return {
+      tooltipBg: '#ffffff',
+      tooltipBorder: '#e4e7ec',
+      text: '#344054',
+      muted: '#667085',
+      axis: '#e4e7ec',
+      split: '#eef0f3',
+      pieBorder: '#ffffff',
+      bar: '#5e6ad2',
+      running: '#2e90fa',
+      await: '#f79009',
+      ok: '#12b76a',
+      fail: '#f04438',
+      cancel: '#98a2b3',
+      pending: '#98a2b3',
+    }
+  }
+  if (resolvedTheme.value === 'gray') {
+    return {
+      tooltipBg: '#f7f7f2',
+      tooltipBorder: '#111111',
+      text: '#111111',
+      muted: '#3f3f3b',
+      axis: '#111111',
+      split: 'rgba(10,10,10,.12)',
+      pieBorder: '#f7f7f2',
+      bar: '#111111',
+      running: '#111111',
+      await: '#b88a2e',
+      ok: '#1f5c3a',
+      fail: '#a11b1b',
+      cancel: '#5a5a54',
+      pending: '#3f3f3b',
+    }
+  }
+  return {
+    tooltipBg: '#202123',
+    tooltipBorder: 'rgba(255,255,255,.12)',
+    text: '#d0d6e0',
+    muted: '#8a8f98',
+    axis: '#2a2b2e',
+    split: 'rgba(255,255,255,.06)',
+    pieBorder: '#191a1b',
+    bar: '#5e6ad2',
+    running: '#6aa1ff',
+    await: '#e8b64a',
+    ok: '#2fbe77',
+    fail: '#e5484d',
+    cancel: '#5c6167',
+    pending: '#8a8f98',
+  }
+})
 
 const statusItems = computed(() => [
   { key: 'running', label: '运行中', value: stateCount('running'), color: chartPalette.value.running },
@@ -333,6 +352,20 @@ watch([statusItems, trend, resolvedTheme], () => {
         </RouterLink>
       </div>
     </div>
+
+    <section class="gray-hero" aria-hidden="true">
+      <div class="gray-hero__left">
+        <div class="gray-hero__logo">BACMAP / LOCAL GENOMIC EVIDENCE</div>
+        <h2>LOCAL<br />GENOMIC<br />EVIDENCE</h2>
+        <div class="gray-hero__meta">
+          {{ total }} TASKS / {{ stats?.strains.total ?? 0 }} STRAINS<br />
+          D1—D4 / AIR-GAPPED / NO CLOUD
+        </div>
+      </div>
+      <div class="gray-hero__map">
+        <span v-for="i in 12" :key="i" class="gray-hero__node" />
+      </div>
+    </section>
 
     <div v-if="!loading && awaitingCount > 0" class="pending-banner" role="status">
       <Icon name="clock" />

@@ -163,6 +163,71 @@
 
   --shadow-pop: 0 16px 40px rgba(16, 24, 40, 0.14);
 }
+/* Concrete / Swiss gray template: paper, ink, rules and hard offsets. */
+:root[data-theme="gray"] {
+  color-scheme: light;
+  --bg: #deded8;
+  --panel: #f1f1eb;
+  --surface: #f7f7f2;
+  --surface-raised: #ffffff;
+  --surface-hover: #e7e7e0;
+  --surface-inset: #ffffff;
+  --surface-soft: rgba(10, 10, 10, 0.03);
+  --surface-faint: #e7e7e0;
+  --surface-track: #c9c9c2;
+  --surface-sheen: rgba(10, 10, 10, 0.08);
+
+  --text-1: #0a0a0a;
+  --text-2: #1c1c1a;
+  --text-3: #3f3f3b;
+  --text-4: #5a5a54;
+
+  --accent: #111111;
+  --accent-hover: #000000;
+  --accent-soft: rgba(10, 10, 10, 0.07);
+  --accent-line: rgba(10, 10, 10, 0.32);
+  --link: #1a1a1a;
+
+  --border: rgba(10, 10, 10, 0.26);
+  --border-subtle: rgba(10, 10, 10, 0.13);
+  --border-strong: #111111;
+  --control-border-hover: #111111;
+
+  --topbar-bg: rgba(241, 241, 235, 0.92);
+  --body-glow: transparent;
+  --code-bg: #e4e4dd;
+  --scrim: rgba(0, 0, 0, 0.55);
+  --spinner-track: #bdbdb5;
+
+  --st-pending-dot: #5a5a54;
+  --st-pending-text: #3f3f3b;
+  --st-pending-bg: #e7e7e0;
+  --st-pending-line: #bdbdb5;
+  --st-running-dot: #111111;
+  --st-running-text: #0a0a0a;
+  --st-running-bg: #e7e7e0;
+  --st-running-line: #111111;
+  --st-await-dot: #b88a2e;
+  --st-await-text: #7a4a00;
+  --st-await-bg: #efe5c9;
+  --st-await-line: #b88a2e;
+  --st-ok-dot: #1f5c3a;
+  --st-ok-text: #1f5c3a;
+  --st-ok-bg: #dce7dd;
+  --st-ok-line: #7fa988;
+  --st-fail-dot: #a11b1b;
+  --st-fail-text: #a11b1b;
+  --st-fail-bg: #efd9d6;
+  --st-fail-line: #cf8d86;
+  --st-cancel-dot: #5a5a54;
+  --st-cancel-text: #3f3f3b;
+  --st-cancel-bg: #e7e7e0;
+  --st-cancel-line: #bdbdb5;
+
+  --shadow-pop: 6px 6px 0 rgba(10, 10, 10, 0.22);
+  --select-arrow: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%233f3f3b%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E");
+}
+
 
 *,
 *::before,

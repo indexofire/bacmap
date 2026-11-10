@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 
-export type ThemePreference = 'dark' | 'light' | 'system'
-export type ResolvedTheme = 'dark' | 'light'
+export type ThemePreference = 'dark' | 'light' | 'gray' | 'system'
+export type ResolvedTheme = 'dark' | 'light' | 'gray'
 
 const STORAGE_KEY = 'bacmap-theme'
 const preference = ref<ThemePreference>('dark')
@@ -9,7 +9,9 @@ const systemDark = ref(true)
 let initialized = false
 
 function normalize(value: string | null): ThemePreference {
-  return value === 'light' || value === 'system' || value === 'dark' ? value : 'dark'
+  return value === 'light' || value === 'gray' || value === 'system' || value === 'dark'
+    ? value
+    : 'dark'
 }
 
 function resolveTheme(): ResolvedTheme {
@@ -20,7 +22,7 @@ function resolveTheme(): ResolvedTheme {
 function applyTheme() {
   const resolved = resolveTheme()
   document.documentElement.dataset.theme = resolved
-  document.documentElement.style.colorScheme = resolved
+  document.documentElement.style.colorScheme = resolved === 'dark' ? 'dark' : 'light'
 }
 
 export function initTheme(): void {
@@ -57,7 +59,8 @@ export function useTheme() {
   }
 
   function toggle() {
-    setTheme(resolved.value === 'dark' ? 'light' : 'dark')
+    const order: ResolvedTheme[] = ['dark', 'light', 'gray']
+    setTheme(order[(order.indexOf(resolved.value) + 1) % order.length])
   }
 
   return { preference, resolved, setTheme, toggle }

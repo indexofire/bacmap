@@ -48,7 +48,11 @@ def validate_sample(sample: str) -> None:
         sys.exit(1)
 
 
-SPECIES_MODES = ["simple", "panel", "skani_gtdb", "mash_refseq", "sourmash", "standard"]
+SPECIES_MODES = [
+    "marker", "ani", "mash", "sourmash", "gtdbtk", "all",
+    # legacy aliases accepted by older configs/scripts
+    "simple", "panel", "skani_gtdb", "mash_refseq", "standard",
+]
 
 
 def run_snakemake(

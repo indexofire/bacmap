@@ -212,7 +212,7 @@ onMounted(() => void load())
       <section v-if="showReport" class="card report-embed">
         <div class="card__head">
           <h2 class="card__title">完整分析报告</h2>
-          <span class="card__hint">{{ resolvedTheme === 'light' ? '浅色主题' : '暗色主题' }} · 自包含 HTML</span>
+          <span class="card__hint">{{ resolvedTheme === 'light' ? '浅色主题' : resolvedTheme === 'gray' ? '灰色主题' : '暗色主题' }} · 自包含 HTML</span>
           <a class="btn btn--ghost btn--sm" :href="reportDownload">下载 HTML</a>
         </div>
         <iframe class="report-frame" :src="reportSrc" title="样本完整分析报告" />

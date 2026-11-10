@@ -5,8 +5,10 @@
 collect_summary 兼容；原始 gside 输出整体保留在 `gside_raw` 供溯源
 （ADR-18：版本以输出内嵌为准）。
 
-**升级阶梯（v1.4.17）**：`--escalation` 时按 `marker → panel → mash_refseq →
-sourmash → all` 依次升档，直到拿到可识别 verdict；每档结果记入 `attempts`。
+**升级阶梯（v1.10.18）**：`--escalation` 时按 `marker → ani → mash → sourmash →
+gtdbtk → all` 依次升档，直到拿到可识别 verdict；每档结果记入 `attempts`。
+config/CLI 接受 gside 0.2.4 的 canonical 名称，内部映射到 0.2.3 CLI 的
+legacy 名称（ani→panel、mash→mash_refseq），两代 gside 都可运行。
 数据库未就绪的档会自行落空（不崩溃）——全档失败则保持 `Unknown` 并带诊断，
 提示人工 `gside db setup --tier <tier>`。
 
@@ -22,18 +24,22 @@ import subprocess
 import sys
 
 MODE_MAP = {
+    # canonical（gside ≥0.2.4）→ 本机 gside 0.2.3 CLI 名称
     "simple": "marker",
     "marker": "marker",
     "panel": "panel",
+    "ani": "panel",
     "skani_gtdb": "panel",
+    "mash": "mash_refseq",
     "mash_refseq": "mash_refseq",
     "sourmash": "sourmash",
+    "gtdbtk": "gtdbtk",
     "all": "all",
     "standard": "all",
 }
 
-# gside 档位从弱到强的顺序（决定升级阶梯的区间）。
-MODE_ORDER = ("marker", "panel", "mash_refseq", "sourmash", "all")
+# CLI 档位从弱到强的顺序（决定升级阶梯的区间）。
+MODE_ORDER = ("marker", "panel", "mash_refseq", "sourmash", "gtdbtk", "all")
 
 FALLBACK = {
     "species": "Unknown",
@@ -64,7 +70,7 @@ def _is_identified(species: object) -> bool:
 def _call_gside(contigs: str, mode: str) -> tuple[dict | None, str | None]:
     try:
         proc = subprocess.run(
-            ["gside", "species", contigs, "--mode", mode],
+            ["gside", "scan", contigs, "--mode", mode],
             capture_output=True,
             text=True,
             timeout=600,
@@ -107,11 +113,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--contigs", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--mode", default="simple", help="起始档（simple/panel/mash_refseq/...）")
+    ap.add_argument("--mode", default="simple", help="起始档（marker/ani/mash/sourmash/gtdbtk/all；兼容旧别名）")
     ap.add_argument(
         "--escalation",
         action="store_true",
-        help="未定种时按档位阶梯升级（marker→panel→mash_refseq→sourmash→all）",
+        help="未定种时按档位阶梯升级（marker→ani→mash→sourmash→gtdbtk→all）",
     )
     ap.add_argument("--mode-max", default="all", help="升级上限档位")
     args = ap.parse_args()

@@ -74,7 +74,7 @@ _TEMPLATES = _Templates(directory=str(Path(__file__).parent / "templates"))
 logger = logging.getLogger(__name__)
 
 # 报告模板版本标记：旧模板生成的 HTML 在首次访问时原地重渲染。
-_REPORT_MARKER = b'name="bacmap-report" content="4"'
+_REPORT_MARKER = b'name="bacmap-report" content="5"'
 _REPORT_LOCK = threading.Lock()
 
 
@@ -212,12 +212,12 @@ def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
                 else f'inline; filename="{sample_id}_report.html"'
             ),
         }
-        # 控制台浅色主题：按请求注入 report 的 light token，不修改磁盘产物。
-        if theme == "light":
+        # 控制台浅色/灰色主题：按请求注入 report token，不修改磁盘产物。
+        if theme in {"light", "gray"}:
             html = path.read_text(encoding="utf-8")
             html = html.replace(
                 '<html lang="zh-CN">',
-                '<html lang="zh-CN" data-report-theme="light">',
+                f'<html lang="zh-CN" data-report-theme="{theme}">',
                 1,
             )
             return HTMLResponse(html, headers=headers)

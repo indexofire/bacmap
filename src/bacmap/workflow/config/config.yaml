@@ -10,12 +10,12 @@ nondeterministic_steps: []
 workdir: "results"
 project_root: "../.."
 
-# 物种鉴定方法（species-id 专项）：simple=marker 靶基因（默认）；
-# panel/skani_gtdb/mash_refseq/sourmash/standard 由方案 A/B/C 交付后可用，
-# 数据库缺失时自动回退 simple 并记录原因。Kraken2 reads 级预筛独立开关（方案 D）。
-species_mode: "simple"
-# 升级阶梯（v1.4.17）：起始档未定种时按 marker→panel→mash_refseq→sourmash→all 升档。
-# 各档库未就绪时该档落空（不崩溃）；本地需 `gside db setup --tier <tier>`。
+# 物种鉴定方法（species-id 专项）：marker 靶基因（默认）；
+# 可选 marker/ani/mash/sourmash/gtdbtk/all；兼容旧别名 simple/panel/skani_gtdb/
+# mash_refseq/standard。数据库缺失时该档落空（不崩溃），本地需
+# `gside db setup --tier <tier>`。Kraken2 reads 级预筛独立开关。
+species_mode: "marker"
+# 升级阶梯（v1.10.18）：起始档未定种时按 marker→ani→mash→sourmash→gtdbtk→all 升档。
 species_escalation: false
 species_mode_max: "all"
 kraken2_prefilter: false

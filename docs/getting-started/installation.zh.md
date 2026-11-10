@@ -83,7 +83,7 @@ bacmap --version      # 0.1.5
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest（当前基线：2001 passed）
+pixi run -e dev test        # pytest（当前基线：2003 passed）
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter 依赖契约

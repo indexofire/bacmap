@@ -421,7 +421,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="bacmap-report" content="4">
+<meta name="bacmap-report" content="5">
 <title>{sample_id} · 分析报告 · bacmap</title>
 <style>
   :root {{
@@ -462,9 +462,27 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     --fail: #b42318;
     --warn: #b54708;
   }}
+  :root[data-report-theme="gray"] {{
+    --bg: #deded8;
+    --panel: #f1f1eb;
+    --surface: #f7f7f2;
+    --text-1: #0a0a0a;
+    --text-2: #1c1c1a;
+    --text-3: #3f3f3b;
+    --text-4: #5a5a54;
+    --accent: #111111;
+    --link: #1a1a1a;
+    --border: #111111;
+    --border-subtle: rgba(10, 10, 10, 0.16);
+    --code-bg: #e4e4dd;
+    --ok: #1f5c3a;
+    --fail: #a11b1b;
+    --warn: #7a4a00;
+  }}
   * {{ box-sizing: border-box; }}
   html {{ color-scheme: dark; }}
   html[data-report-theme="light"] {{ color-scheme: light; }}
+  html[data-report-theme="gray"] {{ color-scheme: light; }}
   body {{
     margin: 0;
     min-height: 100dvh;
@@ -556,9 +574,33 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     .card {{ padding: 16px; }}
     td.label {{ width: 130px; }}
   }}
+  html[data-report-theme="gray"] body {{
+    background-image:
+      linear-gradient(to right, rgba(10, 10, 10, 0.055) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(10, 10, 10, 0.055) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }}
+  html[data-report-theme="gray"] .pagehead {{ border-top: 4px solid #111; padding-top: 18px; }}
+  html[data-report-theme="gray"] h1 {{
+    text-transform: uppercase;
+    letter-spacing: -0.055em;
+    font-weight: 800;
+  }}
+  html[data-report-theme="gray"] .card {{
+    border-radius: 0;
+    box-shadow: 3px 3px 0 rgba(10, 10, 10, 0.13);
+  }}
+  html[data-report-theme="gray"] .badge,
+  html[data-report-theme="gray"] .cgmlst-verdict-badge {{ border-radius: 0; }}
+  html[data-report-theme="gray"] th {{
+    color: #111;
+    border-bottom: 1px solid #111;
+    letter-spacing: 0.1em;
+  }}
+  html[data-report-theme="gray"] td.label {{ color: #3f3f3b; }}
   @media print {{
     body {{ background: #fff; color: #222; }}
-    .card {{ background: #fff; border-color: #ddd; break-inside: avoid; }}
+    .card {{ background: #fff; border-color: #ddd; box-shadow: none; break-inside: avoid; }}
     .card h2, h1, h3 {{ color: #111; }}
     th {{ color: #555; }}
     td {{ color: #222; }}

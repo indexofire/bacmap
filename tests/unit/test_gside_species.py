@@ -45,12 +45,20 @@ class TestLadder:
             "panel",
             "mash_refseq",
             "sourmash",
+            "gtdbtk",
             "all",
         ]
 
     def test_escalation_capped_at_max(self):
         mod = _load()
         assert mod._ladder("panel", True, "mash_refseq") == ["panel", "mash_refseq"]
+
+    def test_canonical_aliases(self):
+        mod = _load()
+        assert mod._ladder("ani", False, "all") == ["panel"]
+        assert mod._ladder("mash", False, "all") == ["mash_refseq"]
+        assert mod._ladder("marker", False, "all") == ["marker"]
+        assert mod._ladder("gtdbtk", False, "all") == ["gtdbtk"]
 
     def test_max_below_start_is_clamped(self):
         mod = _load()
@@ -84,7 +92,7 @@ class TestRunEscalation:
         out = self._run(mod, tmp_path, ["--mode", "simple", "--escalation"])
         assert out["species"] == "Unknown"
         assert out["escalated"] is True
-        assert len(out["attempts"]) == 5
+        assert len(out["attempts"]) == 6
         assert "db not provisioned" in out["error"]
 
     def test_no_escalation_single_attempt(self, tmp_path, monkeypatch):

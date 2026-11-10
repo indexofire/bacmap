@@ -83,7 +83,18 @@ _CGMLST_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
 }
 
 SPECIES_ID_METHODS = frozenset(
-    {"marker", "panel", "skani_gtdb", "mash_refseq", "sourmash", "gtdbtk", "kraken2"}
+    {
+        "marker",
+        "ani",
+        "mash",
+        "sourmash",
+        "gtdbtk",
+        "all",
+        "panel",
+        "skani_gtdb",
+        "mash_refseq",
+        "kraken2",
+    }
 )
 
 

@@ -10,10 +10,10 @@
 重定向到对应的 `/console/...`。SPA 以预构建静态资源提供：运行期不需要 Node/Bun
 （ADR-01）；Node 只在重新构建前端时使用。
 
-控制台提供 **dark / light 两套主题**：右上角月亮/太阳按钮即时切换，选择写入
-`localStorage`（`bacmap-theme`），刷新后保持；浅色模板采用 TailAdmin 风格的浅灰画布、
-白色卡片、细边框与柔和阴影，图表配色同步切换。样本 HTML 报告也支持浅色渲染
-（`?theme=light`），控制台切到浅色后报告页签会同步。
+控制台提供 **INK / PAPER / CONCRETE 三套主题**：右上角主题菜单即时切换，选择写入
+`localStorage`（`bacmap-theme`），刷新后保持。INK 为暗色仪器台，PAPER 为 TailAdmin
+风格浅色文档，CONCRETE 为 Swiss/brutalist 灰色模板（网格纸、硬边框、Helvetica 大标题、
+等宽数据与分屏海报式首页）。图表与样本 HTML 报告同步主题（`?theme=light|gray`）。
 
 ```bash
 bacmap start web                            # 默认 127.0.0.1:8800
@@ -42,7 +42,7 @@ pixi run -e web web-build
 | `/console/overview` | 系统概览（版本、路径、数据策略、沙箱） |
 | `/console/search` | 按关键词/血清型/ST/基因检索样本 |
 | `/research` | 高级研究工具（系统发育、logistic、对象写操作；Jinja） |
-| `/samples/{id}/report` | 报告 HTML 源（`?embed=1` 内嵌）；直接访问 307 到 `/console/samples/{id}?tab=report`，`?download=1` 改为附件，`?theme=light` 浅色渲染 |
+| `/samples/{id}/report` | 报告 HTML 源（`?embed=1` 内嵌）；直接访问 307 到 `/console/samples/{id}?tab=report`，`?download=1` 改为附件，`?theme=light|gray` 浅色/灰色渲染 |
 | `/api/v1/*` | JSON API（见 [HTTP API 参考](../reference/api.zh.md)） |
 
 样本详情页提供“概览 / 完整报告”两个页签，报告在页签内的沙箱 iframe 中渲染，不另开页面。

@@ -133,6 +133,14 @@ class TestResultsPages:
         assert r.status_code == 200
         assert 'data-report-theme="light"' in r.text
 
+    def test_report_gray_theme_injected(self, client):
+        c, home = client
+        rep = home / "results" / "SAM-001" / "report" / "SAM-001_report.html"
+        rep.write_text('<html lang="zh-CN"><body>ok</body></html>', encoding="utf-8")
+        r = c.get("/samples/SAM-001/report?embed=1&theme=gray")
+        assert r.status_code == 200
+        assert 'data-report-theme="gray"' in r.text
+
     def test_report_file_route_404_when_absent(self, client):
         c, _ = client
         assert c.get("/samples/NOPE/report").status_code == 404
@@ -378,7 +386,7 @@ class TestSampleReportDelivery:
         def fake_generate(args: dict[str, object]) -> str:
             calls.append(args)
             html.write_text(
-                '<html><head><meta name="bacmap-report" content="4"></head>'
+                '<html><head><meta name="bacmap-report" content="5"></head>'
                 "<body>new theme</body></html>",
                 encoding="utf-8",
             )

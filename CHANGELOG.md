@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+### gside 模式升级 + CONCRETE 灰色主题
+
+- **gside 模式参数同步**：`gside_species.py` 接受 gside 0.2.4 的 canonical
+  `marker/ani/mash/sourmash/gtdbtk/all`，兼容旧别名
+  `simple/panel/skani_gtdb/mash_refseq/standard`；在 gside 0.2.3 CLI 上自动映射为
+  `marker/panel/mash_refseq/sourmash/gtdbtk/all`。`species_mode` 默认改为 `marker`，
+  升级阶梯加入 gtdbtk；CLI/服务层同步接受新名称。
+- **CONCRETE 灰色主题**：前端新增第三套 Swiss/brutalist 灰色模板（网格纸、硬边框、
+  Helvetica 大标题、等宽数据、分屏海报式仪表盘首页、三态主题菜单）；暗色与浅色保留。
+  图表、主题菜单与样本 HTML 报告同步（报告支持 `?theme=gray`）。
+- 宋门菌血清型暂继续使用 SISTR；gspec `sen_sero_sistr` 的 serotype/2 支持发布后再迁移。
+
 ### 志贺菌血清型迁移到 gspec `shi_sero`
 
 - **SHI registry 改路由**：`core/pathogens.yaml` 从 `serotype_engine: shigatyper` 改为
@@ -98,7 +110,7 @@
 - 依赖升级：`gside ==0.2.3`、`gspec ==0.10.2`、`gseek ==0.10.5`、`gmlst ==0.6.1`，
   新增 `gmeta ==0.1.0`（mNGS 可选依赖）。
 - 新增 `GET /api/v1/stats`；测试基线 2016 → 1995（-21：删除旧 HTML 页面/表单测试，
-  API 覆盖保留），报告内嵌/主题/检索/DAG 回归净基线 2002 → 2001（删除 8 个 ShigaTyper 旧测试，新增 7 个 shi_sero/gspec 测试）。
+  API 覆盖保留），报告内嵌/主题/检索/DAG 回归净基线 2002 → 2001（删除 8 个 ShigaTyper 旧测试，新增 7 个 shi_sero/gspec 测试），v1.10.18 +2（共 2003）。
 
 ## [0.1.5] - 2026-11-09
 

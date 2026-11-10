@@ -8,8 +8,14 @@ import { useTheme } from '../composables/useTheme'
 
 const route = useRoute()
 const router = useRouter()
-const { resolved: resolvedTheme, toggle: toggleTheme } = useTheme()
+const { resolved: resolvedTheme, setTheme } = useTheme()
 const menuOpen = ref(false)
+const themeMenuOpen = ref(false)
+const themeOptions = [
+  { id: 'dark', label: 'INK', hint: '暗色仪器', icon: 'moon' },
+  { id: 'light', label: 'PAPER', hint: '浅色文档', icon: 'sun' },
+  { id: 'gray', label: 'CONCRETE', hint: '瑞士灰', icon: 'grid' },
+] as const
 const version = ref('0.2.0')
 const search = ref('')
 const pendingApprovals = ref(0)
@@ -53,19 +59,38 @@ watch(
 )
 
 onMounted(async () => {
+  window.addEventListener('click', onDocumentClick)
+  window.addEventListener('keydown', onDocumentKey)
+  void loadPending()
+  pendingTimer = setInterval(() => void loadPending(), 60_000)
   try {
     const cap = await api.capabilities()
     version.value = cap.bacmap_version
   } catch {
     // 版本号是装饰信息，失败不打断控制台。
   }
-  void loadPending()
-  pendingTimer = setInterval(() => void loadPending(), 60_000)
 })
 
 onBeforeUnmount(() => {
   if (pendingTimer) clearInterval(pendingTimer)
+  window.removeEventListener('click', onDocumentClick)
+  window.removeEventListener('keydown', onDocumentKey)
 })
+
+function onDocumentClick(event: MouseEvent) {
+  const target = event.target
+  if (target instanceof Element && target.closest('.theme-control')) return
+  themeMenuOpen.value = false
+}
+
+function onDocumentKey(event: KeyboardEvent) {
+  if (event.key === 'Escape') themeMenuOpen.value = false
+}
+
+function chooseTheme(id: 'dark' | 'light' | 'gray') {
+  setTheme(id)
+  themeMenuOpen.value = false
+}
 
 async function loadPending() {
   try {
@@ -163,16 +188,41 @@ function submitSearch() {
           <Icon name="search" />
         </RouterLink>
 
-        <button
-          class="icon-btn topbar__theme"
-          type="button"
-          :aria-label="resolvedTheme === 'dark' ? '切换到浅色主题' : '切换到深色主题'"
-          :title="resolvedTheme === 'dark' ? '切换到浅色主题' : '切换到深色主题'"
-          :aria-pressed="resolvedTheme === 'light'"
-          @click="toggleTheme"
-        >
-          <Icon :name="resolvedTheme === 'dark' ? 'sun' : 'moon'" />
-        </button>
+        <div class="theme-control">
+          <button
+            class="icon-btn topbar__theme"
+            type="button"
+            aria-label="切换主题"
+            title="切换主题"
+            aria-haspopup="menu"
+            :aria-expanded="themeMenuOpen"
+            @click="themeMenuOpen = !themeMenuOpen"
+          >
+            <Icon
+              :name="resolvedTheme === 'dark' ? 'moon' : resolvedTheme === 'light' ? 'sun' : 'grid'"
+            />
+          </button>
+          <div v-if="themeMenuOpen" class="theme-menu" role="menu" aria-label="主题">
+            <div class="theme-menu__head mono">THEME / 模板</div>
+            <button
+              v-for="option in themeOptions"
+              :key="option.id"
+              type="button"
+              class="theme-menu__item"
+              :class="{ 'is-active': resolvedTheme === option.id }"
+              role="menuitemradio"
+              :aria-checked="resolvedTheme === option.id"
+              @click="chooseTheme(option.id)"
+            >
+              <span class="theme-menu__swatch" :class="`theme-menu__swatch--${option.id}`" />
+              <span class="theme-menu__label">
+                <strong>{{ option.label }}</strong>
+                <small>{{ option.hint }}</small>
+              </span>
+              <Icon :name="option.icon" :size="14" />
+            </button>
+          </div>
+        </div>
       </header>
 
       <main id="main" class="content" tabindex="-1">
