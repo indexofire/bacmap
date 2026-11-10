@@ -93,6 +93,9 @@ from bacmap.core.analysis.gspec_typing import (  # noqa: E402
     ecoh_serotype_summary as _ecoh_serotype_summary,
 )
 from bacmap.core.analysis.gspec_typing import (  # noqa: E402
+    shigella_serotype_summary as _shigella_serotype_summary,
+)
+from bacmap.core.analysis.gspec_typing import (  # noqa: E402
     summarize as summarize_gspec_typing,
 )
 from bacmap.core.analysis.gspec_typing import (  # noqa: E402
@@ -120,11 +123,14 @@ summary["steps"]["plasmid"] = {
 }
 
 dec_serotype = _ecoh_serotype_summary(gspec_tp["databases"].get("ecoh")) or {}
+_shigella_gspec = _shigella_serotype_summary(gspec_tp["databases"].get("shi_sero"))
 pathotype_path = opt_input("pathotype")
 shigella_path = opt_input("shigella_serotype")
-_dec_applicable = any(
-    p is not None for p in (pathotype_path, shigella_path)
-) or dec_serotype != {}
+_dec_applicable = (
+    any(p is not None for p in (pathotype_path, shigella_path))
+    or dec_serotype != {}
+    or _shigella_gspec is not None
+)
 
 if _dec_applicable:
     # ecoh O/H 能力状态/表型已由 gspec typing.json 归一（dec_serotype）。
@@ -158,25 +164,44 @@ if _dec_applicable:
         summary["steps"]["dec"]["pathotype"] = "N/A"
         summary["steps"]["dec"]["pathotype_status"] = "not_applicable"
 
-    shigella_serotype = read_json(shigella_path, {}) if shigella_path else {}
+    # 志贺菌血清型：gspec shi_sero（marker-set 库）优先；旧部署的
+    # shigella_serotype.json 仅作为兼容回退（v1.4.24 ShigaTyper 遗留）。
+    shigella_serotype = _shigella_gspec or (
+        read_json(shigella_path, {}) if shigella_path else {}
+    )
     if not isinstance(shigella_serotype, dict):
         shigella_serotype = {}
-    summary["steps"]["dec"]["shigella_serotype"] = shigella_serotype.get("serotype", "N/A")
-    summary["steps"]["dec"]["shigella_species"] = shigella_serotype.get("species", "N/A")
-    if shigella_path is not None:
-        summary["steps"]["dec"]["shigella_status"] = shigella_serotype.get("status", "N/A")
+    _shi_status = str(shigella_serotype.get("status", "N/A"))
+    _shi_genes = shigella_serotype.get("genes")
+    summary["steps"]["dec"]["shigella_serotype"] = shigella_serotype.get(
+        "serotype", "N/A"
+    )
+    summary["steps"]["dec"]["shigella_species"] = shigella_serotype.get(
+        "species", "N/A"
+    )
+    summary["steps"]["dec"]["shigella_status"] = _shi_status
+    if _shigella_gspec is not None:
+        summary["steps"]["dec"]["shigella_method"] = shigella_serotype.get(
+            "method", "gspec shi_sero"
+        )
+        if isinstance(_shi_genes, list):
+            summary["steps"]["dec"]["shigella_ipab"] = (
+                "ipaB" if "ipaB" in _shi_genes else ""
+            )
+    elif shigella_path is not None:
         summary["steps"]["dec"]["shigella_ipab"] = shigella_serotype.get("ipaB", "")
-    else:
-        summary["steps"]["dec"]["shigella_status"] = "not_applicable"
 
     ecoh_serotype_val = dec_serotype.get("serotype", "-:-")
-    shigella_species_val = shigella_serotype.get("species", "N/A")
-    shigella_serotype_val = shigella_serotype.get("serotype", "Undetermined")
-    shigella_ran = shigella_serotype.get("status") == "ran"
+    shigella_serotype_val = str(shigella_serotype.get("serotype") or "Undetermined")
+    shigella_ran = _shi_status == "ran"
+    _shigella_fallback = {"N/A", "Undetermined", "Not Shigella/EIEC"}
 
-    if shigella_ran and "Shigella" in shigella_species_val:
+    if shigella_ran and shigella_serotype_val not in _shigella_fallback:
         primary_serotype = shigella_serotype_val
-        serotype_method = "shigatyper"
+        serotype_method = str(
+            shigella_serotype.get("method")
+            or ("gspec shi_sero" if _shigella_gspec is not None else "shigatyper")
+        )
     elif ecoh_serotype_val != "-:-":
         primary_serotype = ecoh_serotype_val
         serotype_method = "ecoh_serotyper (DEC/EIEC)"
@@ -186,8 +211,11 @@ if _dec_applicable:
 
     summary["steps"]["dec"]["primary_serotype"] = primary_serotype
     summary["steps"]["dec"]["serotype_method"] = serotype_method
+    # 统一入口：前端/报告优先读 steps.serotype.value；沙门菌仍保留 sistr 字段。
+    summary["steps"]["serotype"]["value"] = primary_serotype
+    summary["steps"]["serotype"]["method"] = serotype_method
 else:
-    # 非 DEC/志贺菌物种：整段不适用（不跑 gspec eco_dec / ecoh / ShigaTyper）
+    # 非 DEC/志贺菌物种：整段不适用（不跑 gspec eco_dec / ecoh / shi_sero）
     summary["steps"]["dec"] = {
         "status": "not_applicable",
         "reason": "DEC 致病型 / 志贺菌血清型仅适用于大肠埃希菌与志贺菌",

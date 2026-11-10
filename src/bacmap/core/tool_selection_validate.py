@@ -46,7 +46,7 @@ class DbCatalogEntry(BaseModel):
     description: str = ""
     vendor: str = ""
     dbtype: str = ""
-    kind: Literal["gene", "cluster"] = "gene"
+    kind: Literal["gene", "cluster", "composite"] = "gene"
     typing: bool = False
     installed: bool = False
     indexed: bool = False
@@ -417,7 +417,7 @@ def _check_database(
             sample=sample,
         )
     if (
-        entry.kind == "cluster"
+        entry.kind in {"cluster", "composite"}
         and sample_types is not None
         and sample_types.get(sample) == "reads"
     ):

@@ -147,6 +147,18 @@ class TestSummaryFields:
         summary = {"steps": {"serotype": {"other": "x"}}}
         assert summary_fields(summary)["serotype"] == "N/A"
 
+    def test_gspec_value_preferred(self):
+        summary = {
+            "steps": {
+                "serotype": {
+                    "sistr": "N/A",
+                    "value": "S. flexneri 3a",
+                    "method": "gspec shi_sero",
+                }
+            }
+        }
+        assert summary_fields(summary)["serotype"] == "S. flexneri 3a"
+
     def test_invalid_mlst(self):
         summary = {"steps": {"mlst": "garbage"}}
         assert summary_fields(summary)["mlst_st"] == "N/A"

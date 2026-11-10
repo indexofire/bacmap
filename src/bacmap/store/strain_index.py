@@ -393,21 +393,27 @@ class StrainGenotypeIndex:
 
 
 def _extract_serotype(payload: dict[str, Any]) -> tuple[str, str]:
-    """血清型 (值, 方法)：SISTR/serotype 键优先，缺失时回退 DEC 主血清型。"""
+    """血清型 (值, 方法)：统一 value 优先，其次 SISTR，最后回退 DEC 主血清型。"""
     serotype_val = ""
     serotype_method = ""
     serotype_data = payload.get("serotype", {})
     if isinstance(serotype_data, str):
         serotype_val = serotype_data
     elif isinstance(serotype_data, dict):
-        serotype_val = serotype_data.get("sistr", "") or serotype_data.get("serotype", "")
+        # gspec shi_sero / sinh_sero 等统一写入 value+method；旧 summary 只有 sistr。
+        serotype_val = str(serotype_data.get("value") or "").strip()
         if serotype_val and serotype_val != "N/A":
-            serotype_method = "SISTR"
-    if not serotype_val:
+            serotype_method = str(serotype_data.get("method") or "gspec")
+        else:
+            sistr = str(serotype_data.get("sistr") or "").strip()
+            if sistr and sistr != "N/A":
+                serotype_val = sistr
+                serotype_method = "SISTR"
+    if not serotype_val or serotype_val == "N/A":
         dec = payload.get("dec", {})
         if isinstance(dec, dict):
-            primary = dec.get("primary_serotype", "")
-            method = dec.get("serotype_method", "")
+            primary = str(dec.get("primary_serotype") or "").strip()
+            method = str(dec.get("serotype_method") or "").strip()
             if primary and primary not in ("N/A", "-:-", "Undetermined"):
                 serotype_val = primary
                 serotype_method = method

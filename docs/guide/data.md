@@ -36,9 +36,17 @@ HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.
 | `platform` | sequencing platform (`ilm`, `ont`, `pacbio`, …); `unknown` when not provided |
 | `checksum` | SHA-256 over the input file(s); maintained by registration |
 
-Assembly-only samples have no reads: `fastp` and read-level tools such as the Shigella
-ShigaTyper are not added to the DAG; the Shigella serotype is reported as `N/A` until reads
-are supplied or gspec gains support. Reads samples keep the original ShigaTyper path.
+Assembly-only samples have no reads: read-level steps such as `fastp` are not added to the
+DAG. Shigella serotyping is handled for both input types by the gspec `shi_sero` marker-set
+library on assembled contigs; no reads are required. If the local `shi_sero` is stale
+(missing `serotype.json`), back it up and rebuild:
+
+```bash
+mv ~/.local/share/gspec/db/shi_sero ~/.local/share/gspec/db/shi_sero.bak
+gspec db setup -d shi_sero
+```
+
+For example, the `26OTH0027` assembly resolves to `S. flexneri 3a`.
 
 Naming recommendation for multiple libraries of one isolate:
 

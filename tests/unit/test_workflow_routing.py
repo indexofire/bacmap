@@ -48,7 +48,7 @@ class TestAssemblyEntryGating:
 class TestSerotypeEngine:
     def test_engines(self):
         assert serotype_engine("SAL") == "sistr"
-        assert serotype_engine("Shigella") == "shigatyper"
+        assert serotype_engine("Shigella") == ""  # 志贺菌血清型由 gspec shi_sero 承担
         assert serotype_engine("DEC") == "ecoh"
         assert serotype_engine("Escherichia_coli") == "ecoh"
 
@@ -86,8 +86,9 @@ class TestReportInputsGating:
         assert extra == {"sistr"}
 
     def test_shigella(self):
-        extra = _extra("Shigella")
-        assert extra == {"shigella_serotype"}
+        # 志贺菌血清型由 gspec shi_sero（通用 gspec_typing 产物）承担，
+        # 不再有读段级 ShigaTyper 专用输入。
+        assert _extra("Shigella") == set()
 
     def test_vpara(self):
         # v1.4.41：毒力标记（vpara_virulence）与 O/K（vpa_ok）都由通用

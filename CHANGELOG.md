@@ -5,14 +5,22 @@
 
 ## [Unreleased]
 
-### 工作流修复：assembly 直入的志贺菌不再触发 ShigaTyper
+### 志贺菌血清型迁移到 gspec `shi_sero`
 
-- **修复 `PosixPath / float` DAG 崩溃**：`report_inputs` 新增 `has_reads` 门控，
-  只对 reads 样本请求 `shigella_serotype.json`。assembly 直入样本（如 `26OTH0027`）
-  没有 R1/R2，ShigaTyper 是读段级工具，不应进入 DAG；血清型如实显示 `N/A`。
-- `r1_path`/`r2_path` 对 samples.tsv 缺失的 R1/R2 给出带样本 ID 的明确错误，
-  不再把空值解析成 NaN 后抛 `PosixPath / float`。
-- 回归：新增 routing 单测 + 真实部署的 Snakemake dry-run（SHI assembly 样本）覆盖。
+- **SHI registry 改路由**：`core/pathogens.yaml` 从 `serotype_engine: shigatyper` 改为
+  `gspec_screens: [shi_sero]`；`report_inputs` 不再请求读段级 `shigella_serotype.json`，
+  assembly 直入样本也不会再把 ShigaTyper 放进 DAG。
+- **gspec 直接判组装子**：`shi_sero` 是 marker-set 血清型库，`gspec_typing` 对
+  `assembly/contigs.fasta` 执行 screen + typing；`collect_summary` 将
+  `schemes.serotype` 归一为 `steps.serotype.value` / `steps.dec.primary_serotype`
+  （方法 `gspec shi_sero`），GOM 菌株索引、前端和报告统一读取。
+- **旧 gspec 数据目录修复**：`shi_sero` 在 gspec 0.10.2 之前安装的副本缺少
+  `serotype.json`，会报 `TYPING_NO_SCHEME`。已备份旧库并用
+  `gspec db setup -d shi_sero` 重建；升级后需确认该文件存在。
+- **真实数据验证**：`26OTH0027`（assembly 直入）由 `shi_sero` 判定为
+  `S. flexneri 3a`；失败任务中的 `PosixPath / float` 不再出现。
+- 回归：新增 gspec shi_sero 适配 3 项、collect_summary 1 项、strain_index 1 项；
+  routing/registry 金标同步更新。
 
 ### 细菌基因组注释（QUAST → Bakta → eggNOG-mapper）
 
@@ -86,7 +94,7 @@
 - 依赖升级：`gside ==0.2.3`、`gspec ==0.10.2`、`gseek ==0.10.5`、`gmlst ==0.6.1`，
   新增 `gmeta ==0.1.0`（mNGS 可选依赖）。
 - 新增 `GET /api/v1/stats`；测试基线 2016 → 1995（-21：删除旧 HTML 页面/表单测试，
-  API 覆盖保留），报告内嵌/主题/检索/DAG 回归另增 7 个测试（共 2002）。
+  API 覆盖保留），报告内嵌/主题/检索/DAG 回归另增 14 个测试（共 2009）。
 
 ## [0.1.5] - 2026-11-09
 

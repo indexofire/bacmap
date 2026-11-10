@@ -6,7 +6,7 @@ A local pathogen-genomics workstation: deterministic analysis, a durable task en
 an immutable evidence chain, and an MCP server for external AI agents. Data stays on the machine.
 
 Frozen design: [docs/concepts/frozen-design.md](docs/concepts/frozen-design.md) (English reference;
-the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.10.16**).
+the [Chinese version](docs/concepts/frozen-design.zh.md) is authoritative, revision **v1.10.17**).
 Program version: **0.1.5**.
 
 ## Operating in natural language (the intended entry point)
@@ -105,7 +105,7 @@ Full bilingual site: <https://indexofire.github.io/bacmap/> (Chinese: `/zh/`).
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest (current baseline: 2002 passed)
+pixi run -e dev test        # pytest (current baseline: 2009 passed)
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter (5 contracts)

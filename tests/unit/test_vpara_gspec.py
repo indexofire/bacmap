@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from bacmap.core.analysis.gspec_typing import (
     ecoh_serotype_summary,
+    shigella_serotype_summary,
     summarize,
     virulence_marks,
 )
@@ -99,3 +100,39 @@ class TestSummarizeShape:
             }
         )
         assert out["databases"]["vpa_vf"]["genes"] == ["tlh"]
+
+
+class TestShigellaSerotypeSummary:
+    def test_none_when_db_absent(self):
+        assert shigella_serotype_summary(None) is None
+
+    def test_serotype_scheme_becomes_value(self):
+        out = shigella_serotype_summary(
+            {
+                "status": "ran",
+                "schemes": {"serotype": "S. flexneri 3a"},
+                "confidence": "high",
+                "genes": ["Sf_wzx", "gtrX", "Oac", "ipaB"],
+            }
+        )
+        assert out["serotype"] == "S. flexneri 3a"
+        assert out["species"] == "Shigella"
+        assert out["method"] == "gspec shi_sero"
+        assert out["status"] == "ran"
+        assert out["confidence"] == "high"
+
+    def test_no_scheme_is_honest_n_a(self):
+        out = shigella_serotype_summary(
+            {"status": "no_scheme", "error": "database 'shi_sero' carries no typing scheme"}
+        )
+        assert out["serotype"] == "N/A"
+        assert out["species"] == ""
+        assert out["status"] == "no_scheme"
+        assert "typing scheme" in out["reason"]
+
+    def test_fallback_is_not_shigella(self):
+        out = shigella_serotype_summary(
+            {"status": "ran", "schemes": {"serotype": "Not Shigella/EIEC"}}
+        )
+        assert out["serotype"] == "Not Shigella/EIEC"
+        assert out["species"] == ""

@@ -14,7 +14,7 @@ pixi shell
 回退到没有 DBOS 的 Python）。
 
 ```bash
-pixi run -e dev test          # pytest；当前基线 2002 passed
+pixi run -e dev test          # pytest；当前基线 2009 passed
 pixi run -e dev lint          # ruff（src + tests）
 pixi run -e dev typecheck     # 对 src/bacmap 跑 mypy
 pixi run -e dev contracts     # import-linter（5 条契约）

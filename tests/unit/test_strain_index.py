@@ -204,6 +204,23 @@ class TestExtractGenotype:
         assert result["mlst_st"] == ""
         assert result["amr_genes"] == []
 
+    def test_extract_gspec_shigella_serotype(self):
+        payload = {
+            "species_verdict": "Shigella",
+            "serotype": {
+                "sistr": "N/A",
+                "value": "S. flexneri 3a",
+                "method": "gspec shi_sero",
+            },
+            "dec": {
+                "primary_serotype": "S. flexneri 3a",
+                "serotype_method": "gspec shi_sero",
+            },
+        }
+        result = _extract_genotype(payload)
+        assert result["serotype"] == "S. flexneri 3a"
+        assert result["serotype_method"] == "gspec shi_sero"
+
     def test_extract_dec_serotype(self):
         payload = {
             "species_verdict": "E.coli",

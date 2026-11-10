@@ -36,6 +36,7 @@ GOLDEN_AMRFINDER_ORGANISMS = {
     # V.parahaemolyticus 故意缺席：AMRFinderPlus 无其策展库 → 不传 -O。
 }
 GOLDEN_GSPEC_SCREENS = {
+    "SHI": ["shi_sero"],
     "ECO": ["eco_dec", "ecoh"],
     "VPA": ["vpa_vf", "vpa_ok", "vpa_pai"],
     "LMO": ["lmo_sero"],
@@ -43,9 +44,8 @@ GOLDEN_GSPEC_SCREENS = {
     "ABA": ["ab_k", "ab_o"],
 }
 GOLDEN_SEROTYPE_ENGINES = {
-    "SAL": "sistr",      # SISTR 只做沙门菌血清型
-    "SHI": "shigatyper", # 志贺菌血清型：ShigaTyper（未来迁 gspec）
-    "ECO": "ecoh",       # 大肠埃希菌 O/H：gspec ecoh
+    "SAL": "sistr",  # SISTR 只做沙门菌血清型
+    "ECO": "ecoh",   # 大肠埃希菌 O/H：gspec ecoh
 }
 GOLDEN_SNP_GROUPS = {
     "salmonella": (DATA_DIR / "reference/genomes/salmonella_LT2.fasta", ["SAL"]),
@@ -204,6 +204,7 @@ class TestResolveDualAccept:
         from bacmap.core.pathogen_registry import gspec_screens_for
 
         assert gspec_screens_for("E.coli") == ["eco_dec", "ecoh"]
+        assert gspec_screens_for("Shigella") == ["shi_sero"]
         assert gspec_screens_for("Listeria_monocytogenes") == ["lmo_sero"]
         assert gspec_screens_for("Salmonella") == []
         assert gspec_screens_for("Unknown") == []

@@ -36,8 +36,16 @@ HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.
 | `platform` | 测序平台（`ilm`、`ont`、`pacbio` 等）；未提供时为 `unknown` |
 | `checksum` | 输入文件的 SHA-256；由登记流程维护 |
 
-assembly 直入样本没有 reads：`fastp` 与依赖 reads 的工具（如志贺菌 ShigaTyper）不会进入 DAG；
-此时志贺菌血清型显示 `N/A`，直到提供 reads 或后续由 gspec 支持。reads 样本仍按原路径运行 ShigaTyper。
+assembly 直入样本没有 reads：`fastp` 等读段级步骤不会进入 DAG。志贺菌血清型统一由
+gspec `shi_sero` 库对组装 contigs 判定（marker-set 血清型，不需要 reads）。
+如果数据目录中的 `shi_sero` 是旧版（缺 `serotype.json`），先备份再重建：
+
+```bash
+mv ~/.local/share/gspec/db/shi_sero ~/.local/share/gspec/db/shi_sero.bak
+gspec db setup -d shi_sero
+```
+
+例如 `26OTH0027` 组装子会得到 `S. flexneri 3a`。
 
 同一菌株实体有多个文库时的命名建议：
 

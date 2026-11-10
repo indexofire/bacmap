@@ -149,3 +149,39 @@ def ecoh_serotype_summary(entry: Any) -> dict[str, Any] | None:
         "status": status or "unavailable",
         "reason": reason,
     }
+
+
+def shigella_serotype_summary(entry: Any) -> dict[str, Any] | None:
+    """``databases["shi_sero"]`` → summary ``steps.dec`` 的志贺菌血清型字段。
+
+    shi_sero 是 gspec 的 marker-set 库（``gspec.serotype/1``）：screen + typing
+    后给出 ``schemes["serotype"]``。库未登记（None）→ None；库存在但无表型时
+    如实记录 no_scheme/unavailable/failed，不猜血清型。
+    """
+    if not isinstance(entry, dict):
+        return None
+    schemes_raw = entry.get("schemes")
+    schemes = schemes_raw if isinstance(schemes_raw, dict) else {}
+    serotype = str(schemes.get("serotype", "") or "").strip()
+    status = str(entry.get("status", ""))
+    genes_raw = entry.get("genes")
+    genes = [str(g) for g in genes_raw] if isinstance(genes_raw, list) else []
+    species = "Shigella" if serotype and serotype != "Not Shigella/EIEC" else ""
+    if serotype:
+        return {
+            "serotype": serotype,
+            "species": species,
+            "status": status or "ran",
+            "method": "gspec shi_sero",
+            "confidence": str(entry.get("confidence", "") or ""),
+            "genes": genes,
+        }
+    return {
+        "serotype": "N/A",
+        "species": "",
+        "status": status or "unavailable",
+        "method": "gspec shi_sero",
+        "confidence": "",
+        "genes": genes,
+        "reason": str(entry.get("error", "") or ""),
+    }

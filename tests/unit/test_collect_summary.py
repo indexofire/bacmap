@@ -134,6 +134,33 @@ def test_vpa_ok_populates_serotype_from_gspec(tmp_path):
     assert summary["steps"]["vpa_serotype"]["source"] == "gspec:vpa_ok"
 
 
+def test_shigella_serotype_from_gspec_shi_sero(tmp_path):
+    summary = _run(
+        tmp_path,
+        {"verdict": "Shigella", "detected_markers": [{"gene": "ipah"}]},
+        omit={"sistr", "pathotype", "shigella_serotype"},
+        gspec_typing={
+            "status": "ran",
+            "databases": {
+                "shi_sero": {
+                    "kind": "gene",
+                    "status": "ran",
+                    "schemes": {"serotype": "S. flexneri 3a"},
+                    "confidence": "high",
+                    "genes": ["Sf_wzx", "gtrX", "Oac", "ipaB"],
+                }
+            },
+        },
+    )
+    assert summary["steps"]["dec"]["serotype_method"] == "gspec shi_sero"
+    assert summary["steps"]["dec"]["primary_serotype"] == "S. flexneri 3a"
+    assert summary["steps"]["dec"]["shigella_serotype"] == "S. flexneri 3a"
+    assert summary["steps"]["dec"]["shigella_status"] == "ran"
+    # 前端/报告统一入口
+    assert summary["steps"]["serotype"]["value"] == "S. flexneri 3a"
+    assert summary["steps"]["serotype"]["method"] == "gspec shi_sero"
+
+
 def test_non_dec_species_marks_dec_not_applicable(tmp_path):
     summary = _run(
         tmp_path,

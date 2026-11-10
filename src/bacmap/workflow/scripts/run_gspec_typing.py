@@ -179,8 +179,9 @@ def _catalog(datadir: str) -> dict[str, Any]:
 
 def _db_kind(catalog: dict[str, Any], db: str) -> str:
     entry = catalog.get(db)
-    kind = getattr(entry, "kind", "")
-    return str(kind or "gene")
+    kind = str(getattr(entry, "kind", "") or "gene")
+    # 复合分析库（如 cje_penner）在 screen 内完成 cluster 判定，按 cluster 处理。
+    return "cluster" if kind in {"cluster", "composite"} else "gene"
 
 
 def _cluster_result(document: dict[str, Any]) -> dict[str, Any]:

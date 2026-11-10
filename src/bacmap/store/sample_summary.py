@@ -89,7 +89,10 @@ def summary_fields(summary: dict[str, Any]) -> dict[str, str]:
     st = parse_mlst(mlst_raw)["st"] if mlst_raw and isinstance(mlst_raw, str) else "N/A"
 
     sero = steps.get("serotype", {})
-    serotype = sero.get("sistr", "N/A") if isinstance(sero, dict) else "N/A"
+    if isinstance(sero, dict):
+        serotype = str(sero.get("value") or sero.get("sistr") or "N/A")
+    else:
+        serotype = "N/A"
 
     return {"species": species_name, "mlst_st": st, "serotype": serotype}
 

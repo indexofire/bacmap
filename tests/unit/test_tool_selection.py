@@ -493,10 +493,12 @@ class TestCatalogs:
             "providers": [
                 {"name": "vpa_ok", "kind": "cluster", "typing": True, "installed": True},
                 {"name": "card", "kind": "gene", "typing": False, "installed": False},
+                {"name": "cje_penner", "kind": "composite", "typing": True, "installed": True},
             ],
         }
         catalog = parse_catalog(payload)
         assert catalog["vpa_ok"].kind == "cluster"
+        assert catalog["cje_penner"].kind == "composite"
         assert len(catalog_hash(catalog)) == 64
 
     def test_parse_gmlst(self):

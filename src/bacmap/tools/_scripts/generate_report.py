@@ -358,7 +358,10 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     alleles = mlst_info.get("alleles", {})
 
     sero = steps.get("serotype", {})
-    serovar = sero.get("sistr", "N/A") if isinstance(sero, dict) else "N/A"
+    if isinstance(sero, dict):
+        serovar = str(sero.get("value") or sero.get("sistr") or "N/A")
+    else:
+        serovar = "N/A"
     serogroup = sero.get("serogroup", "") if isinstance(sero, dict) else ""
     o_antigen = sero.get("o_antigen", "") if isinstance(sero, dict) else ""
     h1 = sero.get("h1", "") if isinstance(sero, dict) else ""
