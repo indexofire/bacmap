@@ -45,7 +45,9 @@ mummer4 = "*"
 flye = ">=2.9.5,<3"
 unicycler = ">=0.5.1,<0.6"
 bakta = ">=1.12,<2"
-eggnog-mapper = ">=2.1.12,<3"
+# 注意：bioconda 的 eggnog-mapper >=2.1.13 构建要求 python <3.12（与 bacmap 3.12
+# 冲突），无法经 conda 升级；2.1.12 为 3.12 下可解的最高版本。
+eggnog-mapper = ">=2.1.12,<2.1.13"
 
 [pypi-dependencies]
 gmlst = "==0.6.1"
