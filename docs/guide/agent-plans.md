@@ -573,6 +573,27 @@ confirm): analyze plan confirmed and executed to `succeeded`; read-only tools su
 MLST/AMR per sample; a `mine` plan ran in the rootless-Podman sandbox, produced
 `mine_report.json` and stopped at the mining gate until a human signature (`task approve` →
 
+`succeeded`). The agent self-corrected `input_data_class` D3→D2 under the cloud profile and
+never attempted to confirm a plan itself.
+
+Upstream workarounds:
+
+- **Hermes fresh `HERMES_HOME`**: `python-olm` fails to build with CMake ≥4; set
+  `CMAKE_POLICY_VERSION_MINIMUM=3.5` for the first launch. The isolated runtime ignores
+  `ZAI_API_KEY`/`GLM_API_KEY` until you add it with
+  `hermes auth add zai --type api-key --api-key <key>`.
+- **Moved pixi env**: after moving/renaming the repo, conda entry points keep stale shebangs
+  (`snakemake`, `bedtools`, …: `bad interpreter`). `pixi clean --environment default && pixi
+  install` rebuilds them. Launching MCP through `pixi run` (see §3) also keeps the env's bin
+  on PATH for task execution.
+- **DSH**: new entries must be wrapped in `insert:`; a bare entry is treated as a patch and
+  skipped. The web UI prints a `?token=…` URL on first start; curl from outside the browser
+  meets the browser-trust fence by design.
+- **Pi**: if MCP tools are missing, check `pi --version` (≥0.99).
+
+The automated test suite covers the stdio plan round trip with a real MCP client; the table above
+records manual model-backed checks with the Zhipu coding-plan endpoint.
+
 ## 10. Embedding the bacmap console in your harness (PLAN #20)
 
 Running bacmap Web and your agent harness in separate windows works, but some users prefer
@@ -581,9 +602,10 @@ a single window. Each harness has a different mechanism:
 ### DSH: sidebar bundle (implemented)
 
 `tools/dsh-bacmap-console` is a DSH bundle that embeds the bacmap web console in the DSH
-sidebar. It reverse-proxies `http://127.0.0.1:8800` under the DSH origin (removing
-`X-Frame-Options` and rewriting CSP `frame-ancestors`), so no separate browser tab is
-needed.
+sidebar. It reverse-proxies `http://127.0.0.1:8800` under the DSH origin at `/bacmap/console/`
+(removing `X-Frame-Options` and rewriting CSP `frame-ancestors`), sets the SPA router base and
+prefixes runtime report/API URLs for the mount. The console and the embedded full report both
+work inside the DSH iframe; open `/bacmap/console/` directly if needed.
 
 ```bash
 # Already in the bacmap repo; link it into your DSH profile:
@@ -641,23 +663,3 @@ When bacmap runs on a server and the agent runs locally:
 
 The DSH reverse-proxy approach works for remote bacmap too — just change the proxy
 target from `localhost:8800` to the server address.
-`succeeded`). The agent self-corrected `input_data_class` D3→D2 under the cloud profile and
-never attempted to confirm a plan itself.
-
-Upstream workarounds:
-
-- **Hermes fresh `HERMES_HOME`**: `python-olm` fails to build with CMake ≥4; set
-  `CMAKE_POLICY_VERSION_MINIMUM=3.5` for the first launch. The isolated runtime ignores
-  `ZAI_API_KEY`/`GLM_API_KEY` until you add it with
-  `hermes auth add zai --type api-key --api-key <key>`.
-- **Moved pixi env**: after moving/renaming the repo, conda entry points keep stale shebangs
-  (`snakemake`, `bedtools`, …: `bad interpreter`). `pixi clean --environment default && pixi
-  install` rebuilds them. Launching MCP through `pixi run` (see §3) also keeps the env's bin
-  on PATH for task execution.
-- **DSH**: new entries must be wrapped in `insert:`; a bare entry is treated as a patch and
-  skipped. The web UI prints a `?token=…` URL on first start; curl from outside the browser
-  meets the browser-trust fence by design.
-- **Pi**: if MCP tools are missing, check `pi --version` (≥0.99).
-
-The automated test suite covers the stdio plan round trip with a real MCP client; the table above
-records manual model-backed checks with the Zhipu coding-plan endpoint.

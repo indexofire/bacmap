@@ -571,3 +571,44 @@ bacmap 无法控制被复制进 Harness 工作区的文件，也无法控制模�
 
 自动化测试套件用真实的 MCP 客户端覆盖了 stdio 计划往返；上表记录的是使用智谱编码套餐端点的、
 由模型驱动的人工检查。
+
+## 10. 把 bacmap 控制台嵌入 Harness（PLAN #20）
+
+bacmap Web 与 Harness 分窗口使用没问题，但有些用户希望只开一个窗口。各 Harness 的机制不同：
+
+### DSH：侧边栏 bundle（已实现）
+
+`tools/dsh-bacmap-console` 是 DSH bundle，把 bacmap Web 控制台嵌入 DSH 侧边栏。它在
+`/bacmap/console/` 下反向代理 `http://127.0.0.1:8800`（移除 `X-Frame-Options` 并把 CSP
+`frame-ancestors` 放宽到 `'self'`），同时设置 SPA router base、为运行时报告/API URL 加挂载
+前缀。控制台与内嵌的完整报告都能在 DSH iframe 内显示；需要时也可直接打开 `/bacmap/console/`。
+
+```bash
+# bundle 已在 bacmap 仓库内；链接到 DSH profile：
+ln -s /path/to/bacmap/tools/dsh-bacmap-console ~/.dsh/profiles/web/node_modules/@local/
+```
+
+### Hermes：Desktop 插件面板
+
+Hermes Desktop 支持用插件包内的 `desktop/plugin.js` 注册自定义侧边栏面板。bacmap 面板需要：
+
+1. 在 `plugin.yaml` 注册 `bacmap_console` 面板；
+2. 在 `desktop/plugin.js` 创建指向 `http://127.0.0.1:8800` 的 `<iframe>`（可能需要调整 CORS，
+   或使用 Hermes 内置代理）；
+3. 面板会与 Hermes 内置面板并列显示。
+
+这需要 Hermes Desktop（CLI/TUI 版本不支持）。
+
+### Pi：glimpseui WebView 窗口
+
+Pi 扩展可用 [`glimpse`](https://github.com/hazat/glimpse) 原生 WebView 打开 bacmap Web 浮窗，
+并支持双向 JSON 通信；安装：`pi install npm:glimpseui`。示例 TypeScript 代码见英文版。
+
+### 远程部署（bacmap 在服务器、智能体在本机）
+
+1. **SSH 隧道**（最简单）：`ssh -L 8800:localhost:8800 server`，Web 与 MCP 都经 localhost 访问；
+2. **带令牌的直连 HTTP**：在局域网暴露 `bacmap start web`（设置 `BACMAP_WEB_TOKEN`），
+   Harness 的 MCP 配置指向 `http://server:8765/mcp` 并携带令牌；
+3. **VPN/WireGuard**：整网可达，无需额外配置。
+
+DSH 反向代理同样适用于远程 bacmap——把代理目标从 `localhost:8800` 改成服务器地址即可。

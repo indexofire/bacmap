@@ -5,7 +5,7 @@ import Icon from '../components/Icon.vue'
 import CopyButton from '../components/CopyButton.vue'
 import { api } from '../api'
 import type { RunRow, SampleDetail } from '../types'
-import { fmtTime, jsonText, shortId } from '../lib/format'
+import { appUrl, fmtTime, jsonText, shortId } from '../lib/format'
 import { useTheme } from '../composables/useTheme'
 
 const MAX_GENE_CHIPS = 24
@@ -23,10 +23,10 @@ const activeTab = ref<'detail' | 'report'>(route.query.tab === 'report' ? 'repor
 const expandedGeneGroups = ref<Record<string, boolean>>({})
 
 const reportSrc = computed(
-  () => `/samples/${encodeURIComponent(id)}/report?embed=1&theme=${resolvedTheme.value}`,
+  () => appUrl(`/samples/${encodeURIComponent(id)}/report?embed=1&theme=${resolvedTheme.value}`),
 )
 const reportDownload = computed(
-  () => `/samples/${encodeURIComponent(id)}/report?download=1&theme=${resolvedTheme.value}`,
+  () => appUrl(`/samples/${encodeURIComponent(id)}/report?download=1&theme=${resolvedTheme.value}`),
 )
 
 const digest = computed(() => data.value?.digest)

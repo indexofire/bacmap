@@ -12,7 +12,7 @@ import type {
   ResearchStudy,
   RunRow,
 } from '../types'
-import { fmtTime, shortId } from '../lib/format'
+import { appUrl, fmtTime, shortId } from '../lib/format'
 import { useToast } from '../composables/useToast'
 
 const toast = useToast()
@@ -127,7 +127,7 @@ onMounted(() => void load())
           <Icon name="refresh" />
           刷新
         </button>
-        <a class="btn btn--ghost" href="/research">
+        <a class="btn btn--ghost" :href="appUrl('/research')">
           <Icon name="external-link" />
           高级研究页
         </a>
@@ -317,8 +317,8 @@ onMounted(() => void load())
             系统发育与多变量 logistic 回归仍在旧版研究页；迁移到 SPA 的下一批。
           </p>
           <div class="inline-actions">
-            <a class="btn btn--ghost btn--sm" href="/research/phylo"><Icon name="plans" /> 系统发育</a>
-            <a class="btn btn--ghost btn--sm" href="/research/stats"><Icon name="chart" /> Logistic</a>
+            <a class="btn btn--ghost btn--sm" :href="appUrl('/research/phylo')"><Icon name="plans" /> 系统发育</a>
+            <a class="btn btn--ghost btn--sm" :href="appUrl('/research/stats')"><Icon name="chart" /> Logistic</a>
           </div>
         </section>
       </aside>

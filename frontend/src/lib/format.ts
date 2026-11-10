@@ -55,3 +55,12 @@ export function fmtBytes(value: number): string {
   }
   return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
+
+/** Prefix a root-absolute app URL for the DSH reverse-proxy mount. */
+export function appUrl(path: string): string {
+  if (!path.startsWith('/')) return path
+  const mount = window.__BACMAP_MOUNT__
+  if (!mount) return path
+  if (path === mount || path.startsWith(`${mount}/`)) return path
+  return `${mount}${path}`
+}

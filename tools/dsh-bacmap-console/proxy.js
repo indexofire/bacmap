@@ -84,11 +84,12 @@ const OFFLINE_PAGE = `<!DOCTYPE html>
  * @param mount - path prefix the proxy answers on.
  * @returns rewritten document text.
  */
-export function rewriteHtml(html, mount = MOUNT) {
+export function rewriteHtml(html, mount = MOUNT, { injectShim = true } = {}) {
   const prefixed = html.replace(
     /\b(href|src|action)=(["'])\/(?!\/)/gi,
     (_match, attribute, quote) => `${attribute}=${quote}${mount}/`,
   )
+  if (!injectShim) return prefixed
   const shim = `<script src="${mount}/__dsh/runtime.js"></script>`
   return prefixed.includes('</head>')
     ? prefixed.replace('</head>', `${shim}</head>`)
@@ -198,6 +199,8 @@ function sendOffline(res, target, status = 502) {
 function runtimeSource() {
   return `(function () {
   var mount = ${JSON.stringify(MOUNT)};
+  window.__BACMAP_MOUNT__ = mount;
+  window.__BACMAP_ROUTER_BASE__ = mount + '/console/';
   function fix(value) {
     if (typeof value !== 'string' || value.charAt(0) !== '/' || value.charAt(1) === '/') return value;
     if (value === mount || value.indexOf(mount + '/') === 0) return value;
@@ -210,6 +213,13 @@ function runtimeSource() {
       return originalFetch.call(this, input, init);
     };
   }
+  var setAttribute = Element.prototype.setAttribute;
+  Element.prototype.setAttribute = function (name, value) {
+    if ((name === 'href' || name === 'src') && typeof value === 'string') {
+      value = fix(value);
+    }
+    return setAttribute.call(this, name, value);
+  };
   var xhrOpen = window.XMLHttpRequest && window.XMLHttpRequest.prototype.open;
   if (typeof xhrOpen === 'function') {
     window.XMLHttpRequest.prototype.open = function (method, url) {
@@ -452,7 +462,12 @@ export function createHandler(options) {
           sendOffline(res, target, 502)
           return
         }
-        const body = Buffer.from(rewriteHtml(Buffer.concat(chunks).toString('utf8'), mount), 'utf8')
+        const upstreamTarget = upstreamPath(url.pathname, mount)
+        const isReport = /^\/samples\/[^/]+\/report$/.test(upstreamTarget)
+        const body = Buffer.from(
+          rewriteHtml(Buffer.concat(chunks).toString('utf8'), mount, { injectShim: !isReport }),
+          'utf8',
+        )
         delete out['content-length']
         out['content-length'] = String(body.length)
         res.writeHead(response.statusCode ?? 502, out)

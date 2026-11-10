@@ -20,7 +20,7 @@ def test_report_template_is_dark_and_versioned(tmp_path):
     out = tmp_path / "S1_report.html"
     gr.generate_html("S1", summary, DeterministicVerifier().verify_all(summary), out)
     text = out.read_text(encoding="utf-8")
-    assert 'name="bacmap-report" content="6"' in text
+    assert 'name="bacmap-report" content="7"' in text
     assert "--bg: #08090a" in text
     assert "max-width: 900px" not in text  # 旧浅色模板已淘汰
 
@@ -57,6 +57,26 @@ def test_annotation_section_renders_quast_and_top_genes():
     assert "80.0%" in html_text
     assert "J:10" in html_text
     assert "gyrA" in html_text
+
+
+def test_nli_section_renders_persisted_ai_text(monkeypatch):
+    monkeypatch.setattr(
+        "bacmap.core.verify.nli_reflector.latest_review_flag",
+        lambda _db, _sample: {
+            "interpretation_text": "检出 blaTEM-1，提示氨苄西林耐药。",
+            "needs_human_review": False,
+            "contradiction_rate": 0.0,
+            "threshold": 0.3,
+            "verifiable_count": 1,
+            "corroborated_count": 1,
+            "timestamp": "2026-11-10T00:00:00",
+            "contradicted_claims": [],
+        },
+    )
+    html_text = gr._render_nli_section("S1")
+    assert "AI 解读与 NLI 自检" in html_text
+    assert "已通过 NLI 自检" in html_text
+    assert "blaTEM-1" in html_text
 
 
 def test_annotation_section_quast_only_when_annotation_disabled():

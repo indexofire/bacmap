@@ -1,3 +1,4 @@
+import { appUrl } from './lib/format'
 import type {
   Capabilities,
   DatabaseStats,
@@ -44,14 +45,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (method !== 'GET' && method !== 'HEAD') {
     headers.set('X-CSRF-Token', csrfToken())
   }
-  const response = await fetch(`/api/v1${path}`, {
+  const response = await fetch(appUrl(`/api/v1${path}`), {
     ...init,
     headers,
     credentials: 'same-origin',
   })
   if (response.status === 401) {
     const next = encodeURIComponent(window.location.pathname + window.location.search)
-    window.location.assign(`/login?next=${next}`)
+    window.location.assign(appUrl(`/login?next=${next}`))
     throw new ApiError(401, 'unauthorized', '需要登录')
   }
   const text = await response.text()

@@ -206,8 +206,10 @@ def verify_result(args: dict[str, Any], **kwargs: Any) -> str:
                     for cv in reflection.verdicts
                 ],
             }
-            if reflection.needs_human_review:
-                record_reflection_event(_REFLECTION_DB_PATH, sample_id, reflection)
+            # 无论是否触发人审都留存解读文本：报告可在 NLI 自检章节展示 AI 解读。
+            record_reflection_event(
+                _REFLECTION_DB_PATH, sample_id, reflection, interpretation_text
+            )
         return json.dumps(response, ensure_ascii=False)
     except Exception as e:
         logger.exception("verify_result failed")

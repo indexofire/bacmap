@@ -1,8 +1,10 @@
 import { nextTick } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 
+const routerBase = window.__BACMAP_ROUTER_BASE__ || '/console/'
+
 const router = createRouter({
-  history: createWebHistory('/console/'),
+  history: createWebHistory(routerBase),
   routes: [
     {
       path: '/',

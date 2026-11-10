@@ -5,6 +5,25 @@
 
 ## [Unreleased]
 
+### DSH 控制台嵌入修复 + 报告可视化与 AI 解读
+
+- **DSH 挂载修复**：`tools/dsh-bacmap-console` 现在把控制台固定在 `/bacmap/console/`，
+  运行时注入 `__BACMAP_MOUNT__` / `__BACMAP_ROUTER_BASE__`，并让前端 API、登录跳转、
+  报告 iframe/下载与研究产物链接统一经 `appUrl()` 加挂载前缀。此前根路径 `/` 会被
+  SPA 路由解析成 `/console/bacmap/console/`，导致报告 404；现在控制台与内嵌完整报告
+  都能在 DSH iframe 中显示。报告页不再注入代理 shim，消除 sandbox script 报错。
+- **报告可视化**：样本报告新增 KPI 摘要条、AMR 类别分布与高置信耐药基因条形图、
+  VFDB 毒力基因条形图、质粒复制子表、Bakta 特征/eggNOG COG 功能分类图，以及可折叠的
+  完整基因明细表。全部用 HTML/CSS 实现，适配报告的沙箱 CSP（无脚本）。
+- **AI 解读章节**：`bio_verify_result` 传入 `interpretation_text` 时，NLI Reflector
+  无论是否触发人审都会持久化解读文本；报告新增“AI 解读与 NLI 自检”，展示解读正文、
+  矛盾率、可验证/佐证 claims 与矛盾明细。无 LLM 时只显示确定性结果，不伪造解读。
+- 回归：新增 NLI 报告章节测试 1 项；测试基线 2006 → 2007。
+- **文档站修复**：5 个文档文件名带隐藏换行符（`glossary.zh.md\n` 等）导致 mkdocs
+  nav 找不到页面，已改名修复；补齐 glossary / accounts / gbrain / gene-investigation
+  四页英文版（此前只有中文版）；tutorial 存根页删除手写语言链接（改用 i18n 插件
+  顶部语言切换）。`docs-build` 现在零告警。
+
 ### gside 模式升级 + CONCRETE 灰色主题
 
 - **gside 模式参数同步**：`gside_species.py` 接受 gside 0.2.4 的 canonical

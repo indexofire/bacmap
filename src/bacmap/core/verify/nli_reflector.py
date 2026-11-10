@@ -328,7 +328,12 @@ def reflect(
     )
 
 
-def record_reflection_event(db_path: Path, sample_id: str, reflection: ReflectionResult) -> bool:
+def record_reflection_event(
+    db_path: Path,
+    sample_id: str,
+    reflection: ReflectionResult,
+    interpretation_text: str = "",
+) -> bool:
     """把 reflection 结果落 GOM 审计事件（needs_human_review 时调用）。
 
     payload 含完整矛盾明细（contradicted claims），供 bio_review_flags 工具
@@ -375,6 +380,7 @@ def record_reflection_event(db_path: Path, sample_id: str, reflection: Reflectio
                     "verifiable_count": reflection.verifiable_count,
                     "corroborated_count": reflection.corroborated_count,
                     "threshold": reflection.threshold,
+                    "interpretation_text": interpretation_text,
                     "contradicted_claims": [
                         {
                             "claim_type": str(cv.claim.claim_type),

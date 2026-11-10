@@ -6,11 +6,10 @@ writing (`write`) — on a personal Linux workstation, using
 [Strata](https://strata.ai) with a quantised DeepSeek model as the local LLM
 backend (example hardware: RTX 5060 Ti 16 GB + 64 GB RAM, ≥300 GB disk).
 
-The full text is maintained in Chinese:
-[bacmap-strata-deepseek-tutorial.zh.md](bacmap-strata-deepseek-tutorial.zh.md)
-（[中文版](bacmap-strata-deepseek-tutorial.zh.md)：在个人电脑上用 Strata 跑
-DeepSeek 量化模型，为 bacmap 提供 LLM 后端——NCBI 沙门菌 ~100 株基因组
-「分析 → 数据挖掘 → 论文写作」全流程教程）。
+The full text is maintained in Chinese — use the language switcher at the top of
+this page to read it. In short: run Strata with a quantised DeepSeek model on a
+personal workstation as bacmap's LLM backend, then walk a full
+「analyse → mine → write」 flow over ~100 NCBI *Salmonella* genomes.
 
 Key stages covered: Strata install & model download → bacmap pixi environment &
 config → NCBI datasets download of ~100 *Salmonella* genomes → batch `analyze`

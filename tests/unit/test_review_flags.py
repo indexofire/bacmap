@@ -83,8 +83,8 @@ class TestReportNliSection:
         _seed_gom(tmp_path / "gom.sqlite")
         monkeypatch.setattr(gr, "_NLI_DB_PATH", tmp_path / "gom.sqlite")
         html = gr._render_nli_section("SAM-001")
-        assert "AI 解读自检" in html
-        assert "NEEDS HUMAN REVIEW" in html
+        assert "AI 解读与 NLI 自检" in html
+        assert "需要人工审核" in html
         assert "blaNDM-1" in html
         assert ">34<" in html
 

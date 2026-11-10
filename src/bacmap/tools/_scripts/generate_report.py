@@ -17,6 +17,7 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
@@ -50,26 +51,92 @@ def _row(label: str, value: str, ok: bool = True) -> str:
     )
 
 
-def _gene_table(genes: list[dict], title: str) -> str:
+def _bar_chart(rows: Sequence[tuple[str, float | int]], unit: str = "", limit: int = 10) -> str:
+    """Pure-CSS horizontal bars (no scripts; works under the sandbox CSP)."""
+    rows = [(str(name), float(value or 0)) for name, value in rows[:limit] if name]
+    if not rows:
+        return '<p class="muted">未检出</p>'
+    top = max(value for _, value in rows) or 1
+    pieces = []
+    for name, value in rows:
+        width = max(1.0, value / top * 100)
+        shown = f"{value:g}" if unit == "" else f"{value:g}{unit}"
+        pieces.append(
+            '<div class="bar-row">'
+            f'<span class="bar-label" title="{html.escape(name)}">{html.escape(name)}</span>'
+            f'<span class="bar-track"><span class="bar-fill" style="width:{width:.1f}%"></span></span>'
+            f'<span class="bar-value mono">{html.escape(shown)}</span>'
+            "</div>"
+        )
+    return '<div class="bars">' + "".join(pieces) + "</div>"
+
+
+def _num(value: object) -> float:
+    try:
+        return float(str(value).replace("%", "").strip())
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _class_counts(genes: list[dict]) -> list[tuple[str, int]]:
+    from collections import Counter
+
+    counts: Counter[str] = Counter()
+    for gene in genes:
+        raw = str(gene.get("RESISTANCE", "") or "")
+        for part in raw.replace(";", ",").split(","):
+            name = part.strip()
+            if name and name.lower() not in {"serotype", "virulence", "replicon"}:
+                counts[name] += 1
+    return counts.most_common()
+
+
+def _gene_table(
+    genes: list[dict],
+    title: str,
+    *,
+    value_key: str = "%COVERAGE",
+    value_label: str = "%Coverage",
+    limit: int = 12,
+) -> str:
     if not genes:
-        return f"<h3>{html.escape(title)}</h3><p>未检出</p>"
-    rows = "".join(
-        f"<tr><td>{html.escape(str(g.get('GENE', '?')))}</td>"
-        f"<td>{html.escape(str(g.get('%IDENTITY', '?')))}</td>"
-        f"<td>{html.escape(str(g.get('%COVERAGE', '?')))}</td>"
-        f"<td>{html.escape(str(g.get('RESISTANCE', '')))}</td></tr>"
-        for g in genes[:20]
+        return f'<h3>{html.escape(title)}</h3><p class="muted">未检出</p>'
+
+    def rows(items: list[dict]) -> str:
+        return "".join(
+            f"<tr><td><code>{html.escape(str(g.get('GENE', '?')))}</code></td>"
+            f'<td class="mono">{html.escape(str(g.get("%IDENTITY", "?")))}</td>'
+            f'<td class="mono">{html.escape(str(g.get(value_key, "?")))}</td>'
+            f"<td>{html.escape(str(g.get('RESISTANCE', '') or '—'))}</td></tr>"
+            for g in items
+        )
+
+    head = (
+        "<table><tr><th>Gene</th><th>%Identity</th>"
+        f"<th>{html.escape(value_label)}</th><th>类别 / 备注</th></tr>"
     )
-    extra = f"<p><em>显示前 20 个，共 {len(genes)} 个</em></p>" if len(genes) > 20 else ""
-    return f"""
-    <h3>{html.escape(title)} ({len(genes)} genes)</h3>
-    <table><tr><th>Gene</th><th>%Identity</th><th>%Coverage</th><th>Resistance</th></tr>
-    {rows}</table>{extra}"""
+    visible = rows(genes[:limit])
+    more = ""
+    if len(genes) > limit:
+        more = (
+            f'<details class="gene-details"><summary>查看全部 {len(genes)} 条</summary>'
+            f"{head}{rows(genes)}</table></details>"
+        )
+    return (
+        f'<h3>{html.escape(title)} <span class="muted">({len(genes)} genes)</span></h3>'
+        f"{head}{visible}</table>{more}"
+    )
 
 
-# ---------------------------------------------------------------------------
-# Per-sample cgMLST trace-back card (plan todo 9)
-# ---------------------------------------------------------------------------
+def _stat_strip(items: list[tuple[str, str, str]]) -> str:
+    return '<div class="stat-strip">' + "".join(
+        '<div class="stat-strip__item">'
+        f'<span class="stat-strip__label">{html.escape(label)}</span>'
+        f'<strong class="stat-strip__value">{html.escape(value)}</strong>'
+        f'<span class="stat-strip__hint">{html.escape(hint)}</span>'
+        "</div>"
+        for label, value, hint in items
+    ) + "</div>"
 
 
 def _extract_species(summary: dict) -> str:
@@ -241,16 +308,23 @@ def _render_cgmlst_section(sample_id: str, summary: dict) -> str:
 
 
 def _render_nli_section(sample_id: str) -> str:
-    """P1-4：读回最近一次 nli_reflected 审计事件，渲染「AI 解读自检」章节。
-
-    无事件（未触发人审）/ 无 DB / 读失败 → 空串（章节缺省，报告不受影响）。
-    """
+    """AI 解读 + NLI 自检（有持久化解读文本或人审标记时展示）。"""
     from bacmap.core.verify.nli_reflector import latest_review_flag
 
     flag = latest_review_flag(_NLI_DB_PATH, sample_id)
-    if not flag or not flag.get("needs_human_review"):
+    if not flag:
         return ""
 
+    text = str(flag.get("interpretation_text") or "").strip()
+    needs_review = bool(flag.get("needs_human_review"))
+    if not text and not needs_review:
+        return ""
+
+    paragraphs = "".join(
+        f"<p>{html.escape(chunk.strip())}</p>"
+        for chunk in text.split("\n\n")
+        if chunk.strip()
+    )
     claims = flag.get("contradicted_claims", [])
     claim_rows = "".join(
         f"<tr><td>{html.escape(str(c.get('claim_type', '')))}</td>"
@@ -259,21 +333,57 @@ def _render_nli_section(sample_id: str) -> str:
         f"<td>{html.escape(str(c.get('evidence', '')))}</td></tr>"
         for c in claims
     )
+    verdict = "需要人工审核" if needs_review else "已通过 NLI 自检"
+    verdict_cls = "badge--fail" if needs_review else "badge--ok"
     return f"""
-<h2>AI 解读自检（Layer 3 NLI Reflector）</h2>
+<h2>AI 解读与 NLI 自检</h2>
+<p><span class="badge {verdict_cls}">{verdict}</span></p>
+<div class="ai-text">{paragraphs}</div>
 <table>
 <tr><th>指标</th><th>值</th></tr>
-{_row("人审标记", "NEEDS HUMAN REVIEW")}
 {_row("矛盾率", f"{flag.get('contradiction_rate', 0):.2f}（阈值 {flag.get('threshold', '—')}）")}
 {_row("可验证 claims", flag.get("verifiable_count", "—"))}
 {_row("佐证 claims", flag.get("corroborated_count", "—"))}
 {_row("审计时间", flag.get("timestamp", "—"))}
 </table>
-<p>以下 AI 解读中的 claims 与管线事实矛盾（人审请核对）：</p>
-<table>
-<tr><th>Claim 类型</th><th>内容</th><th>事实依据</th></tr>
-{claim_rows}
-</table>
+{f'<p class="muted">以下 AI 解读中的 claims 与管线事实矛盾，请人工核对：</p><table><tr><th>Claim 类型</th><th>内容</th><th>事实依据</th></tr>{claim_rows}</table>' if claims else ''}
+"""
+
+
+def _render_amr_section(genes: list[dict]) -> str:
+    classes = _class_counts(genes)
+    top = sorted(
+        genes, key=lambda g: _num(g.get("%IDENTITY", 0)), reverse=True
+    )[:10]
+    top_rows = [(str(g.get("GENE", "?")), _num(g.get("%IDENTITY", 0))) for g in top]
+    return f"""
+<h2>耐药基因（CARD）</h2>
+<div class="chart-grid">
+  <div class="chart-card"><h3>耐药类别分布</h3>{_bar_chart(classes)}</div>
+  <div class="chart-card"><h3>高置信基因（%Identity）</h3>{_bar_chart(top_rows, "%")}</div>
+</div>
+{_gene_table(genes, "CARD AMR Genes", value_key="%COVERAGE", value_label="%Coverage")}
+"""
+
+
+def _render_vf_section(genes: list[dict]) -> str:
+    top = sorted(
+        genes, key=lambda g: _num(g.get("%IDENTITY", 0)), reverse=True
+    )[:10]
+    top_rows = [(str(g.get("GENE", "?")), _num(g.get("%IDENTITY", 0))) for g in top]
+    return f"""
+<h2>毒力基因（VFDB）</h2>
+<div class="chart-grid">
+  <div class="chart-card"><h3>高置信毒力基因（%Identity）</h3>{_bar_chart(top_rows, "%")}</div>
+</div>
+{_gene_table(genes, "VFDB Virulence Genes", value_key="%COVERAGE", value_label="%Coverage")}
+"""
+
+
+def _render_plasmid_section(genes: list[dict]) -> str:
+    return f"""
+<h2>质粒复制子（PlasmidFinder）</h2>
+{_gene_table(genes, "PlasmidFinder", value_key="%COVERAGE", value_label="%Coverage")}
 """
 
 
@@ -310,10 +420,20 @@ def _render_annotation_section(summary: dict) -> str:
                 for k, v in bakta.items()
             )
             parts.append(f"<h3>Bakta 特征计数</h3><table><tr><th>类型</th><th>数量</th></tr>{rows}</table>")
+            parts.append(
+                '<div class="chart-card"><h3>Bakta 特征分布</h3>'
+                + _bar_chart([(str(k), _num(v)) for k, v in bakta.items()])
+                + "</div>"
+            )
         egg = ann.get("eggnog", {})
         if isinstance(egg, dict) and egg:
             cog = egg.get("cog_category_counts", {})
             cog_text = ", ".join(f"{k}:{v}" for k, v in cog.items()) if isinstance(cog, dict) else "—"
+            cog_bars = (
+                _bar_chart([(str(k), _num(v)) for k, v in cog.items()])
+                if isinstance(cog, dict)
+                else ""
+            )
             parts.append(
                 "<table>"
                 + _row("eggNOG 查询", egg.get("queries", "—"))
@@ -326,6 +446,8 @@ def _render_annotation_section(summary: dict) -> str:
                 + _row("Pfam", egg.get("pfam_count", "—"))
                 + "</table>"
             )
+            if cog_bars:
+                parts.append('<div class="chart-card"><h3>COG 功能分类</h3>' + cog_bars + "</div>")
         top = ann.get("top_genes", [])
         if isinstance(top, list) and top:
             rows = "".join(
@@ -398,6 +520,19 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
 
     cgmlst_section = _render_cgmlst_section(sample_id, summary)
     annotation_section = _render_annotation_section(summary)
+    amr_section = _render_amr_section(card_genes)
+    vf_section = _render_vf_section(vfdb_genes)
+    plasmid_section = _render_plasmid_section(plasmid_genes)
+    ann_meta = steps.get("annotation") if isinstance(steps.get("annotation"), dict) else {}
+    ann_status = str(ann_meta.get("status") or "未运行") if ann_meta else "未运行"
+    summary_strip = _stat_strip(
+        [
+            ("AMR", str(len(card_genes)), "CARD 耐药基因"),
+            ("VFDB", str(len(vfdb_genes)), "毒力基因"),
+            ("PLASMID", str(len(plasmid_genes)), "复制子"),
+            ("ANNOTATION", ann_status, "Bakta / eggNOG"),
+        ]
+    )
 
     annotation_block = (
         f'<section class="card">{annotation_section}</section>'
@@ -421,7 +556,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="bacmap-report" content="6">
+<meta name="bacmap-report" content="7">
 <title>{sample_id} · 分析报告 · bacmap</title>
 <style>
   :root {{
@@ -568,11 +703,36 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     border-radius: 0 6px 6px 0; color: var(--warn); font-size: 12px;
   }}
   .cgmlst-caveats ul {{ margin: 4px 0 0; }}
+  .stat-strip {{
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-bottom: 18px; overflow: hidden;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  }}
+  .stat-strip__item {{ padding: 14px 16px; border-right: 1px solid var(--border-subtle); }}
+  .stat-strip__item:last-child {{ border-right: 0; }}
+  .stat-strip__label {{ display: block; color: var(--text-3); font: 10px/1.4 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }}
+  .stat-strip__value {{ display: block; margin-top: 4px; color: var(--text-1); font: 700 26px/1 var(--font-sans); letter-spacing: -.03em; }}
+  .stat-strip__hint {{ display: block; margin-top: 5px; color: var(--text-3); font-size: 11px; }}
+  .chart-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 10px 0 16px; }}
+  .chart-card {{ padding: 14px 16px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface); }}
+  .chart-card h3 {{ margin: 0 0 10px; }}
+  .bars {{ display: grid; gap: 7px; }}
+  .bar-row {{ display: grid; grid-template-columns: minmax(86px, 150px) minmax(0, 1fr) 52px; align-items: center; gap: 9px; font-size: 11px; }}
+  .bar-label {{ overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }}
+  .bar-track {{ height: 7px; overflow: hidden; border-radius: 999px; background: var(--code-bg); }}
+  .bar-fill {{ display: block; height: 100%; border-radius: inherit; background: var(--accent); }}
+  .bar-value {{ color: var(--text-3); text-align: right; }}
+  .gene-details {{ margin: 10px 0 4px; padding-top: 8px; border-top: 1px solid var(--border-subtle); }}
+  .gene-details summary {{ cursor: pointer; color: var(--link); font-size: 12px; }}
+  .ai-text p {{ margin: 8px 0; white-space: pre-line; }}
   @media (max-width: 720px) {{
     .page {{ padding: 24px 14px 40px; }}
     h1 {{ font-size: 22px; }}
     .card {{ padding: 16px; }}
     td.label {{ width: 130px; }}
+    .stat-strip {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+    .stat-strip__item:nth-child(2) {{ border-right: 0; }}
+    .chart-grid {{ grid-template-columns: 1fr; }}
   }}
   html[data-report-theme="gray"] body {{
     background-image:
@@ -598,6 +758,14 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     letter-spacing: 0.1em;
   }}
   html[data-report-theme="gray"] td.label {{ color: #3f3f3b; }}
+  html[data-report-theme="gray"] .stat-strip,
+  html[data-report-theme="gray"] .chart-card {{ border-radius: 0; }}
+  html[data-report-theme="gray"] .stat-strip {{ border-color: #111; }}
+  html[data-report-theme="gray"] .stat-strip__item {{ border-color: rgba(10,10,10,.16); }}
+  html[data-report-theme="gray"] .stat-strip__value {{ text-transform: uppercase; }}
+  html[data-report-theme="gray"] .chart-card {{ border-color: rgba(10,10,10,.22); }}
+  html[data-report-theme="gray"] .bar-track {{ border-radius: 0; background: #c9c9c2; }}
+  html[data-report-theme="gray"] .bar-fill {{ border-radius: 0; background: #111; }}
   @media print {{
     body {{ background: #fff; color: #222; }}
     .card {{ background: #fff; border-color: #ddd; box-shadow: none; break-inside: avoid; }}
@@ -621,6 +789,8 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     <span class="badge {status_class}">Verifier: {status_label}</span>
     {v_review}
   </header>
+
+  {summary_strip}
 
   <section class="card">
     <h2>基本信息</h2>
@@ -649,18 +819,15 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
   {nli_block}
 
   <section class="card">
-    <h2>AMR 耐药基因（CARD）</h2>
-    {_gene_table(card_genes, "CARD AMR Genes")}
+    {amr_section}
   </section>
 
   <section class="card">
-    <h2>毒力基因（VFDB）</h2>
-    {_gene_table(vfdb_genes, "VFDB Virulence Genes")}
+    {vf_section}
   </section>
 
   <section class="card">
-    <h2>质粒复制子（PlasmidFinder）</h2>
-    {_gene_table(plasmid_genes, "PlasmidFinder")}
+    {plasmid_section}
   </section>
 
   {cgmlst_block}

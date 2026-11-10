@@ -13,8 +13,10 @@ reverse-proxies the console under the GUI origin:
 - `x-frame-options` is removed and `frame-ancestors 'none'` becomes
   `frame-ancestors 'self'`;
 - root-absolute URLs (`href`, `src`, `action`, redirect `Location`) are
-  rewritten onto `/bacmap`, and a small same-origin script prefixes URLs that
-  bacmap builds at runtime (for example the task-detail poller);
+  rewritten onto `/bacmap`, and a small same-origin script sets the SPA router
+  base to `/bacmap/console/`, exposes the mount for `appUrl()`, and prefixes
+  URLs that bacmap builds at runtime (for example report iframes and the
+  task-detail poller). The shim is skipped for sandboxed report documents;
 - the route is admitted only through `ctx.connection.requestRejection`, so an
   anonymous request is refused before it reaches bacmap;
 - when bacmap is not running the route answers a small "not running" page, and
@@ -28,7 +30,7 @@ reverse-proxies the console under the GUI origin:
    answer, and reloads the frame once it is up. While booting the button shows
    a spinner; a failed start shows the exit code or the tail of the console log.
 3. The toolbar dot turns green when the console answers. The reload button
-   reloads the frame; the arrow button opens `/bacmap/` in a new tab.
+   reloads the frame; the arrow button opens `/bacmap/console/` in a new tab.
 
 The same console can still be started by hand; the Start button then reports
 that it is already running.
@@ -58,9 +60,9 @@ that it is already running.
 
 ## Limits
 
-- The console is served at `/bacmap` on the GUI origin. A deployment that
-  publishes DSH under a path prefix (`--public-url`) is not handled by the URL
-  rewrite yet.
+- The console is served at `/bacmap/console/` on the GUI origin (the panel
+  and the external-open button use that path). A deployment that publishes DSH
+  under a path prefix (`--public-url`) is not handled by the URL rewrite yet.
 - The Host half is ordinary plugin code: editing `index.js`/`proxy.js` takes
   effect when DSH loads that plugin again. A restart of `dsh web` is the
   reliable path.

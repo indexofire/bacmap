@@ -46,7 +46,13 @@ pixi run -e web web-build
 | `/api/v1/*` | JSON API（见 [HTTP API 参考](../reference/api.zh.md)） |
 
 样本详情页提供“概览 / 完整报告”两个页签，报告在页签内的沙箱 iframe 中渲染，不另开页面。
-旧模板生成的报告（无 `bacmap-report` 版本标记）会在首次访问时自动重渲染为暗色主题。
+旧模板生成的报告（无 `bacmap-report` 版本标记）会在首次访问时自动重渲染为当前主题。
+
+报告内容包含：KPI 摘要、AMR 类别分布与高置信基因条形图、VFDB 毒力基因、质粒复制子、
+Bakta/eggNOG 注释与 COG 功能分类（有注释数据时），完整基因表可折叠展开。
+**AI 解读**：外部 Harness/分析师读取 summary 后生成 `interpretation_text`，调用
+`bio_verify_result` 并传入该文本；NLI Reflector 会做事实一致性自检并持久化，报告展示
+“AI 解读与 NLI 自检”（通过或需人工审核）。没有 LLM 时报告只显示确定性结果，不伪造解读。
 仪表盘对 `/api/v1/stats` 失败做降级：任务区照常加载，数据库统计显示不可用提示而不是全 0。
 
 任务详情页在非终态时每两秒轮询 `/api/v1/tasks/{id}`。所有资源（CSS、JS、图标、favicon）

@@ -211,7 +211,7 @@ window.__ModuleLoader__.load({
               title: t('reload'), 'aria-label': t('reload'),
             }, h(ReloadIcon)),
             h('a', {
-              className: 'dsh-bacmap__button', href: MOUNT + '/', target: '_blank',
+              className: 'dsh-bacmap__button', href: MOUNT + '/console/', target: '_blank',
               rel: 'noreferrer noopener', title: t('openExternal'), 'aria-label': t('openExternal'),
             }, h(ExternalIcon)))),
         online === false
@@ -239,7 +239,7 @@ window.__ModuleLoader__.load({
         h('iframe', {
           key: generation,
           className: 'dsh-bacmap__frame',
-          src: MOUNT + '/',
+          src: MOUNT + '/console/',
           title: t('frameTitle'),
           referrerPolicy: 'no-referrer',
         }))

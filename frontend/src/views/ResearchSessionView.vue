@@ -5,7 +5,7 @@ import Icon from '../components/Icon.vue'
 import CopyButton from '../components/CopyButton.vue'
 import { api } from '../api'
 import type { ResearchArtifact, ResearchLedgerEntry, ResearchSessionView } from '../types'
-import { fmtBytes, fmtTime, jsonText } from '../lib/format'
+import { appUrl, fmtBytes, fmtTime, jsonText } from '../lib/format'
 
 const ARTIFACT_LABELS: Record<string, string> = {
   figure: '图',
@@ -33,7 +33,9 @@ const error = ref('')
 
 const stat = computed(() => view.value?.stat)
 const session = computed(() => view.value?.session)
-const figureUrl = computed(() => `/api/v1/research/sessions/${encodeURIComponent(id)}/figure.svg`)
+const figureUrl = computed(() =>
+  appUrl(`/api/v1/research/sessions/${encodeURIComponent(id)}/figure.svg`),
+)
 const hasFigure = computed(
   () => view.value?.artifacts.some((artifact) => artifact.kind === 'figure') ?? false,
 )
@@ -118,10 +120,12 @@ function artifactSize(artifact: ResearchArtifact): string {
 }
 
 function artifactLink(kind: string): string | null {
-  if (kind === 'figure') return `/api/v1/research/sessions/${encodeURIComponent(id)}/figure.svg`
-  if (kind === 'report') return `/api/v1/research/sessions/${encodeURIComponent(id)}/report.md`
+  if (kind === 'figure')
+    return appUrl(`/api/v1/research/sessions/${encodeURIComponent(id)}/figure.svg`)
+  if (kind === 'report')
+    return appUrl(`/api/v1/research/sessions/${encodeURIComponent(id)}/report.md`)
   if (kind === 'manuscript') {
-    return `/api/v1/research/sessions/${encodeURIComponent(id)}/manuscript.md`
+    return appUrl(`/api/v1/research/sessions/${encodeURIComponent(id)}/manuscript.md`)
   }
   return null
 }
@@ -292,10 +296,10 @@ onMounted(() => void load())
               </figure>
               <p v-else class="muted">暂无标准图。</p>
               <div class="inline-actions" style="margin-top: 14px">
-                <a class="btn btn--ghost btn--sm" :href="`/api/v1/research/sessions/${encodeURIComponent(id)}/report.md`" target="_blank" rel="noopener">
+                <a class="btn btn--ghost btn--sm" :href="appUrl(`/api/v1/research/sessions/${encodeURIComponent(id)}/report.md`)" target="_blank" rel="noopener">
                   <Icon name="file-text" /> 报告 Markdown
                 </a>
-                <a class="btn btn--ghost btn--sm" :href="`/api/v1/research/sessions/${encodeURIComponent(id)}/manuscript.md`" target="_blank" rel="noopener">
+                <a class="btn btn--ghost btn--sm" :href="appUrl(`/api/v1/research/sessions/${encodeURIComponent(id)}/manuscript.md`)" target="_blank" rel="noopener">
                   <Icon name="file-text" /> 论文草案
                 </a>
               </div>
