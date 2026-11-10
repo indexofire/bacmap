@@ -69,10 +69,25 @@ def _strip_read_ext(name: str) -> str:
 
 
 def scan_fasta_dir(fasta_dir: Path) -> list[Path]:
-    """递归收集组装 FASTA（.fna/.fasta/.fa，大小写不敏感；.gz 不收——下游需明文）。"""
-    return sorted(
+    """递归收集组装 FASTA（.fna/.fasta/.fa，大小写不敏感；.gz 不收——下游需明文）。
+
+    v1.10.20 链接去重：外部工具（如 shigapass）常在子目录留指向原始组装的
+    符号链接（``run/x.fasta -> ../x.fna``）。同一物理文件经不同文件名会被
+    复合校验和（含文件名）误判为"不同内容"的 dataset 碰撞——这里按
+    ``resolve()`` 去重，每个物理文件只保留排序在前的代表路径。
+    """
+    files = sorted(
         p for p in fasta_dir.rglob("*") if p.is_file() and p.suffix.lower() in _FASTA_EXTS
     )
+    seen: set[Path] = set()
+    deduped: list[Path] = []
+    for fa in files:
+        real = fa.resolve()
+        if real in seen:
+            continue
+        seen.add(real)
+        deduped.append(fa)
+    return deduped
 
 
 def scan_fastq_pairs(fastq_dir: Path) -> list[tuple[Path, Path | None]]:
@@ -196,9 +211,17 @@ def _guard_collision(
     new_path: str,
 ) -> None:
     record = dict(zip(header, existing, strict=False))
+    # v1.10.20 兜底：新文件 resolve 后与登记路径指向同一物理文件 → 必然同源
+    # （复合校验和含文件名，同一文件的符号链接/换名副本会被误判"内容不同"）。
+    old_path = record.get("assembly") or record.get("R1") or ""
+    try:
+        if old_path and Path(new_path).resolve() == Path(old_path).resolve():
+            return
+    except OSError:
+        pass
     old_sum = record.get("checksum", "")
     if old_sum and checksum and old_sum != checksum:
-        old_path = record.get("assembly") or record.get("R1")
+        old_path = record.get("assembly") or record.get("R1") or ""
         raise ValueError(
             f"dataset id collision: {dataset_id!r} already registered with different content"
             f" (existing path: {old_path}; new path: {new_path}). "
@@ -206,7 +229,7 @@ def _guard_collision(
             f"{dataset_id}__<platform>__<yyyymmdd>."
         )
     if not old_sum:
-        old_path = record.get("assembly") or record.get("R1")
+        old_path = record.get("assembly") or record.get("R1") or ""
         old_files = [Path(record[k]) for k in ("R1", "R2") if record.get(k)]
         if not old_files and record.get("assembly"):
             old_files = [Path(record["assembly"])]

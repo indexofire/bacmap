@@ -44,6 +44,31 @@ class TestCollision:
         second = register_fastas(home, d, "VPA")
         assert first["added"] == 1 and second["added"] == 0 and second["reused"] == 1
 
+    def test_symlink_with_same_stem_in_subdir_does_not_collide(self, tmp_path: Path):
+        """v1.10.20 回归：子目录里指向原始组装的符号链接（外部工具常留，
+        如 shigapass_run/S1.fasta -> ../S1.fna）不得因文件名不同被误判碰撞。"""
+        d = tmp_path / "data"
+        sub = d / "tool_out"
+        sub.mkdir(parents=True)
+        (d / "S1.fna").write_text(">c\nACGT\n")
+        (sub / "S1.fasta").symlink_to("../S1.fna")
+        home = tmp_path / "home"
+        result = register_fastas(home, d, "VPA")
+        assert result["added"] == 1 and result["reused"] == 0
+        assert result["samples"] == ["S1"]
+
+    def test_renamed_hardlink_copy_of_registered_file_is_idempotent(self, tmp_path: Path):
+        """登记后目录里出现的换名链接再登记：resolve 同一物理文件 → 幂等放行。"""
+        d = tmp_path / "data"
+        d.mkdir()
+        (d / "S1.fna").write_text(">c\nACGT\n")
+        home = tmp_path / "home"
+        register_fastas(home, d, "VPA")
+        (d / "sub").mkdir()
+        (d / "sub" / "S1.fna").symlink_to("../S1.fna")
+        again = register_fastas(home, d, "VPA")
+        assert again["added"] == 0 and again["reused"] == 1
+
     def test_same_id_different_content_fails_loudly(self, tmp_path: Path):
         a = tmp_path / "a"
         b = tmp_path / "b"
