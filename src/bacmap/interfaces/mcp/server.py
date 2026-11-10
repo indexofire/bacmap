@@ -472,20 +472,65 @@ def _register_record_tool(server: MCPServer, engine: Any, profile: ProfileSpec) 
 
 
 def _register_skill_resources(server: MCPServer) -> None:
-    """角色说明书以 skill:// 资源发布（agentskills.io 原文 + sha256 摘要，ADR-12/21）。"""
+    """角色说明书以 skill:// 资源发布（agentskills.io 原文 + sha256 摘要，ADR-12/21）。
+
+    v1.10.20：同时发布用户安装的领域技能（``$BACMAP_HOME/skills/<name>/SKILL.md``，
+    如 figures4papers 的 figure-maker 作图技能）——角色技能在包内、领域技能在
+    本机数据目录，两者同以 ``skill://bacmap/<name>/…`` 分发；目录缺失时静默跳过。
+    """
     import hashlib
+    from pathlib import Path
 
     from bacmap.agent import roledef
+    from bacmap.config import BACMAP_HOME
 
-    for role in roledef.list_roles():
-        text = roledef.skill_markdown(role)
+    def _publish(uri: str, name: str, description: str, text: str) -> None:
         server.resource(
-            f"skill://bacmap/{role}/SKILL.md",
-            name=f"bacmap-{role}-skill",
-            description=f"bacmap {role} 角色说明书（SKILL.md 原文）",
+            uri,
+            name=name,
+            description=description,
             mime_type="text/markdown",
             meta={"sha256": hashlib.sha256(text.encode()).hexdigest()},
         )(_skill_reader(text))
+
+    for role in roledef.list_roles():
+        text = roledef.skill_markdown(role)
+        _publish(
+            f"skill://bacmap/{role}/SKILL.md",
+            name=f"bacmap-{role}-skill",
+            description=f"bacmap {role} 角色说明书（SKILL.md 原文）",
+            text=text,
+        )
+
+    skills_dir = Path(BACMAP_HOME) / "skills"
+    if not skills_dir.is_dir():
+        return
+    for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
+        skill = skill_md.parent.name
+        try:
+            text = skill_md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        _publish(
+            f"skill://bacmap/{skill}/SKILL.md",
+            name=f"bacmap-{skill}-skill",
+            description=f"bacmap 领域技能 {skill}（SKILL.md 原文，用户安装）",
+            text=text,
+        )
+        refs = skill_md.parent / "references"
+        if not refs.is_dir():
+            continue
+        for ref in sorted(refs.glob("*.md")):
+            try:
+                ref_text = ref.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            _publish(
+                f"skill://bacmap/{skill}/references/{ref.name}",
+                name=f"bacmap-{skill}-{ref.stem}",
+                description=f"bacmap 领域技能 {skill} 参考：{ref.stem}",
+                text=ref_text,
+            )
 
 
 def _skill_reader(text: str) -> Any:

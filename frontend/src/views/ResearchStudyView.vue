@@ -53,10 +53,14 @@ onMounted(() => void load())
         <p class="pagehead__sub">研究问题、Cohort、AnalysisPlan 与 Claim 的只读视图。</p>
       </div>
       <div class="pagehead__actions">
-        <a class="btn btn--ghost" :href="`/research/studies/${id}`">
+        <RouterLink class="btn btn--ghost" :to="`/research/studies/${id}/package`">
+          <Icon name="file-text" />
+          打包
+        </RouterLink>
+        <RouterLink class="btn btn--ghost" :to="`/research/studies/${id}/workbench`">
           <Icon name="external-link" />
-          高级操作页
-        </a>
+          高级操作
+        </RouterLink>
         <button class="btn btn--ghost" type="button" :disabled="loading" @click="load">
           <Icon name="refresh" />
           刷新

@@ -85,6 +85,16 @@ What `pixi install` provides:
   `tools.annotation.eggnog.sensmode: "sensitive"` and `iterate: true` in the workflow
   `config.yaml`. `usemem: true` keeps the diamond DB in RAM for consecutive samples
   (~10 GB free memory required).
+- **Publication-grade figure skill (optional)**: `pixi run python
+  scripts/install_figure_skill.py` installs the
+  [figures4papers](https://github.com/ChenLiu-1996/figures4papers)
+  scientific-figure-making skill to `$BACMAP_HOME/skills/figure-maker/`. Once
+  installed, MCP publishes it as `skill://bacmap/figure-maker/**` resources
+  (SKILL.md plus palette/patterns/tutorials references) and the writer/miner
+  manuals direct models to follow its conventions for publication figures.
+  **License note**: upstream is CC BY-NC 4.0, incompatible with bacmap's MIT —
+  the repo ships no upstream content (deploy-time download only); non-commercial
+  use (public-health surveillance, academic research).
 - **A separate `recomb` environment** with Gubbins for optional recombination detection, because
   its IQ-TREE pin conflicts with the main pipeline; run it with `pixi run -e recomb …`.
 - **Trycycler is not installed by default**: its conda package requires Python <3.11 while bacmap

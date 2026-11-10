@@ -13,6 +13,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from bacmap.interfaces._security import CSP
 from bacmap.interfaces.web.auth import verify_csrf
 from bacmap.interfaces.web.markdown import render_markdown
 from bacmap.research import phylo, regression, reporting
@@ -169,6 +170,20 @@ def build_research_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     objects = ResearchObjectService(engine.home)
     requests = ResearchRequestService(engine.home)
     packages = ResearchPackageService(engine.home)
+
+    # v1.10.20：控制台内嵌（LegacyEmbedView）需要同源 framing。这些 Jinja
+    # 工具页是应用自有页面（与 SPA 同信任级、模板零脚本），放宽为
+    # frame-ancestors 'self'（外站仍不可嵌，与样本报告策略一致）；全局
+    # SecurityHeadersMiddleware 只补缺失头，这里的显式设置优先生效。
+    _frameable_csp = CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'")
+
+    @app.middleware("http")
+    async def _research_sameorigin_framing(request: Request, call_next: Any) -> Any:
+        response = await call_next(request)
+        if request.url.path.startswith("/research"):
+            response.headers["content-security-policy"] = _frameable_csp
+            response.headers["x-frame-options"] = "SAMEORIGIN"
+        return response
 
     @app.get("/research", response_class=HTMLResponse)
     def research_page(request: Request) -> HTMLResponse:

@@ -67,6 +67,57 @@ const router = createRouter({
       meta: { title: '研究' },
     },
     {
+      // v1.10.20：旧 Jinja 研究工具纳入控制台外壳（嵌入而非跳出）。
+      path: '/research/workbench',
+      name: 'research-workbench',
+      component: () => import('./views/LegacyEmbedView.vue'),
+      meta: {
+        title: '高级研究工作台',
+        hint: 'Study / Cohort / Claim 表单工作流（队列冻结、断言评审等）',
+        legacyPath: '/research',
+      },
+    },
+    {
+      path: '/research/phylo',
+      name: 'research-phylo',
+      component: () => import('./views/LegacyEmbedView.vue'),
+      meta: {
+        title: '系统发育（BEAST 规格）',
+        hint: 'alignment / 日期 / 分区 → BEAST XML 与验证',
+        legacyPath: '/research/phylo',
+      },
+    },
+    {
+      path: '/research/stats',
+      name: 'research-stats',
+      component: () => import('./views/LegacyEmbedView.vue'),
+      meta: {
+        title: 'Logistic 关联分析',
+        hint: 'P1 薄链路：本地 logistic（OR / CI / p 值）',
+        legacyPath: '/research/stats',
+      },
+    },
+    {
+      path: '/research/studies/:id/package',
+      name: 'research-study-package',
+      component: () => import('./views/LegacyEmbedView.vue'),
+      meta: {
+        title: 'Study 打包',
+        hint: '投稿包裹构建与下载',
+        legacyPath: '/research/studies/:id/package',
+      },
+    },
+    {
+      path: '/research/studies/:id/workbench',
+      name: 'research-study-workbench',
+      component: () => import('./views/LegacyEmbedView.vue'),
+      meta: {
+        title: 'Study 操作台',
+        hint: '队列 / 计划 / 断言 / 实验表单（服务端渲染工具）',
+        legacyPath: '/research/studies/:id',
+      },
+    },
+    {
       path: '/research/sessions/:id',
       name: 'research-session',
       component: () => import('./views/ResearchSessionView.vue'),

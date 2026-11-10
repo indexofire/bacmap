@@ -32,3 +32,6 @@ metadata:
   `reference_note`；不得复制、下载或再分发原图。
 - 自定义图渲染后用 `bacmap research figure attach` 登记；没有 spec/data/code/output
   hash 的图片不得进入投稿包。
+- **出版级图**：若 MCP 资源 `skill://bacmap/figure-maker/SKILL.md` 可读
+  （`scripts/install_figure_skill.py` 安装，figures4papers 样式），优先按其
+  api.md 的调色板/多面板布局/导出约定撰写图代码；缺省回退到上面的契约基线。
