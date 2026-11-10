@@ -1,7 +1,8 @@
 # bacmap 分析流程配置
 # 路径可通过环境变量覆盖: BACMAP_RESULTS_DIR, BACMAP_DATA_DIR
 
-threads: 8
+# 分析线程数：匹配本工作站 16 核；小内存/共享机器可调低
+threads: 16
 iqtree_seed: 42
 # 运行记录（ADR-18）：seeds 覆盖/扩展固定种子；nondeterministic_steps 列出
 # 无法固定随机性、需在运行记录中标记的步骤名。留空即取默认。
@@ -37,9 +38,9 @@ databases:
   card: "card"
   plasmidfinder: "plasmidfinder"
   resfinder: "resfinder"
-  # gspec 自定义库（ADR-20）：部署期由 scripts/build_gspec_db.py 构建于
-  # $BACMAP_HOME/refs/gspec/；供 vpara_virulence 规则筛查。
-  vpara_virulence: "vpara_virulence"
+  # v1.10.19：vpara_virulence 条目随 vpara.smk（v1.4.41 删除）一并清理——
+  # 弧菌毒力/O-K/毒力岛改走 pathogens.yaml 的 gspec_screens（vpa_vf/vpa_ok/
+  # vpa_pai）经通用 gspec_typing 规则路由。
 
 tools:
   fastp:
@@ -80,6 +81,14 @@ tools:
       data_dir: ""
       tax_scope: "Bacteria"
       mode: "diamond"
+      # 速度档位（v1.10.19）：实测 sensitive+迭代在 8 线程上仅 diamond 就
+      # >50 分钟/基因组，不可用。默认 mid-sensitive + 关闭迭代（肠杆菌等
+      # 覆盖好的物种注释损失可忽略，diamond 阶段 ~3-5x 提速）。
+      # 需要极限灵敏度时改 sensmode: "sensitive" 且 iterate: true。
+      # usemem: true 让 diamond 库常驻内存（批量时省重复读盘，需 ~10G 空闲内存）。
+      sensmode: "mid-sensitive"
+      iterate: false
+      usemem: false
   quast:
     min_contig: 500
   blastn:

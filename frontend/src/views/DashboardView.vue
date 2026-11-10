@@ -47,10 +47,30 @@ function stateCount(state: string): number {
 
 const total = computed(() => (stats.value ? stats.value.tasks.total : tasks.value.length))
 const awaitingCount = computed(() => stateCount('awaiting_approval'))
-const recent = computed(() => tasks.value.slice(0, 6))
 const pending = computed(() => tasks.value.filter((t) => t.state === 'awaiting_approval'))
 const shownPending = computed(() => pending.value.slice(0, 4))
 const unlistedPending = computed(() => Math.max(0, awaitingCount.value - shownPending.value.length))
+
+// “最近任务”分页：每页 5 条（与趋势图/状态环图等高的一行三栏布局）。
+const RECENT_PAGE_SIZE = 5
+const recentPage = ref(1)
+const recentTotal = computed(() => tasks.value.length)
+const recentPageCount = computed(() =>
+  Math.max(1, Math.ceil(recentTotal.value / RECENT_PAGE_SIZE)),
+)
+const recentPaged = computed(() => {
+  const start = (recentPage.value - 1) * RECENT_PAGE_SIZE
+  return tasks.value.slice(start, start + RECENT_PAGE_SIZE)
+})
+watch(recentPageCount, (n) => {
+  if (recentPage.value > n) recentPage.value = n
+})
+function recentPrev() {
+  if (recentPage.value > 1) recentPage.value -= 1
+}
+function recentNext() {
+  if (recentPage.value < recentPageCount.value) recentPage.value += 1
+}
 
 const chartPalette = computed(() => {
   if (resolvedTheme.value === 'light') {
@@ -136,14 +156,69 @@ const trend = computed(() => {
 const dbKpis = computed(() => {
   const s = stats.value
   return [
-    { label: '菌株总数', value: s ? s.strains.total : '—', icon: 'records', foot: 'strain_genotype_index' },
-    { label: '基因组对象', value: s ? s.gom.genome_objects : '—', icon: 'server', foot: 'GOM 不可变对象' },
-    { label: 'AMR 基因命中', value: s ? s.gom.amr_genes : '—', icon: 'alert-triangle', foot: 'CARD/VFDB/NCBI 命中行' },
-    { label: '样本报告', value: s ? s.results.sample_reports : '—', icon: 'file-text', foot: '已完成分析样本' },
-    { label: '研究会话', value: s ? s.research.sessions : '—', icon: 'chart', foot: 'AMR 关联 / 高级统计' },
-    { label: '知识库条目', value: s ? s.knowledge.entries : '—', icon: 'terminal', foot: '已审核知识条目' },
-    { label: '运行记录', value: s ? s.runs.total : '—', icon: 'runs', foot: 'runs.sqlite' },
-    { label: '化验结果', value: s ? s.lab_results.total : '—', icon: 'check-circle', foot: 'lab_results' },
+    {
+      label: '菌株总数',
+      value: s ? s.strains.total : '—',
+      icon: 'records',
+      foot: 'strain_genotype_index',
+      to: '/samples',
+    },
+    {
+      label: '基因组对象',
+      value: s ? s.gom.genome_objects : '—',
+      icon: 'server',
+      foot: `分离物 ${s ? s.gom.isolates : '—'} · GOM 不可变对象`,
+      to: '/gom',
+    },
+    {
+      label: 'AMR 基因命中',
+      value: s ? s.gom.amr_genes : '—',
+      icon: 'alert-triangle',
+      foot: 'CARD/VFDB/NCBI 命中行',
+      to: '/gom',
+    },
+    {
+      label: '样本报告',
+      value: s ? s.results.sample_reports : '—',
+      icon: 'file-text',
+      foot: '已完成分析样本',
+      to: '/samples',
+    },
+    {
+      label: '计划',
+      value: s ? s.tasks.plans : '—',
+      icon: 'plans',
+      foot: '版本化任务提案',
+      to: '/plans',
+    },
+    {
+      label: '研究会话',
+      value: s ? s.research.sessions : '—',
+      icon: 'chart',
+      foot: `研究 ${s ? s.research.studies : '—'} · 队列 ${s ? s.research.cohorts : '—'} · 断言 ${s ? s.research.claims : '—'}`,
+      to: '/research',
+    },
+    {
+      label: '知识库条目',
+      value: s ? s.knowledge.entries : '—',
+      icon: 'terminal',
+      foot: '已审核知识条目',
+      to: '/search',
+    },
+    {
+      label: '运行记录',
+      value: s ? s.runs.total : '—',
+      icon: 'runs',
+      foot: 'runs.sqlite',
+      to: '/runs',
+    },
+    {
+      label: '化验结果',
+      value: s ? s.lab_results.total : '—',
+      icon: 'check-circle',
+      foot: `覆盖 ${s ? s.lab_results.strains : '—'} 个菌株`,
+      to: '/records',
+    },
   ]
 })
 
@@ -485,79 +560,105 @@ watch([statusItems, trend, resolvedTheme], () => {
       <section class="section">
         <div class="section__head">
           <h2 class="section__title">数据库概览</h2>
-          <span class="section__hint">GOM · 菌株索引 · 研究 · 知识库</span>
+          <span class="section__hint">点击卡片进入对应页面 · GOM · 菌株索引 · 研究 · 知识库</span>
         </div>
         <div class="kpi-grid kpi-grid--db">
-          <div v-for="item in dbKpis" :key="item.label" class="kpi">
+          <RouterLink v-for="item in dbKpis" :key="item.label" :to="item.to" class="kpi kpi--link">
             <div class="kpi__label"><Icon :name="item.icon" /> {{ item.label }}</div>
             <div class="kpi__value">{{ item.value }}</div>
-            <div class="kpi__foot">{{ item.foot }}</div>
+            <div class="kpi__foot">
+              {{ item.foot }}
+              <Icon name="arrow-right" class="kpi__go" />
+            </div>
+          </RouterLink>
+        </div>
+      </section>
+
+      <div class="dash-row">
+        <section class="card dash-row__panel">
+          <div class="card__head">
+            <h2 class="card__title"><Icon name="chart" /> 最近 7 天任务</h2>
           </div>
-        </div>
-      </section>
+          <div v-if="tasks.length" class="card__body card__body--fill">
+            <div ref="trendEl" class="chart chart--sm" role="img" aria-label="最近 7 天任务数量柱状图" />
+          </div>
+          <EmptyState v-else title="暂无任务" hint="提交任务后，这里会显示最近 7 天的任务趋势。" icon="chart" />
+        </section>
 
-      <section class="card">
-        <div class="card__head">
-          <h2 class="card__title">最近 7 天任务</h2>
-          <span class="card__hint">基于最近 200 条任务 · 按创建日期统计</span>
-        </div>
-        <div v-if="tasks.length" class="card__body">
-          <div ref="trendEl" class="chart chart--sm" role="img" aria-label="最近 7 天任务数量柱状图" />
-        </div>
-        <EmptyState v-else title="暂无任务" hint="提交任务后，这里会显示最近 7 天的任务趋势。" icon="chart" />
-      </section>
+        <section class="card dash-row__panel">
+          <div class="card__head">
+            <h2 class="card__title"><Icon name="tasks" /> 任务状态分布</h2>
+            <RouterLink to="/tasks" class="btn btn--ghost btn--sm">任务页</RouterLink>
+          </div>
+          <div v-if="total" class="card__body card__body--fill">
+            <div ref="statusEl" class="chart chart--fill" role="img" aria-label="任务状态分布环形图" />
+          </div>
+          <EmptyState v-else title="暂无任务" hint="任务状态分布会在提交第一个任务后出现。" icon="tasks" />
+        </section>
 
-      <section class="card">
-        <div class="card__head">
-          <h2 class="card__title">任务状态分布</h2>
-          <span class="card__hint">{{ statsAvailable ? '全部任务（统计库）' : '最近 200 条任务' }}</span>
-        </div>
-        <div v-if="total" class="card__body">
-          <div ref="statusEl" class="chart" role="img" aria-label="任务状态分布环形图" />
-        </div>
-        <EmptyState v-else title="暂无任务" hint="任务状态分布会在提交第一个任务后出现。" icon="tasks" />
-      </section>
-
-      <section class="card">
-        <div class="card__head">
-          <h2 class="card__title">最近任务</h2>
-          <RouterLink to="/tasks" class="btn btn--ghost btn--sm">查看全部</RouterLink>
-        </div>
-        <div v-if="recent.length" class="table-wrap">
-          <table class="table">
-            <thead>
-              <tr>
-                <th scope="col">任务 ID</th>
-                <th scope="col">类型</th>
-                <th scope="col">状态</th>
-                <th scope="col">提交人</th>
-                <th scope="col">创建时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="task in recent" :key="task.task_id" class="row-click">
-                <td data-label="任务 ID">
-                  <RouterLink class="link-cell" :to="`/tasks/${task.task_id}`">
-                    {{ shortId(task.task_id) }}
-                  </RouterLink>
-                </td>
-                <td data-label="类型"><code>{{ task.task_type }}</code></td>
-                <td data-label="状态"><StatusBadge :state="task.state" /></td>
-                <td data-label="提交人">{{ task.submitted_by }}</td>
-                <td data-label="创建时间"><span class="mono muted">{{ fmtTime(task.created_at) }}</span></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <EmptyState
-          v-else
-          title="还没有任务"
-          hint="从任务页提交第一个分析任务；运行状态会实时出现在这里。"
-          icon="tasks"
-        >
-          <RouterLink to="/tasks?new=1" class="btn btn--primary btn--sm">提交任务</RouterLink>
-        </EmptyState>
-      </section>
+        <section class="card dash-row__panel dash-row__recent">
+          <div class="card__head">
+            <h2 class="card__title"><Icon name="clock" /> 最近任务</h2>
+            <div class="card__actions">
+              <div v-if="recentTotal" class="pager">
+                <button
+                  type="button"
+                  class="pager__btn"
+                  :disabled="recentPage <= 1"
+                  aria-label="上一页"
+                  @click="recentPrev"
+                >
+                  <Icon name="chevron-left" />
+                </button>
+                <span class="pager__state mono">{{ recentPage }} / {{ recentPageCount }}</span>
+                <button
+                  type="button"
+                  class="pager__btn"
+                  :disabled="recentPage >= recentPageCount"
+                  aria-label="下一页"
+                  @click="recentNext"
+                >
+                  <Icon name="chevron-right" />
+                </button>
+              </div>
+              <RouterLink to="/tasks" class="btn btn--ghost btn--sm">全部</RouterLink>
+            </div>
+          </div>
+          <div v-if="recentPaged.length" class="table-wrap table-wrap--fill">
+            <table class="table table--compact">
+              <thead>
+                <tr>
+                  <th scope="col">任务 ID</th>
+                  <th scope="col">类型</th>
+                  <th scope="col">状态</th>
+                  <th scope="col">提交人</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="task in recentPaged" :key="task.task_id" class="row-click">
+                  <td data-label="任务 ID">
+                    <RouterLink class="link-cell" :to="`/tasks/${task.task_id}`">
+                      {{ shortId(task.task_id) }}
+                    </RouterLink>
+                    <div class="muted mono table__sub">{{ fmtTime(task.created_at) }}</div>
+                  </td>
+                  <td data-label="类型"><code>{{ task.task_type }}</code></td>
+                  <td data-label="状态"><StatusBadge :state="task.state" /></td>
+                  <td data-label="提交人">{{ task.submitted_by }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <EmptyState
+            v-else
+            title="还没有任务"
+            hint="从任务页提交第一个分析任务；运行状态会实时出现在这里。"
+            icon="tasks"
+          >
+            <RouterLink to="/tasks?new=1" class="btn btn--primary btn--sm">提交任务</RouterLink>
+          </EmptyState>
+        </section>
+      </div>
 
       <section class="section">
         <div class="section__head">
@@ -708,6 +809,134 @@ watch([statusItems, trend, resolvedTheme], () => {
   line-height: 1.6;
 }
 
+/* v1.10.19 一行三栏：7 天趋势 / 状态环图 / 最近任务（分页，等高） */
+.dash-row {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 4fr) minmax(0, 7fr);
+  gap: 18px;
+  align-items: stretch;
+  margin-bottom: 20px;
+}
+
+.dash-row__panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.card__body--fill {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 190px;
+}
+
+.card__body--fill .chart {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 190px;
+}
+
+.chart--fill {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 190px;
+}
+
+.table-wrap--fill {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pager__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.pager__btn:hover:not(:disabled) {
+  color: var(--link);
+  border-color: var(--link);
+}
+
+.pager__btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.pager__state {
+  min-width: 46px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.table--compact th {
+  padding: 7px 12px;
+}
+
+.table--compact td {
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+.table__sub {
+  font-size: 10.5px;
+}
+
+/* 数据库概览卡片：可点击导航 */
+.kpi--link {
+  text-decoration: none;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.kpi--link:hover {
+  border-color: var(--link);
+}
+
+.kpi--link .kpi__foot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kpi__go {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.kpi--link:hover .kpi__go {
+  opacity: 1;
+  transform: none;
+  color: var(--link);
+}
+
 .distribution-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -787,6 +1016,18 @@ watch([statusItems, trend, resolvedTheme], () => {
   }
   .kpi-grid--db {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dash-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dash-row__recent {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .dash-row {
+    grid-template-columns: 1fr;
   }
 }
 

@@ -247,6 +247,16 @@ ssh -L 8800:127.0.0.1:8800 user@workstation
 # then open http://127.0.0.1:8800 locally
 ```
 
+To run the console in the background (survives the terminal), use daemon mode:
+
+```bash
+bacmap start web -D            # or --daemon
+# PID file: $BACMAP_HOME/web.pid · log: $BACMAP_HOME/web.log
+kill "$(cat $BACMAP_HOME/web.pid)"   # stop
+```
+
+Starting again while a live daemon is running is refused (stale PID files are ignored).
+
 If you bind a non-loopback address, bacmap refuses to start without a token:
 
 ```bash

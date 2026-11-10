@@ -43,6 +43,15 @@ def parse_tsv(path, default=None):
             rows.append(dict(zip(headers, fields, strict=False)))
     return rows
 
+def parse_gspec_screen(path):
+    """v1.10.19：gspec screen JSON 报告 → abricate 形状的行（共享解析层）。"""
+    from bacmap.core.utils import parse_gspec_report
+
+    p = Path(path)
+    if not p.exists() or p.stat().st_size == 0:
+        return []
+    return parse_gspec_report(p.read_text())
+
 qc_path = getattr(snakemake.input, "qc_json", None)
 qc = read_json(qc_path, {}) if qc_path else {}  # assembly 直入样本无 fastp 产物
 summary["steps"]["qc"] = {
@@ -113,13 +122,13 @@ if gspec_tp["serogroup"]:
     summary["steps"]["serotype"]["serogroup_scheme"] = gspec_tp["serogroup_scheme"]
 
 summary["steps"]["amr"] = {
-    "abricate_vfdb": parse_tsv(snakemake.input.vfdb, []),
-    "abricate_card": parse_tsv(snakemake.input.card, []),
+    "abricate_vfdb": parse_gspec_screen(snakemake.input.vfdb),
+    "abricate_card": parse_gspec_screen(snakemake.input.card),
     "amrfinderplus": parse_tsv(snakemake.input.amrfinderplus, []),
 }
 
 summary["steps"]["plasmid"] = {
-    "plasmidfinder": parse_tsv(snakemake.input.plasmidfinder, []),
+    "plasmidfinder": parse_gspec_screen(snakemake.input.plasmidfinder),
 }
 
 dec_serotype = _ecoh_serotype_summary(gspec_tp["databases"].get("ecoh")) or {}

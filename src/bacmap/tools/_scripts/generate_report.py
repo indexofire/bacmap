@@ -31,7 +31,6 @@ from bacmap.core.analysis.cgmlst_projection import (
 )
 from bacmap.core.analysis.cgmlst_types import CgmlstProfile
 from bacmap.core.utils import (
-    parse_abricate_tsv,
     parse_cgmlst_profile,
     parse_mlst,
 )
@@ -489,14 +488,14 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     h1 = sero.get("h1", "") if isinstance(sero, dict) else ""
     h2 = sero.get("h2", "") if isinstance(sero, dict) else ""
 
-    card_genes = parse_abricate_tsv("")
-    card_path = RESULTS_DIR / sample_id / "amr" / "abricate_card.tsv"
-    if card_path.exists():
-        card_genes = parse_abricate_tsv(card_path.read_text())
-    vfdb_path = RESULTS_DIR / sample_id / "amr" / "abricate_vfdb.tsv"
-    vfdb_genes = parse_abricate_tsv(vfdb_path.read_text()) if vfdb_path.exists() else []
-    plasmid_path = RESULTS_DIR / sample_id / "plasmid" / "abricate_plasmidfinder.tsv"
-    plasmid_genes = parse_abricate_tsv(plasmid_path.read_text()) if plasmid_path.exists() else []
+    # v1.10.19：gspec screen 结果 JSON 优先（gspec/<kind>.json），
+    # 旧运行目录回退 TSV 布局（amr/abricate_<kind>.tsv）。
+    from bacmap.core.utils import load_screen_hits
+
+    sample_dir = RESULTS_DIR / sample_id
+    card_genes = load_screen_hits(sample_dir, "card")
+    vfdb_genes = load_screen_hits(sample_dir, "vfdb")
+    plasmid_genes = load_screen_hits(sample_dir, "plasmidfinder")
 
     asm_stats = steps.get("assembly", "")
     asm_parts = asm_stats.strip().split("\n")[-1].split("\t") if asm_stats else []

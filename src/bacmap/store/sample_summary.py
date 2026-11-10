@@ -25,7 +25,9 @@ def sample_steps(results_dir: Path, sample_id: str) -> dict[str, bool]:
         "assembly": (base / "assembly" / "contigs.fasta").exists(),
         "species": (base / "species" / "species_id.json").exists(),
         "mlst": (base / "typing" / "mlst.tsv").exists(),
-        "amr": (base / "amr" / "abricate_card.tsv").exists(),
+        # v1.10.19：gspec screen 以 JSON 为主产物；旧运行目录的 TSV 兼容
+        "amr": (base / "gspec" / "card.json").exists()
+        or (base / "amr" / "abricate_card.tsv").exists(),
         "report": summary_path(results_dir, sample_id).exists(),
     }
 

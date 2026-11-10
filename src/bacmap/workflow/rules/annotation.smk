@@ -15,7 +15,9 @@
 import os
 from pathlib import Path
 
-_ANN = config.get("annotation", {}) or {}
+# v1.10.19 修复：annotation 段嵌在 config 的 `tools:` 下（与 quast 同级），
+# 此前误在顶层查找——配置从未生效，全靠默认值运行。
+_ANN = config.get("tools", {}).get("annotation", {}) or {}
 _ANN_ENABLED = bool(_ANN.get("enabled", True)) and os.environ.get(
     "BACMAP_ANNOTATION_ENABLED", "1"
 ).strip().lower() not in {"0", "false", "no", "off"}
@@ -38,6 +40,18 @@ BAKTA_MIN_CONTIG = int(_BAKTA_CFG.get("min_contig_length", 1))
 BAKTA_SKIP_PLOT = "--skip-plot" if bool(_BAKTA_CFG.get("skip_plot", True)) else ""
 EGGNOG_TAX_SCOPE = str(_EGGNOG_CFG.get("tax_scope", "Bacteria") or "").strip()
 EGGNOG_MODE = str(_EGGNOG_CFG.get("mode", "diamond") or "diamond").strip()
+# v1.10.19 速度档位（可选）：
+#   sensmode: fast / mid-sensitive / sensitive（emapper 默认）/ 更高档
+#   iterate:  多轮递增灵敏度搜索（默认开；关闭可提速 ~3-5x，对肠杆菌等
+#             覆盖好的物种注释损失极小）
+#   usemem:  diamond 库常驻内存（批量分析时省去重复读盘，需 ~10G 空闲内存）
+_EGGNOG_SENSMODE_RAW = str(_EGGNOG_CFG.get("sensmode", "") or "").strip()
+EGGNOG_SENSMODE = (
+    f"--sensmode {_EGGNOG_SENSMODE_RAW}" if _EGGNOG_SENSMODE_RAW else ""
+)
+# iterate=false → --dmnd_iterate no；默认（true）交给 emapper 自身默认（迭代开）
+EGGNOG_ITERATE_FLAG = "" if _EGGNOG_CFG.get("iterate", True) else "--dmnd_iterate no"
+EGGNOG_USEMEM = "--usemem" if _EGGNOG_CFG.get("usemem", False) else ""
 
 
 rule assembly_qc_quast:
@@ -99,6 +113,9 @@ if _ANN_ENABLED:
             data_dir = EGGNOG_DATA_DIR,
             tax_scope = f"--tax_scope {EGGNOG_TAX_SCOPE}" if EGGNOG_TAX_SCOPE else "",
             mode = EGGNOG_MODE,
+            sensmode = EGGNOG_SENSMODE,
+            iterate = EGGNOG_ITERATE_FLAG,
+            usemem = EGGNOG_USEMEM,
         shell:
             "set -euo pipefail; "
             "DATA=\"{params.data_dir}\"; "
@@ -109,7 +126,8 @@ if _ANN_ENABLED:
             "mkdir -p {params.outdir} && "
             "emapper.py -i {input.faa} -o {wildcards.sample} "
             "--output_dir {params.outdir} --data_dir \"$DATA\" --cpu {threads} "
-            "-m {params.mode} {params.tax_scope} --override"
+            "-m {params.mode} {params.tax_scope} {params.sensmode} {params.iterate} "
+            "{params.usemem} --override"
 
     rule genome_annotation:
         """合并 Bakta 注释与 eggNOG 功能分类 → annotation.json。"""

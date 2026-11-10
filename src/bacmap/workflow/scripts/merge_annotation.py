@@ -1,6 +1,9 @@
-"""Snakemake 脚本：Bakta JSON + eggNOG-mapper annotations → annotation.json。"""
+"""Snakemake 脚本：Bakta JSON + eggNOG-mapper annotations → annotation.json。
 
-from __future__ import annotations
+注意：本脚本经 Snakemake ``script:`` 指令执行——preamble 会被注入到文件
+最前面，**不能使用 ``from __future__ import annotations``**（不再是首条
+语句 → SyntaxError，v1.10.14 起潜伏、首次启用注释时引爆）。
+"""
 
 import json
 from pathlib import Path

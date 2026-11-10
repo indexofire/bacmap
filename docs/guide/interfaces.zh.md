@@ -233,6 +233,16 @@ ssh -L 8800:127.0.0.1:8800 user@workstation
 # then open http://127.0.0.1:8800 locally
 ```
 
+后台运行控制台（不随终端退出），使用守护进程模式：
+
+```bash
+bacmap start web -D            # 或 --daemon
+# PID 文件：$BACMAP_HOME/web.pid · 日志：$BACMAP_HOME/web.log
+kill "$(cat $BACMAP_HOME/web.pid)"   # 停止
+```
+
+守护进程已在运行时再次启动会被拒绝（陈旧 PID 文件自动放行）。
+
 如果绑定非回环地址，bacmap 在缺少令牌时会拒绝启动：
 
 ```bash

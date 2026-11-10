@@ -78,7 +78,8 @@ class DbosTaskEngine:
             raise NotImplementedError(f"unsupported task type: {task_type}")
         p = params.model_dump() if isinstance(params, BaseModel) else dict(params)
         p.setdefault("home", str(self.home))
-        p.setdefault("cores", 8)
+        # cores 不在此处给默认值（v1.10.19）：显式传入才生效，
+        # 缺省由引擎读部署 config.yaml 的 threads（多核机器不再被写死的 8 截断）。
         p.setdefault("submitted_by", submitted_by)
 
         if task_type == TaskType.RECORD:

@@ -100,11 +100,78 @@ def _run_mcp(args: argparse.Namespace) -> None:
     )
 
 
+def _pid_alive(pid: int) -> bool:
+    """PID 是否仍存活（signal 0 探测；无权限/不存在都视为已死）。"""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _daemonize(log_path: Path, pid_path: Path) -> None:
+    """双 fork 守护进程化：脱离会话、stdio 重定向到日志、PID 落盘。
+
+    仅在最终孙进程返回；父/子进程 ``os._exit`` 直接退出（不走 atexit/flush，
+    避免把父进程的清理副作用带进 daemon）。PID 文件由 atexit 摘除
+    （uvicorn 优雅退出会触发）；SIGKILL 后残留的陈旧 PID 由启动时探测兜底。
+    """
+    import atexit
+
+    sys.stdout.flush()
+    sys.stderr.flush()
+    if os.fork() > 0:
+        os._exit(0)
+    os.setsid()
+    if os.fork() > 0:
+        os._exit(0)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    devnull = os.open(os.devnull, os.O_RDONLY)
+    log_fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o640)
+    os.dup2(devnull, 0)
+    os.dup2(log_fd, 1)
+    os.dup2(log_fd, 2)
+    if devnull > 2:
+        os.close(devnull)
+    if log_fd > 2:
+        os.close(log_fd)
+    pid_path.write_text(f"{os.getpid()}\n")
+
+    def _remove_pidfile() -> None:
+        try:
+            pid_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    atexit.register(_remove_pidfile)
+
+
 def _run_web(args: argparse.Namespace) -> None:
     import uvicorn
 
     from bacmap.interfaces.web.app import create_app
     from bacmap.interfaces.web.auth import require_auth_when_exposed
+
+    if getattr(args, "daemon", False):
+        home = Path(args.home or BACMAP_HOME)
+        pid_path = home / "web.pid"
+        log_path = home / "web.log"
+        if pid_path.exists():
+            try:
+                old_pid = int(pid_path.read_text().strip())
+            except ValueError:
+                old_pid = 0
+            if old_pid and _pid_alive(old_pid):
+                raise SystemExit(
+                    f"bacmap web already running (pid {old_pid}); pidfile: {pid_path}"
+                )
+        print(
+            f"bacmap start web -D → http://{args.host}:{args.port}/"
+            f"  ·  pidfile: {pid_path}  ·  log: {log_path}"
+        )
+        _daemonize(log_path, pid_path)
 
     token = os.environ.get(args.token_env, "")
     _warn_if_exposed(args.host)
@@ -550,6 +617,17 @@ def _add_start_parsers(sub: Any) -> None:
         "--token-env",
         default="BACMAP_WEB_TOKEN",
         help=T("bearer token env var name", "Bearer token 环境变量名"),
+    )
+    p_web.add_argument(
+        "-D",
+        "--daemon",
+        action="store_true",
+        help=T(
+            "run in the background (daemon); PID file at $BACMAP_HOME/web.pid, "
+            "log at $BACMAP_HOME/web.log; stop with kill $(cat $BACMAP_HOME/web.pid)",
+            "后台守护进程方式运行；PID 写入 $BACMAP_HOME/web.pid，日志 "
+            "$BACMAP_HOME/web.log；停止用 kill $(cat $BACMAP_HOME/web.pid)",
+        ),
     )
     p_web.set_defaults(func=_run_web)
 

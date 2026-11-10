@@ -121,24 +121,24 @@ rule typing_sistr:
         "( echo '{{\"serovar\":\"N/A\",\"serogroup\":\"N/A\",\"o_antigen\":\"N/A\",\"h1\":\"N/A\",\"h2\":\"N/A\"}}' > {output.json} && "
         "touch {output.cgmlst} )"
 
-rule amr_abricate_vfdb:
+rule gspec_screen_vfdb:
     input:
         contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
     output:
-        result = str(WORKDIR) + "/{sample}/amr/abricate_vfdb.tsv"
+        result = str(WORKDIR) + "/{sample}/gspec/vfdb.json"
     params:
         minid = ABRICATE_MINID,
         mincov = ABRICATE_MINCOV
     shell:
         "mkdir -p $(dirname {output.result}) && "
         "gspec screen {input.contigs} --db vfdb --minid {params.minid} --mincov {params.mincov} "
-        "> {output.result}"
+        "-f json -o {output.result}"
 
-rule amr_abricate_card:
+rule gspec_screen_card:
     input:
         contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
     output:
-        result = str(WORKDIR) + "/{sample}/amr/abricate_card.tsv"
+        result = str(WORKDIR) + "/{sample}/gspec/card.json"
     params:
         pixi = str(__import__("pathlib").Path(sys.executable).resolve().parent),
         minid = ABRICATE_MINID,
@@ -147,20 +147,20 @@ rule amr_abricate_card:
     shell:
         "mkdir -p $(dirname {output.result}) && "
         "gspec screen {input.contigs} --db card --minid {params.minid} --mincov {params.mincov} "
-        "> {output.result}"
+        "-f json -o {output.result}"
 
-rule amr_abricate_plasmidfinder:
+rule gspec_screen_plasmidfinder:
     input:
         contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
     output:
-        result = str(WORKDIR) + "/{sample}/plasmid/abricate_plasmidfinder.tsv"
+        result = str(WORKDIR) + "/{sample}/gspec/plasmidfinder.json"
     params:
         minid = ABRICATE_MINID,
         mincov = ABRICATE_MINCOV
     shell:
         "mkdir -p $(dirname {output.result}) && "
         "gspec screen {input.contigs} --db plasmidfinder --minid {params.minid} --mincov {params.mincov} "
-        "> {output.result}"
+        "-f json -o {output.result}"
 
 rule amr_amrfinderplus:
     """NCBI AMRFinderPlus: AMR genes + point mutations (curated per-family cutoffs).

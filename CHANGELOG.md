@@ -5,6 +5,68 @@
 
 ## [Unreleased]
 
+### 仪表盘一行三栏布局（CONCRETE 优化）
+
+- "最近 7 天任务 / 任务状态分布 / 最近任务"三个面板合并为一行（5:4:7 三栏、
+  等高对齐；≤1180px 降为两栏 + 最近任务独占一行，≤760px 单栏堆叠）。
+- "最近任务"改为分页（每页 5 条，上一页/下一页 + 页码指示），任务 ID 下附
+  创建时间，表格改紧凑行高。
+- 数据库概览扩展为 9 张可点击导航卡（新增"计划"、研究子计数、化验覆盖菌株数），
+  悬停显示箭头直达对应页面（菌株/样本/GOM/研究/计划/知识库/运行/记录）。
+
+### gspec screen 改为 JSON 主输出 + vpara 残留清理
+
+- **merge_annotation SyntaxError 修复**：`merge_annotation.py` 顶部的
+  `from __future__ import annotations` 与 Snakemake `script:` 指令的 preamble
+  注入冲突（preamble 拼在文件最前 → `__future__` 不再是首条语句 → 编译期
+  SyntaxError，无 traceback、极难定位）。该雷自 v1.10.14 注释落地即潜伏，
+  首次启用注释时引爆。已移除该行并新增回归测试锁定所有 `script:` 指令
+  脚本禁止 `from __future__ import`（`test_workflow_script_future.py`）。
+- **注释全链路实测（16 核）**：Bakta full ~8 分钟 + eggNOG mid-sensitive
+  ~3.5 分钟 + gspec screens 秒级 + merge/summary 2.6 秒 ≈ **12.5 分钟/基因组**，
+  注释率 97.65%（4502 CDS），COG 全 20 类、GO 5412、KEGG KO 3367、Pfam 2874。
+- **JSON 主输出**：card / vfdb / plasmidfinder 三条 screen 规则改为
+  `gspec screen -f json -o gspec/<kind>.json`（规则更名 `gspec_screen_*`），
+  保留 schema / 工具版本 / 参数等 provenance；数值字段（%IDENTITY 等）恢复类型。
+  新增共享解析层 `core.utils.parse_gspec_report` / `load_screen_hits`：JSON 优先、
+  旧运行目录的 `amr/abricate_*.tsv` 布局自动回退（报告对历史 run 仍可重渲染）。
+  collect_summary / generate_report / sample_steps 同步。
+- **vpara_virulence 残留清理**（回应 run 记录“参考数据库=vpara_virulence”的错象）：
+  志贺菌分析流程本身正确（gspec shi_sero）；错在部署期登记表
+  `refs/manifest.json` 只有一条 v1.4.41 删规则时漏清的 `gspec:vpara_virulence`
+  条目，被 ADR-18 证据链机械记入每个 run。已删除 `config.yaml databases`
+  的 vpara_virulence 条目与 `refs/gspec/vpara_virulence/` 目录，并按
+  `pathogens.yaml` 实际引用重建登记表（card/vfdb/plasmidfinder/shi_sero/
+  eco_dec/ecoh/lmo_sero/vpa_ok/vpa_vf/vpa_pai + ncbi-amrfinderplus，
+  含 sha256 与版本日期）。此后 run 记录的 ref_databases 如实反映在用库。
+- **eggNOG 快速档实测**：mid-sensitive + 关闭迭代 + 8 线程下 diamond 阶段
+  ~4.5 分钟/基因组（此前 sensitive+迭代 >53 分钟未完成）；Bakta full ~8 分钟。
+
+### 注释数据库就位 + eggNOG 速度档位
+
+- **`bacmap start web -D/--daemon`**：守护进程方式后台启动 Web 控制台（双 fork
+  脱离会话）。PID 写入 `$BACMAP_HOME/web.pid`，stdout/stderr 追加到
+  `$BACMAP_HOME/web.log`；已在运行（PID 存活）时拒绝二次启动，陈旧 PID 自动放行。
+  停止：`kill $(cat $BACMAP_HOME/web.pid)`。默认仍为前台运行。
+- **cores 修复**：`task_engine` 不再给每个任务写死 `cores=8`；缺省时引擎读部署
+  `config.yaml` 的 `threads` 作为 snakemake `--cores`（16 核工作站不再被截断到 8）。
+  显式传 `cores` 仍优先生效。
+- **annotation 配置读取修复**：`annotation.smk` 此前在 config 顶层找 `annotation`，
+  实际它嵌在 `tools:` 下——注释配置从未生效，一直靠默认值运行；现改为
+  `config.tools.annotation`（与 `tools.quast` 同级同源）。
+- **eggNOG 速度档位**：`annotation.smk` 的 eggnog 规则新增 `sensmode` / `iterate` /
+  `usemem` 配置项（工作流 `config.yaml` 的 `tools.annotation.eggnog` 段）。默认
+  `mid-sensitive` + 关闭迭代（实测 sensitive+迭代在 8 线程上仅 diamond 阶段就
+  >50 分钟/基因组，不可用）；极限灵敏度可改回 `sensmode: "sensitive"` +
+  `iterate: true`。`usemem: true` 让 diamond 库常驻内存。
+- **线程默认 8 → 16**：匹配 16 核工作站；小机器可在 config.yaml 调回。
+- **eggNOG 上游域名修复记录**：eggnog-mapper ≤2.1.13 的
+  `download_eggnog_data.py` 使用已失效的 `eggnogdb.embl.de`（NXDOMAIN）；需改为
+  `eggnog5.embl.de`（或用 Cloudflare 镜像 `downloads.eggnogdb.org`，速度快 ~25x）。
+- **AMRFinderPlus DB 版本兼容**：amrfinder 4.2.7 要求 DB ≥ 2025-09-22.2，Bakta
+  db6 自带的 2024-12-18.1 过旧会导致 Bakta AMR 专家系统失败（exit 1）；将
+  `<bakta-db>/amrfinderplus-db/latest` 指向新版 DB（如 2026-08-07.1）即可修复。
+
 ### DSH 控制台嵌入修复 + 报告可视化与 AI 解读
 
 - **DSH 挂载修复**：`tools/dsh-bacmap-console` 现在把控制台固定在 `/bacmap/console/`，

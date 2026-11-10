@@ -78,6 +78,13 @@ What `pixi install` provides:
   `BACMAP_BAKTA_DB` / `BACMAP_EGGNOG_DATA_DIR`. If you do not need annotation, set
   `BACMAP_ANNOTATION_ENABLED=0` (the pipeline writes a `disabled` placeholder, never fake
   annotations).
+- **eggNOG speed tuning** (batch runs): the default is `mid-sensitive` without iterative
+  search (measured: emapper's quality-first `sensitive` + iterate takes >50 min/genome
+  for the diamond stage alone on 8 threads). For well-covered species (Enterobacteriaceae
+  etc.) the annotation loss is negligible; for maximum sensitivity set
+  `tools.annotation.eggnog.sensmode: "sensitive"` and `iterate: true` in the workflow
+  `config.yaml`. `usemem: true` keeps the diamond DB in RAM for consecutive samples
+  (~10 GB free memory required).
 - **A separate `recomb` environment** with Gubbins for optional recombination detection, because
   its IQ-TREE pin conflicts with the main pipeline; run it with `pixi run -e recomb …`.
 - **Trycycler is not installed by default**: its conda package requires Python <3.11 while bacmap

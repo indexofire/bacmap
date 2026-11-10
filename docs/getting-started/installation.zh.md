@@ -74,6 +74,12 @@ bacmap --version      # 0.1.5
   首次使用请运行 `pixi run python scripts/setup_annotation_dbs.py`；可用
   `BACMAP_BAKTA_DB` / `BACMAP_EGGNOG_DATA_DIR` 覆盖路径。不需要注释时设置
   `BACMAP_ANNOTATION_ENABLED=0`（管线写 `disabled` 占位，绝不伪造注释结果）。
+- **eggNOG 速度调优**（批量运行）：默认 `mid-sensitive` 且关闭迭代搜索（实测：
+  emapper 质量优先的 `sensitive` + 迭代仅 diamond 阶段就要 >50 分钟/基因组、
+  8 线程）。对数据库覆盖好的物种（肠杆菌等）注释损失可忽略；需要极限灵敏度时
+  在工作流 `config.yaml` 设 `tools.annotation.eggnog.sensmode: "sensitive"` 且
+  `iterate: true`。连续分析多株时 `usemem: true` 让 diamond 库常驻内存
+  （需 ~10 GB 空闲内存）。
 - **独立的 `recomb` 环境**，内含 Gubbins，用于可选的重组检测。因为其与
   IQ-TREE 版本锁定与主管线冲突；请用 `pixi run -e recomb …` 运行。
 - **trycycler 不随默认环境安装**：其 conda 包要求 Python <3.11，而 bacmap 运行在

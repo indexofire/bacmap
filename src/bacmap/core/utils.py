@@ -75,6 +75,75 @@ def parse_abricate_tsv(tsv_text: str) -> list[dict[str, str]]:
     return rows
 
 
+def parse_gspec_report(json_text: str) -> list[dict[str, str]]:
+    """Parse a ``gspec screen --format json`` report into abricate-shaped rows.
+
+    v1.10.19：screen 规则以 JSON 为主输出（保留 schema/工具版本/参数等
+    provenance）。为使报告、collect_summary 与 NLI 事实提取等既有消费方
+    零改动，这里把 hits 映射回 abricate 列名（GENE / %IDENTITY / …），
+    数值统一转字符串（下游本就按字符串渲染/转义）。
+    旧运行目录的 TSV 由 ``load_screen_hits`` 回退处理。
+    """
+    if not json_text:
+        return []
+    try:
+        report = json.loads(json_text)
+    except json.JSONDecodeError:
+        return []
+    rows: list[dict[str, str]] = []
+    for f in report.get("files", []) if isinstance(report, dict) else []:
+        if not isinstance(f, dict):
+            continue
+        for hit in f.get("hits", []) or []:
+            if not isinstance(hit, dict):
+                continue
+            rows.append(
+                {
+                    "#FILE": str(hit.get("file", f.get("file", "")) or ""),
+                    "SEQUENCE": str(hit.get("sequence", "")),
+                    "START": str(hit.get("start", "")),
+                    "END": str(hit.get("end", "")),
+                    "STRAND": str(hit.get("strand", "")),
+                    "GENE": str(hit.get("gene", "")),
+                    "COVERAGE": str(hit.get("coverage", "")),
+                    "COVERAGE_MAP": str(hit.get("coverage_map", "")),
+                    "GAPS": str(hit.get("gaps", "")),
+                    "%COVERAGE": str(hit.get("coverage_pct", "")),
+                    "%IDENTITY": str(hit.get("identity_pct", "")),
+                    "DATABASE": str(hit.get("database", "")),
+                    "ACCESSION": str(hit.get("accession", "")),
+                    "PRODUCT": str(hit.get("product", "")),
+                    "RESISTANCE": str(hit.get("resistance", "")),
+                }
+            )
+    return rows
+
+
+def load_screen_hits(sample_dir: str | Path, kind: str) -> list[dict[str, str]]:
+    """读取一个样本的 gspec screen 结果（JSON 优先，回退旧 TSV 布局）。
+
+    ``kind`` 为 ``card`` / ``vfdb`` / ``plasmidfinder``；JSON 布局
+    ``gspec/<kind>.json``（v1.10.19+），TSV 布局 ``amr/abricate_<kind>.tsv``
+    （或 plasmid 的 ``plasmid/abricate_plasmidfinder.tsv``）供旧运行目录
+    兼容。两者都缺 → 空列表。
+    """
+    root = Path(sample_dir)
+    json_path = root / "gspec" / f"{kind}.json"
+    if json_path.is_file():
+        rows = parse_gspec_report(json_path.read_text(encoding="utf-8"))
+        if rows or json_path.stat().st_size > 0:
+            return rows
+    tsv_candidates = (
+        [root / "plasmid" / "abricate_plasmidfinder.tsv"]
+        if kind == "plasmidfinder"
+        else [root / "amr" / f"abricate_{kind}.tsv"]
+    )
+    for tsv_path in tsv_candidates:
+        if tsv_path.is_file():
+            return parse_abricate_tsv(tsv_path.read_text(encoding="utf-8"))
+    return []
+
+
 def read_json_file(path: str | Path) -> Any | None:
     """Read and parse a JSON file; None if missing, empty, or invalid.
 

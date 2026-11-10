@@ -66,10 +66,12 @@ def report_inputs(
         "quast": f"{base}/assembly/quast/transposed_report.tsv",
         "species_id": f"{base}/species/species_id.json",
         "mlst": f"{base}/typing/mlst.tsv",
-        "vfdb": f"{base}/amr/abricate_vfdb.tsv",
-        "card": f"{base}/amr/abricate_card.tsv",
+        # v1.10.19：gspec screen 以 JSON 为主输出（保留 provenance），
+        # TSV 布局仅在旧运行目录由读取层回退。
+        "vfdb": f"{base}/gspec/vfdb.json",
+        "card": f"{base}/gspec/card.json",
         "amrfinderplus": f"{base}/amr/amrfinderplus.tsv",
-        "plasmidfinder": f"{base}/plasmid/abricate_plasmidfinder.tsv",
+        "plasmidfinder": f"{base}/gspec/plasmidfinder.json",
         "gspec_typing": f"{base}/gspec/typing.json",
         "annotation": f"{base}/annotation/annotation.json",
     }

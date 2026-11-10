@@ -17,9 +17,10 @@ $BACMAP_HOME/results/
 │       │   │   └── quast/           # QUAST report.tsv / transposed_report.tsv
 │       │   ├── annotation/          # Bakta + eggNOG + annotation.json
 │       │   ├── species/
+│       │   ├── gspec/               # gspec screen JSON (card/vfdb/plasmidfinder,
+│       │   │                        #   with tool version & params) + typing.json
 │       │   ├── typing/
-│       │   ├── amr/
-│       │   ├── plasmid/
+│       │   ├── amr/                 # amrfinderplus.tsv
 │       │   └── report/
 │       │       ├── <dataset>_summary.json
 │       │       └── <dataset>_report.html

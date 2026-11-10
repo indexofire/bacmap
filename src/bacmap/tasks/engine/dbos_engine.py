@@ -77,9 +77,20 @@ def _run_snakemake(params: dict[str, Any]) -> Any:
     import time as _time
 
     overrides = {"workdir": f"results/runs/{task_id}"} if task_id else None
+    # v1.10.19：cores 默认取部署 config.yaml 的 threads（此前写死 8，
+    # 多核机器上 config.threads 被 --cores 截断，规则线程永远 ≤8）。
+    cores = params.get("cores")
+    if not cores:
+        try:
+            import yaml
+
+            _cfg = yaml.safe_load((deployed / "config" / "config.yaml").read_text()) or {}
+            cores = int(_cfg.get("threads", 8))
+        except Exception:  # 配置不可读时退回保守默认，不阻断分析
+            cores = 8
     for attempt in range(4):
         result = runner.run(
-            targets=targets, cores=params.get("cores", 8), config_overrides=overrides
+            targets=targets, cores=cores, config_overrides=overrides
         )
         if result.returncode == 0:
             # 物理结果在 runs/<task_id>/，扁平路径只做"最新运行"别名（P2 方案 A）。

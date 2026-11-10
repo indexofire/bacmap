@@ -63,6 +63,7 @@ bacmap --version        # 0.1.5
 bacmap config init      # optional: create config from config.example.toml
 bacmap doctor           # health check
 bacmap start web        # http://127.0.0.1:8800/console/
+bacmap start web -D      # daemon mode (pid/log in $BACMAP_HOME)
 ```
 
 First analysis:
