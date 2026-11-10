@@ -163,7 +163,11 @@ def extract_facts(summary: dict[str, Any], sample_id: str) -> StrainFacts:
             st = ""
 
     sero = steps.get("serotype", {})
-    serotype = str(sero.get("sistr", "")) if isinstance(sero, dict) else ""
+    serotype = (
+        str(sero.get("value") or sero.get("sistr") or "")
+        if isinstance(sero, dict)
+        else ""
+    )
 
     amr = steps.get("amr", {})
     pl = steps.get("plasmid", {})

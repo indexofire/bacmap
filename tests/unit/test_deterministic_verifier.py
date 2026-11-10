@@ -160,6 +160,31 @@ class TestVerifyAll:
         assert result.passed is True
         assert result.failed_count == 0
 
+    def test_gspec_shigella_value_with_na_serogroup_passes(self):
+        v = DeterministicVerifier()
+        result = v.verify_serotype("S. flexneri 3a", "N/A")
+        assert result.passed is True
+
+    def test_gspec_shigella_value_is_verified(self):
+        v = DeterministicVerifier()
+        summary = {
+            "steps": {
+                "species": {"species": "Shigella flexneri", "confidence": "high"},
+                "mlst": "FILE\tSCHEME\tST\ncontigs\tecoli_1\t1025",
+                "serotype": {
+                    "sistr": "N/A",
+                    "sistr_status": "not_applicable",
+                    "value": "S. flexneri 3a",
+                    "method": "gspec shi_sero",
+                },
+                "amr": {"abricate_card": [{"GENE": "blaTEM-1"}]},
+            }
+        }
+        result = v.verify_all(summary)
+        assert result.passed is True
+        sero = next(c for c in result.checks if c.name == "serotype")
+        assert sero.details["serovar"] == "S. flexneri 3a"
+
     def test_vpa_result_passes_with_own_scheme_and_na_serotype(self):
         """真实 VPA summary 形状：vparahaemolyticus_1 位点 + SISTR 不适用。
 

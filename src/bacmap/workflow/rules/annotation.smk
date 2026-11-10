@@ -129,5 +129,19 @@ else:
             contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
         output:
             annotation = str(WORKDIR) + "/{sample}/annotation/annotation.json"
-        script:
-            "../scripts/annotation_disabled.py"
+        run:
+            import json
+            from pathlib import Path
+
+            payload = {
+                "schema": "bacmap.annotation/1",
+                "sample": str(wildcards.sample),
+                "status": "disabled",
+                "reason": "BACMAP_ANNOTATION_ENABLED=0 or annotation.enabled=false",
+                "summary": None,
+                "features": [],
+                "eggnog": [],
+            }
+            out = Path(output.annotation)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

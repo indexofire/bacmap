@@ -151,7 +151,7 @@ class DeterministicVerifier:
             return CheckResult("serotype", False, "Serovar missing")
 
         details: dict[str, Any] = {"serovar": serovar}
-        if serogroup and serogroup != "-":
+        if serogroup and serogroup not in {"-", "N/A", "NA", "n/a"}:
             details["serogroup"] = serogroup
             if serogroup not in _KNOWN_SEROGROUPS:
                 return CheckResult(
@@ -213,20 +213,24 @@ class DeterministicVerifier:
         mlst_check = self.verify_mlst(st, alleles, expected_loci=expected)
 
         sero_raw = steps.get("serotype", {})
-        if isinstance(sero_raw, dict) and sero_raw.get("sistr_status") == "not_applicable":
-            # 非沙门菌：SISTR 不适用（collect_summary 会写 not_applicable + 原因），
-            # 血清型未配置（如 VPA 等 gspec 血清型子命令）不是校验失败。
+        serovar = (
+            str(sero_raw.get("value") or sero_raw.get("sistr") or "N/A")
+            if isinstance(sero_raw, dict)
+            else "N/A"
+        )
+        serogroup = sero_raw.get("serogroup", "") if isinstance(sero_raw, dict) else ""
+        if serovar not in ("", "N/A"):
+            # 统一 value（gspec shi_sero/ecoh 等）优先；旧 summary 回退 SISTR。
+            sero_check = self.verify_serotype(serovar, serogroup)
+        elif isinstance(sero_raw, dict) and sero_raw.get("sistr_status") == "not_applicable":
+            # 非沙门菌且没有其它血清型结果：不适用不是校验失败。
             sero_check = CheckResult(
                 "serotype",
                 True,
-                "Serotype not applicable for this species (SISTR is Salmonella-only)",
+                "Serotype not applicable for this species (no configured serotype engine)",
                 {"applicable": False},
             )
         else:
-            serovar = (
-                sero_raw.get("sistr", "N/A") if isinstance(sero_raw, dict) else "N/A"
-            )
-            serogroup = sero_raw.get("serogroup", "") if isinstance(sero_raw, dict) else ""
             sero_check = self.verify_serotype(serovar, serogroup)
 
         amr_raw = steps.get("amr", {})

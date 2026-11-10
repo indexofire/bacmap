@@ -94,7 +94,10 @@ def get_result(args: dict[str, Any], **kwargs: Any) -> str:
     st = parse_mlst(mlst_raw)["st"] if isinstance(mlst_raw, str) and mlst_raw else "N/A"
 
     sero = steps.get("serotype", {})
-    serovar = sero.get("sistr", "N/A") if isinstance(sero, dict) else "N/A"
+    if isinstance(sero, dict):
+        serovar = str(sero.get("value") or sero.get("sistr") or "N/A")
+    else:
+        serovar = "N/A"
 
     amr = steps.get("amr", {})
     card = amr.get("abricate_card", []) if isinstance(amr, dict) else []

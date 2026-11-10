@@ -290,7 +290,7 @@ def _render_annotation_section(summary: dict) -> str:
         parts.append("<h3>QUAST 组装质控</h3>")
         parts.append(f'<pre class="quast">{html.escape(str(quast))}</pre>')
 
-    if isinstance(ann, dict):
+    if isinstance(ann, dict) and ann:
         status = ann.get("status", "ok")
         rate_raw = float(ann.get("annotation_rate", 0) or 0)
         rate_pct = rate_raw * 100 if rate_raw <= 1 else rate_raw
@@ -421,7 +421,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="bacmap-report" content="5">
+<meta name="bacmap-report" content="6">
 <title>{sample_id} · 分析报告 · bacmap</title>
 <style>
   :root {{

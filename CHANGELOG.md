@@ -16,6 +16,10 @@
   Helvetica 大标题、等宽数据、分屏海报式仪表盘首页、三态主题菜单）；暗色与浅色保留。
   图表、主题菜单与样本 HTML 报告同步（报告支持 `?theme=gray`）。
 - 宋门菌血清型暂继续使用 SISTR；gspec `sen_sero_sistr` 的 serotype/2 支持发布后再迁移。
+- **报告可见性/校验修复**：样本报告统一读取 `steps.serotype.value`（gspec shi_sero/ecoh），
+  Deterministic Verifier 接受非沙门菌的 `N/A` serogroup；注释关闭时不再渲染空的
+  Bakta/eggNOG 章节。`BACMAP_ANNOTATION_ENABLED=0` 的禁用占位规则改为 Snakemake `run:`
+  块，避免脚本注入失败；真实样本 `26OTH0027` 重新分析后报告返回 200。
 
 ### 志贺菌血清型迁移到 gspec `shi_sero`
 
@@ -110,7 +114,7 @@
 - 依赖升级：`gside ==0.2.3`、`gspec ==0.10.2`、`gseek ==0.10.5`、`gmlst ==0.6.1`，
   新增 `gmeta ==0.1.0`（mNGS 可选依赖）。
 - 新增 `GET /api/v1/stats`；测试基线 2016 → 1995（-21：删除旧 HTML 页面/表单测试，
-  API 覆盖保留），报告内嵌/主题/检索/DAG 回归净基线 2002 → 2001（删除 8 个 ShigaTyper 旧测试，新增 7 个 shi_sero/gspec 测试），v1.10.18 +2（共 2003）。
+  API 覆盖保留），报告内嵌/主题/检索/DAG 回归净基线 2002 → 2001（删除 8 个 ShigaTyper 旧测试，新增 7 个 shi_sero/gspec 测试），v1.10.18 +5（共 2006）。
 
 ## [0.1.5] - 2026-11-09
 

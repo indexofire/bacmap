@@ -386,7 +386,7 @@ class TestSampleReportDelivery:
         def fake_generate(args: dict[str, object]) -> str:
             calls.append(args)
             html.write_text(
-                '<html><head><meta name="bacmap-report" content="5"></head>'
+                '<html><head><meta name="bacmap-report" content="6"></head>'
                 "<body>new theme</body></html>",
                 encoding="utf-8",
             )

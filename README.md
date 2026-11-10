@@ -105,7 +105,7 @@ Full bilingual site: <https://indexofire.github.io/bacmap/> (Chinese: `/zh/`).
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest (current baseline: 2003 passed)
+pixi run -e dev test        # pytest (current baseline: 2006 passed)
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter (5 contracts)

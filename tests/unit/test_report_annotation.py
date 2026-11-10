@@ -20,7 +20,7 @@ def test_report_template_is_dark_and_versioned(tmp_path):
     out = tmp_path / "S1_report.html"
     gr.generate_html("S1", summary, DeterministicVerifier().verify_all(summary), out)
     text = out.read_text(encoding="utf-8")
-    assert 'name="bacmap-report" content="5"' in text
+    assert 'name="bacmap-report" content="6"' in text
     assert "--bg: #08090a" in text
     assert "max-width: 900px" not in text  # 旧浅色模板已淘汰
 
@@ -57,6 +57,14 @@ def test_annotation_section_renders_quast_and_top_genes():
     assert "80.0%" in html_text
     assert "J:10" in html_text
     assert "gyrA" in html_text
+
+
+def test_annotation_section_quast_only_when_annotation_disabled():
+    html_text = gr._render_annotation_section(
+        {"steps": {"assembly_quast": "Assembly\tcontigs\ncontigs.fasta\t12"}}
+    )
+    assert "QUAST" in html_text
+    assert "Bakta" not in html_text
 
 
 def test_annotation_section_empty_when_no_data():

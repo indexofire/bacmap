@@ -454,7 +454,11 @@ def _search_fulltext(query: str, limit: int) -> str:
 
         p = obj.payload
         sero = p.get("serotype", {})
-        serovar = sero.get("sistr", "") if isinstance(sero, dict) else ""
+        serovar = (
+            str(sero.get("value") or sero.get("sistr") or "")
+            if isinstance(sero, dict)
+            else ""
+        )
 
         mlst_raw = p.get("mlst", "")
         st_val = ""

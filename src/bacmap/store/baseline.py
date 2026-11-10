@@ -62,7 +62,9 @@ def _summary_species(summary: dict[str, Any]) -> str:
 
 def _summary_serotype(summary: dict[str, Any]) -> str:
     sero = ((summary.get("steps", {}) or {}).get("serotype", {})) or {}
-    return str(sero.get("sistr", "")) if isinstance(sero, dict) else ""
+    if isinstance(sero, dict):
+        return str(sero.get("value") or sero.get("sistr") or "")
+    return ""
 
 
 def _summary_mlst_st(summary: dict[str, Any]) -> str:
