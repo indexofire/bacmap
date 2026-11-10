@@ -1,7 +1,7 @@
 # 汇总报告：聚合所有步骤结果为 JSON
 #
 # v1.4.24：按病原注册表**条件依赖**——只请求该物种适用的步骤产物，不适用者
-#   既不进入 DAG、也不触发外部工具（SISTR 只属沙门菌；ShigaTyper 只属志贺菌；
+#   既不进入 DAG、也不触发外部工具（SISTR 只属沙门菌；志贺菌血清型走 gspec shi_sero；
 #   ecoh 只属大肠埃希菌；vpara 只属副溶血弧菌；DEC 致病型只属 ECO/SHI）。
 
 
@@ -18,7 +18,6 @@ def _report_inputs(wc):
         SAMPLES_DF.loc[wc.sample, "species"],
         str(WORKDIR),
         has_qc=wc.sample in READS_SAMPLES,
-        has_reads=wc.sample in READS_SAMPLES,
         selection=TOOL_SELECTION,
     )
 

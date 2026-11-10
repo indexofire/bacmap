@@ -1,6 +1,6 @@
 """工作流路由：按病原注册表决定每个样本适用的种以下步骤（v1.4.24）。
 
-回归：ECO 样本曾无条件触发 SISTR（沙门菌工具）、ShigaTyper/vpara 步骤；
+回归：ECO 样本曾无条件触发 SISTR（沙门菌工具）、ShigaTyper/vpara 步骤（ShigaTyper 已迁 gspec shi_sero）；
 vpa/dec/shigella 规则与 report 依赖都未按物种门控。
 """
 
@@ -39,11 +39,6 @@ class TestAssemblyEntryGating:
         files = report_inputs("S1", "SAL", "/w")
         assert files["qc_json"] == "/w/S1/qc/S1_fastp.json"
 
-    def test_fasta_sample_drops_read_level_shigella(self):
-        files = report_inputs("S1", "Shigella", "/w", has_qc=False, has_reads=False)
-        assert "qc_json" not in files
-        assert "shigella_serotype" not in files
-
 
 class TestSerotypeEngine:
     def test_engines(self):
@@ -60,7 +55,7 @@ class TestSerotypeEngine:
 class TestGspecDbRouting:
     def test_eco_dec_only_where_declared(self):
         assert uses_gspec_db("DEC", "eco_dec") is True
-        # 志贺菌的血清型走 ShigaTyper；registry 未为其声明 eco_dec
+        # 志贺菌血清型走 gspec shi_sero；registry 未为其声明 eco_dec
         assert uses_gspec_db("Shigella", "eco_dec") is False
         assert uses_gspec_db("SAL", "eco_dec") is False
         assert uses_gspec_db("V_parahaemolyticus", "eco_dec") is False

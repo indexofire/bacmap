@@ -91,9 +91,6 @@ tools:
     scheme: "auto"
   sistr:
     threads: 4
-  seqsero2:
-    mapping_mode: "a"
-    analysis_mode: "a"
   amrfinderplus:
     organism: "Salmonella"
     min_coverage: 0.5

@@ -17,10 +17,14 @@
 - **旧 gspec 数据目录修复**：`shi_sero` 在 gspec 0.10.2 之前安装的副本缺少
   `serotype.json`，会报 `TYPING_NO_SCHEME`。已备份旧库并用
   `gspec db setup -d shi_sero` 重建；升级后需确认该文件存在。
+- **删除 ShigaTyper 旧路径**：移除 `shigella_serotype` 规则、
+  `run_shigatyper.py`、pixi `shigatyper` 依赖及其 7 个专属测试；志贺菌血清型只保留
+  gspec `shi_sero`。
 - **真实数据验证**：`26OTH0027`（assembly 直入）由 `shi_sero` 判定为
   `S. flexneri 3a`；失败任务中的 `PosixPath / float` 不再出现。
-- 回归：新增 gspec shi_sero 适配 3 项、collect_summary 1 项、strain_index 1 项；
-  routing/registry 金标同步更新。
+- 回归：新增 gspec shi_sero 适配 3 项、collect_summary 1 项、strain_index 1 项、
+  sample_summary 1 项、FASTA DAG 1 项；删除 8 个 ShigaTyper 专属测试，净基线
+  2002 → 2001（2009 → 2001）。
 
 ### 细菌基因组注释（QUAST → Bakta → eggNOG-mapper）
 
@@ -94,7 +98,7 @@
 - 依赖升级：`gside ==0.2.3`、`gspec ==0.10.2`、`gseek ==0.10.5`、`gmlst ==0.6.1`，
   新增 `gmeta ==0.1.0`（mNGS 可选依赖）。
 - 新增 `GET /api/v1/stats`；测试基线 2016 → 1995（-21：删除旧 HTML 页面/表单测试，
-  API 覆盖保留），报告内嵌/主题/检索/DAG 回归另增 14 个测试（共 2009）。
+  API 覆盖保留），报告内嵌/主题/检索/DAG 回归净基线 2002 → 2001（删除 8 个 ShigaTyper 旧测试，新增 7 个 shi_sero/gspec 测试）。
 
 ## [0.1.5] - 2026-11-09
 

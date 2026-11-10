@@ -139,7 +139,7 @@ class PathogenRegistry:
         }
 
     def serotype_engines(self) -> dict[str, str]:
-        """物种码 → 血清型判定引擎（sistr / ecoh / shigatyper / lmo_sero…）。"""
+        """物种码 → 血清型判定引擎（sistr / ecoh …）；志贺菌由 gspec shi_sero 承担。"""
         return {
             c: p.serotype_engine
             for c, p in self.pathogens.items()

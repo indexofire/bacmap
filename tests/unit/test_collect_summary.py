@@ -48,7 +48,6 @@ def _run(
         "plasmidfinder": missing,
         "pathotype": missing,
         "gspec_typing": gspec_path,
-        "shigella_serotype": missing,
         "annotation": str(ann_path),
         "species_id": str(sid),
     }
@@ -88,7 +87,7 @@ def test_non_salmonella_marks_sistr_not_applicable(tmp_path):
     summary = _run(
         tmp_path,
         {"verdict": "DEC", "detected_markers": [{"gene": "ipah"}]},
-        omit={"sistr", "pathotype", "shigella_serotype"},
+        omit={"sistr", "pathotype"},
         # ECO 的 gspec 库清单默认含 ecoh（无 typing scheme → 如实 no_scheme）
         gspec_typing={
             "status": "ran",
@@ -138,7 +137,7 @@ def test_shigella_serotype_from_gspec_shi_sero(tmp_path):
     summary = _run(
         tmp_path,
         {"verdict": "Shigella", "detected_markers": [{"gene": "ipah"}]},
-        omit={"sistr", "pathotype", "shigella_serotype"},
+        omit={"sistr", "pathotype"},
         gspec_typing={
             "status": "ran",
             "databases": {
@@ -165,7 +164,7 @@ def test_non_dec_species_marks_dec_not_applicable(tmp_path):
     summary = _run(
         tmp_path,
         {"verdict": "Salmonella", "detected_markers": []},
-        omit={"ectyper", "pathotype", "shigella_serotype"},
+        omit={"ectyper", "pathotype"},
     )
     assert summary["steps"]["dec"]["status"] == "not_applicable"
     assert summary["steps"]["serotype"]["sistr"] == "N/A"

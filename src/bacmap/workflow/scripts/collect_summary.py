@@ -125,9 +125,8 @@ summary["steps"]["plasmid"] = {
 dec_serotype = _ecoh_serotype_summary(gspec_tp["databases"].get("ecoh")) or {}
 _shigella_gspec = _shigella_serotype_summary(gspec_tp["databases"].get("shi_sero"))
 pathotype_path = opt_input("pathotype")
-shigella_path = opt_input("shigella_serotype")
 _dec_applicable = (
-    any(p is not None for p in (pathotype_path, shigella_path))
+    pathotype_path is not None
     or dec_serotype != {}
     or _shigella_gspec is not None
 )
@@ -164,11 +163,8 @@ if _dec_applicable:
         summary["steps"]["dec"]["pathotype"] = "N/A"
         summary["steps"]["dec"]["pathotype_status"] = "not_applicable"
 
-    # 志贺菌血清型：gspec shi_sero（marker-set 库）优先；旧部署的
-    # shigella_serotype.json 仅作为兼容回退（v1.4.24 ShigaTyper 遗留）。
-    shigella_serotype = _shigella_gspec or (
-        read_json(shigella_path, {}) if shigella_path else {}
-    )
+    # 志贺菌血清型：gspec shi_sero（marker-set 库）判定。
+    shigella_serotype = _shigella_gspec or {}
     if not isinstance(shigella_serotype, dict):
         shigella_serotype = {}
     _shi_status = str(shigella_serotype.get("status", "N/A"))
@@ -188,8 +184,6 @@ if _dec_applicable:
             summary["steps"]["dec"]["shigella_ipab"] = (
                 "ipaB" if "ipaB" in _shi_genes else ""
             )
-    elif shigella_path is not None:
-        summary["steps"]["dec"]["shigella_ipab"] = shigella_serotype.get("ipaB", "")
 
     ecoh_serotype_val = dec_serotype.get("serotype", "-:-")
     shigella_serotype_val = str(shigella_serotype.get("serotype") or "Undetermined")
@@ -199,8 +193,7 @@ if _dec_applicable:
     if shigella_ran and shigella_serotype_val not in _shigella_fallback:
         primary_serotype = shigella_serotype_val
         serotype_method = str(
-            shigella_serotype.get("method")
-            or ("gspec shi_sero" if _shigella_gspec is not None else "shigatyper")
+            shigella_serotype.get("method") or "gspec shi_sero"
         )
     elif ecoh_serotype_val != "-:-":
         primary_serotype = ecoh_serotype_val

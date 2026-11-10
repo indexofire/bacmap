@@ -23,7 +23,7 @@ def _sample_code(sample):
 
 
 def _serotype_engine(sample):
-    """样本物种 → 血清型引擎（sistr/ecoh/shigatyper…）；无声明 → ""。"""
+    """样本物种 → 血清型引擎（sistr/ecoh…）；志贺菌走 gspec shi_sero；无声明 → ""。"""
     return _routing_engine(SAMPLES_DF.loc[sample, "species"])
 
 
