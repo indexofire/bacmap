@@ -18,6 +18,7 @@ def _report_inputs(wc):
         SAMPLES_DF.loc[wc.sample, "species"],
         str(WORKDIR),
         has_qc=wc.sample in READS_SAMPLES,
+        has_reads=wc.sample in READS_SAMPLES,
         selection=TOOL_SELECTION,
     )
 

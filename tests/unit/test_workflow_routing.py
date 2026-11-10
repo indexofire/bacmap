@@ -39,6 +39,11 @@ class TestAssemblyEntryGating:
         files = report_inputs("S1", "SAL", "/w")
         assert files["qc_json"] == "/w/S1/qc/S1_fastp.json"
 
+    def test_fasta_sample_drops_read_level_shigella(self):
+        files = report_inputs("S1", "Shigella", "/w", has_qc=False, has_reads=False)
+        assert "qc_json" not in files
+        assert "shigella_serotype" not in files
+
 
 class TestSerotypeEngine:
     def test_engines(self):

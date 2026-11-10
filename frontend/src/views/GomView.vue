@@ -1,24 +1,34 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { onMounted, ref, watch } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { api } from '../api'
 import type { GomObject } from '../types'
 import { fmtTime, shortId } from '../lib/format'
 
+const router = useRouter()
 const objects = ref<GomObject[]>([])
+const allTypes = ref<string[]>([])
 const type = ref('')
 const loading = ref(true)
 const error = ref('')
 
-const types = computed(() => Array.from(new Set(objects.value.map((o) => o.object_type))).sort())
+function goRow(event: Event, path: string) {
+  const target = event.target
+  if (target instanceof Element && target.closest('a,button')) return
+  void router.push(path)
+}
 
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    objects.value = await api.listGom(type.value.trim() || undefined, 200)
+    const items = await api.listGom(type.value.trim() || undefined, 200)
+    objects.value = items
+    if (!type.value.trim()) {
+      allTypes.value = Array.from(new Set(items.map((o) => o.object_type))).sort()
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载 GOM 对象失败'
   } finally {
@@ -51,7 +61,7 @@ watch(type, () => void load())
       <div class="filters">
         <select v-model="type" class="select" style="width: 180px; height: 30px; padding: 0 30px 0 10px; font-size: 12px">
           <option value="">全部类型</option>
-          <option v-for="item in types" :key="item" :value="item">{{ item }}</option>
+          <option v-for="item in allTypes" :key="item" :value="item">{{ item }}</option>
         </select>
         <span class="filter-spacer" />
         <span class="card__hint">{{ objects.length }} 条</span>
@@ -72,7 +82,12 @@ watch(type, () => void load())
             </tr>
           </thead>
           <tbody>
-            <tr v-for="obj in objects" :key="`${obj.object_id}-${obj.version}`" class="row-click">
+            <tr
+              v-for="obj in objects"
+              :key="`${obj.object_id}-${obj.version}`"
+              class="row-click"
+              @click="goRow($event, `/gom/${obj.object_id}?version=${obj.version}`)"
+            >
               <td data-label="object_id">
                 <RouterLink class="link-cell" :to="`/gom/${obj.object_id}?version=${obj.version}`">
                   {{ shortId(obj.object_id, 18) }}

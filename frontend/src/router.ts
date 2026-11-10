@@ -1,3 +1,4 @@
+import { nextTick } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 
 const router = createRouter({
@@ -118,6 +119,9 @@ const router = createRouter({
 router.afterEach((to) => {
   const title = (to.meta.title as string | undefined) ?? '控制台'
   document.title = `${title} · bacmap`
+  void nextTick(() => {
+    document.getElementById('main')?.focus({ preventScroll: true })
+  })
 })
 
 export default router

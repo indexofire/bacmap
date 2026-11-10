@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Icon from './Icon.vue'
 import ToastHost from './ToastHost.vue'
 import { api } from '../api'
+import { useTheme } from '../composables/useTheme'
 
 const route = useRoute()
 const router = useRouter()
+const { resolved: resolvedTheme, toggle: toggleTheme } = useTheme()
 const menuOpen = ref(false)
 const version = ref('0.2.0')
 const search = ref('')
+const pendingApprovals = ref(0)
+let pendingTimer: ReturnType<typeof setInterval> | undefined
 
 const title = computed(() => (route.meta.title as string | undefined) ?? '控制台')
 
@@ -55,7 +59,22 @@ onMounted(async () => {
   } catch {
     // 版本号是装饰信息，失败不打断控制台。
   }
+  void loadPending()
+  pendingTimer = setInterval(() => void loadPending(), 60_000)
 })
+
+onBeforeUnmount(() => {
+  if (pendingTimer) clearInterval(pendingTimer)
+})
+
+async function loadPending() {
+  try {
+    const stats = await api.stats()
+    pendingApprovals.value = stats.tasks.by_state.awaiting_approval ?? 0
+  } catch {
+    // 统计接口不可用时保持上次计数，不打断导航。
+  }
+}
 
 function submitSearch() {
   const q = search.value.trim()
@@ -86,6 +105,13 @@ function submitSearch() {
           >
             <Icon :name="item.icon" />
             <span>{{ item.label }}</span>
+            <span
+              v-if="item.to === '/tasks' && pendingApprovals"
+              class="nav-link__count nav-link__count--alert"
+              :title="`${pendingApprovals} 个任务等待审批`"
+            >
+              {{ pendingApprovals }}
+            </span>
           </RouterLink>
         </div>
       </nav>
@@ -127,9 +153,29 @@ function submitSearch() {
             aria-label="全局搜索"
           />
         </form>
+
+        <RouterLink
+          to="/search"
+          class="icon-btn topbar__search-mobile"
+          aria-label="搜索样本"
+          title="搜索样本"
+        >
+          <Icon name="search" />
+        </RouterLink>
+
+        <button
+          class="icon-btn topbar__theme"
+          type="button"
+          :aria-label="resolvedTheme === 'dark' ? '切换到浅色主题' : '切换到深色主题'"
+          :title="resolvedTheme === 'dark' ? '切换到浅色主题' : '切换到深色主题'"
+          :aria-pressed="resolvedTheme === 'light'"
+          @click="toggleTheme"
+        >
+          <Icon :name="resolvedTheme === 'dark' ? 'sun' : 'moon'" />
+        </button>
       </header>
 
-      <main id="main" class="content">
+      <main id="main" class="content" tabindex="-1">
         <RouterView />
       </main>
     </div>

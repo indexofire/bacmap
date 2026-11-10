@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import CopyButton from '../components/CopyButton.vue'
 import Icon from '../components/Icon.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { api } from '../api'
-import type { TaskEvent, TaskRow } from '../types'
+import type { RunRow, TaskEvent, TaskRow } from '../types'
 import { fmtTime, jsonText, shortId } from '../lib/format'
 import { usePolling } from '../composables/usePolling'
 import { useToast } from '../composables/useToast'
@@ -15,11 +16,12 @@ const id = String(route.params.id)
 
 const task = ref<TaskRow | null>(null)
 const events = ref<TaskEvent[]>([])
+const run = ref<RunRow | null>(null)
 const loading = ref(true)
 const error = ref('')
 
 const approver = ref('')
-const decision = ref<'approve' | 'reject'>('approve')
+const decision = ref<'' | 'approve' | 'reject'>('')
 const signature = ref('')
 const comment = ref('')
 const submitting = ref(false)
@@ -28,11 +30,121 @@ const actionError = ref('')
 const terminal = ['succeeded', 'failed', 'cancelled']
 const active = computed(() => !!task.value && !terminal.includes(task.value.state))
 
+const stateLabels: Record<string, string> = {
+  pending: '排队中',
+  running: '运行中',
+  awaiting_approval: '待审批',
+  succeeded: '已完成',
+  failed: '已失败',
+  cancelled: '已取消',
+}
+
+const verdictLabels: Record<string, string> = {
+  pass: '通过',
+  reject: '拒绝',
+  needs_human_review: '待定',
+  approve: '通过',
+  approved: '通过',
+}
+
+const gateLabels: Record<string, string> = {
+  analysis_claims: '分析结论门',
+  baseline_release: '基线发布门',
+  mining: '挖掘门',
+  citation: '引用门',
+}
+
+interface GateContext {
+  raw: string
+  gate: string
+  verdict: string
+  problems: string[]
+  nArtifacts: number | null
+  evaluatedAt: string
+}
+
+interface PlanRef {
+  id: string
+  version: number
+}
+
 const eventLabels: Record<string, string> = {
   'task.submitted': '任务已提交',
   'task.step': '步骤变更',
   'task.state': '状态变更',
   'task.approval': '审批签名',
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function parseGateMessage(message: string | null | undefined): GateContext | null {
+  const raw = message?.trim()
+  if (!raw) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return null
+  }
+  if (!isRecord(parsed)) return null
+  let candidate: Record<string, unknown> | null = null
+  if (typeof parsed.gate === 'string') {
+    candidate = parsed
+  } else if (isRecord(parsed.gates)) {
+    for (const value of Object.values(parsed.gates)) {
+      if (isRecord(value) && typeof value.gate === 'string') {
+        candidate = value
+        break
+      }
+    }
+  }
+  if (!candidate) return null
+  const details = isRecord(candidate.details) ? candidate.details : {}
+  const rawProblems = details.problems
+  const problems = Array.isArray(rawProblems)
+    ? rawProblems.map((problem) => (typeof problem === 'string' ? problem : jsonText(problem)))
+    : []
+  const nArtifacts = typeof details.n_artifacts === 'number' ? details.n_artifacts : null
+  return {
+    raw,
+    gate: String(candidate.gate),
+    verdict: typeof candidate.verdict === 'string' ? candidate.verdict : '',
+    problems,
+    nArtifacts,
+    evaluatedAt: typeof candidate.evaluated_at === 'string' ? candidate.evaluated_at : '',
+  }
+}
+
+function gateLabel(gate: string): string {
+  return gateLabels[gate] ?? (gate || '—')
+}
+
+function verdictLabel(verdict: string): string {
+  return verdictLabels[verdict] ?? (verdict || '—')
+}
+
+function stateLabel(state: string): string {
+  return stateLabels[state] ?? state
+}
+
+function verdictTone(verdict: string): string {
+  if (verdict === 'pass' || verdict === 'approve') return 'succeeded'
+  if (verdict === 'reject') return 'failed'
+  return 'awaiting_approval'
+}
+
+function describeGate(context: GateContext): string {
+  const problems = context.problems.length ? `（${context.problems.join('、')}）` : ''
+  return `${gateLabel(context.gate)}：${verdictLabel(context.verdict)}${problems}`
+}
+
+function humanDetail(value: string): string {
+  if (!value || value === '{}' || value === '[]') return '—'
+  const gate = parseGateMessage(value)
+  if (gate) return describeGate(gate)
+  return stateLabels[value] ?? verdictLabels[value] ?? value
 }
 
 function eventTone(type: string, payload: Record<string, unknown> | null | undefined): string {
@@ -48,10 +160,46 @@ function eventTone(type: string, payload: Record<string, unknown> | null | undef
 }
 
 function eventDetail(event: TaskEvent): string {
-  const payload = event.payload ?? {}
-  const detail = payload.detail ?? payload.message ?? payload.step ?? payload.state ?? payload.decision
-  if (detail !== undefined) return String(detail)
+  const payload = event.payload
+  if (!payload || Object.keys(payload).length === 0) return '—'
+  const state = typeof payload.state === 'string' ? payload.state : ''
+  if (state) {
+    const message = typeof payload.message === 'string' ? payload.message.trim() : ''
+    const gate = parseGateMessage(message)
+    const suffix = gate ? describeGate(gate) : message ? humanDetail(message) : ''
+    return suffix ? `${stateLabel(state)} · ${suffix}` : stateLabel(state)
+  }
+  const step = typeof payload.step === 'string' ? payload.step.trim() : ''
+  if (step) return `步骤：${step}`
+  const decision = typeof payload.decision === 'string' ? payload.decision : ''
+  if (decision) return `决定：${verdictLabel(decision)}`
+  const detail = typeof payload.detail === 'string' ? payload.detail.trim() : ''
+  if (detail) return humanDetail(detail)
+  const message = typeof payload.message === 'string' ? payload.message.trim() : ''
+  if (message) return humanDetail(message)
+  const taskType = typeof payload.task_type === 'string' ? payload.task_type : ''
+  if (taskType) return `类型：${taskType}`
   return jsonText(payload)
+}
+
+const gateContext = computed(() => parseGateMessage(task.value?.message))
+const messageText = computed(() => {
+  const message = task.value?.message?.trim() ?? ''
+  if (!message || message === '{}' || message === '[]' || message === 'null') return ''
+  return message
+})
+const planRef = computed<PlanRef | null>(() => {
+  const match = task.value?.submitted_by.match(/plan\s+([0-9a-f]{16})@v(\d+)/i)
+  return match ? { id: match[1], version: Number(match[2]) } : null
+})
+
+async function loadRun(taskId: string) {
+  try {
+    const runs = await api.listRuns(100)
+    run.value = runs.find((row) => row.task_id === taskId) ?? null
+  } catch {
+    run.value = null
+  }
 }
 
 async function load(silent = false) {
@@ -63,6 +211,11 @@ async function load(silent = false) {
     ])
     task.value = taskData
     events.value = eventData.events.slice().reverse()
+    if (terminal.includes(taskData.state)) {
+      await loadRun(taskData.task_id)
+    } else {
+      run.value = null
+    }
     error.value = ''
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载任务失败'
@@ -79,7 +232,12 @@ async function approve() {
     actionError.value = '审批人和签名不能为空'
     return
   }
-  if (decision.value === 'reject' && !window.confirm('拒绝会终止该任务，结果不会发布。确定拒绝？')) {
+  const choice = decision.value
+  if (!choice) {
+    actionError.value = '请选择审批决定'
+    return
+  }
+  if (choice === 'reject' && !window.confirm('拒绝会终止该任务，结果不会发布。确定拒绝？')) {
     return
   }
   submitting.value = true
@@ -87,11 +245,11 @@ async function approve() {
   try {
     task.value = await api.approveTask(id, {
       approver: approver.value.trim(),
-      decision: decision.value,
+      decision: choice,
       signature: signature.value,
       comment: comment.value.trim() || undefined,
     })
-    toast.ok(decision.value === 'approve' ? '审批通过，任务继续执行' : '已拒绝该任务')
+    toast.ok(choice === 'approve' ? '审批通过，任务继续执行' : '已拒绝该任务')
     await load(true)
   } catch (err) {
     actionError.value = err instanceof Error ? err.message : '审批失败'
@@ -129,10 +287,25 @@ onMounted(() => void load())
             返回任务
           </RouterLink>
         </div>
-        <h1 class="pagehead__title">任务详情</h1>
+        <h1 class="pagehead__title">
+          <span class="inline-actions" style="gap: 10px">
+            <span class="mono" :title="task?.task_id ?? ''">
+              {{ task ? shortId(task.task_id, 20) : '任务详情' }}
+            </span>
+            <CopyButton v-if="task" :value="task.task_id" label="任务 ID" />
+          </span>
+        </h1>
         <p class="pagehead__sub">状态、审批门与领域事件时间线。</p>
       </div>
       <div class="pagehead__actions">
+        <RouterLink
+          v-if="planRef"
+          :to="`/plans/${planRef.id}?version=${planRef.version}`"
+          class="btn btn--ghost"
+        >
+          <Icon name="plans" />
+          查看计划
+        </RouterLink>
         <button class="btn btn--ghost" type="button" :disabled="loading" @click="load()">
           <Icon name="refresh" />
           刷新
@@ -176,10 +349,6 @@ onMounted(() => void load())
                   <dd>{{ task.current_step || '—' }}</dd>
                 </div>
                 <div class="statuslist__row">
-                  <dt>消息</dt>
-                  <dd>{{ task.message || '—' }}</dd>
-                </div>
-                <div class="statuslist__row">
                   <dt>创建时间</dt>
                   <dd class="mono">{{ fmtTime(task.created_at) }}</dd>
                 </div>
@@ -188,6 +357,64 @@ onMounted(() => void load())
                   <dd class="mono">{{ fmtTime(task.updated_at) }}</dd>
                 </div>
               </dl>
+
+              <div class="divider" style="margin: 16px 0" />
+
+              <div class="inline-actions" style="justify-content: space-between; margin-bottom: 6px">
+                <h3 class="card__title" style="font-size: 13px">
+                  {{ gateContext ? '审批上下文' : '消息' }}
+                </h3>
+                <span
+                  v-if="gateContext"
+                  class="badge"
+                  :class="`badge--${verdictTone(gateContext.verdict)}`"
+                >
+                  <span class="badge__dot" aria-hidden="true" />
+                  {{ verdictLabel(gateContext.verdict) }}
+                </span>
+              </div>
+
+              <dl v-if="gateContext" class="statuslist">
+                <div class="statuslist__row">
+                  <dt>门</dt>
+                  <dd>
+                    {{ gateLabel(gateContext.gate) }}
+                    <code>{{ gateContext.gate }}</code>
+                  </dd>
+                </div>
+                <div class="statuslist__row">
+                  <dt>判定</dt>
+                  <dd>
+                    {{ verdictLabel(gateContext.verdict) }}
+                    <span class="muted">（{{ gateContext.verdict || '—' }}）</span>
+                  </dd>
+                </div>
+                <div class="statuslist__row">
+                  <dt>问题</dt>
+                  <dd>
+                    <ul v-if="gateContext.problems.length" style="margin: 0; padding-left: 18px">
+                      <li v-for="(problem, index) in gateContext.problems" :key="index">
+                        <code>{{ problem }}</code>
+                      </li>
+                    </ul>
+                    <span v-else>—</span>
+                  </dd>
+                </div>
+                <div v-if="gateContext.nArtifacts !== null" class="statuslist__row">
+                  <dt>产物数量</dt>
+                  <dd class="mono">{{ gateContext.nArtifacts }}</dd>
+                </div>
+                <div v-if="gateContext.evaluatedAt" class="statuslist__row">
+                  <dt>评估时间</dt>
+                  <dd class="mono">{{ fmtTime(gateContext.evaluatedAt) }}</dd>
+                </div>
+              </dl>
+              <details v-if="gateContext" style="margin-top: 10px">
+                <summary class="card__hint" style="cursor: pointer">原始消息（JSON）</summary>
+                <pre class="code-block" style="margin-top: 8px; max-height: 180px">{{ gateContext.raw }}</pre>
+              </details>
+              <pre v-else-if="messageText" class="code-block" style="max-height: 180px">{{ messageText }}</pre>
+              <p v-else class="muted">—</p>
             </div>
           </section>
 
@@ -221,28 +448,6 @@ onMounted(() => void load())
         </div>
 
         <div class="stack">
-          <section class="card card--pad">
-            <h2 class="card__title" style="margin-bottom: 14px">任务信息</h2>
-            <div class="meta-grid">
-              <div class="meta-item">
-                <dt>任务 ID</dt>
-                <dd class="mono">{{ shortId(task.task_id, 20) }}</dd>
-              </div>
-              <div class="meta-item">
-                <dt>类型</dt>
-                <dd><code>{{ task.task_type }}</code></dd>
-              </div>
-              <div class="meta-item">
-                <dt>提交人</dt>
-                <dd>{{ task.submitted_by }}</dd>
-              </div>
-              <div class="meta-item">
-                <dt>状态</dt>
-                <dd><StatusBadge :state="task.state" /></dd>
-              </div>
-            </div>
-          </section>
-
           <section v-if="task.state === 'awaiting_approval'" class="card card--pad" style="border-top: 2px solid var(--st-await-dot)">
             <h2 class="card__title">审批签名</h2>
             <p class="card__hint" style="margin: 4px 0 16px">
@@ -255,9 +460,10 @@ onMounted(() => void load())
               </div>
               <div class="field">
                 <label class="field__label" for="decision">决定</label>
-                <select id="decision" v-model="decision" class="select">
-                  <option value="approve">approve · 通过并发布</option>
-                  <option value="reject">reject · 拒绝</option>
+                <select id="decision" v-model="decision" class="select" required>
+                  <option value="" disabled>请选择决定</option>
+                  <option value="approve">通过并发布</option>
+                  <option value="reject">拒绝</option>
                 </select>
               </div>
               <div class="field">
@@ -305,12 +511,26 @@ onMounted(() => void load())
           <section v-else class="card card--pad">
             <h2 class="card__title">任务已结束</h2>
             <p class="card__hint" style="margin-top: 6px">
-              状态：{{ task.state }}。运行记录可在「运行记录」页查看。
+              状态：{{ stateLabel(task.state) }}。运行记录可在「运行记录」页查看。
             </p>
-            <RouterLink to="/runs" class="btn btn--ghost btn--sm" style="margin-top: 14px">
-              <Icon name="runs" />
-              查看运行记录
-            </RouterLink>
+            <div class="inline-actions" style="margin-top: 14px">
+              <RouterLink v-if="run" :to="`/runs/${run.run_id}`" class="btn btn--ghost btn--sm">
+                <Icon name="runs" />
+                查看运行记录
+              </RouterLink>
+              <RouterLink v-else to="/runs" class="btn btn--ghost btn--sm">
+                <Icon name="runs" />
+                查看运行记录
+              </RouterLink>
+              <RouterLink
+                v-if="planRef"
+                :to="`/plans/${planRef.id}?version=${planRef.version}`"
+                class="btn btn--ghost btn--sm"
+              >
+                <Icon name="plans" />
+                查看计划
+              </RouterLink>
+            </div>
           </section>
         </div>
       </div>

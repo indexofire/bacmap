@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { api } from '../api'
@@ -10,11 +10,13 @@ import type {
   ResearchPlan,
   ResearchSession,
   ResearchStudy,
+  RunRow,
 } from '../types'
 import { fmtTime, shortId } from '../lib/format'
 import { useToast } from '../composables/useToast'
 
 const toast = useToast()
+const router = useRouter()
 const tabs = [
   { key: 'sessions', label: '会话' },
   { key: 'studies', label: 'Studies' },
@@ -29,6 +31,7 @@ const studies = ref<ResearchStudy[]>([])
 const cohorts = ref<ResearchCohort[]>([])
 const plans = ref<ResearchPlan[]>([])
 const claims = ref<ResearchClaim[]>([])
+const runs = ref<RunRow[]>([])
 const loading = ref(true)
 const busy = ref(false)
 const error = ref('')
@@ -50,22 +53,30 @@ const counts = computed(() => ({
   claims: claims.value.length,
 }))
 
+function goRow(event: Event, path: string) {
+  const target = event.target
+  if (target instanceof Element && target.closest('a,button')) return
+  void router.push(path)
+}
+
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [s, st, co, pl, cl] = await Promise.all([
+    const [s, st, co, pl, cl, rn] = await Promise.all([
       api.listResearchSessions(100),
       api.listResearchStudies(100),
       api.listResearchCohorts(undefined, 100),
       api.listResearchPlans(undefined, 100),
       api.listResearchClaims(undefined, 100),
+      api.listRuns(100),
     ])
     sessions.value = s
     studies.value = st
     cohorts.value = co
     plans.value = pl
     claims.value = cl
+    runs.value = rn
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载研究数据失败'
   } finally {
@@ -148,7 +159,12 @@ onMounted(() => void load())
               <table class="table">
                 <thead><tr><th>session</th><th>run</th><th>gene × test</th><th>profile</th><th>status</th><th>created</th></tr></thead>
                 <tbody>
-                  <tr v-for="s in sessions" :key="s.session_id" class="row-click">
+                  <tr
+                    v-for="s in sessions"
+                    :key="s.session_id"
+                    class="row-click"
+                    @click="goRow($event, `/research/sessions/${s.session_id}`)"
+                  >
                     <td data-label="session">
                       <RouterLink class="link-cell" :to="`/research/sessions/${s.session_id}`">
                         {{ shortId(s.session_id) }}
@@ -171,7 +187,12 @@ onMounted(() => void load())
               <table class="table">
                 <thead><tr><th>study</th><th>question</th><th>status</th><th>D</th></tr></thead>
                 <tbody>
-                  <tr v-for="s in studies" :key="s.study_id" class="row-click">
+                  <tr
+                    v-for="s in studies"
+                    :key="s.study_id"
+                    class="row-click"
+                    @click="goRow($event, `/research/studies/${s.study_id}`)"
+                  >
                     <td data-label="study"><RouterLink class="link-cell" :to="`/research/studies/${s.study_id}`">{{ shortId(s.study_id) }}</RouterLink></td>
                     <td data-label="question">{{ s.question }}</td>
                     <td data-label="status"><code>{{ s.status }}</code></td>
@@ -244,8 +265,14 @@ onMounted(() => void load())
           </p>
           <form class="form" @submit.prevent="createSession">
             <div class="field">
-              <label class="field__label" for="r-run">run_id</label>
-              <input id="r-run" v-model="form.run_id" class="input input--mono" required autocomplete="off" />
+              <label class="field__label" for="r-run">运行记录</label>
+              <select id="r-run" v-model="form.run_id" class="select" required>
+                <option value="">请选择 run</option>
+                <option v-for="run in runs" :key="run.run_id" :value="run.run_id">
+                  {{ shortId(run.run_id, 16) }} · {{ run.strain_ids.join(', ') || '无样本' }}
+                </option>
+              </select>
+              <p v-if="!runs.length" class="field__hint">暂无可用运行记录，请先完成一次分析。</p>
             </div>
             <div class="field">
               <label class="field__label" for="r-gene">基因</label>

@@ -36,6 +36,10 @@ HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.
 | `platform` | sequencing platform (`ilm`, `ont`, `pacbio`, …); `unknown` when not provided |
 | `checksum` | SHA-256 over the input file(s); maintained by registration |
 
+Assembly-only samples have no reads: `fastp` and read-level tools such as the Shigella
+ShigaTyper are not added to the DAG; the Shigella serotype is reported as `N/A` until reads
+are supplied or gspec gains support. Reads samples keep the original ShigaTyper path.
+
 Naming recommendation for multiple libraries of one isolate:
 
 ```text

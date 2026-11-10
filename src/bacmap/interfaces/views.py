@@ -247,6 +247,7 @@ def gom_object(
         "organism": go.organism,
         "strain_id": go.strain_id,
         "pipeline_version": go.pipeline_version,
+        "payload_keys": sorted(str(k) for k in go.payload),
         "payload": go.payload,
     }
 
@@ -350,8 +351,19 @@ def search_rows(
     hits: list[dict[str, Any]] = []
     for r in rows:
         hay = " ".join(
-            [str(r.get("verdict", "")), str(r.get("serovar", "")), str(r.get("st", "")),
-             *r.get("card_genes", []), *r.get("vfdb_genes", [])]
+            [
+                str(r.get("sample_id", "")),
+                str(r.get("_sample_id", "")),
+                str(r.get("strain_id", "")),
+                str(r.get("organism", "")),
+                str(r.get("verdict", "")),
+                str(r.get("serovar", "")),
+                str(r.get("st", "")),
+                str(r.get("pathotype", "")),
+                str(r.get("ipaH", "")),
+                *r.get("card_genes", []),
+                *r.get("vfdb_genes", []),
+            ]
         ).lower()
         if terms and not all(t in hay for t in terms):
             continue

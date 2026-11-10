@@ -61,9 +61,12 @@ export interface PlanRecord {
 
 export interface RunRow {
   run_id: string
-  sample_id?: string
+  strain_ids: string[]
+  started_at: string
+  finished_at?: string | null
+  workflow?: string
+  baseline_version?: string
   task_id?: string
-  created_at?: string
   [key: string]: unknown
 }
 
@@ -202,6 +205,9 @@ export interface ResearchLedgerEntry {
   action?: string
   actor?: string
   created_at?: string
+  event?: string
+  at?: string
+  payload_json?: string
   [key: string]: unknown
 }
 

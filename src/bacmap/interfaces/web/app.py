@@ -74,7 +74,7 @@ _TEMPLATES = _Templates(directory=str(Path(__file__).parent / "templates"))
 logger = logging.getLogger(__name__)
 
 # 报告模板版本标记：旧模板生成的 HTML 在首次访问时原地重渲染。
-_REPORT_MARKER = b'name="bacmap-report" content="2"'
+_REPORT_MARKER = b'name="bacmap-report" content="4"'
 _REPORT_LOCK = threading.Lock()
 
 
@@ -185,7 +185,9 @@ def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     """样本 HTML 报告：内嵌到 SPA 样本页，旧深链重定向回面板。"""
 
     @app.get("/samples/{sample_id}/report")
-    def sample_report(sample_id: str, download: int = 0, embed: int = 0) -> Response:
+    def sample_report(
+        sample_id: str, download: int = 0, embed: int = 0, theme: str = ""
+    ) -> Response:
         if not _validate_sample_id(sample_id):
             raise HTTPException(400, "非法样本 ID")
         path = report_path(engine, sample_id)
@@ -201,15 +203,29 @@ def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
             "sandbox; default-src 'none'; style-src 'unsafe-inline'; "
             "img-src data:; frame-ancestors 'self'"
         )
+        headers = {
+            "Content-Security-Policy": csp,
+            "X-Frame-Options": "SAMEORIGIN",
+            "Content-Disposition": (
+                f'attachment; filename="{sample_id}_report.html"'
+                if download
+                else f'inline; filename="{sample_id}_report.html"'
+            ),
+        }
+        # 控制台浅色主题：按请求注入 report 的 light token，不修改磁盘产物。
+        if theme == "light":
+            html = path.read_text(encoding="utf-8")
+            html = html.replace(
+                '<html lang="zh-CN">',
+                '<html lang="zh-CN" data-report-theme="light">',
+                1,
+            )
+            return HTMLResponse(html, headers=headers)
         return FileResponse(
             path,
             media_type="text/html",
-            filename=f"{sample_id}_report.html",
             content_disposition_type="attachment" if download else "inline",
-            headers={
-                "Content-Security-Policy": csp,
-                "X-Frame-Options": "SAMEORIGIN",
-            },
+            headers=headers,
         )
 
 

@@ -350,6 +350,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
 
     # gside 版 summary 用 "species" 键（_extract_species 双键兼容旧 fixtures 的 verdict）。
     verdict = _extract_species(summary) or "N/A"
+    species_display = verdict.replace("_", " ") if verdict else "N/A"
     species_confirmed = bool(verdict) and verdict != "N/A" and not verdict.startswith("not_")
 
     mlst_info = parse_mlst(steps.get("mlst", ""))
@@ -417,7 +418,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="bacmap-report" content="2">
+<meta name="bacmap-report" content="4">
 <title>{sample_id} · 分析报告 · bacmap</title>
 <style>
   :root {{
@@ -432,6 +433,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     --link: #828fff;
     --border: rgba(255, 255, 255, 0.08);
     --border-subtle: rgba(255, 255, 255, 0.05);
+    --code-bg: rgba(0, 0, 0, 0.24);
     --ok: #5ad191;
     --fail: #ff8589;
     --warn: #eccf7a;
@@ -440,8 +442,26 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas,
       "Noto Sans Mono CJK SC", monospace;
   }}
+  :root[data-report-theme="light"] {{
+    --bg: #f9fafb;
+    --panel: #f2f4f7;
+    --surface: #ffffff;
+    --text-1: #101828;
+    --text-2: #344054;
+    --text-3: #475467;
+    --text-4: #667085;
+    --accent: #5e6ad2;
+    --link: #4655c4;
+    --border: #e4e7ec;
+    --border-subtle: #eef0f3;
+    --code-bg: #f2f4f7;
+    --ok: #027a48;
+    --fail: #b42318;
+    --warn: #b54708;
+  }}
   * {{ box-sizing: border-box; }}
   html {{ color-scheme: dark; }}
+  html[data-report-theme="light"] {{ color-scheme: light; }}
   body {{
     margin: 0;
     min-height: 100dvh;
@@ -454,12 +474,15 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     line-height: 1.7;
     -webkit-font-smoothing: antialiased;
   }}
+  html[data-report-theme="light"] body {{
+    background-image: radial-gradient(60% 240px at 50% 0, rgba(94, 106, 210, 0.06), transparent 70%);
+  }}
   a {{ color: var(--link); text-decoration: none; }}
   a:hover {{ text-decoration: underline; text-underline-offset: 3px; }}
   code, pre {{
     font-family: var(--font-mono);
     font-size: 12px;
-    background: rgba(0, 0, 0, 0.24);
+    background: var(--code-bg);
     border: 1px solid var(--border-subtle);
     border-radius: 6px;
   }}
@@ -547,7 +570,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     <h1>{sample_id}</h1>
     <div class="meta">
       生成时间 <span class="mono">{datetime.now().strftime("%Y-%m-%d %H:%M")}</span>
-      · 物种 <span class="mono">{verdict}</span>
+      · 物种 <span class="mono">{species_display}</span>
       · MLST <span class="mono">{st}</span>
     </div>
     <span class="badge {status_class}">Verifier: {status_label}</span>
@@ -558,7 +581,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     <h2>基本信息</h2>
     <table>
       {_row("样本编号", sample_id)}
-      {_row("物种判定", verdict, species_confirmed)}
+      {_row("物种判定", species_display, species_confirmed)}
       {_row("MLST ST", st)}
       {_row("MLST Alleles", allele_str)}
       {_row("血清型", serovar)}

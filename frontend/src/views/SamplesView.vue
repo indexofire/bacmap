@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { api } from '../api'
 import type { SampleRow } from '../types'
 
+const router = useRouter()
 const rows = ref<SampleRow[]>([])
 const nextCursor = ref<string | null>(null)
 const loading = ref(true)
@@ -23,6 +24,12 @@ const filtered = computed(() => {
       .includes(q),
   )
 })
+
+function goRow(event: Event, path: string) {
+  const target = event.target
+  if (target instanceof Element && target.closest('a,button')) return
+  void router.push(path)
+}
 
 async function load() {
   loading.value = true
@@ -53,6 +60,14 @@ async function loadMore() {
 }
 
 onMounted(() => void load())
+
+function displaySpecies(value: string): string {
+  return String(value ?? '').replaceAll('_', ' ') || '—'
+}
+
+function displayOrDash(value: string): string {
+  return !value || value === 'N/A' ? '—' : value
+}
 </script>
 
 <template>
@@ -98,15 +113,20 @@ onMounted(() => void load())
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in filtered" :key="row.sample_id" class="row-click">
+            <tr
+              v-for="row in filtered"
+              :key="row.sample_id"
+              class="row-click"
+              @click="goRow($event, `/samples/${row.sample_id}`)"
+            >
               <td data-label="样本">
                 <RouterLink class="link-cell" :to="`/samples/${row.sample_id}`">
                   {{ row.sample_id }}
                 </RouterLink>
               </td>
-              <td data-label="物种">{{ row.verdict }}</td>
-              <td data-label="MLST"><span class="mono">{{ row.st }}</span></td>
-              <td data-label="血清型">{{ row.serovar }}</td>
+              <td data-label="物种"><i>{{ displaySpecies(row.verdict) }}</i></td>
+              <td data-label="MLST"><span class="mono">{{ displayOrDash(row.st) }}</span></td>
+              <td data-label="血清型">{{ displayOrDash(row.serovar) }}</td>
               <td data-label="CARD"><span class="mono">{{ row.n_card }}</span></td>
               <td data-label="VFDB"><span class="mono">{{ row.n_vfdb }}</span></td>
               <td data-label="质粒"><span class="mono">{{ row.n_plasmid }}</span></td>

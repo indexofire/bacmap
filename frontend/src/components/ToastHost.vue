@@ -18,7 +18,13 @@ const toast = useToast()
         :name="item.kind === 'ok' ? 'check-circle' : item.kind === 'err' ? 'x-circle' : 'alert-circle'"
       />
       <span>{{ item.message }}</span>
-      <button class="icon-btn" style="width: 22px; height: 22px; margin-left: auto" @click="toast.dismiss(item.id)">
+      <button
+        class="icon-btn toast__close"
+        type="button"
+        aria-label="关闭通知"
+        title="关闭通知"
+        @click="toast.dismiss(item.id)"
+      >
         <Icon name="x" :size="12" />
       </button>
     </div>

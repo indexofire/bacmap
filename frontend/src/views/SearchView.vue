@@ -45,6 +45,25 @@ async function runSearch() {
 onMounted(() => {
   if (query.value || serotype.value || mlst.value || gene.value) void runSearch()
 })
+
+function displaySpecies(value: string): string {
+  return String(value ?? '').replaceAll('_', ' ') || '—'
+}
+
+function displayOrDash(value: string): string {
+  return !value || value === 'N/A' ? '—' : value
+}
+
+function reset() {
+  query.value = ''
+  serotype.value = ''
+  mlst.value = ''
+  gene.value = ''
+  results.value = []
+  searched.value = false
+  error.value = ''
+  void router.replace({ query: {} })
+}
 </script>
 
 <template>
@@ -79,6 +98,15 @@ onMounted(() => {
           </div>
         </div>
         <div class="form__actions">
+          <button
+            v-if="searched"
+            class="btn btn--ghost"
+            type="button"
+            :disabled="loading"
+            @click="reset"
+          >
+            清空条件
+          </button>
           <button class="btn btn--primary" type="submit" :disabled="loading">
             <span v-if="loading" class="spinner" />
             <Icon v-else name="search" />
@@ -112,9 +140,9 @@ onMounted(() => {
           <tbody>
             <tr v-for="row in results" :key="row.sample_id">
               <td data-label="样本"><span class="link-cell">{{ row.sample_id }}</span></td>
-              <td data-label="物种">{{ row.verdict }}</td>
-              <td data-label="ST" class="mono">{{ row.st }}</td>
-              <td data-label="血清型">{{ row.serovar }}</td>
+              <td data-label="物种"><i>{{ displaySpecies(row.verdict) }}</i></td>
+              <td data-label="ST" class="mono">{{ displayOrDash(row.st) }}</td>
+              <td data-label="血清型">{{ displayOrDash(row.serovar) }}</td>
               <td data-label="CARD" class="mono">{{ row.n_card }}</td>
               <td data-label="VFDB" class="mono">{{ row.n_vfdb }}</td>
               <td data-label="">

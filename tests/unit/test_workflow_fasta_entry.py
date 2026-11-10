@@ -89,6 +89,21 @@ class TestFastaEntryDag:
         assert proc.returncode == 0, (proc.stderr + proc.stdout)[-800:]
         assert "snp_calling" not in proc.stdout  # 无 reads 样本：SNP 群组不激活
 
+    def test_shigella_fasta_sample_skips_read_level_shigatyper(self, wf_home: Path):
+        """SHI assembly 直入样本没有 R1/R2，不得把 ShigaTyper 放进 DAG。
+
+        回归：r1_path 曾把 samples.tsv 的空 R1 解析成 NaN（float），
+        PosixPath / float 在 DAG 构建期抛 TypeError（真实数据任务 1127a1b4…）。
+        """
+        asm_dir = wf_home / "gs" / "SHI-ASM"
+        asm_dir.mkdir(parents=True)
+        (asm_dir / "SHI-ASM.fasta").write_text(">c1\nACGTACGT\n", encoding="utf-8")
+        _write_samples(wf_home, ["SHI-ASM\tShigella\t\t\tgs/SHI-ASM/SHI-ASM.fasta"])
+        proc = _dry(wf_home, "SHI-ASM")
+        assert proc.returncode == 0, proc.stderr[-800:]
+        assert "shigella_serotype" not in proc.stdout
+        assert "report_summary" in proc.stdout
+
     def test_annotation_dag_runs_quast_bakta_eggnog(self, wf_home: Path):
         asm_dir = wf_home / "gs" / "ASM-ANN"
         asm_dir.mkdir(parents=True)

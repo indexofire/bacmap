@@ -53,12 +53,16 @@ def report_inputs(
     workdir: str,
     *,
     has_qc: bool = True,
+    has_reads: bool = True,
     selection: ToolSelection | None = None,
 ) -> dict[str, str]:
     """样本的 summary 依赖（只含适用步骤；不适用者不进入 DAG）。
 
     ``has_qc=False`` 用于 assembly 直入样本（无 reads，无 fastp 产物）：
     qc_json 不进 DAG，summary 的 qc 段由脚本侧容错为空。
+    ``has_reads=False`` 同时排除读段级工具（ShigaTyper）：assembly 直入样本
+    没有 R1/R2，若仍把 shigella_serotype.json 放进 DAG，会把 samples.tsv 的
+    空 R1 解析成 NaN/float 并在 Snakefile 的 r1_path 中触发 TypeError。
     """
     base = f"{workdir}/{sample}"
     files: dict[str, str] = {
@@ -78,7 +82,7 @@ def report_inputs(
     engine = serotype_engine(species_value)
     if engine == "sistr":
         files["sistr"] = f"{base}/typing/sistr.json"
-    if engine == "shigatyper":
+    if engine == "shigatyper" and has_reads:
         files["shigella_serotype"] = f"{base}/dec/shigella_serotype.json"
     if uses_gspec_db(species_value, "eco_dec", selection=selection, sample=sample):
         files["pathotype"] = f"{base}/dec/pathotype.json"

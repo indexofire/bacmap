@@ -11,6 +11,12 @@ dashboard); `/` redirects there. The old Jinja task console has been removed: le
 equivalents. The SPA is served as prebuilt static assets: no Node/Bun is needed at runtime
 (ADR-01); Node is only used when rebuilding the frontend.
 
+The console ships **dark and light themes**: the sun/moon button in the top bar switches
+instantly and persists the choice in `localStorage` (`bacmap-theme`). The light template uses a
+TailAdmin-like near-white canvas, white cards, fine borders and soft shadows; charts switch
+palette with the theme. Sample HTML reports also render in light mode (`?theme=light`), and the
+report tab follows the console theme.
+
 ```bash
 bacmap start web                            # 127.0.0.1:8800 by default
 bacmap start web --host 127.0.0.1 --port 8800
@@ -38,7 +44,7 @@ Console routes:
 | `/console/overview` | system overview (versions, paths, policy, sandbox) |
 | `/console/search` | sample search by keyword/serotype/ST/gene |
 | `/research` | advanced research tooling (phylogenetics, logistic, object writes; Jinja) |
-| `/samples/{id}/report` | report HTML source (`?embed=1` for the inline frame); direct visits 307 to `/console/samples/{id}?tab=report`, `?download=1` for attachment |
+| `/samples/{id}/report` | report HTML source (`?embed=1` for the inline frame); direct visits 307 to `/console/samples/{id}?tab=report`, `?download=1` for attachment, `?theme=light` for the light report |
 | `/api/v1/*` | JSON API (see [HTTP API reference](../reference/api.md)) |
 
 The sample detail page has “Overview / Full report” tabs; the report renders inside a sandboxed

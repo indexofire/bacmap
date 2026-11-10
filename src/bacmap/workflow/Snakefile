@@ -74,11 +74,19 @@ if _NO_INPUT:
         "samples.tsv 输入不完整（R1/R2 或 assembly 至少其一）: " + ", ".join(_NO_INPUT)
     )
 
+def _sample_input_path(wc, column):
+    value = SAMPLES_DF.loc[wc.sample, column]
+    if value is None or str(value) == "nan" or not str(value).strip():
+        raise ValueError(
+            f"样本 {wc.sample} 在 samples.tsv 中没有 {column}；该规则只适用于 reads 样本"
+        )
+    return str(PROJECT_ROOT / value)
+
 def r1_path(wc):
-    return str(PROJECT_ROOT / SAMPLES_DF.loc[wc.sample, "R1"])
+    return _sample_input_path(wc, "R1")
 
 def r2_path(wc):
-    return str(PROJECT_ROOT / SAMPLES_DF.loc[wc.sample, "R2"])
+    return _sample_input_path(wc, "R2")
 
 def assembly_path(wc):
     return str(PROJECT_ROOT / SAMPLES_DF.loc[wc.sample, "assembly"])

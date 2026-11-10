@@ -61,6 +61,12 @@ async function load(initial = false) {
   }
 }
 
+function goRow(event: Event, path: string) {
+  const target = event.target
+  if (target instanceof Element && target.closest('a,button')) return
+  void router.push(path)
+}
+
 function openDrawer() {
   drawerOpen.value = true
   if (route.query.new) {
@@ -150,7 +156,12 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="task in filtered" :key="task.task_id" class="row-click">
+            <tr
+              v-for="task in filtered"
+              :key="task.task_id"
+              class="row-click"
+              @click="goRow($event, `/tasks/${task.task_id}`)"
+            >
               <td data-label="任务 ID">
                 <RouterLink class="link-cell" :to="`/tasks/${task.task_id}`">
                   {{ shortId(task.task_id) }}

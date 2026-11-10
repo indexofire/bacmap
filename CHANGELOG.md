@@ -5,6 +5,15 @@
 
 ## [Unreleased]
 
+### 工作流修复：assembly 直入的志贺菌不再触发 ShigaTyper
+
+- **修复 `PosixPath / float` DAG 崩溃**：`report_inputs` 新增 `has_reads` 门控，
+  只对 reads 样本请求 `shigella_serotype.json`。assembly 直入样本（如 `26OTH0027`）
+  没有 R1/R2，ShigaTyper 是读段级工具，不应进入 DAG；血清型如实显示 `N/A`。
+- `r1_path`/`r2_path` 对 samples.tsv 缺失的 R1/R2 给出带样本 ID 的明确错误，
+  不再把空值解析成 NaN 后抛 `PosixPath / float`。
+- 回归：新增 routing 单测 + 真实部署的 Snakemake dry-run（SHI assembly 样本）覆盖。
+
 ### 细菌基因组注释（QUAST → Bakta → eggNOG-mapper）
 
 - **`workflow/rules/annotation.smk` 替换占位实现**：组装后先跑 QUAST
@@ -65,6 +74,9 @@
   知识库条目、运行记录、化验结果，以及物种/血清型/MLST/AMR Top 分布。
 - 单样本 HTML 报告改为与 Web 面板一致的暗色主题（token、卡片、状态徽章、等宽读数），
   移除 emoji 标题；打印时切换为浅色。
+- 新增 **浅色主题模板**（TailAdmin 风格：浅灰画布、白卡片、细边框、柔和阴影），
+  顶栏太阳/月亮按钮切换，`localStorage` 持久化；图表与 HTML 报告随主题同步
+  （报告支持 `?theme=light`）。
 - 报告内嵌到样本详情的“完整报告”页签（沙箱 iframe），不再单独打开页面；直接访问
   `/samples/{id}/report` 会 307 回 `/console/samples/{id}?tab=report`，`?download=1`
   仍为附件。旧模板报告（无 `bacmap-report` 版本标记）首次访问时自动重渲染为暗色主题。
@@ -74,7 +86,7 @@
 - 依赖升级：`gside ==0.2.3`、`gspec ==0.10.2`、`gseek ==0.10.5`、`gmlst ==0.6.1`，
   新增 `gmeta ==0.1.0`（mNGS 可选依赖）。
 - 新增 `GET /api/v1/stats`；测试基线 2016 → 1995（-21：删除旧 HTML 页面/表单测试，
-  API 覆盖保留），报告内嵌/自动升级另增 3 个测试（共 1998）。
+  API 覆盖保留），报告内嵌/主题/检索/DAG 回归另增 7 个测试（共 2002）。
 
 ## [0.1.5] - 2026-11-09
 

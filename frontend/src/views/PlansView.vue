@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import PlanBadge from '../components/PlanBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -8,6 +8,7 @@ import { api } from '../api'
 import type { PlanRecord } from '../types'
 import { fmtRelative, fmtTime, shortId } from '../lib/format'
 
+const router = useRouter()
 const plans = ref<PlanRecord[]>([])
 const loading = ref(true)
 const refreshing = ref(false)
@@ -16,6 +17,12 @@ const error = ref('')
 const sorted = computed(() =>
   plans.value.slice().sort((a, b) => (a.created_at < b.created_at ? 1 : -1)),
 )
+
+function goRow(event: Event, path: string) {
+  const target = event.target
+  if (target instanceof Element && target.closest('a,button')) return
+  void router.push(path)
+}
 
 async function load(initial = false) {
   if (initial) loading.value = true
@@ -75,7 +82,12 @@ onMounted(() => void load(true))
             </tr>
           </thead>
           <tbody>
-            <tr v-for="plan in sorted" :key="`${plan.plan_id}-${plan.version}`" class="row-click">
+            <tr
+              v-for="plan in sorted"
+              :key="`${plan.plan_id}-${plan.version}`"
+              class="row-click"
+              @click="goRow($event, `/plans/${plan.plan_id}?version=${plan.version}`)"
+            >
               <td data-label="计划 ID">
                 <RouterLink class="link-cell" :to="`/plans/${plan.plan_id}?version=${plan.version}`">
                   {{ shortId(plan.plan_id) }}

@@ -117,6 +117,11 @@ class TestTasks:
         hits = c.get("/api/v1/search?q=Salmonella").json()["items"]
         assert {row["sample_id"] for row in hits} == {"S1", "S2", "S3"}
 
+    def test_search_by_sample_id(self, env):
+        _, c, _ = env
+        hits = c.get("/api/v1/search?q=S1").json()["items"]
+        assert {row["sample_id"] for row in hits} == {"S1"}
+
     def test_record_submit(self, env):
         _, c, _ = env
         r = c.post(

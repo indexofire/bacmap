@@ -124,6 +124,7 @@ class TestRunApi:
         assert objs and objs[0]["strain_id"] == "S1"
         got = c.get(f"/api/v1/gom/objects/{objs[0]['object_id']}?version={objs[0]['version']}")
         assert got.json()["payload"]["sample"] == "S1"
+        assert got.json()["payload_keys"] == ["sample", "steps"]
         assert c.get("/api/v1/gom/objects/nope").status_code == 404
 
 

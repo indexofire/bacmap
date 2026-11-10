@@ -36,6 +36,9 @@ HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.
 | `platform` | 测序平台（`ilm`、`ont`、`pacbio` 等）；未提供时为 `unknown` |
 | `checksum` | 输入文件的 SHA-256；由登记流程维护 |
 
+assembly 直入样本没有 reads：`fastp` 与依赖 reads 的工具（如志贺菌 ShigaTyper）不会进入 DAG；
+此时志贺菌血清型显示 `N/A`，直到提供 reads 或后续由 gspec 支持。reads 样本仍按原路径运行 ShigaTyper。
+
 同一菌株实体有多个文库时的命名建议：
 
 ```text

@@ -50,7 +50,7 @@ fallback and operations surface.
   versions/seeds, and versioned GOM objects.
 - **MCP-only agent access** — 26 registry tools plus plan/task/record tools, filtered by a fixed
   `cloud` (default) or `local-trusted` data-class profile. No built-in chat (ADR-21).
-- **Interfaces** — Vue 3 console at `/console/` (dark instrument dashboard, charts, approvals),
+- **Interfaces** — Vue 3 console at `/console/` (dark/light themes, charts, approvals),
   CLI, TUI, JSON API `/api/v1`, MCP (stdio / Streamable HTTP).
 
 ## Quick start
@@ -105,7 +105,7 @@ Full bilingual site: <https://indexofire.github.io/bacmap/> (Chinese: `/zh/`).
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest (current baseline: 1998 passed)
+pixi run -e dev test        # pytest (current baseline: 2002 passed)
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter (5 contracts)
