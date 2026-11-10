@@ -74,6 +74,13 @@ The summary JSON now includes `steps.assembly_quast` (QUAST transposed report) a
 Reports are generated automatically at the end of every analysis. Re-running an analysis
 regenerates them; there is no direct MCP write tool for reports.
 
+**Cold-artifact compaction (v1.10.20)**: at the end of every analyze run, bacmap gzips the
+bulk intermediates nobody reads afterwards — Bakta exports (`embl/gbff/gff3/ffn/fna/faa`),
+the merged `annotation.json` and eggNOG tables (~85 MB per isolate measured → ~20 MB
+compressed). Hot paths stay plain: `summary.json`, `gspec/*.json`, report HTML, MLST,
+QUAST tables and `contigs.fasta`. Restore any run's raw files with
+`bacmap run expand <run_id>`; compact old runs with `bacmap run compact <run_id>`.
+
 ## 3. Run records (`runs.sqlite` + manifests)
 
 Each analyze run creates one immutable record:

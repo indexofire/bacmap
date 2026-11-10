@@ -29,9 +29,37 @@ def _emit(data: Any, as_json: bool) -> None:
     c.print(json.dumps(data, ensure_ascii=False, indent=2))
 
 
+def run_compact(args: argparse.Namespace) -> None:
+    """v1.10.20：gzip run 冷产物（幂等；报告/summary/gspec 等热路径不动）。"""
+    from bacmap.store.results_layout import compact_run_artifacts, run_results_dir
+
+    run_dir = run_results_dir(args.home, args.run_id)
+    if not run_dir.is_dir():
+        raise SystemExit(f"run directory not found: {run_dir}")
+    result = compact_run_artifacts(run_dir)
+    mb = result["bytes_saved"] / 2**20
+    print(
+        T(
+            f"compacted {result['files']} files, freed {mb:.1f} MiB "
+            f"(restore with: bacmap run expand {args.run_id})",
+            f"已压缩 {result['files']} 个文件，释放 {mb:.1f} MiB"
+            f"（恢复：bacmap run expand {args.run_id}）",
+        )
+    )
+
+
+def run_expand(args: argparse.Namespace) -> None:
+    from bacmap.store.results_layout import expand_run_artifacts, run_results_dir
+
+    run_dir = run_results_dir(args.home, args.run_id)
+    if not run_dir.is_dir():
+        raise SystemExit(f"run directory not found: {run_dir}")
+    count = expand_run_artifacts(run_dir)
+    print(T(f"restored {count} files", f"已恢复 {count} 个文件"))
+
+
 def run_ls(args: argparse.Namespace) -> None:
     from bacmap.interfaces.views import list_runs
-
     rows = list_runs(args.home, args.limit)
     if args.json:
         _emit(rows, True)
@@ -128,6 +156,33 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(ls)
     add_json(ls)
     ls.set_defaults(func=run_ls)
+
+    def _run_dir_arg(parser: Any) -> None:
+        parser.add_argument(
+            "run_id",
+            help=T("run/task id under results/runs/", "results/runs/ 下的 run/task id"),
+        )
+        add_home(parser)
+
+    compact = r.add_parser(
+        "compact",
+        help=T(
+            "gzip cold artifacts of a run (Bakta exports/annotation.json/eggNOG tables)",
+            "压缩 run 的冷产物（Bakta 导出/annotation.json/eggNOG 中间表）",
+        ),
+    )
+    _run_dir_arg(compact)
+    compact.set_defaults(func=run_compact)
+    expand = r.add_parser(
+        "expand",
+        help=T(
+            "restore files compacted by `run compact`",
+            "展开 `run compact` 压缩的文件",
+        ),
+    )
+    _run_dir_arg(expand)
+    expand.set_defaults(func=run_expand)
+
     show = r.add_parser(
         "show",
         help=T(

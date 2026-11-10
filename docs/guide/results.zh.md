@@ -71,6 +71,12 @@ summary JSON 现在包含 `steps.assembly_quast`（QUAST 转置报告）与 `ste
 
 报告会在每次分析结束时自动生成。重新运行一次分析就会重新生成它们；不存在用于报告的 MCP 直接写入工具。
 
+**冷产物压缩（v1.10.20）**：每次 analyze 结束时自动 gzip 运行后无人再读的大体量中间产物——
+Bakta 导出（`embl/gbff/gff3/ffn/fna/faa`）、合并的 `annotation.json` 与 eggNOG 中间表
+（实测单株 ~85MB → 压缩后 ~20MB）。热路径保持明文：`summary.json`、`gspec/*.json`、
+报告 HTML、MLST、QUAST 表与 `contigs.fasta`。需要原始文件时用
+`bacmap run expand <run_id>` 展开；存量旧 run 可用 `bacmap run compact <run_id>` 补压。
+
 ## 3. 运行记录（`runs.sqlite` + 清单）
 
 每次 analyze 运行都会创建一条不可变记录：

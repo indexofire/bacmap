@@ -611,6 +611,10 @@ def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
         str(home), params["samples"], run["run_id"], run_dir_s
     )
     out["cohorts_ingested"] = _step_ingest_cohorts(str(home), run["run_id"], run_dir_s)
+    # v1.10.20：冷产物压缩（Bakta 导出/annotation.json/eggNOG 中间表 ≈ 单株
+    # 80+MB → gzip ~20MB）；热路径（summary/gspec/报告/contigs）保持明文。
+    if run_dir_s is not None:
+        out["compacted"] = _step_compact(run_dir_s, params["samples"])
     if any(g["verdict"] != "pass" for g in out["gates"].values()):
         out["status"] = "AWAITING_APPROVAL"
     return out
@@ -641,6 +645,14 @@ def _generate_report_for(
 @DBOS.step()
 def _step_report(sample_id: str, results_dir_s: str | None = None) -> dict[str, Any]:
     return _generate_report_for(sample_id, results_dir_s)
+
+
+@DBOS.step()
+def _step_compact(run_dir_s: str, samples: list[str]) -> dict[str, Any]:
+    """冷产物压缩（见 store.results_layout.compact_run_artifacts）。"""
+    from bacmap.store.results_layout import compact_run_artifacts
+
+    return compact_run_artifacts(run_dir_s, samples)
 
 
 def _run_sandbox(spec: Any) -> Any:

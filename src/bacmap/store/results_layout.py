@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import gzip
 import os
 import shutil
 from collections.abc import Iterable
@@ -18,6 +19,96 @@ from pathlib import Path
 
 RUNS_DIRNAME = "runs"
 COHORT_DIRS = ("snp", "cgmlst")
+
+# ---------------------------------------------------------------------------
+# 冷产物压缩（v1.10.20）：run 结束后无人再读的大文件 → gzip；需要时展开。
+# 实测单株 ~89MB 中 ~85MB 是 Bakta 导出（embl/gbff/gff3/ffn/fna/faa）、合并
+# annotation.json 与 eggNOG 中间表——全部只被管线在运行期消费。Web/报告/GOM
+# 热路径只读 summary.json、gspec/*.json、report.html、mlst/species/quast tsv。
+# -----------------------------------------------------------------------------
+
+#: 冷目录：整个子目录 gzip（文件级，保留目录结构）
+_COLD_DIRS = ("annotation/bakta", "annotation/eggnog")
+#: 冷文件（相对样本目录）
+_COLD_FILES = ("annotation/annotation.json",)
+#: quast 中保留明文的两个小表（人类可读 + 备用核对）
+_QUAST_KEEP = {"report.tsv", "transposed_report.tsv"}
+
+
+def _gzip_file(path: Path) -> int:
+    """单文件 → path.gz（原文件删除）；返回释放字节数。已是 .gz 或缺失则 0。"""
+    if path.suffix == ".gz" or not path.is_file():
+        return 0
+    gz = path.with_suffix(path.suffix + ".gz")
+    with open(path, "rb") as src, gzip.open(gz, "wb", compresslevel=6) as dst:
+        shutil.copyfileobj(src, dst)
+    size = path.stat().st_size
+    path.unlink()
+    return size
+
+
+def _gunzip_file(path: Path) -> bool:
+    if path.suffix != ".gz" or not path.is_file():
+        return False
+    out = path.with_suffix("")
+    with gzip.open(path, "rb") as src, open(out, "wb") as dst:
+        shutil.copyfileobj(src, dst)
+    path.unlink()
+    return True
+
+
+def compact_run_artifacts(run_dir: Path | str, samples: Iterable[str] | None = None) -> dict:
+    """把 run 目录中的冷产物 gzip 压缩（幂等；返回 {files, bytes_saved, samples}）。
+
+    热路径文件不动：summary/report/gspec/typing/species/amr/contigs 与
+    quast 的 report.tsv / transposed_report.tsv。需要原始文件时用
+    :func:`expand_run_artifacts` 展开或手工 ``gunzip``。
+    """
+    run_dir = Path(run_dir)
+    names = list(samples) if samples else [p.name for p in run_dir.iterdir() if p.is_dir()]
+    files = 0
+    saved = 0
+    for sample in names:
+        base = run_dir / sample
+        if not base.is_dir():
+            continue
+        cold: list[Path] = []
+        for rel in _COLD_DIRS:
+            sub = base / rel
+            if sub.is_dir():
+                cold.extend(p for p in sub.rglob("*") if p.is_file())
+        for rel in _COLD_FILES:
+            p = base / rel
+            if p.is_file():
+                cold.append(p)
+        quast = base / "assembly" / "quast"
+        if quast.is_dir():
+            cold.extend(
+                p for p in quast.rglob("*") if p.is_file() and p.name not in _QUAST_KEEP
+            )
+        for path in cold:
+            freed = _gzip_file(path)
+            if freed:
+                files += 1
+                saved += freed
+    return {"files": files, "bytes_saved": saved, "samples": names}
+
+
+def expand_run_artifacts(run_dir: Path | str, samples: Iterable[str] | None = None) -> int:
+    """展开 compact 压缩的冷产物（幂等；返回展开文件数）。"""
+    run_dir = Path(run_dir)
+    names = list(samples) if samples else [p.name for p in run_dir.iterdir() if p.is_dir()]
+    count = 0
+    for sample in names:
+        base = run_dir / sample
+        if not base.is_dir():
+            continue
+        for rel in (*_COLD_DIRS, "annotation", "assembly"):
+            sub = base / rel
+            if sub.is_dir():
+                for p in sub.rglob("*.gz"):
+                    count += _gunzip_file(p)
+    return count
 
 
 def results_root(home: Path | str) -> Path:

@@ -5,6 +5,40 @@
 
 ## [Unreleased]
 
+### run 冷产物自动压缩
+
+- **动机**：单株 analyze 结果 ~89MB，其中 ~85MB 是 Bakta 导出（embl 14M + gbff 13M +
+  gff3/ffn/fna/faa）、合并 annotation.json（12M）与 eggNOG 中间表（6.8M）——运行期
+  消费后 Web/报告/GOM 路径不再读取。
+- **方案**：`analyze` 收尾新增 `_step_compact`：冷产物 gzip（实测 89MB → 26MB，压掉
+  ~70%）；热路径（summary.json、gspec/*.json、报告 HTML、MLST、QUAST 表、contigs）
+  保持明文。幂等。CLI：`bacmap run compact/expand <run_id>`（存量 run 补压/恢复）。
+
+### figures4papers 作图技能（部署期安装）
+
+- `scripts/install_figure_skill.py`：把 figures4papers 的 scientific-figure-making
+  技能（CC BY-NC 4.0，pin commit）装到 `$BACMAP_HOME/skills/figure-maker/`。
+  MCP 以 `skill://bacmap/figure-maker/**` 发布（SKILL.md + api/patterns/tutorials
+  参考），writer/miner 说明书指引模型按其出版级样式作图。**仓库不内嵌上游内容**
+  （许可不兼容，部署期下载；限非商业场景）。
+
+### 研究工具页纳入控制台（消除孤立页）
+
+- 旧 Jinja 研究工具（高级工作台 / 系统发育 BEAST 规格 / Logistic / Study 打包与
+  操作台）经新增 `LegacyEmbedView` 以沙箱 iframe 嵌入控制台外壳；ResearchView 的
+  三个跳出链接改为站内路由。`/research` 前缀响应放宽为 `frame-ancestors 'self'`
+  （外站仍不可嵌，与样本报告策略一致）。
+
+### 输入登记符号链接误判修复
+
+- **假碰撞根因**：`shigapass_run/26OTH0027.fasta -> ../26OTH0027.fna` 这类外部工具
+  留下的符号链接被递归扫描当成独立输入；复合校验和含文件名，同一物理文件的两个
+  名字必然"不同"→ 误报 `dataset id collision`（且 `new_path` 显示 resolve 后
+  路径，与 existing path 相同，极具迷惑性）。**修复**：① `scan_fasta_dir` 按
+  `resolve()` 去重，每个物理文件只登记一次；② `_guard_collision` 兜底——新文件
+  resolve 后与登记路径同一物理文件即幂等放行。真实数据目录复验：24 株全部
+  幂等复用、零冲突。同一基因组多次分析的既有语义（`--samples` 复用）不受影响。
+
 ### 仪表盘一行三栏布局（CONCRETE 优化）
 
 - **AMRFinderPlus 数据库升级 2026-08-07.1 → 2026-10-29.1**（NCBI 最新）：

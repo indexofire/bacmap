@@ -119,6 +119,7 @@ def _daemonize(log_path: Path, pid_path: Path) -> None:
     （uvicorn 优雅退出会触发）；SIGKILL 后残留的陈旧 PID 由启动时探测兜底。
     """
     import atexit
+    import contextlib
 
     sys.stdout.flush()
     sys.stderr.flush()
@@ -140,10 +141,8 @@ def _daemonize(log_path: Path, pid_path: Path) -> None:
     pid_path.write_text(f"{os.getpid()}\n")
 
     def _remove_pidfile() -> None:
-        try:
+        with contextlib.suppress(OSError):
             pid_path.unlink(missing_ok=True)
-        except OSError:
-            pass
 
     atexit.register(_remove_pidfile)
 
