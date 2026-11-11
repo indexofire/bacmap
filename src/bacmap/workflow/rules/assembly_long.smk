@@ -11,7 +11,7 @@
 #
 # v1.4.42 与 shovill 路径的衔接：flye/unicycler 产物落位
 # assembly/flye/contigs.fa 或 assembly/unicycler/contigs.fa，
-# 经 contigs_finalize 统一为 assembly/contigs.fasta（下游无差别消费）。
+# 经 contigs_finalize 统一为 assembly/{sample}.fasta（下游无差别消费，文件名=菌株名）。
 
 FLYE_MINLEN = config.get("tools", {}).get("flye", {}).get("minlen", 1000)
 # genome_size 可选：flye 2.9+ 自动估计；仅在用户显式配置时传入

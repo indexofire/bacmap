@@ -19,7 +19,7 @@ def _sample_databases(sample):
 
 rule gspec_typing:
     input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta",
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta",
         species = str(WORKDIR) + "/{sample}/species/species_id.json",
     output:
         result = str(WORKDIR) + "/{sample}/gspec/typing.json"

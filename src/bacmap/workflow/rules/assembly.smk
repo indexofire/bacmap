@@ -47,18 +47,18 @@ rule assembly_shovill:
 
 
 rule contigs_finalize:
-    """统一 contigs 通道：shovill 产物或提供的 FASTA 落位 assembly/contigs.fasta。"""
+    """统一 contigs 通道：shovill 产物或提供的 FASTA 落位 assembly/{sample}.fasta。"""
     input:
         src = _contigs_src
     output:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     shell:
         "mkdir -p $(dirname {output.contigs}) && cp {input.src} {output.contigs}"
 
 
 rule assembly_stats:
     input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     output:
         stats = str(WORKDIR) + "/{sample}/assembly/assembly_stats.tsv"
     shell:

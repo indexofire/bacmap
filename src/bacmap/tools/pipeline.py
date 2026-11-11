@@ -253,7 +253,9 @@ def list_samples(args: dict[str, Any], **kwargs: Any) -> str:
         for r in csv.DictReader(f, delimiter="\t"):
             sid = r["sample"]
             summary = _RESULTS_DIR / sid / "report" / f"{sid}_summary.json"
-            contigs = _RESULTS_DIR / sid / "assembly" / "contigs.fasta"
+            contigs = _RESULTS_DIR / sid / "assembly" / f"{sid}.fasta"
+            if not contigs.exists():
+                contigs = _RESULTS_DIR / sid / "assembly" / "contigs.fasta"
 
             if summary.exists():
                 status = "completed"

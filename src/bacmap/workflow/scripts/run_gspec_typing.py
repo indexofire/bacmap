@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -156,19 +157,53 @@ def _effective_databases(
 
 
 def _screen_tsv_genes(path: Path) -> list[str]:
-    """从 gene 库的 screen TSV 去重收集基因名（gspec ≥0.10 JSON 无 genes 键）。"""
+    """从 gene 库的 screen 结果去重收集基因名（gspec ≥0.10 JSON 无 genes 键）。
+
+    v1.10.21：screen 产物为 JSON（``<db>_screen.json``）；旧运行的 TSV 布局
+    自动回退。派生给 ``gspec typing`` 的临时 TSV 也走本函数。
+    """
+    from bacmap.core.utils import parse_abricate_tsv, parse_gspec_report
+
     try:
-        text = path.read_text(encoding="utf-8")
+        if path.suffix == ".json":
+            rows = parse_gspec_report(path.read_text(encoding="utf-8"))
+        else:
+            rows = parse_abricate_tsv(path.read_text(encoding="utf-8"))
     except OSError:
         return []
-    from bacmap.core.utils import parse_abricate_tsv
-
     seen: list[str] = []
-    for row in parse_abricate_tsv(text):
+    for row in rows:
         gene = str(row.get("GENE", "")).strip()
         if gene and gene not in seen:
             seen.append(gene)
     return seen
+
+
+def _derive_typing_tsv(screen_json: Path) -> Path | None:
+    """screen JSON 报告 → ``gspec typing`` 所需的表格（临时文件，调用方删）。
+
+    ``gspec typing`` 只接受 abricate 形状表（FILE/%IDENTITY/%COVERAGE…），
+    不认 ``gspec.report/1``——这里用共享解析层把 JSON 命中行写回 TSV。
+    """
+    import tempfile
+
+    from bacmap.core.utils import parse_gspec_report
+
+    try:
+        rows = parse_gspec_report(screen_json.read_text(encoding="utf-8"))
+    except OSError:
+        return None
+    header = [
+        "#FILE", "SEQUENCE", "START", "END", "STRAND", "GENE", "COVERAGE",
+        "COVERAGE_MAP", "GAPS", "%COVERAGE", "%IDENTITY", "DATABASE",
+        "ACCESSION", "PRODUCT", "RESISTANCE",
+    ]
+    fd, name = tempfile.mkstemp(suffix=".tsv", prefix=f"{screen_json.stem}_", text=True)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write("\t".join(header) + "\n")
+        for row in rows:
+            fh.write("\t".join(str(row.get(col, "")) for col in header) + "\n")
+    return Path(name)
 
 
 def _catalog(datadir: str) -> dict[str, Any]:
@@ -261,20 +296,28 @@ def _screen_and_type(
                     "error": "cluster JSON is not an object"}
         return _cluster_result(document)
 
-    screen = workdir / f"{db}_screen.tsv"
+    # v1.10.21：gene 库 screen 以 JSON 为结果产物（gspec.report/1，含工具
+    # 版本/参数 provenance，供智能体与读取层消费）；`gspec typing` 只吃表格
+    # （FILE/%IDENTITY/%COVERAGE），故从 JSON 派生 TSV 到临时文件喂给它，
+    # 用完即删——结果目录不再残留机器难读的 TSV 中间产物。
+    screen_json = workdir / f"{db}_screen.json"
     sp = subprocess.run(
-        [*common, "-o", str(screen)],
+        [*common, "--format", "json", "-o", str(screen_json)],
         capture_output=True,
         text=True,
         timeout=timeout,
     )
-    if sp.returncode != 0 or not screen.is_file():
+    if sp.returncode != 0 or not screen_json.is_file():
         code, message = _gspec_error(sp.stdout) or _gspec_error(sp.stderr) or ("", "")
         if code == "DATABASE_NOT_FOUND":
             return {"kind": "gene", "status": "unavailable",
                     "error": message or f"database {db} not installed"}
         return {"kind": "gene", "status": "failed", "stage": "screen",
                 "error": (message or sp.stderr or "")[-500:]}
+    screen = _derive_typing_tsv(screen_json)
+    if screen is None:
+        return {"kind": "gene", "status": "failed", "stage": "screen",
+                "error": f"cannot derive typing table from {screen_json.name}"}
     typing_cmd = [gspec, "typing", str(screen), "--format", "json"]
     if datadir:
         typing_cmd += ["--datadir", datadir]
@@ -284,6 +327,7 @@ def _screen_and_type(
         text=True,
         timeout=timeout,
     )
+    screen.unlink(missing_ok=True)  # 派生表格用完即删（结果目录只留 JSON）
     payload: dict[str, Any] = {}
     if tp.stdout.strip():
         try:
@@ -315,7 +359,7 @@ def _screen_and_type(
         if status == "no_scheme":
             # 库可筛查（screen 已成功）、仅无表型 scheme —— 基因命中仍然有效
             # （如 vpa_vf 的 tdh/trh/tlh 存在性判定只依赖 screen）。
-            out["genes"] = _screen_tsv_genes(screen)
+            out["genes"] = _screen_tsv_genes(screen_json)
         return out
     if tp.returncode != 0:
         return {"kind": "gene", "status": "failed", "stage": "typing",

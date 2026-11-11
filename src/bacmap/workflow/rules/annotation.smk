@@ -57,7 +57,7 @@ EGGNOG_USEMEM = "--usemem" if _EGGNOG_CFG.get("usemem", False) else ""
 rule assembly_qc_quast:
     """组装质控：QUAST 统计 contig 数、N50、GC、错配等。"""
     input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     output:
         report = str(WORKDIR) + "/{sample}/assembly/quast/report.tsv",
         transposed = str(WORKDIR) + "/{sample}/assembly/quast/transposed_report.tsv"
@@ -76,7 +76,7 @@ if _ANN_ENABLED:
     rule bakta_annotate:
         """Bakta 细菌基因组注释（需要 Bakta light/full 数据库）。"""
         input:
-            contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta",
+            contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta",
             quast = str(WORKDIR) + "/{sample}/assembly/quast/report.tsv",
         output:
             json = str(WORKDIR) + "/{sample}/annotation/bakta/{sample}.json",
@@ -144,7 +144,7 @@ else:
     rule genome_annotation:
         """注释关闭：写 disabled 占位，不伪造任何注释结果。"""
         input:
-            contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+            contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
         output:
             annotation = str(WORKDIR) + "/{sample}/annotation/annotation.json"
         run:

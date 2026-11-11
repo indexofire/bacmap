@@ -29,7 +29,7 @@ def _cgmlst_scheme(sample):
 
 rule typing_cgmlst:
     input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     output:
         str(WORKDIR) + "/{sample}/typing/cgmlst.tsv"
     params:

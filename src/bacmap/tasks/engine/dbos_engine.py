@@ -547,9 +547,50 @@ def _step_register_inputs(params: dict[str, Any]) -> dict[str, Any]:
     return register_fastqs_dir(home, Path(str(params["fastq_dir"])).expanduser(), species)
 
 
+def _task_state_cancelled(task_id: str, home_s: str) -> bool:
+    """任务行是否已进入人工终态（cancelled/failed）——纯函数，测试直调。
+
+    DBOS 在进程重启时会恢复一切非终态工作流——若任务行已标记 cancelled
+    而工作流被重放，这里返回 True 让工作流立即以 CANCELLED 收场（终态），
+    不再占用管线锁。取消语义从"只改任务行"升级为"任务行 + 工作流双终态"。
+    """
+    import sqlite3
+
+    db = Path(home_s) / "tasks.sqlite"
+    if not db.is_file() or not task_id:
+        return False
+    try:
+        with sqlite3.connect(f"file:{db}?mode=ro", uri=True) as conn:
+            row = conn.execute(
+                "SELECT state FROM tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+    except sqlite3.Error:
+        return False
+    return bool(row) and str(row[0]) in {"cancelled", "failed"}
+
+
+@DBOS.step()
+def _step_cancelled(task_id: str, home_s: str) -> bool:
+    return _task_state_cancelled(task_id, home_s)
+
+
+def _cancelled_envelope(task_id: str) -> dict[str, Any]:
+    return {
+        "status": "CANCELLED",
+        "snakemake_returncode": 0,
+        "message": f"task {task_id} cancelled; workflow replay suppressed",
+        "gates": {},
+    }
+
+
 @DBOS.workflow()
 def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
     home = Path(params["home"])
+
+    # 防唤醒守卫①：工作流入口（DBOS 重放的已取消任务在此即刻终止）。
+    task_id_guard = str(params.get("task_id") or "")
+    if task_id_guard and _step_cancelled(task_id_guard, str(home)):
+        return _cancelled_envelope(task_id_guard)
 
     if params.get("fasta_dir") or params.get("fastq_dir"):
         try:
@@ -575,6 +616,10 @@ def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
         params = {**params, "samples": reg["samples"]}
 
     rc = _step_run(params)
+    # 防唤醒守卫②：管线可能运行数小时，期间用户可能取消——结束后
+    # 再查一次，已取消则不再入库/出报告，直接终态收场。
+    if task_id_guard and _step_cancelled(task_id_guard, str(home)):
+        return _cancelled_envelope(task_id_guard)
     if rc["returncode"] != 0:
         detail = rc.get("error") or rc.get("stderr_tail") or "无 stderr 输出"
         return {

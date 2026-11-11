@@ -50,10 +50,17 @@ def _fake_run(typing_out: dict[str, str], *, screen_fail: set[str] | None = None
             db = cmd[cmd.index("--db") + 1]
             if screen_fail and db in screen_fail:
                 return _Proc(2, err=f"{db} screen failed")
-            Path(cmd[cmd.index("-o") + 1]).write_text("#FILE\tGENE\n", encoding="utf-8")
+            # v1.10.21：screen 产物为 gspec.report/1 JSON（typing 表由其派生）
+            Path(cmd[cmd.index("-o") + 1]).write_text(
+                json.dumps({"schema": "gspec.report/1", "tool": {"name": "gspec"}, "files": []}),
+                encoding="utf-8",
+            )
             return _Proc(0)
-        # typing <screen.tsv> -f json —— 库名从 screen 文件名推回
-        db = Path(cmd[2]).name.replace("_screen.tsv", "")
+        # typing <派生临时表> -f json —— 库名从临时表前缀（<db>_screen_）推回
+        import re
+
+        m = re.match(r"(.+)_screen_", Path(cmd[2]).name)
+        db = m.group(1) if m else Path(cmd[2]).stem
         default = json.dumps(
             {"schema": "gspec.error/1", "code": "TYPING_NO_SCHEME", "message": "no scheme"}
         )

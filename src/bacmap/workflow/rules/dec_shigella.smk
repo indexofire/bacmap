@@ -11,7 +11,7 @@ import sys
 
 rule dec_pathotype:
     input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     output:
         result = str(WORKDIR) + "/{sample}/dec/pathotype.json"
     params:

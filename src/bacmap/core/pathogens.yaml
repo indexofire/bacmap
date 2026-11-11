@@ -24,7 +24,10 @@ pathogens:
   SAL:
     display_name: 沙门菌
     gside_labels: [Salmonella]
-    mlst_scheme: salmonella_2
+    # v1.10.21 修复：MLST 必须用 7 基因 Achtman 方案 senterica_1——
+    # 此前误配 salmonella_2（cgMLST 2750 位点，属 cgmlst 方案），导致
+    # MLST ST 全部 N/A。同类防线见 test_pathogen_scheme_types.py。
+    mlst_scheme: senterica_1
     cgmlst_scheme: senterica_2
     amrfinder_organism: Salmonella
     serotype_engine: sistr

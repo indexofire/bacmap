@@ -22,7 +22,8 @@ def sample_steps(results_dir: Path, sample_id: str) -> dict[str, bool]:
     base = results_dir / sample_id
     return {
         "qc": (base / "qc" / f"{sample_id}_fastp.json").exists(),
-        "assembly": (base / "assembly" / "contigs.fasta").exists(),
+        "assembly": (base / "assembly" / f"{sample_id}.fasta").exists()
+        or (base / "assembly" / "contigs.fasta").exists(),
         "species": (base / "species" / "species_id.json").exists(),
         "mlst": (base / "typing" / "mlst.tsv").exists(),
         # v1.10.19：gspec screen 以 JSON 为主产物；旧运行目录的 TSV 兼容
@@ -48,7 +49,9 @@ def sample_status(results_dir: Path, sample_id: str) -> str:
     """Canonical status: completed (summary) > in-progress (contigs) > not-started."""
     if summary_path(results_dir, sample_id).exists():
         return "completed"
-    if (results_dir / sample_id / "assembly" / "contigs.fasta").exists():
+    if (results_dir / sample_id / "assembly" / f"{sample_id}.fasta").exists() or (
+        results_dir / sample_id / "assembly" / "contigs.fasta"
+    ).exists():
         return "in-progress"
     return "not-started"
 

@@ -17,7 +17,7 @@ from bacmap.core.species_codes import GSIDE_MARKER_LABELS, code_map
 EXPECTED_CODES = set(code_map(list(GSIDE_MARKER_LABELS)))
 
 GOLDEN_MLST_SCHEMES = {
-    "SAL": "salmonella_2",
+    "SAL": "senterica_1",  # v1.10.21 修复：7 基因 Achtman（旧值 salmonella_2 是 cgMLST 方案，ST 全 N/A）
     "SHI": "ecoli_1",
     "ECO": "ecoli_1",
     "VPA": "vparahaemolyticus_1",

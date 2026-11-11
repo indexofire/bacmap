@@ -69,7 +69,7 @@ AMRFINDER_MINCOV = config["tools"]["amrfinderplus"]["min_coverage"]
 
 rule typing_mlst:
     input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     output:
         result = str(WORKDIR) + "/{sample}/typing/mlst.tsv"
     params:
@@ -87,7 +87,7 @@ rule typing_mlst:
 
 rule typing_tgmlst:
     input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     output:
         result = str(WORKDIR) + "/{sample}/typing/tgmlst.tsv"
     params:
@@ -105,7 +105,7 @@ rule typing_tgmlst:
 
 rule typing_sistr:
     input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     output:
         json = str(WORKDIR) + "/{sample}/typing/sistr.json",
         cgmlst = str(WORKDIR) + "/{sample}/typing/sistr_cgmlst.csv"
@@ -123,7 +123,7 @@ rule typing_sistr:
 
 rule gspec_screen_vfdb:
     input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     output:
         result = str(WORKDIR) + "/{sample}/gspec/vfdb.json"
     params:
@@ -136,7 +136,7 @@ rule gspec_screen_vfdb:
 
 rule gspec_screen_card:
     input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     output:
         result = str(WORKDIR) + "/{sample}/gspec/card.json"
     params:
@@ -151,7 +151,7 @@ rule gspec_screen_card:
 
 rule gspec_screen_plasmidfinder:
     input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     output:
         result = str(WORKDIR) + "/{sample}/gspec/plasmidfinder.json"
     params:
@@ -170,7 +170,7 @@ rule amr_amrfinderplus:
     the dedicated binary is kept for mutation-aware AMR calls.
     """
     input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     output:
         result = str(WORKDIR) + "/{sample}/amr/amrfinderplus.tsv"
     params:

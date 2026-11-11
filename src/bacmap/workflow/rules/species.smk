@@ -9,7 +9,7 @@ import sys
 
 rule species_identify:
     input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/contigs.fasta"
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     output:
         result = str(WORKDIR) + "/{sample}/species/species_id.json"
     params:

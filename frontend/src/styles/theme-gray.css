@@ -21,6 +21,17 @@
   outline-offset: 3px;
 }
 
+/* 表单控件自持焦点表达（硬阴影 + 变边），禁用全局 outline——
+   否则聚焦时出现 外环+阴影+边框 三重黑框（v1.10.21 走查修复）。 */
+:root[data-theme="gray"] .input:focus-visible,
+:root[data-theme="gray"] .select:focus-visible,
+:root[data-theme="gray"] .textarea:focus-visible,
+:root[data-theme="gray"] .topbar__search input:focus-visible,
+:root[data-theme="gray"] .search-mini input:focus-visible,
+:root[data-theme="gray"] .pager__btn:focus-visible {
+  outline: none;
+}
+
 /* ---------- Shell ---------- */
 :root[data-theme="gray"] .sidebar {
   border-right: 1px solid #111;
@@ -129,11 +140,16 @@
 
 :root[data-theme="gray"] .topbar__search input,
 :root[data-theme="gray"] .search-mini input {
-  border-color: #111;
+  border-color: #c9c9c2;
   border-radius: 0;
   background: #f7f7f2;
   font-family: var(--font-mono);
   font-size: 11px;
+}
+
+:root[data-theme="gray"] .topbar__search input:hover,
+:root[data-theme="gray"] .search-mini input:hover {
+  border-color: #8a8a82;
 }
 
 :root[data-theme="gray"] .topbar__search input:focus,
@@ -432,12 +448,20 @@
 :root[data-theme="gray"] .input,
 :root[data-theme="gray"] .select,
 :root[data-theme="gray"] .textarea {
-  border: 1px solid #111;
+  border: 1px solid #c9c9c2;
   border-radius: 0;
   background: #f7f7f2;
   color: #111;
   font-family: var(--font-mono);
   font-size: 12px;
+}
+
+/* v1.10.21 走查：静息态去掉黑框（多输入表单会出现整片黑盒子）——
+   暖灰细线定形、悬停加深，黑色边框+硬阴影只作为焦点签名态。 */
+:root[data-theme="gray"] .input:hover,
+:root[data-theme="gray"] .select:hover,
+:root[data-theme="gray"] .textarea:hover {
+  border-color: #8a8a82;
 }
 
 :root[data-theme="gray"] .input:focus,
@@ -637,8 +661,14 @@
   font-size: 11px;
 }
 
+/* v1.10.21 走查修复：筛选表单等非数据格场景不再出现黑色框线
+   （meta-grid 被检索页筛选区复用，边框会让 input 周围出现异常线条）。
+   表格化网格效果仅在含 .meta-item 数据格时生效（仪表盘系统状态等）。 */
 :root[data-theme="gray"] .meta-grid {
   gap: 0;
+}
+
+:root[data-theme="gray"] .meta-grid:has(.meta-item) {
   border-top: 1px solid #111;
   border-left: 1px solid #111;
 }

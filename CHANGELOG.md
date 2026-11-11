@@ -5,6 +5,43 @@
 
 ## [Unreleased]
 
+### 分型产物 JSON 化 + 组装文件以菌株命名 + 防唤醒守卫
+
+- **gspec typing screen 产物 JSON 化**：gene 库（ecoh/shi_sero/vpa_* 等）的
+  screen 中间产物从 TSV 改为 `gspec/<db>_screen.json`（gspec.report/1，含
+  工具版本/参数 provenance）；`gspec typing` 所需表格由 JSON 派生到临时
+  文件、用完即删——结果目录不再残留机器难读的 TSV。原则：程序读 JSON，
+  人读表格（报告 HTML 已是表格形态）。
+- **组装文件以菌株命名**：`assembly/contigs.fasta` → `assembly/<sample>.fasta`，
+  下游所有结果的 FILE 字段（MLST/amrfinder/QUAST/gspec）不再统一显示
+  "contigs"。读取层双路径兼容旧 run。
+- **取消防唤醒守卫**：DBOS 重启恢复会唤醒已取消的任务（实测发生过）——
+  工作流入口与管线结束后查询 tasks.sqlite，cancelled/failed 即刻以
+  CANCELLED 终态收场；顺带修复守卫插入时损坏的 `@DBOS.workflow()` 装饰器
+  （曾致 analyze 工作流注册失败）。
+- **CONCRETE 输入框走查修复**：静息态黑框 → 暖灰细线（悬停加深，黑框+
+  硬阴影保留为焦点签名态）；聚焦三重黑环（全局 outline 与控件焦点态叠加）
+  消除；检索页 meta-grid 黑色网格线移除（`:has(.meta-item)` 限定数据格场景）。
+- 崩溃恢复实证：SIGKILL 全进程树后重启，任务自动从断点续跑（步骤级 +
+  规则级双断点）；旧中断批次同样被唤醒（已按需取消）。
+
+### 沙门菌 MLST 方案错配修复（数据完整性 P0）
+
+- **错误**：`pathogens.yaml` 沙门菌 `mlst_scheme: salmonella_2`——该方案实为
+  cgMLST（2750 位点，pubmlst），套在 7 基因 MLST 步骤上导致 **ST 全部 N/A**
+  （旧 run 1719d5c3 的 20 株沙门样本全部污染）。正确方案为 `senterica_1`
+  （Achtman 7 基因，enterobase）。
+- **修复**：改为 `senterica_1` 并下载安装；真实样本验证 26SAL0518 →
+  **ST 8334**（aroC 173/dnaN 788/hemD 125/hisD 206/purE 40/sucA 174/thrA 165）。
+- **防再犯守卫**（`test_pathogen_scheme_types.py`）：从 gmlst 方案目录读取类型，
+  断言所有物种 `mlst_scheme` 类型=mlst 且 7 位点、`cgmlst_scheme` 类型=cgmlst；
+  回归锁死沙门=senterica_1。全物种核验通过（志贺/大肠 ecoli_1、弧菌
+  vparahaemolyticus_1、李斯特 lmonocytogenes_1 均正确）。
+- **同类全面核查**：amrfinder_organism（Salmonella/Escherichia 均合法）、
+  serotype_engine（sistr/ecoh）、gspec_screens（vpa_*/shi_sero/eco_*/lmo_sero
+  均已安装）、snp_group 参考组均无错配。
+- 旧 run 数据不可变保留；重跑沙门批次即可获得正确 MLST。
+
 ### run 冷产物自动压缩
 
 - **动机**：单株 analyze 结果 ~89MB，其中 ~85MB 是 Bakta 导出（embl 14M + gbff 13M +
