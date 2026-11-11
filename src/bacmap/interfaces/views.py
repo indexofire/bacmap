@@ -113,6 +113,7 @@ def sample_digest(summary: dict[str, Any]) -> dict[str, Any]:
         "n_plasmid": len(plasmid) if isinstance(plasmid, list) else 0,
         "ipaH": dec.get("ipaH", "N/A"),
         "pathotype": dec.get("pathotype", "N/A"),
+        "prelim": summary.get("_prelim", False),
         "card_genes": card_genes,
         "vfdb_genes": vfdb_genes,
         "plasmids": sorted(
@@ -267,9 +268,15 @@ def _read_summary(path: Path) -> dict[str, Any] | None:
 
 
 def load_summaries(engine: DbosTaskEngine) -> list[dict[str, Any]]:
-    """已完成样本的 summary 扫描（基于 engine.home）。"""
+    """已完成样本的 summary 扫描（基于 engine.home）。
+
+    v1.10.24 流式兼容：最终 summary 缺失时回退 prelim——正在分析的样本
+    （快步骤已完成、注释进行中）在列表中立即可见，digest.prelim=True
+    供前端标注"初步"。两个同名 summary 并存时以最终版为准。
+    """
     results = Path(engine.home) / "results"
     out: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for sj in sorted(results.glob("*/report/*_summary.json")):
         # 只认与样本目录同名的 summary（与 sample_page/report_path 口径一致）：
         # 报告目录里遗留的旧名 summary 不得变成第二行/读成错误样本。
@@ -277,6 +284,15 @@ def load_summaries(engine: DbosTaskEngine) -> list[dict[str, Any]]:
             continue
         data = _read_summary(sj)
         if data is not None:
+            out.append(data)
+            seen.add(sj.parent.parent.name)
+    for pj in sorted(results.glob("*/report/*_summary.prelim.json")):
+        sid = pj.parent.parent.name
+        if sid in seen or pj.name != f"{sid}_summary.prelim.json":
+            continue  # 已有最终版或名字不对
+        data = _read_summary(pj)
+        if data is not None:
+            data.setdefault("_prelim", True)
             out.append(data)
     return out
 

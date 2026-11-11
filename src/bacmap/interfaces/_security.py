@@ -17,7 +17,9 @@ CSP = (
     "font-src 'self'; "
     "connect-src 'self'; "
     "object-src 'none'; "
-    "base-uri 'none'; "
+    # v1.10.24：SPA 用 <base href="/console/"> 解析懒加载资源路径——
+    # 允许同源 base（DSH 代理改写为 /bacmap/console/ 后仍同源）。
+    "base-uri 'self'; "
     "form-action 'self'; "
     "frame-ancestors 'none'"
 )

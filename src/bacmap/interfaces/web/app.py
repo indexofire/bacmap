@@ -364,6 +364,15 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
     )
     # 静态资源仅本地（CSS/图标/脚本；零外联，ADR-16）
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    # v1.10.24：SPA 资源经 /console/assets/ 可达（<base href="/console/"> 的
+    # 相对路径解析正确；否则 catch-all 返回 HTML 导致 MIME type 错误）。
+    console_assets = STATIC_DIR / "console" / "assets"
+    if console_assets.is_dir():
+        app.mount(
+            "/console/assets",
+            StaticFiles(directory=console_assets),
+            name="console-assets",
+        )
 
     # v0.2.0：Vue 3 SPA 控制台（构建产物在 static/console；无 Node 运行时）。
     console_index = STATIC_DIR / "console" / "index.html"

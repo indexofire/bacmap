@@ -4,12 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark light" />
-    <script src="/static/console/theme-init.js"></script>
+    <!-- v1.10.24：<base> 让 SPA 嵌套路由下的相对资源路径始终解析到 /console/；
+         DSH 代理将此改写为 /bacmap/console/，懒加载 CSS/JS 均正确。 -->
+    <base href="/console/">
+    <script src="./theme-init.js"></script>
     <meta
       name="description"
       content="bacmap 本地病原菌基因组分析控制台：任务、计划、审批与证据链。"
     />
-    <link rel="icon" type="image/svg+xml" href="/static/console/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <title>bacmap console</title>
   </head>
   <body>
