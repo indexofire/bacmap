@@ -5,6 +5,21 @@
 
 ## [Unreleased]
 
+### 中断任务自动恢复 + 用户暂停/恢复
+
+- **根因**：DBOS 恢复线程按 `application_version` 过滤 PENDING 工作流——
+  断电重启叠加代码升级后版本哈希漂移，旧版本中断工作流成为**永久孤儿**
+  （任务行 running、无进程执行，实测）。修复：`_runtime` 启动后经
+  `recovery.py` ①收养旧版本本地 PENDING 工作流（改版本号 + 主动触发恢复，
+  步骤输入为 JSON 标量跨版本安全）②对账卡死任务行（running × 工作流终态/
+  缺失 → failed，提示 resume）。**实战验证**：重启 web 后孤儿任务
+  3777ad63 的 snakemake 自动在同一 run 目录续跑（已完成规则跳过）。
+- **用户暂停/恢复**：`bacmap task pause/resume <id>` + Web API
+  `POST /tasks/{id}/pause|resume`。pause 在步骤边界收场（不强杀当前
+  snakemake 规则）；resume 清旧工作流后以同一 task_id 重建，
+  `--rerun-incomplete` 在同一 run 目录从已完成规则继续。新增 PAUSED 任务态。
+- 测试基线 2038 → 2044。
+
 ### 分型产物 JSON 化 + 组装文件以菌株命名 + 防唤醒守卫
 
 - **gspec typing screen 产物 JSON 化**：gene 库（ecoh/shi_sero/vpa_* 等）的

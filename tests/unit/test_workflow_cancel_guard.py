@@ -35,6 +35,11 @@ class TestTaskStateCancelled:
         _seed_tasks_db(tmp_path / "tasks.sqlite", "t3", "running")
         assert _task_state_cancelled("t3", str(tmp_path)) is False
 
+    def test_paused_task_stops_workflow(self, tmp_path: Path):
+        """v1.10.22：paused 与 cancelled 同为工作流停止态（resume 重建工作流）。"""
+        _seed_tasks_db(tmp_path / "tasks.sqlite", "t7", "paused")
+        assert _task_state_cancelled("t7", str(tmp_path)) is True
+
     def test_missing_db_or_task(self, tmp_path: Path):
         assert _task_state_cancelled("t4", str(tmp_path)) is False
         _seed_tasks_db(tmp_path / "tasks.sqlite", "t5", "succeeded")

@@ -187,7 +187,7 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         return {"items": rows}
 
 
-def _task_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
+def _task_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa: C901 — 路由族内聚；拆分收益低于可读性损失
     @router.get("/tasks")
     def list_tasks(limit: int = 50) -> dict[str, Any]:
         return {"items": engine.list_tasks(_limit(limit))}
@@ -228,6 +228,30 @@ def _task_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         _require_csrf(request)
         try:
             engine.cancel(TaskId(task_id))
+        except KeyError as exc:
+            raise NotFound(f"no such task: {task_id}") from exc
+        except ValueError as exc:
+            raise Conflict(str(exc)) from exc
+        return engine.get_task(TaskId(task_id))
+
+    @router.post("/tasks/{task_id}/pause")
+    def pause_task(request: Request, task_id: str) -> dict[str, Any]:
+        """v1.10.22：用户暂停（工作流在下一边界收场，snakemake 跑完当前规则）。"""
+        _require_csrf(request)
+        try:
+            engine.pause(TaskId(task_id))
+        except KeyError as exc:
+            raise NotFound(f"no such task: {task_id}") from exc
+        except ValueError as exc:
+            raise Conflict(str(exc)) from exc
+        return engine.get_task(TaskId(task_id))
+
+    @router.post("/tasks/{task_id}/resume")
+    def resume_task(request: Request, task_id: str) -> dict[str, Any]:
+        """v1.10.22：恢复 paused/failed(interrupted) 任务（同 run 目录续跑）。"""
+        _require_csrf(request)
+        try:
+            engine.resume(TaskId(task_id))
         except KeyError as exc:
             raise NotFound(f"no such task: {task_id}") from exc
         except ValueError as exc:

@@ -307,6 +307,80 @@ class DbosTaskEngine:
             DBOS.cancel_workflow(row["workflow_id"])
         self._update_state(task_id, TaskState.CANCELLED)
 
+    def pause(self, task_id: TaskId) -> None:
+        """用户暂停（v1.10.22）：工作流在下一个边界（管线结束/步骤间）收场。
+
+        正在执行的 snakemake 不会被强杀——长管线跑完当前规则后，守卫在
+        步骤边界检测 paused 即终态返回。恢复用 :meth:`resume`。
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT state, workflow_id FROM tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"no such task: {task_id}")
+        if row["state"] not in (TaskState.RUNNING.value, TaskState.PENDING.value):
+            raise ValueError(
+                f"task {task_id} state is {row['state']!r}; only running tasks can pause"
+            )
+        if row["workflow_id"]:
+            try:
+                DBOS.cancel_workflow(row["workflow_id"])
+            except Exception:  # 工作流可能已终态：以任务行为准
+                logger.warning("pause: cancel_workflow %s failed", task_id, exc_info=True)
+        self._update_state(task_id, TaskState.PAUSED, "paused by user")
+
+    def resume(self, task_id: TaskId) -> None:
+        """恢复 paused/failed(interrupted) 任务（v1.10.22）。
+
+        清掉旧工作流行后以**同一 task_id** 重建工作流：snakemake
+        ``--rerun-incomplete`` 在同一 run 目录续跑，已完成规则不重算。
+        """
+        from dbos import DBOS as _DBOS
+
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT state, task_type, params_json FROM tasks WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"no such task: {task_id}")
+        if row["state"] not in (
+            TaskState.PAUSED.value,
+            TaskState.FAILED.value,
+            TaskState.CANCELLED.value,
+        ):
+            raise ValueError(
+                f"task {task_id} state is {row['state']!r}; "
+                "only paused/failed/cancelled tasks can resume"
+            )
+        try:
+            _DBOS.delete_workflow(str(task_id))  # 旧工作流行（含孤儿 PENDING）
+        except Exception:
+            logger.warning("resume: delete_workflow %s failed", task_id, exc_info=True)
+        params = json.loads(row["params_json"])
+        params.setdefault("home", str(self.home))
+        params["task_id"] = str(task_id)
+        params["resumed"] = True
+        from bacmap.tasks.engine.dbos_engine import analyze_workflow
+
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE tasks SET state = ?, message = '', current_step = 'pipeline', "
+                "updated_at = ? WHERE task_id = ?",
+                (TaskState.RUNNING.value, datetime.now(UTC).isoformat(), str(task_id)),
+            )
+        from dbos import SetWorkflowID
+
+        with SetWorkflowID(str(task_id)):
+            _DBOS.start_workflow(analyze_workflow, params)
+        self.events.append(
+            EventType.TASK_SUBMITTED,
+            task_id=str(task_id),
+            actor="resume",
+            payload={"task_type": row["task_type"], "resumed": True},
+        )
+
     def approve(self, task_id: TaskId, approval: Approval) -> None:
         now = datetime.now(UTC).isoformat()
         with self._conn() as conn:

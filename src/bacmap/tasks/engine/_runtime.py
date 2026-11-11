@@ -6,10 +6,13 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from pathlib import Path
 
 from dbos import DBOS
+
+logger = logging.getLogger(__name__)
 
 _dbos_ready = False
 _dbos_ready_lock = threading.Lock()
@@ -30,6 +33,15 @@ def init_dbos(db_path: Path) -> None:
         DBOS(config=cfg)
         DBOS.launch()
         _dbos_ready = True
+        # v1.10.22：跨版本中断恢复（收养旧版 PENDING 工作流 + 卡死任务对账）。
+        try:
+            from bacmap.tasks.engine.recovery import recover_interrupted
+
+            result = recover_interrupted(db_path.parent)
+            if result["adopted"] or result["reconciled"]:
+                logger.info("startup recovery: %s", result)
+        except Exception:  # 恢复失败不阻断服务启动
+            logger.warning("startup recovery failed", exc_info=True)
 
 
 def shutdown_dbos() -> None:

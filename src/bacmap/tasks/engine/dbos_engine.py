@@ -566,7 +566,9 @@ def _task_state_cancelled(task_id: str, home_s: str) -> bool:
             ).fetchone()
     except sqlite3.Error:
         return False
-    return bool(row) and str(row[0]) in {"cancelled", "failed"}
+    # paused 与 cancelled/failed 同为工作流停止态：用户暂停后，重放的工作流
+    # 在边界即刻收场（resume 经 task_engine.resume_task 重建工作流续跑）。
+    return bool(row) and str(row[0]) in {"cancelled", "failed", "paused"}
 
 
 @DBOS.step()

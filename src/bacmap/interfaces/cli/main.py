@@ -421,6 +421,42 @@ def _run_task_cancel(args: argparse.Namespace) -> None:
     _console().print(T(f"Task {args.task_id} cancelled", f"任务 {args.task_id} 已取消"))
 
 
+def _run_task_pause(args: argparse.Namespace) -> None:
+    try:
+        engine = _engine(args.home)
+        engine.pause(_resolve_task_id(engine, args.task_id))
+    except KeyError as exc:
+        raise SystemExit(
+            T(f"Task not found: {args.task_id}", f"任务不存在：{args.task_id}")
+        ) from exc
+    except ValueError as exc:
+        raise SystemExit(T(f"Pause failed: {exc}", f"暂停失败：{exc}")) from exc
+    _console().print(
+        T(
+            f"Task {args.task_id} paused (resume: bacmap task resume {args.task_id})",
+            f"任务 {args.task_id} 已暂停（恢复：bacmap task resume {args.task_id}）",
+        )
+    )
+
+
+def _run_task_resume(args: argparse.Namespace) -> None:
+    try:
+        engine = _engine(args.home)
+        engine.resume(_resolve_task_id(engine, args.task_id))
+    except KeyError as exc:
+        raise SystemExit(
+            T(f"Task not found: {args.task_id}", f"任务不存在：{args.task_id}")
+        ) from exc
+    except ValueError as exc:
+        raise SystemExit(T(f"Resume failed: {exc}", f"恢复失败：{exc}")) from exc
+    _console().print(
+        T(
+            f"Task {args.task_id} resumed (continues in this process; same run dir)",
+            f"任务 {args.task_id} 已恢复（在本进程内继续执行；同一 run 目录续跑）",
+        )
+    )
+
+
 def _run_sample_ls(args: argparse.Namespace) -> None:
     from bacmap.interfaces.views import sample_rows
 
@@ -771,6 +807,29 @@ def build_parser() -> argparse.ArgumentParser:
     t_cancel.add_argument("task_id")
     _add_home(t_cancel)
     t_cancel.set_defaults(func=_run_task_cancel)
+
+    t_pause = task_sub.add_parser(
+        "pause",
+        help=T(
+            "pause a running task (workflow stops at the next step boundary)",
+            "暂停任务（工作流在下一个步骤边界收场，snakemake 跑完当前规则）",
+        ),
+    )
+    t_pause.add_argument("task_id")
+    _add_home(t_pause)
+    t_pause.set_defaults(func=_run_task_pause)
+
+    t_resume = task_sub.add_parser(
+        "resume",
+        help=T(
+            "resume a paused/failed(interrupted) task (same run dir, snakemake "
+            "rerun-incomplete continues from completed rules)",
+            "恢复暂停/中断的任务（同一 run 目录，已完成规则不重算）",
+        ),
+    )
+    t_resume.add_argument("task_id")
+    _add_home(t_resume)
+    t_resume.set_defaults(func=_run_task_resume)
 
     from bacmap.interfaces.cli.plans import add_parser as add_plan_parser
 
