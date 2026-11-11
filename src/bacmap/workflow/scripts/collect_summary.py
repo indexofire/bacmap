@@ -262,7 +262,11 @@ if "vpa_serotype" not in summary["steps"] and _sample_code == "VPA":
         "reason": "gspec 尚无副溶血性弧菌血清型数据库",
     }
 
-annotation = read_json(snakemake.input.annotation, {})
+# v1.10.23 流式首屏：prelim 阶段无注释输入——getattr 容缺，标 pending。
+_annotation_path = getattr(snakemake.input, "annotation", "")
+annotation = read_json(_annotation_path, {}) if _annotation_path else {}
+if not annotation:
+    summary["prelim"] = True
 if isinstance(annotation, dict) and annotation.get("summary"):
     ann_summary = annotation.get("summary", {})
     top_genes = []
@@ -286,7 +290,7 @@ if isinstance(annotation, dict) and annotation.get("summary"):
                 "source": feat.get("source", ""),
             })
     summary["steps"]["annotation"] = {
-        "status": annotation.get("status", "ok"),
+        "status": annotation.get("status", "ok") if annotation else "pending",
         "total_CDS": ann_summary.get("total_CDS", 0),
         "annotated_CDS": ann_summary.get("annotated_CDS", 0),
         "annotation_rate": ann_summary.get("annotation_rate", 0),

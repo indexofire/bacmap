@@ -316,18 +316,31 @@ def sample_rows(engine: DbosTaskEngine) -> list[dict[str, Any]]:
 
 
 def sample_detail(home: Path | str, sample_id: str) -> dict[str, Any] | None:
-    """单样本详情：digest + 完整 steps + 报告就绪标记（路径穿越安全）。"""
+    """单样本详情：digest + 完整 steps + 报告就绪标记（路径穿越安全）。
+
+    v1.10.23 流式：最终 summary 缺失时回退 prelim（注释前的首屏结果），
+    digest.prelim=True 供前端提示"注释完成后升级为完整报告"。
+    """
     if not sample_id or sample_id in {".", ".."}:
         return None
     if "/" in sample_id or "\\" in sample_id or "\x00" in sample_id:
         return None
     base = Path(home) / "results" / sample_id
     summary_file = base / "report" / f"{sample_id}_summary.json"
+    prelim = False
     data = _read_summary(summary_file)
+    if data is None:
+        prelim_file = base / "report" / f"{sample_id}_summary.prelim.json"
+        data = _read_summary(prelim_file)
+        prelim = data is not None
     if data is None:
         return None
     digest = sample_digest(data)
+    digest["prelim"] = prelim
     digest["has_report"] = (base / "report" / f"{sample_id}_report.html").is_file()
+    digest["has_prelim_report"] = (
+        base / "report" / f"{sample_id}_report.prelim.html"
+    ).is_file()
     return {
         "digest": digest,
         "steps": data.get("steps", {}),

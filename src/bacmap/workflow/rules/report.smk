@@ -22,6 +22,24 @@ def _report_inputs(wc):
     )
 
 
+def _prelim_inputs(wc):
+    """v1.10.23 流式首屏：同 _report_inputs 但**不含注释**——分钟级完成，
+    供引擎生成初步 summary/报告（web 先看到分型与 AMR 结果；注释后升级）。
+    """
+    files = _report_inputs(wc)
+    return {k: v for k, v in files.items() if k != "annotation"}
+
+
+rule report_summary_prelim:
+    """初步汇总（不含注释）：快步骤（物种/MLST/血清型/AMR/质粒）完成即产出。"""
+    input:
+        unpack(_prelim_inputs)
+    output:
+        summary = str(WORKDIR) + "/{sample}/report/{sample}_summary.prelim.json"
+    script:
+        "../scripts/collect_summary.py"
+
+
 rule report_summary:
     input:
         unpack(_report_inputs)

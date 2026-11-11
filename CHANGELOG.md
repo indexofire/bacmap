@@ -5,6 +5,19 @@
 
 ## [Unreleased]
 
+### 流式两阶段分析（prelim 先行，注释垫底）
+
+- **管线顺序澄清**：DAG 由 bacmap 固定（rules/*.smk 声明式依赖），LLM 不参与排程。
+- **两阶段执行**：引擎先跑 prelim 目标（物种/MLST/血清型/AMR/质粒——分钟级，
+  实测 ~4 分钟出首屏）→ 产出 `<sample>_summary.prelim.json` + 建立扁平别名 →
+  web 即可查看初步报告（按需生成 `_report.prelim.html`，标注"注释进行中"）；
+  再跑最终目标（QUAST/Bakta/eggNOG 自然垫底）→ 完整 summary/报告自动升级。
+- **collect_summary** 适配无注释输入（prelim 标记 + annotation.status=pending）；
+  **sample_detail** 最终缺失回退 prelim（digest.prelim 供前端提示）；
+  报告路由 prelim 回退 + 幂等缓存；前端"完整报告"页签接受 prelim 并带徽标。
+- 重试逻辑抽取 `_run_targets_with_retry`（两阶段共用，含陈旧锁自愈）。
+- 实测：14:01 提交 → 14:05 首屏可见 → 14:24 完整报告（succeeded，26MB 压缩）。
+
 ### 中断任务自动恢复 + 用户暂停/恢复
 
 - **根因**：DBOS 恢复线程按 `application_version` 过滤 PENDING 工作流——

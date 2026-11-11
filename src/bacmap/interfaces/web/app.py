@@ -115,6 +115,36 @@ def _ensure_current_report(engine: DbosTaskEngine, sample_id: str, path: Path) -
 
 
 
+def _ensure_prelim_report(engine: DbosTaskEngine, sample_id: str) -> Path | None:
+    """从 prelim summary 按需生成初步报告 HTML（幂等缓存；无 prelim 返回 None）。"""
+    base = Path(engine.home) / "results" / sample_id / "report"
+    prelim_html = base / f"{sample_id}_report.prelim.html"
+    prelim_summary = base / f"{sample_id}_summary.prelim.json"
+    if not prelim_summary.is_file():
+        return None
+    if prelim_html.is_file():
+        return prelim_html
+    if not _REPORT_LOCK.acquire(blocking=False):
+        return prelim_html if prelim_html.is_file() else None
+    try:
+        if prelim_html.is_file():
+            return prelim_html
+        import json as _json
+
+        from bacmap.core.verify.deterministic_verifier import DeterministicVerifier
+        from bacmap.tools._scripts.generate_report import generate_html
+
+        summary = _json.loads(prelim_summary.read_text(encoding="utf-8"))
+        verification = DeterministicVerifier().verify_all(summary)
+        generate_html(sample_id, summary, verification, prelim_html)
+        return prelim_html
+    except Exception:
+        logger.warning("prelim 报告生成失败 sample=%s", sample_id, exc_info=True)
+        return None
+    finally:
+        _REPORT_LOCK.release()
+
+
 def _consteq(a: str, b: str) -> bool:
     """常量时间字符串比较（非 ASCII 输入编码失败按不匹配处理，而非 500）。
 
@@ -186,11 +216,18 @@ def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
 
     @app.get("/samples/{sample_id}/report")
     def sample_report(
-        sample_id: str, download: int = 0, embed: int = 0, theme: str = ""
+        sample_id: str, download: int = 0, embed: int = 0, theme: str = "", prelim: int = 0
     ) -> Response:
         if not _validate_sample_id(sample_id):
             raise HTTPException(400, "非法样本 ID")
         path = report_path(engine, sample_id)
+        # v1.10.23 流式首屏：最终报告缺失且 prelim summary 存在 → 生成/提供
+        # 初步报告（注释完成前 web 即可查看分型与 AMR 结果）。
+        if not path.is_file() and not download:
+            prelim_html = _ensure_prelim_report(engine, sample_id)
+            if prelim_html is not None:
+                return FileResponse(prelim_html, media_type="text/html")
+            raise HTTPException(404, "该样本尚未生成 HTML 报告")
         if not path.is_file():
             raise HTTPException(404, "该样本尚未生成 HTML 报告")
         _ensure_current_report(engine, sample_id, path)

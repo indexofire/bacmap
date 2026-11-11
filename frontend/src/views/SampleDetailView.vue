@@ -30,7 +30,9 @@ const reportDownload = computed(
 )
 
 const digest = computed(() => data.value?.digest)
-const showReport = computed(() => activeTab.value === 'report' && Boolean(digest.value?.has_report))
+const hasAnyReport = computed(() => Boolean(digest.value?.has_report || digest.value?.has_prelim_report))
+const isPrelim = computed(() => !digest.value?.has_report && Boolean(digest.value?.has_prelim_report))
+const showReport = computed(() => activeTab.value === 'report' && hasAnyReport.value)
 const annotation = computed(() => {
   const steps = data.value?.steps ?? {}
   const ann = steps.annotation
@@ -129,7 +131,7 @@ async function load() {
     data.value = sample
     latestRun.value = runs.find((run) => runStrainIds(run).includes(id)) ?? null
     runsLoaded.value = true
-    if (activeTab.value === 'report' && !data.value.digest.has_report) activeTab.value = 'detail'
+    if (activeTab.value === 'report' && !data.value.digest.has_report && !data.value.digest.has_prelim_report) activeTab.value = 'detail'
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载样本详情失败'
   } finally {
@@ -138,7 +140,7 @@ async function load() {
 }
 
 function openReport() {
-  if (!digest.value?.has_report) return
+  if (!hasAnyReport.value) return
   activeTab.value = 'report'
   void router.replace({ query: { ...route.query, tab: 'report' } })
 }
@@ -170,7 +172,7 @@ onMounted(() => void load())
         <p class="pagehead__sub">分析结果详情、耐药/毒力基因、注释摘要与完整 HTML 报告。</p>
       </div>
       <div class="pagehead__actions">
-        <button v-if="digest?.has_report" class="btn btn--primary" type="button" @click="openReport">
+        <button v-if="hasAnyReport" class="btn btn--primary" type="button" @click="openReport">
           <Icon name="file-text" />
           查看报告
         </button>
@@ -199,7 +201,7 @@ onMounted(() => void load())
           概览
         </button>
         <button
-          v-if="digest.has_report"
+          v-if="hasAnyReport"
           type="button"
           class="chip"
           :class="{ 'is-active': showReport }"
@@ -211,7 +213,7 @@ onMounted(() => void load())
 
       <section v-if="showReport" class="card report-embed">
         <div class="card__head">
-          <h2 class="card__title">完整分析报告</h2>
+          <h2 class="card__title">完整分析报告 <span v-if="isPrelim" class="badge badge--running">初步 · 注释进行中</span></h2>
           <span class="card__hint">{{ resolvedTheme === 'light' ? '浅色主题' : resolvedTheme === 'gray' ? '灰色主题' : '暗色主题' }} · 自包含 HTML</span>
           <a class="btn btn--ghost btn--sm" :href="reportDownload">下载 HTML</a>
         </div>

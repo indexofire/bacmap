@@ -102,7 +102,7 @@ export interface SampleRow {
 }
 
 export interface SampleDetail {
-  digest: SampleRow & { has_report: boolean }
+  digest: SampleRow & { has_report: boolean; has_prelim_report?: boolean; prelim?: boolean }
   steps: Record<string, unknown>
   summary: Record<string, unknown>
 }

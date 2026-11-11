@@ -76,6 +76,37 @@ def _clear_stale_snakemake_locks() -> bool:
     return False
 
 
+def _run_targets_with_retry(
+    runner: Any,
+    targets: list[str],
+    cores: int,
+    overrides: dict[str, str] | None,
+    home: Path,
+    task_id: str,
+    params: dict[str, Any],
+) -> Any:
+    """带锁自愈/退避的目标执行（v1.10.23 抽取复用：prelim 与最终两阶段共用）。"""
+    import time as _time
+
+    for attempt in range(4):
+        result = runner.run(targets=targets, cores=cores, config_overrides=overrides)
+        if result.returncode == 0:
+            from bacmap.store.results_layout import link_run_results
+
+            link_run_results(home, task_id, params["samples"])
+            return result
+        if "LockException" not in (result.stderr or ""):
+            return result
+        if _clear_stale_snakemake_locks():
+            continue
+        wait_s = 45 * (attempt + 1)
+        logger.warning(
+            "snakemake 目录锁被占用（attempt %d/4），%ds 后重试", attempt + 1, wait_s
+        )
+        _time.sleep(wait_s)
+    return result
+
+
 def _run_snakemake(params: dict[str, Any]) -> Any:
     from bacmap.workflow.runner import WorkflowRunner, deploy
 
@@ -96,12 +127,18 @@ def _run_snakemake(params: dict[str, Any]) -> Any:
     runner = WorkflowRunner(
         deployed_dir=deployed, timeout=params.get("timeout", 12 * 3600)
     )
+    # v1.10.23 流式两阶段：阶段1 目标=prelim summary（快步骤：物种/分型/AMR，
+    # 分钟级）→ 完成即出初步报告（web 可见）；阶段2 目标=最终 summary
+    # （注释 Bakta/eggNOG 在此自然垫底）→ 完整报告升级。
+    prelim_targets = [
+        str(run_dir / s / "report" / f"{s}_summary.prelim.json")
+        for s in params["samples"]
+    ]
     targets = [
         str(run_dir / s / "report" / f"{s}_summary.json") for s in params["samples"]
     ]
     # 同一部署目录有 Snakemake 目录锁：并发 analyze（TUI+CLI 同时提交是合法用户行为）
     # 会撞 LockException——退避重试而非直接失败（v1.4.39）。
-    import time as _time
 
     overrides = {"workdir": f"results/runs/{task_id}"} if task_id else None
     # v1.10.19：cores 默认取部署 config.yaml 的 threads（此前写死 8，
@@ -115,25 +152,20 @@ def _run_snakemake(params: dict[str, Any]) -> Any:
             cores = int(_cfg.get("threads", 8))
         except Exception:  # 配置不可读时退回保守默认，不阻断分析
             cores = 8
-    for attempt in range(4):
-        result = runner.run(
-            targets=targets, cores=cores, config_overrides=overrides
-        )
-        if result.returncode == 0:
-            # 物理结果在 runs/<task_id>/，扁平路径只做"最新运行"别名（P2 方案 A）。
-            link_run_results(home, task_id, params["samples"])
-            return result
-        if "LockException" not in (result.stderr or ""):
-            return result
-        # v1.10.22：SIGKILL 过的 snakemake 会留下陈旧目录锁（.snakemake/locks），
-        # 永不自愈。重试前探测：本机已无 snakemake 进程 → 锁必为残留，直接清除。
-        if _clear_stale_snakemake_locks():
-            continue  # 立即重试，不浪费退避时间
-        wait_s = 45 * (attempt + 1)
-        logger.warning(
-            "snakemake 目录锁被占用（attempt %d/4），%ds 后重试", attempt + 1, wait_s
-        )
-        _time.sleep(wait_s)
+    # 阶段1：prelim（快步骤）。失败不致命——最终阶段会重跑并补全；
+    # 成功即建立扁平别名（web 立即可读 live 步骤状态与 prelim 报告）。
+    prelim = _run_targets_with_retry(
+        runner, prelim_targets, cores, overrides, home, task_id, params
+    )
+    if prelim.returncode == 0:
+        _progress(params, "prelim_ready")
+    # 阶段2：最终 summary（注释在此自然垫底）+ 失败语义与历史一致。
+    result = _run_targets_with_retry(
+        runner, targets, cores, overrides, home, task_id, params
+    )
+    if result.returncode == 0:
+        link_run_results(home, task_id, params["samples"])
+        return result
     return result
 
 
