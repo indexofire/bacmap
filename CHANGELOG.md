@@ -5,6 +5,20 @@
 
 ## [Unreleased]
 
+### gvixb 3D 可视化集成
+
+- **结果启动的 3D 视图**：从控制台样本/运行/GOM 页面打开线性组装图、Bakta/eggNOG
+  注释圈图、SNP/cgMLST 进化树与 gmlst 原始 MST（`/gvixb/...` 结果页 + three.js 本地
+  静态资源，零外联）。
+- **只读适配器** `interfaces/gvixb.py`：按 run 物理目录读真实产物，任务未成功不暴露
+  入口；固定文件白名单 + 符号链接越界拒绝；样本"最新结果"入口是独立标注的 latest
+  scope，不复用历史运行接口。
+- **当前产物布局适配**：菌株名产物（`{sample}.fasta`、`{sample}.gff3`、
+  `{sample}.emapper.annotations`）优先，旧命名回退；v1.10.20 冷产物压缩（注释目录
+  `.gz`）透明解压；AMR/VFDB 坐标来自 gspec screen JSON（旧 abricate TSV 回退）。
+- **API**：`/api/v1/gvixb/runs/{run_id}/manifest` 等 7 个只读端点；样本/运行/GOM
+  详情端点附 `gvixb` / `gvixb_views` 入口字段供控制台渲染。
+
 ### 流式两阶段分析（prelim 先行，注释垫底）
 
 - **管线顺序澄清**：DAG 由 bacmap 固定（rules/*.smk 声明式依赖），LLM 不参与排程。

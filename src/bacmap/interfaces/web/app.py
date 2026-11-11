@@ -373,6 +373,10 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
     _build_sample_routes(app, engine)
     _build_redirect_routes(app)
 
+    from bacmap.interfaces.web.gvixb import build_gvixb_routes
+
+    build_gvixb_routes(app, engine, _TEMPLATES)
+
     from bacmap.interfaces.web.research import build_research_routes
 
     build_research_routes(app, engine)

@@ -1,0 +1,21 @@
+{
+  "name": "gvixb",
+  "version": "0.1.0",
+  "description": "Local 3D bacterial genome visualization framework",
+  "entry": "gvixb-app.js",
+  "mountId": "app",
+  "canvasId": "scene",
+  "tooltipId": "tooltip",
+  "views": [
+    { "id": "assembly", "source": "views/assembly-view.js", "description": "Draft assembly circle and single-contig linear focus view" },
+    { "id": "circle", "source": "views/circular-annotation-view.js", "description": "Bakta/eggNOG annotated circular genome" },
+    { "id": "phylo", "source": "views/phylo-view.js", "description": "Newick phylogram" },
+    { "id": "mst", "source": "views/mst-view.js", "description": "Minimum spanning tree" },
+    { "id": "synteny", "source": "views/synteny-view.js", "description": "Comparative synteny blocks" }
+  ],
+  "license": "UNLICENSED",
+  "runtime": {
+    "externalNetwork": false,
+    "threeJs": "0.180"
+  }
+}

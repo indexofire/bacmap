@@ -52,6 +52,9 @@ fallback and operations surface.
   `cloud` (default) or `local-trusted` data-class profile. No built-in chat (ADR-21).
 - **Interfaces** — Vue 3 console at `/console/` (dark / light / gray themes, charts, approvals),
   CLI, TUI, JSON API `/api/v1`, MCP (stdio / Streamable HTTP).
+- **gvixb integration** — result-launched linear assemblies, annotated Bakta/eggNOG circles,
+  SNP/cgMLST trees and original gmlst MSTs from the console's sample, run and GOM pages, with
+  local assets and run-scoped reads.
 
 ## Quick start
 
@@ -97,6 +100,7 @@ Full bilingual site: <https://indexofire.github.io/bacmap/> (Chinese: `/zh/`).
 | Identity, samples, records | [Data & identity](docs/guide/data.md) |
 | Hermes / Pi / DSH + plans | [Agents & plans](docs/guide/agent-plans.md) |
 | Results, runs, GOM | [Results & evidence](docs/guide/results.md) |
+| 3D visualization | [gvixb](docs/guide/visualization.md) |
 | Research Workbench (P1) | [Research Workbench](docs/guide/research-workbench.md) |
 | Architecture and DBOS | [Concepts](docs/concepts/index.md) |
 | Backup, upgrades, troubleshooting | [Operations](docs/operations/index.md) |
@@ -106,7 +110,7 @@ Full bilingual site: <https://indexofire.github.io/bacmap/> (Chinese: `/zh/`).
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest (current baseline: 2006 passed)
+pixi run -e dev test        # pytest (current baseline: 2061 passed)
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter (5 contracts)

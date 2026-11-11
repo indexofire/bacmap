@@ -4,7 +4,7 @@ import { RouterLink, useRoute } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import CopyButton from '../components/CopyButton.vue'
 import { api } from '../api'
-import type { RunRow } from '../types'
+import type { GvixbLink, RunRow } from '../types'
 import { fmtTime, jsonText, shortId } from '../lib/format'
 
 interface ToolVersionRow {
@@ -78,6 +78,18 @@ function refDatabaseRows(value: unknown): RefDatabaseRow[] {
 
 const toolVersions = computed(() => toolVersionRows(run.value?.tool_versions))
 const refDatabases = computed(() => refDatabaseRows(run.value?.ref_databases))
+
+function gvixbViewRows(value: unknown): GvixbLink[] {
+  const items: unknown[] = Array.isArray(value) ? value : []
+  return items.filter(
+    (item): item is GvixbLink =>
+      typeof item === 'object' && item !== null &&
+      typeof (item as GvixbLink).url === 'string' &&
+      typeof (item as GvixbLink).label === 'string',
+  )
+}
+
+const gvixbViews = computed(() => gvixbViewRows(run.value?.gvixb_views))
 
 const sections = computed(() => {
   const current = run.value
@@ -280,6 +292,27 @@ onMounted(() => void load())
               </div>
             </div>
             <div v-else class="card__body"><p class="muted">无参考数据库记录。</p></div>
+          </section>
+
+          <section class="card">
+            <div class="card__head">
+              <h2 class="card__title">gvixb · 3D 可视化</h2>
+              <span class="card__hint">仅列出本次运行的实际产物</span>
+            </div>
+            <div v-if="gvixbViews.length" class="card__body">
+              <div class="table-wrap">
+                <table class="table">
+                  <tbody>
+                    <tr v-for="view in gvixbViews" :key="view.id">
+                      <td>{{ view.label }}</td>
+                      <td class="muted">{{ view.context }}</td>
+                      <td><a class="btn btn--ghost btn--sm" :href="view.url">查看</a></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div v-else class="card__body"><p class="muted">本次运行暂无可视化产物。</p></div>
           </section>
 
           <section v-for="section in sections" :key="section.key" class="card">

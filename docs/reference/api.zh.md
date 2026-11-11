@@ -37,7 +37,7 @@ Origin: http://127.0.0.1:8800
 | GET | `/api/v1/overview` | 系统概览（版本、路径、数据策略、沙箱、任务计数） |
 | GET | `/api/v1/stats` | 数据库统计（任务/运行/GOM/菌株/血清型/MLST/AMR/研究/知识库） |
 | GET | `/api/v1/samples?cursor=&limit=` | 已完成样本分页（仅解析当前页） |
-| GET | `/api/v1/samples/{id}` | 样本 digest + 完整 steps + 报告就绪标记 |
+| GET | `/api/v1/samples/{id}` | 样本 digest + 完整 steps + 报告就绪标记 + gvixb 最新结果入口 |
 | GET | `/api/v1/search?q=&serotype=&mlst_st=&amr_gene=` | 按关键词/血清型/ST/基因检索样本 |
 | GET | `/api/v1/tasks?limit=` | 最近的任务 |
 | POST | `/api/v1/tasks` | 提交 analyze/curate（`task_type`、`samples`、`scope`） |
@@ -52,10 +52,17 @@ Origin: http://127.0.0.1:8800
 | GET | `/api/v1/events?after=&limit=&task_id=&plan_id=` | 事件轮询 |
 | GET | `/api/v1/events/stream?after=&timeout=` | SSE 流（从 `Last-Event-ID` 续传） |
 | GET | `/api/v1/runs?limit=` | 运行记录 |
-| GET | `/api/v1/runs/{id}` | 运行详情 |
+| GET | `/api/v1/runs/{id}` | 运行详情 + gvixb 视图 |
 | GET | `/api/v1/runs/{id}/compare?other=` | 来源比较 |
 | GET | `/api/v1/gom/objects?type=&limit=` | 最新的 GOM 对象 |
-| GET | `/api/v1/gom/objects/{id}?version=` | GOM 对象 |
+| GET | `/api/v1/gom/objects/{id}?version=` | GOM 对象 + 关联 gvixb 视图 |
+| GET | `/api/v1/gvixb/runs/{run_id}/manifest` | 某运行可用的 gvixb 视图 |
+| GET | `/api/v1/gvixb/runs/{run_id}/genome/{dataset}` | 历史运行 draft assembly 数据 |
+| GET | `/api/v1/gvixb/samples/{dataset}/genome` | 最新结果 draft assembly 数据 |
+| GET | `/api/v1/gvixb/runs/{run_id}/annotated-genome/{dataset}` | 历史运行 Bakta/eggNOG 圈图数据 |
+| GET | `/api/v1/gvixb/samples/{dataset}/annotated-genome` | 最新结果圈图数据 |
+| GET | `/api/v1/gvixb/runs/{run_id}/tree/{snp\|cgmlst}/{group}` | 进化树数据 |
+| GET | `/api/v1/gvixb/runs/{run_id}/mst/{group}` | gmlst 原始 MST 数据 |
 
 ## 3. 示例
 
@@ -136,6 +143,16 @@ SSE 帧使用 `id: <seq>`、`event: <type>`、`data: <json>`。用 `Last-Event-I
 curl -s -H "Authorization: Bearer $TOKEN" \
   "http://127.0.0.1:8800/api/v1/runs/<run_a>/compare?other=<run_b>" | jq .
 ```
+
+### gvixb manifest
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8800/api/v1/gvixb/runs/<run_id>/manifest | jq .
+```
+
+返回 `circle:<dataset>` 表示该样本存在 Bakta/eggNOG sidecar 布局。完整目录契约、浏览器 URL 和
+故障排查见 [gvixb 3D 可视化](../guide/visualization.zh.md)。
 
 ## 4. 错误
 

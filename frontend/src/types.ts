@@ -59,6 +59,15 @@ export interface PlanRecord {
   message: string
 }
 
+export interface GvixbLink {
+  id: string
+  kind: 'genome' | 'circle' | 'tree' | 'mst'
+  label: string
+  context: string
+  url: string
+  data_url: string
+}
+
 export interface RunRow {
   run_id: string
   strain_ids: string[]
@@ -67,6 +76,7 @@ export interface RunRow {
   workflow?: string
   baseline_version?: string
   task_id?: string
+  gvixb_views?: GvixbLink[]
   [key: string]: unknown
 }
 
@@ -105,6 +115,7 @@ export interface SampleDetail {
   digest: SampleRow & { has_report: boolean; has_prelim_report?: boolean; prelim?: boolean }
   steps: Record<string, unknown>
   summary: Record<string, unknown>
+  gvixb?: GvixbLink[]
 }
 
 export interface GomObject {
@@ -115,6 +126,7 @@ export interface GomObject {
   created_at: string
   payload_keys?: string[]
   payload?: Record<string, unknown>
+  gvixb_views?: GvixbLink[]
   [key: string]: unknown
 }
 

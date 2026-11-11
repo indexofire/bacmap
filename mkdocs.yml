@@ -41,6 +41,7 @@ plugins:
             Data & Identity: 数据与身份
             Agents & Plans: 智能体与计划
             Results & Evidence: 结果与证据
+            gvixb Integration: gvixb 集成
             Research Workbench: 研究工作台
             Architecture: 架构
             Data Model: 数据模型
@@ -106,6 +107,7 @@ nav:
       - Agents & Plans: guide/agent-plans.md
       - Results & Evidence: guide/results.md
       - Gene Investigation: guide/gene-investigation.md
+      - gvixb Integration: guide/visualization.md
       - Research Workbench: guide/research-workbench.md
   - Concepts:
       - concepts/index.md

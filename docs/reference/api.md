@@ -37,7 +37,7 @@ Origin: http://127.0.0.1:8800
 | GET | `/api/v1/overview` | system overview (versions, paths, policy, sandbox, counts) |
 | GET | `/api/v1/stats` | database statistics (tasks/runs/GOM/strains/serotypes/MLST/AMR/research/knowledge) |
 | GET | `/api/v1/samples?cursor=&limit=` | completed-sample page (only the page is parsed) |
-| GET | `/api/v1/samples/{id}` | sample digest + full steps + report-ready flag |
+| GET | `/api/v1/samples/{id}` | sample digest + full steps + report-ready flag + gvixb latest-result links |
 | GET | `/api/v1/search?q=&serotype=&mlst_st=&amr_gene=` | sample search by keyword/serotype/ST/gene |
 | GET | `/api/v1/tasks?limit=` | recent tasks |
 | POST | `/api/v1/tasks` | submit analyze/curate (`task_type`, `samples`, `scope`) |
@@ -52,10 +52,17 @@ Origin: http://127.0.0.1:8800
 | GET | `/api/v1/events?after=&limit=&task_id=&plan_id=` | event poll |
 | GET | `/api/v1/events/stream?after=&timeout=` | SSE stream (resumes from `Last-Event-ID`) |
 | GET | `/api/v1/runs?limit=` | run records |
-| GET | `/api/v1/runs/{id}` | run detail |
+| GET | `/api/v1/runs/{id}` | run detail + gvixb views |
 | GET | `/api/v1/runs/{id}/compare?other=` | provenance comparison |
 | GET | `/api/v1/gom/objects?type=&limit=` | latest GOM objects |
-| GET | `/api/v1/gom/objects/{id}?version=` | GOM object |
+| GET | `/api/v1/gom/objects/{id}?version=` | GOM object + linked gvixb views |
+| GET | `/api/v1/gvixb/runs/{run_id}/manifest` | gvixb views available for a run |
+| GET | `/api/v1/gvixb/runs/{run_id}/genome/{dataset}` | historical draft assembly payload |
+| GET | `/api/v1/gvixb/samples/{dataset}/genome` | latest-result draft assembly payload |
+| GET | `/api/v1/gvixb/runs/{run_id}/annotated-genome/{dataset}` | historical Bakta/eggNOG circle payload |
+| GET | `/api/v1/gvixb/samples/{dataset}/annotated-genome` | latest-result circle payload |
+| GET | `/api/v1/gvixb/runs/{run_id}/tree/{snp\|cgmlst}/{group}` | tree payload |
+| GET | `/api/v1/gvixb/runs/{run_id}/mst/{group}` | original gmlst MST payload |
 
 ## 3. Examples
 
@@ -136,6 +143,17 @@ SSE frames use `id: <seq>`, `event: <type>`, `data: <json>`. Reconnect with `Las
 curl -s -H "Authorization: Bearer $TOKEN" \
   "http://127.0.0.1:8800/api/v1/runs/<run_a>/compare?other=<run_b>" | jq .
 ```
+
+### gvixb manifest
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:8800/api/v1/gvixb/runs/<run_id>/manifest | jq .
+```
+
+A `circle:<dataset>` entry means the Bakta/eggNOG sidecar layout exists for that dataset. Detailed
+contracts, browser URLs and troubleshooting are in [gvixb 3D
+visualization](../guide/visualization.md).
 
 ## 4. Errors
 

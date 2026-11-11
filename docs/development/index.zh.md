@@ -14,7 +14,7 @@ pixi shell
 回退到没有 DBOS 的 Python）。
 
 ```bash
-pixi run -e dev test          # pytest；当前基线 2006 passed
+pixi run -e dev test          # pytest；当前基线 2061 passed
 pixi run -e dev lint          # ruff（src + tests）
 pixi run -e dev typecheck     # 对 src/bacmap 跑 mypy
 pixi run -e dev contracts     # import-linter（5 条契约）
@@ -149,7 +149,7 @@ dev/               仅本地的调研笔记/脚本（不入库）
 - 程序版本：`pyproject.toml` / `pixi.toml`（当前 0.1.5），仅在明确发布决定后更改。
 - 冻结设计修订：`docs/concepts/frozen-design.zh.md` 中的标题与修订表（v1.10.0），
   独立于程序版本。
-- 测试基线：`AGENTS.md` 规则 7（当前 1857）。
+- 测试基线：`AGENTS.md` 规则 7（当前 2061）。
 
 ## 10. 提交清单
 

@@ -81,6 +81,11 @@ compressed). Hot paths stay plain: `summary.json`, `gspec/*.json`, report HTML, 
 QUAST tables and `contigs.fasta`. Restore any run's raw files with
 `bacmap run expand <run_id>`; compact old runs with `bacmap run compact <run_id>`.
 
+For interactive 3D assemblies, SNP/cgMLST trees and original gmlst MSTs, open the result through
+[gvixb](visualization.md) from the console's sample, run and GOM pages. Historical visualizations
+use the same physical run directory as ingestion and report generation; the latest-sample view is
+a separate, explicitly labelled scope.
+
 ## 3. Run records (`runs.sqlite` + manifests)
 
 Each analyze run creates one immutable record:

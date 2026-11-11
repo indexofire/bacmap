@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="gvixb · bacmap 本地 3D 基因组结果可视化">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%236d8bff'/%3E%3Ccircle cx='16' cy='16' r='6' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+<title>{{ title }} · gvixb</title>
+<link rel="stylesheet" href="/static/gvixb/gvixb.css">
+<link rel="stylesheet" href="/static/gvixb/gvixb-shell.css">
+</head>
+<body>
+<div id="app" data-view="{{ view }}" data-endpoint="{{ link.data_url }}">
+  <canvas id="scene" aria-label="gvixb 3D 可视化画布"></canvas>
+
+  <header class="topbar">
+    <div class="crumb">
+      <div class="l1"><b>GVIXB</b><span class="sep">//</span>BACMAP RESULT VISUALIZATION</div>
+      <div class="l2" id="crumb-sub">{{ link.context }} · LOCAL DATA</div>
+    </div>
+    <a class="gvixb-back" href="{{ back_url }}">← {{ back_label }}</a>
+  </header>
+
+  <aside id="analysis-sidebar">
+    <div class="analysis-kicker" id="analysis-kicker">{{ link.kind }}</div>
+    <h2 class="analysis-title" id="analysis-title">{{ title }}</h2>
+    <p class="analysis-description" id="analysis-description">正在读取当前结果…</p>
+    <div id="analysis-stats"></div>
+    <div class="view-controls" id="analysis-controls"></div>
+    <div class="analysis-actions">
+      <button id="btn-analysis-auto" type="button">自转</button>
+      <button id="btn-analysis-reset" type="button">复位</button>
+      <button id="btn-analysis-export" type="button">PNG</button>
+    </div>
+    <p class="source-note" id="analysis-source">{{ link.context }}</p>
+  </aside>
+
+  <aside id="analysis-panel" class="empty">
+    <div class="slab-head"><i></i><span id="analysis-head">{{ title }} · Selection</span></div>
+    <div id="analysis-body"></div>
+  </aside>
+
+  <div id="bottombar" class="analysis">
+    <div id="dock">
+      <div class="dock-brand">gvixb <span>{{ link.context }}</span></div>
+      <div class="dock-read">
+        <span>Zoom</span><b id="dock-zoom">—</b>
+        <span>Sel</span><b id="dock-sel">—</b>
+      </div>
+    </div>
+  </div>
+  <div id="tooltip"></div>
+</div>
+<script type="module" src="/static/gvixb/gvixb-app.js"></script>
+</body>
+</html>

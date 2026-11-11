@@ -77,6 +77,10 @@ Bakta 导出（`embl/gbff/gff3/ffn/fna/faa`）、合并的 `annotation.json` 与
 报告 HTML、MLST、QUAST 表与 `contigs.fasta`。需要原始文件时用
 `bacmap run expand <run_id>` 展开；存量旧 run 可用 `bacmap run compact <run_id>` 补压。
 
+交互式 3D 组装、SNP/cgMLST 树和 gmlst 原始 MST 可通过 [gvixb](visualization.zh.md)、从控制台的
+样本、运行和 GOM 页面打开。历史可视化与结果摄取、报告生成一样读取本次运行的物理目录；
+样本最新结果视图是单独且明确标注的 scope。
+
 ## 3. 运行记录（`runs.sqlite` + 清单）
 
 每次 analyze 运行都会创建一条不可变记录：

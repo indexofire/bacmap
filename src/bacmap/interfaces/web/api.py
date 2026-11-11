@@ -23,6 +23,13 @@ from pydantic import BaseModel, Field
 
 from bacmap.application.errors import ApplicationError, Conflict, NotFound
 from bacmap.application.plans import PlanService
+from bacmap.interfaces.gvixb import (
+    GvixbLink,
+    gom_visualizations,
+    latest_annotation_link,
+    latest_genome_link,
+    run_visualizations,
+)
 from bacmap.interfaces.stats_summary import gather_stats
 from bacmap.interfaces.views import (
     compare_run_records,
@@ -117,6 +124,23 @@ def _limit(raw: int, ceiling: int = 200) -> int:
     return max(1, min(raw, ceiling))
 
 
+def _gvixb_sample_links(engine: DbosTaskEngine, sample_id: str) -> list[GvixbLink]:
+    """样本"最新结果"的 gvixb 入口（latest scope，与 run scope 严格分离）。
+
+    无对应产物时返回空列表；latest scope 拒绝越界时同样视为无入口
+    （路径越界是安全拒绝，不是 500）。
+    """
+    links: list[GvixbLink] = []
+    for factory in (latest_genome_link, latest_annotation_link):
+        try:
+            link = factory(engine, sample_id)
+        except PermissionError:
+            continue
+        if link is not None:
+            links.append(link)
+    return links
+
+
 def build_api_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     router = APIRouter(prefix="/api/v1")
 
@@ -166,6 +190,7 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         data = sample_detail(engine.home, sample_id)
         if data is None:
             raise NotFound(f"no such sample: {sample_id}")
+        data["gvixb"] = _gvixb_sample_links(engine, sample_id)
         return data
 
     @router.get("/overview")
@@ -377,6 +402,8 @@ def _evidence_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         data = run_detail(engine.home, run_id)
         if data is None:
             raise NotFound(f"no such run: {run_id}")
+        # gvixb 入口只列真实存在的产物；任务未成功/结果目录缺失时为空列表。
+        data["gvixb_views"] = run_visualizations(engine, run_id)
         return data
 
     @router.get("/runs/{run_id}/compare")
@@ -395,6 +422,8 @@ def _evidence_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         data = gom_object(engine.home, object_id, version)
         if data is None:
             raise NotFound(f"no such GOM object: {object_id}")
+        # 仅当对象载荷指向本次运行且产物存在时非空（sample_analysis / cohort 类）。
+        data["gvixb_views"] = gom_visualizations(engine, data)
         return data
 
 

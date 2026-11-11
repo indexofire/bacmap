@@ -4,7 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import CopyButton from '../components/CopyButton.vue'
 import { api } from '../api'
-import type { RunRow, SampleDetail } from '../types'
+import type { GvixbLink, RunRow, SampleDetail } from '../types'
 import { appUrl, fmtTime, jsonText, shortId } from '../lib/format'
 import { useTheme } from '../composables/useTheme'
 
@@ -33,6 +33,10 @@ const digest = computed(() => data.value?.digest)
 const hasAnyReport = computed(() => Boolean(digest.value?.has_report || digest.value?.has_prelim_report))
 const isPrelim = computed(() => !digest.value?.has_report && Boolean(digest.value?.has_prelim_report))
 const showReport = computed(() => activeTab.value === 'report' && hasAnyReport.value)
+const gvixbLinks = computed<GvixbLink[]>(() => {
+  const items = data.value?.gvixb
+  return Array.isArray(items) ? items : []
+})
 const annotation = computed(() => {
   const steps = data.value?.steps ?? {}
   const ann = steps.annotation
@@ -263,6 +267,20 @@ onMounted(() => void load())
                   >
                     {{ shortId(latestRun.task_id, 18) }}
                   </RouterLink>
+                </dd>
+              </div>
+              <div v-if="gvixbLinks.length" class="statuslist__row">
+                <dt>3D 可视化</dt>
+                <dd>
+                  <a
+                    v-for="view in gvixbLinks"
+                    :key="view.id"
+                    class="link-cell"
+                    :href="view.url"
+                    style="margin-right: 12px"
+                  >
+                    {{ view.label.replace('使用 gvixb ', '') }}
+                  </a>
                 </dd>
               </div>
             </dl>

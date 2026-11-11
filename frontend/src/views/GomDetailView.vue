@@ -4,7 +4,7 @@ import { RouterLink, useRoute } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import CopyButton from '../components/CopyButton.vue'
 import { api } from '../api'
-import type { GomObject } from '../types'
+import type { GomObject, GvixbLink } from '../types'
 import { fmtTime, jsonText, shortId } from '../lib/format'
 
 const route = useRoute()
@@ -30,6 +30,15 @@ const strainId = computed(() => stringField(object.value?.strain_id))
 const pipelineVersion = computed(() => stringField(object.value?.pipeline_version))
 const runId = computed(() => stringField(payload.value.run_id))
 const taskId = computed(() => stringField(payload.value.task_id))
+const gvixbViews = computed<GvixbLink[]>(() => {
+  const items = object.value?.gvixb_views
+  return Array.isArray(items)
+    ? items.filter(
+        (item): item is GvixbLink =>
+          !!item && typeof item === 'object' && typeof item.url === 'string' && typeof item.label === 'string',
+      )
+    : []
+})
 
 function stringField(value: unknown): string {
   return typeof value === 'string' ? value : ''
@@ -127,6 +136,25 @@ onMounted(() => void load())
         </div>
 
         <div class="stack">
+          <section v-if="gvixbViews.length" class="card">
+            <div class="card__head">
+              <h2 class="card__title">gvixb · 3D 可视化</h2>
+              <span class="card__hint">指向对象载荷所在运行的实际产物</span>
+            </div>
+            <div class="card__body">
+              <div class="inline-actions">
+                <a
+                  v-for="view in gvixbViews"
+                  :key="view.id"
+                  class="btn btn--ghost btn--sm"
+                  :href="view.url"
+                >
+                  {{ view.label }}
+                </a>
+              </div>
+            </div>
+          </section>
+
           <details class="card gom-details">
             <summary class="gom-details__summary">
               <span class="gom-details__label">

@@ -46,6 +46,8 @@ MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小�
   `local-trusted` 数据分级 Profile 裁剪。无内置对话（ADR-21）。
 - **多种界面** — `/console/` 的 Vue 3 控制台（暗色/浅色/灰色主题、图表、审批）、CLI、TUI、
   JSON API `/api/v1`、MCP（stdio / Streamable HTTP）。
+- **gvixb 集成** — 从控制台的样本、运行和 GOM 页面直接打开线性组装、Bakta/eggNOG 注释圈图、
+  SNP/cgMLST 树及 gmlst 原始 MST；全部资源本地化，历史结果严格按运行读取。
 
 ## 快速开始
 
@@ -91,6 +93,7 @@ bacmap plan confirm <plan_id> --version 1 --hash <前12位>
 | 身份、样本、记录 | [数据与身份](docs/guide/data.zh.md) |
 | Hermes / Pi / DSH + 计划 | [智能体与计划](docs/guide/agent-plans.zh.md) |
 | 结果、运行记录、GOM | [结果与证据](docs/guide/results.zh.md) |
+| 3D 可视化 | [gvixb](docs/guide/visualization.zh.md) |
 | 研究工作台（P1） | [研究工作台](docs/guide/research-workbench.zh.md) |
 | 架构与 DBOS | [核心概念](docs/concepts/index.zh.md) |
 | 备份、升级、排障 | [运维](docs/operations/index.zh.md) |
@@ -100,7 +103,7 @@ bacmap plan confirm <plan_id> --version 1 --hash <前12位>
 
 ```bash
 pixi install -e dev
-pixi run -e dev test        # pytest（当前基线：1703 passed）
+pixi run -e dev test        # pytest（当前基线：2061 passed）
 pixi run -e dev lint        # ruff
 pixi run -e dev typecheck   # mypy
 pixi run -e dev contracts   # import-linter（5 条契约）
