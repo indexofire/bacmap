@@ -49,6 +49,33 @@ from bacmap.tasks.engine._runtime import (  # noqa: F401,E402
 )
 
 
+def _clear_stale_snakemake_locks() -> bool:
+    """陈旧 snakemake 目录锁清理：本机无 snakemake 进程时锁必为 SIGKILL 残留。
+
+    返回 True 表示已清除（调用方应立即重试）。仍有进程在跑（可能是并发
+    analyze 合法持锁）→ False，走正常退避。
+    """
+    import shutil
+    import subprocess as _sp
+
+    try:
+        alive = _sp.run(
+            ["pgrep", "-x", "snakemake"], capture_output=True, text=True
+        ).stdout.strip()
+    except OSError:
+        return False
+    if alive:
+        return False
+    from bacmap.config import BACMAP_HOME
+
+    locks = Path(BACMAP_HOME) / "workflows/bacmap/.snakemake/locks"
+    if locks.is_dir():
+        shutil.rmtree(locks, ignore_errors=True)
+        logger.info("cleared stale snakemake locks (no snakemake process alive)")
+        return True
+    return False
+
+
 def _run_snakemake(params: dict[str, Any]) -> Any:
     from bacmap.workflow.runner import WorkflowRunner, deploy
 
@@ -98,6 +125,10 @@ def _run_snakemake(params: dict[str, Any]) -> Any:
             return result
         if "LockException" not in (result.stderr or ""):
             return result
+        # v1.10.22：SIGKILL 过的 snakemake 会留下陈旧目录锁（.snakemake/locks），
+        # 永不自愈。重试前探测：本机已无 snakemake 进程 → 锁必为残留，直接清除。
+        if _clear_stale_snakemake_locks():
+            continue  # 立即重试，不浪费退避时间
         wait_s = 45 * (attempt + 1)
         logger.warning(
             "snakemake 目录锁被占用（attempt %d/4），%ds 后重试", attempt + 1, wait_s

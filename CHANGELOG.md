@@ -18,6 +18,13 @@
   `POST /tasks/{id}/pause|resume`。pause 在步骤边界收场（不强杀当前
   snakemake 规则）；resume 清旧工作流后以同一 task_id 重建，
   `--rerun-incomplete` 在同一 run 目录从已完成规则继续。新增 PAUSED 任务态。
+- **陈旧 snakemake 锁自愈**：SIGKILL 残留的 `.snakemake/locks` 永不自愈
+  （实测恢复链路卡死于此）——锁冲突重试前探测本机无 snakemake 进程即
+  清除锁并立即重试；并发 analyze 合法持锁仍走退避。
+- **实战闭环**：断电中断任务 3777ad63（跨版本孤儿 × 陈旧锁双重卡死）经
+  cancel → resume 重建 → 锁自愈 → 16 核续跑 → 全流程 succeeded；产物含
+  菌株命名组装文件（MLST FILE=26OTH0027、ST 1025）、gspec/typing 全
+  JSON、自动压缩 31MB。
 - 测试基线 2038 → 2044。
 
 ### 分型产物 JSON 化 + 组装文件以菌株命名 + 防唤醒守卫
