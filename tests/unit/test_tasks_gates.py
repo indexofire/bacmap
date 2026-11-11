@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from bacmap.tasks import gates
 from bacmap.tasks.gates import GateVerdict
 
@@ -25,6 +27,13 @@ def _salmonella_steps() -> dict:
         "plasmid": {"plasmidfinder": [{"GENE": "IncFIB"}]},
         "dec": {},
     }
+
+
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：门测试对本地 [debug] enabled 配置免疫（debug 下门全部直通，
+    REJECT 断言随环境漂移——与 test_web_* / test_tasks_openpath 同一防线）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
 
 
 class TestAnalysisClaimsGate:

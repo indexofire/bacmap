@@ -13,6 +13,12 @@ from bacmap.tasks.params import AnalyzeParams
 from bacmap.tasks.spec import TaskId
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：CLI 计划测试对本地 [debug] enabled 配置免疫（debug 下自动确认）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 class _Engine:
     def __init__(self) -> None:
         self.submitted: list[tuple[str, str]] = []

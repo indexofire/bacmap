@@ -160,6 +160,12 @@ const router = createRouter({
       meta: { title: '样本检索' },
     },
     {
+      path: '/agent/:idx',
+      name: 'agent-embed',
+      component: () => import('./views/AgentEmbedView.vue'),
+      meta: { title: '智能体对话' },
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('./views/NotFoundView.vue'),

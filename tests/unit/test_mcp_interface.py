@@ -11,13 +11,14 @@ from pathlib import Path
 import pytest
 
 import bacmap.tasks.engine.dbos_engine as eng
+from bacmap.interfaces.mcp import server as mcp_server
 from bacmap.interfaces.mcp.profiles import (
     McpProfile,
     ProfileNotAllowedError,
     ProfileSpec,
     resolve_profile,
 )
-from bacmap.interfaces.mcp.server import DEFAULT_PROFILE, build_server, exposed_specs
+from bacmap.interfaces.mcp.server import build_server, exposed_specs
 from bacmap.tasks.spec import TaskState
 from bacmap.tools import registry as tool_registry
 from bacmap.tools.spec import DataClass
@@ -27,6 +28,20 @@ TRUSTED = ProfileSpec(
 )
 
 WRITE_TOOLS = {"bio_analyze_pathogen", "bio_add_metadata", "bio_add_lab_result"}
+
+
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：MCP 计划工具测试对本地 [debug] enabled 配置免疫（debug 下自动确认）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+    # DEFAULT_PROFILE 在模块 import 时按 debug 计算（D4）——须一并重置为 cloud D1
+    from bacmap.interfaces.mcp.profiles import McpProfile, ProfileSpec
+    from bacmap.tools.spec import DataClass
+
+    monkeypatch.setattr(
+        "bacmap.interfaces.mcp.server.DEFAULT_PROFILE",
+        ProfileSpec(profile=McpProfile.CLOUD, max_data_class=DataClass.D1, actor="mcp-stdio:cloud:unknown"),
+    )
 
 
 class _NoopArbiter:
@@ -200,7 +215,7 @@ class TestProfileDataClassFiltering:
         names = _list_tool_names(build_server())
         assert "bio_list_reference_genomes" in names  # D0
         # 注册表工具按 Profile 裁剪；能力协商工具始终可用（不涉及数据）
-        assert names == {s.name for s in exposed_specs(DEFAULT_PROFILE)} | {"bacmap_capabilities"}
+        assert names == {s.name for s in exposed_specs(mcp_server.DEFAULT_PROFILE)} | {"bacmap_capabilities"}
 
     def test_hidden_tool_call_rejected(self, tmp_path: Path):
         fa = tmp_path / "x.fa"

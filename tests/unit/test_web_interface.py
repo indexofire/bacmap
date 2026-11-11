@@ -32,6 +32,17 @@ class _Proc:
     returncode = 0
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.23：鉴权/CSRF 测试对本地 debug 配置免疫。
+
+    开发机常开 ``[debug] enabled = true``（D4 调试），而 debug 下 Web 完全
+    免鉴权（from_env 设计）——不钉死会让本文件所有 401 断言在开发机上
+    随环境漂移（真实发生过：gvixb 合入后唯一失败项即此因）。
+    """
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 @pytest.fixture
 def engine(tmp_path: Path, monkeypatch):
     rep = tmp_path / "results" / "SAM-001" / "report"

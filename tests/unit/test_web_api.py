@@ -15,6 +15,12 @@ from bacmap.tasks.params import AnalyzeParams
 from bacmap.tasks.spec import TaskType
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：鉴权测试对本地 [debug] enabled 配置免疫（debug 下 Web 免鉴权）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 @pytest.fixture
 def env(tmp_path: Path, monkeypatch):
     from bacmap.tasks.engine import task_engine

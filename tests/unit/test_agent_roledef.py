@@ -13,6 +13,13 @@ from bacmap.agent.llm.gateway import LlmGateway
 from bacmap.interfaces.mcp.server import build_server
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：角色数据分级测试对本地 [debug] enabled 配置免疫（debug 下
+    网关跳过角色/分级校验，ceiling 断言随环境漂移）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 class _Out(BaseModel):
     ok: bool = True
 

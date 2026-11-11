@@ -68,3 +68,48 @@ class TestCompactExpand:
         assert (run_dir / "S1/annotation/bakta/S1.embl").is_file()
         assert (run_dir / "S1/annotation/bakta/S1.embl").read_text() == "x" * 10_000
         assert not (run_dir / "S1/annotation/bakta/S1.embl.gz").exists()
+
+
+class TestRepairFlatAliases:
+    def test_relinks_to_latest_complete_run(self, tmp_path: Path):
+        from bacmap.store.results_layout import repair_flat_aliases
+
+        home = tmp_path
+        stale = home / "results/runs/old"
+        fresh = home / "results/runs/new"
+        for run, with_report in ((stale, False), (fresh, True)):
+            rep = run / "S1" / "report"
+            rep.mkdir(parents=True)
+            (rep / "S1_summary.prelim.json").write_text("{}")
+            if with_report:
+                (rep / "S1_summary.json").write_text("{}")
+                (rep / "S1_report.html").write_text("<html>")
+        link = home / "results" / "S1"
+        link.symlink_to("runs/old/S1")
+        result = repair_flat_aliases(home)
+        assert result == {"repaired": 1}
+        assert "runs/new" in str(link.resolve())
+        assert (link / "report" / "S1_report.html").is_file()
+
+    def test_keeps_complete_alias(self, tmp_path: Path):
+        from bacmap.store.results_layout import repair_flat_aliases
+
+        run = tmp_path / "results/runs/good/S1/report"
+        run.mkdir(parents=True)
+        (run / "S1_summary.json").write_text("{}")
+        (run / "S1_report.html").write_text("<html>")
+        link = tmp_path / "results" / "S1"
+        link.symlink_to("runs/good/S1")
+        assert repair_flat_aliases(tmp_path) == {"repaired": 0}
+
+    def test_no_complete_run_keeps_original(self, tmp_path: Path):
+        """只有残缺 run 时保持原状（至少 prelim 可见，不制造断链）。"""
+        from bacmap.store.results_layout import repair_flat_aliases
+
+        rep = tmp_path / "results/runs/only/S1/report"
+        rep.mkdir(parents=True)
+        (rep / "S1_summary.prelim.json").write_text("{}")
+        link = tmp_path / "results" / "S1"
+        link.symlink_to("runs/only/S1")
+        assert repair_flat_aliases(tmp_path) == {"repaired": 0}
+        assert "runs/only" in str(link.resolve())

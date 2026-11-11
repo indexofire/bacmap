@@ -198,7 +198,8 @@ class DbosTaskEngine:
             )
             with self._conn() as conn:
                 row = conn.execute(
-                    "SELECT state, message FROM tasks WHERE task_id = ?", (task_id,)
+                    "SELECT state, message, current_step FROM tasks WHERE task_id = ?",
+                    (task_id,),
                 ).fetchone()
             if row is not None:
                 state, message = TaskState(row["state"]), row["message"]

@@ -94,6 +94,42 @@ def compact_run_artifacts(run_dir: Path | str, samples: Iterable[str] | None = N
     return {"files": files, "bytes_saved": saved, "samples": names}
 
 
+def repair_flat_aliases(home: Path | str) -> dict:
+    """v1.10.24 别名自愈：把指向"无最终报告 run"的样本别名重指到最新完整 run。
+
+    场景（实测）：被取消的批次在 prelim 阶段成功时抢占了扁平别名，随后
+    中断——别名从此指向无报告的残缺 run，控制台"完整报告"按钮消失、
+    报告 iframe 404。规则：别名指向的 run 缺 `<sample>_summary.json` 时，
+    按目录名（任务 ID 无时间序，按 mtime）找**最新含最终 summary** 的 run
+    重指；没有完整 run 时保持原状（至少 prelim 可见）。
+    """
+    home = Path(home)
+    runs_root = results_root(home) / RUNS_DIRNAME
+    if not runs_root.is_dir():
+        return {"repaired": 0}
+    # 每个 run 目录的修改时间（最终 summary 写入时间）作排序键
+    run_dirs = sorted(
+        (p for p in runs_root.iterdir() if p.is_dir()),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    repaired = 0
+    for link in results_root(home).iterdir():
+        if link.name in COHORT_DIRS or not link.is_symlink():
+            continue
+        sample = link.name
+        target = link.resolve()
+        if (target / "report" / f"{sample}_report.html").is_file():
+            continue  # 指向的 run 已有完整报告——无需修复
+        for run in run_dirs:
+            candidate = run / sample
+            if (candidate / "report" / f"{sample}_report.html").is_file():
+                _link(link, candidate)
+                repaired += 1
+                break
+    return {"repaired": repaired}
+
+
 def expand_run_artifacts(run_dir: Path | str, samples: Iterable[str] | None = None) -> int:
     """展开 compact 压缩的冷产物（幂等；返回展开文件数）。"""
     run_dir = Path(run_dir)

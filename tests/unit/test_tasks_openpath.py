@@ -14,6 +14,13 @@ from bacmap.tasks.gates import GateVerdict
 from bacmap.tasks.spec import Approval, TaskState, TaskType
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：门/审批测试对本地 [debug] enabled 配置免疫（debug 下审批门
+    自动通过——引用门会把未知 PMID 放行而非 REJECT，断言随环境漂移）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 class TestMiningGate:
     def test_signed_reproducible_passes(self):
         r = gates.evaluate_mining(

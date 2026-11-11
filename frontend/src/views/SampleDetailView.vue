@@ -30,8 +30,21 @@ const reportDownload = computed(
 )
 
 const digest = computed(() => data.value?.digest)
-const hasAnyReport = computed(() => Boolean(digest.value?.has_report || digest.value?.has_prelim_report))
-const isPrelim = computed(() => !digest.value?.has_report && Boolean(digest.value?.has_prelim_report))
+// v1.10.24：有 summary 即可进报告页——最终 HTML 缺失时路由按需重渲染，
+// 只有 prelim summary 时路由按需生成 prelim 报告（此前按钮依赖 HTML 已存在，
+// 被中断批次的样本（ECO/SAL 群）永远看不到按钮）。
+const hasAnyReport = computed(() =>
+  Boolean(
+    digest.value?.has_report ||
+    digest.value?.has_prelim_report ||
+    digest.value?.prelim ||
+    Object.keys(data.value?.steps ?? {}).length > 0,
+  ),
+)
+const isPrelim = computed(() =>
+  !digest.value?.has_report &&
+  Boolean(digest.value?.has_prelim_report || digest.value?.prelim),
+)
 const showReport = computed(() => activeTab.value === 'report' && hasAnyReport.value)
 const gvixbLinks = computed<GvixbLink[]>(() => {
   const items = data.value?.gvixb

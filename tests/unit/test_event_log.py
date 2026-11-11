@@ -18,6 +18,13 @@ def log(tmp_path: Path) -> EventLog:
     return EventLog(tmp_path / "tasks.sqlite")
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：计划生命周期测试对本地 [debug] enabled 配置免疫（debug 下
+    PlanService 创建即自动确认，revise 报 Conflict）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 class TestEventLog:
     def test_append_returns_monotonic_seq(self, log: EventLog):
         a = log.append(EventType.TASK_SUBMITTED, task_id="t1", actor="cli", payload={"k": 1})

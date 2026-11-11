@@ -26,6 +26,12 @@ def _pmid_entry(identifier: str = "PMID:36626432") -> dict:
     }
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：引用门测试对本地 [debug] enabled 配置免疫（debug 下门直通）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 class TestKnowledgeStore:
     def test_import_then_approve_flow(self, tmp_path: Path):
         ks = _store(tmp_path)

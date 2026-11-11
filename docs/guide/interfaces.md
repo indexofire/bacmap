@@ -249,6 +249,34 @@ ssh -L 8800:127.0.0.1:8800 user@workstation
 
 To run the console in the background (survives the terminal), use daemon mode:
 
+### Embedding a local agent chat (DSH / Hermes / opencode)
+
+Instead of keeping bacmap and your agent harness in two windows, embed the
+harness's own web UI as a console sidebar page (loopback only, ADR-16 — cloud
+frontends cannot be embedded):
+
+```toml
+# config.toml
+[[web.agent_embed]]
+name = "DSH"
+url = "http://127.0.0.1:3080/?token=<dsh-browser-trust-token>"
+
+[[web.agent_embed]]
+name = "Hermes"
+url = "http://127.0.0.1:56791"      # hermes dashboard
+
+[[web.agent_embed]]
+name = "opencode"
+url = "http://127.0.0.1:49374"      # opencode serve
+```
+
+Restart `bacmap start web` — a "智能体对话" sidebar group appears with one
+page per entry (`/agent/<n>`). The configured origins are added to the web
+CSP `frame-src` allowlist automatically; entries pointing at non-loopback
+hosts are skipped. Verified against DSH (needs its browser-trust token in the
+URL), the Hermes dashboard and `opencode serve`. Pi is TUI-only (no web UI to
+embed).
+
 ```bash
 bacmap start web -D            # or --daemon
 # PID file: $BACMAP_HOME/web.pid · log: $BACMAP_HOME/web.log

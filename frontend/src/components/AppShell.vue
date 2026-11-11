@@ -23,33 +23,52 @@ let pendingTimer: ReturnType<typeof setInterval> | undefined
 
 const title = computed(() => (route.meta.title as string | undefined) ?? '控制台')
 
-const groups = [
-  {
-    label: '工作台',
-    items: [
-      { to: '/', label: '仪表盘', icon: 'dashboard', exact: true },
-      { to: '/tasks', label: '任务', icon: 'tasks' },
-      { to: '/plans', label: '计划', icon: 'plans' },
-      { to: '/research', label: '研究', icon: 'chart' },
-    ],
-  },
-  {
-    label: '证据链',
-    items: [
-      { to: '/samples', label: '样本', icon: 'records' },
-      { to: '/runs', label: '运行记录', icon: 'runs' },
-      { to: '/records', label: '数据记录', icon: 'file-text' },
-      { to: '/gom', label: 'GOM', icon: 'server' },
-    ],
-  },
-  {
-    label: '系统',
-    items: [
-      { to: '/overview', label: '系统概览', icon: 'overview' },
-      { to: '/search', label: '样本检索', icon: 'search' },
-    ],
-  },
-]
+interface AgentEmbedLink {
+  name: string
+  url: string
+}
+const agentEmbeds = ref<AgentEmbedLink[]>([])
+
+const groups = computed(() => {
+  const base = [
+    {
+      label: '工作台',
+      items: [
+        { to: '/', label: '仪表盘', icon: 'dashboard', exact: true },
+        { to: '/tasks', label: '任务', icon: 'tasks' },
+        { to: '/plans', label: '计划', icon: 'plans' },
+        { to: '/research', label: '研究', icon: 'chart' },
+      ],
+    },
+    {
+      label: '证据链',
+      items: [
+        { to: '/samples', label: '样本', icon: 'records' },
+        { to: '/runs', label: '运行记录', icon: 'runs' },
+        { to: '/records', label: '数据记录', icon: 'file-text' },
+        { to: '/gom', label: 'GOM', icon: 'server' },
+      ],
+    },
+    {
+      label: '系统',
+      items: [
+        { to: '/overview', label: '系统概览', icon: 'overview' },
+        { to: '/search', label: '样本检索', icon: 'search' },
+      ],
+    },
+  ]
+  if (agentEmbeds.value.length) {
+    base.push({
+      label: '智能体对话',
+      items: agentEmbeds.value.map((e, i) => ({
+        to: `/agent/${i}`,
+        label: e.name,
+        icon: 'terminal',
+      })),
+    })
+  }
+  return base
+})
 
 watch(
   () => route.fullPath,
@@ -66,6 +85,8 @@ onMounted(async () => {
   try {
     const cap = await api.capabilities()
     version.value = cap.bacmap_version
+    const embeds = (cap as unknown as { agent_embeds?: AgentEmbedLink[] }).agent_embeds
+    agentEmbeds.value = Array.isArray(embeds) ? embeds : []
   } catch {
     // 版本号是装饰信息，失败不打断控制台。
   }

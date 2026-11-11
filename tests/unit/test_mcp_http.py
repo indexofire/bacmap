@@ -27,6 +27,20 @@ _INIT = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：MCP HTTP 测试对本地 [debug] enabled 配置免疫（debug 下
+    DEFAULT_PROFILE 为 D4，工具带裁剪断言随环境漂移）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+    from bacmap.interfaces.mcp.profiles import McpProfile, ProfileSpec
+    from bacmap.tools.spec import DataClass
+
+    monkeypatch.setattr(
+        "bacmap.interfaces.mcp.server.DEFAULT_PROFILE",
+        ProfileSpec(profile=McpProfile.CLOUD, max_data_class=DataClass.D1, actor="mcp-stdio:cloud:unknown"),
+    )
+
+
 class TestBearerTokenMiddleware:
     def test_empty_token_rejected(self):
         with pytest.raises(ValueError):

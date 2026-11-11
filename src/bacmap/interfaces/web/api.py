@@ -160,10 +160,15 @@ def build_api_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
 
 def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
     @router.get("/capabilities")
-    def capabilities() -> dict[str, Any]:
+    def capabilities(request: Request) -> dict[str, Any]:
+        # v1.10.24：智能体对话嵌入清单（[[web.agent_embed]] 配置驱动）。
+        from bacmap.interfaces.web.agent_embed import embeds_payload
+
+        embeds = getattr(request.app.state, "agent_embeds", [])
         return {
             "api_version": API_VERSION,
             "bacmap_version": pkg_version("bacmap"),
+            "agent_embeds": embeds_payload(embeds),
             "plannable_task_types": ["analyze", "curate"],
             "features": [
                 "plans",

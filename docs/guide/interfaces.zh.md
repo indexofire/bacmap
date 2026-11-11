@@ -235,6 +235,31 @@ ssh -L 8800:127.0.0.1:8800 user@workstation
 
 后台运行控制台（不随终端退出），使用守护进程模式：
 
+### 内嵌本机智能体对话（DSH / Hermes / opencode）
+
+不必同时开 bacmap 与智能体两个窗口——把智能体自己的 web UI 嵌成控制台
+侧边栏页面（仅限回环地址，ADR-16；云托管前端不可嵌入）：
+
+```toml
+# config.toml
+[[web.agent_embed]]
+name = "DSH"
+url = "http://127.0.0.1:3080/?token=<dsh-browser-trust-token>"
+
+[[web.agent_embed]]
+name = "Hermes"
+url = "http://127.0.0.1:56791"      # hermes dashboard
+
+[[web.agent_embed]]
+name = "opencode"
+url = "http://127.0.0.1:49374"      # opencode serve
+```
+
+重启 `bacmap start web` 后侧边栏出现"智能体对话"分组，每条配置一个页面
+（`/agent/<n>`）。配置的 origin 会自动加入 Web CSP 的 `frame-src` 白名单；
+非回环条目直接跳过。已实测：DSH（需把 browser-trust token 写进 URL）、
+Hermes Dashboard、`opencode serve` 三端可嵌；Pi 为纯 TUI（无 web 面可嵌）。
+
 ```bash
 bacmap start web -D            # 或 --daemon
 # PID 文件：$BACMAP_HOME/web.pid · 日志：$BACMAP_HOME/web.log

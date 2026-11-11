@@ -69,6 +69,13 @@ def home(tmp_path: Path) -> Path:
     return tmp_path
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：研究计划测试对本地 [debug] enabled 配置免疫（debug 下
+    PlanService 自动确认，round-trip 状态断言随环境漂移）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 class TestAnalysisSpec:
     def test_method_requirements(self):
         with pytest.raises(ValueError, match="mixed_logistic requires"):

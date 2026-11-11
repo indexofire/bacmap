@@ -22,6 +22,13 @@ from bacmap.agent.llm.gateway import (
 from bacmap.tools.spec import DataClass
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：LLM 网关测试对本地 [debug] enabled 配置免疫（debug 下
+    角色档位校验跳过，min-tier 断言随环境漂移）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 class _Out(BaseModel):
     """最小结构化输出模型（原意图分类模型已随内置助手移除）。"""
 

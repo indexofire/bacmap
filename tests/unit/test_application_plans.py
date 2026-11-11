@@ -23,6 +23,12 @@ from bacmap.tasks.params import AnalyzeParams, CurateParams, CurateScope, engine
 from bacmap.tasks.spec import TaskId, TaskType
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：计划确认测试对本地 [debug] enabled 配置免疫（debug 下创建即自动确认）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 class FakeEngine:
     """记录提交；显式 task_id 幂等（与 DbosTaskEngine 契约一致）。"""
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from bacmap.interfaces.web.auth import (
     WebAuthConfig,
     issue_session,
@@ -58,6 +60,13 @@ class TestSession:
         assert not verify_session("secret", "")
         assert not verify_session("secret", "a.b")
         assert not verify_session("secret", "a.not-int.c")
+
+
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：鉴权测试对本地 [debug] enabled 配置免疫（debug 下 Web 免鉴权）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
 
 
 class TestAuthConfig:

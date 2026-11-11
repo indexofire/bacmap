@@ -31,6 +31,13 @@ _SECURITY_HEADERS: list[tuple[bytes, bytes]] = [
 ]
 
 
+def _csp_with_frame_sources(sources: list[str]) -> str:
+    """default-src 'self' 下跨源 iframe 会被拦——追加 frame-src 白名单。"""
+    if not sources:
+        return CSP
+    return CSP + f"; frame-src 'self' {' '.join(sources)}"
+
+
 def _apply(headers: list[tuple[bytes, bytes]]) -> None:
     """附加安全头（已存在同名者不重复添加）。"""
     present = {h[0].lower() for h in headers}
@@ -40,10 +47,23 @@ def _apply(headers: list[tuple[bytes, bytes]]) -> None:
 
 
 class SecurityHeadersMiddleware:
-    """纯 ASGI：为所有 HTTP 响应附加安全头（含鉴权 401）。"""
+    """纯 ASGI：为所有 HTTP 响应附加安全头（含鉴权 401）。
 
-    def __init__(self, app: Any) -> None:
+    ``extra_frame_sources``（v1.10.24）：显式放行进 CSP ``frame-src`` 的
+    origin（bacmap 页面里嵌入本机智能体 UI 用；缺省为空 = 沿用
+    default-src 'self' 的最严格行为）。
+    """
+
+    def __init__(self, app: Any, extra_frame_sources: list[str] | None = None) -> None:
         self._app = app
+        sources = [s for s in (extra_frame_sources or []) if s]
+        self._headers: list[tuple[bytes, bytes]] = [
+            (b"content-security-policy", _csp_with_frame_sources(sources).encode("latin-1")),
+            (b"x-content-type-options", b"nosniff"),
+            (b"x-frame-options", b"DENY"),
+            (b"referrer-policy", b"no-referrer"),
+            (b"cross-origin-opener-policy", b"same-origin"),
+        ]
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope.get("type") != "http":
@@ -52,7 +72,11 @@ class SecurityHeadersMiddleware:
 
         async def send_wrapper(message: dict[str, Any]) -> None:
             if message.get("type") == "http.response.start":
-                _apply(message.setdefault("headers", []))
+                headers = message.setdefault("headers", [])
+                present = {h[0].lower() for h in headers}
+                for name, value in self._headers:
+                    if name not in present:
+                        headers.append((name, value))
             await send(message)
 
         await self._app(scope, receive, send_wrapper)

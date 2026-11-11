@@ -31,6 +31,13 @@ def _spec(tmp_path: Path) -> SandboxSpec:
     )
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：沙箱测试对本地 [debug] enabled 配置免疫（debug 下无后端
+    时回退透传，refuse 断言随环境漂移）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 class TestCommandBuilding:
     def test_apptainer_cmd(self, tmp_path: Path):
         cmd = ApptainerRunner().build_cmd(_spec(tmp_path))

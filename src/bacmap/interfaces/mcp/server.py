@@ -80,13 +80,17 @@ def exposed_specs(profile: ProfileSpec) -> list[Any]:
     ]
 
 
-def build_server(engine: Any = None, profile: ProfileSpec = DEFAULT_PROFILE) -> MCPServer:
+def build_server(engine: Any = None, profile: ProfileSpec | None = None) -> MCPServer:
     """构建 bacmap MCP server。
 
     engine 为 None 时不注册任务提交工具（纯只读模式）；
     传入 DbosTaskEngine 时暴露 bacmap_submit_task / bacmap_task_status。
     ``profile`` 决定工具带的数据级别上限与任务提交者身份（服务端决定）。
+    v1.10.24：profile 延迟取默认（原默认参数在 def 时绑定模块级常量，
+    测试 monkeypatch DEFAULT_PROFILE 不生效——D4/D1 裁剪随环境漂移）。
     """
+    if profile is None:
+        profile = DEFAULT_PROFILE
     server = MCPServer(
         name="bacmap",
         instructions=external_operating_rules(

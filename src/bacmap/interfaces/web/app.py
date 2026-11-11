@@ -221,9 +221,14 @@ def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
         if not _validate_sample_id(sample_id):
             raise HTTPException(400, "非法样本 ID")
         path = report_path(engine, sample_id)
-        # v1.10.23 流式首屏：最终报告缺失且 prelim summary 存在 → 生成/提供
-        # 初步报告（注释完成前 web 即可查看分型与 AMR 结果）。
+        # v1.10.24 流式首屏：最终报告缺失时——有最终 summary 先按需重渲染，
+        # 否则 prelim summary 存在则生成/提供初步报告（注释完成前 web 即可
+        # 查看分型与 AMR 结果）。
         if not path.is_file() and not download:
+            if (path.parent / f"{sample_id}_summary.json").is_file():
+                _ensure_current_report(engine, sample_id, path)
+                if path.is_file():
+                    return FileResponse(path, media_type="text/html")
             prelim_html = _ensure_prelim_report(engine, sample_id)
             if prelim_html is not None:
                 return FileResponse(prelim_html, media_type="text/html")
@@ -340,12 +345,23 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
     """
     app = FastAPI(title="bacmap", docs_url=None, redoc_url=None)
     cfg = WebAuthConfig.from_env(auth_token)
+    # v1.10.24 智能体对话嵌入：读 [[web.agent_embed]]，origin 进 CSP frame-src。
+    from bacmap.config import config_path as _active_config_path
+    from bacmap.interfaces.web.agent_embed import load_agent_embeds
+
+    agent_embeds = load_agent_embeds(_active_config_path(engine.home))
+    app.state.agent_embeds = agent_embeds
     app.state.web_auth = cfg
     if cfg.enabled:
         # ADR-14/v1.4.15：bearer（API）与 cookie（浏览器）双通道；cookie 模式配 CSRF。
         app.add_middleware(WebAuthMiddleware, cfg=cfg)
     # 安全响应头（含 CSP）：最后加入 → 位于最外层，鉴权 401/303 也带安全头。
-    app.add_middleware(SecurityHeadersMiddleware)
+    # v1.10.24：配置了智能体嵌入时，其回环 origin 加入 frame-src（default-src
+    # 'self' 会拦跨源 iframe；仅放行配置内显式声明的本机地址）。
+    _frame_sources = [e.origin for e in agent_embeds if e.origin]
+    app.add_middleware(
+        SecurityHeadersMiddleware, extra_frame_sources=_frame_sources
+    )
     # 静态资源仅本地（CSS/图标/脚本；零外联，ADR-16）
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

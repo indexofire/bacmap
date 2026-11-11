@@ -125,8 +125,11 @@ def _now() -> str:
 
 
 def recover_interrupted(home: Path, dbos_db: Path | None = None) -> dict:
-    """DBOS 启动后的组合入口：收养跨版本 PENDING → 对账卡死任务行。"""
+    """DBOS 启动后的组合入口：收养跨版本 PENDING → 对账卡死任务行 → 别名自愈。"""
+    from bacmap.store.results_layout import repair_flat_aliases
+
     dbos_db = dbos_db or (home / "dbos.sqlite")
     adopted = adopt_stale_pending_workflows(dbos_db)
     reconciled = reconcile_stuck_tasks(home)
-    return {"adopted": adopted, "reconciled": reconciled}
+    alias = repair_flat_aliases(home)
+    return {"adopted": adopted, "reconciled": reconciled, **alias}

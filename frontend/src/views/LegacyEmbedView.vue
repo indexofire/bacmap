@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import { appUrl } from '../lib/format'
+import { useTheme } from '../composables/useTheme'
 
 /**
  * 旧版 Jinja 工具页的控制台内嵌载体（v1.10.20）。
@@ -14,6 +15,7 @@ import { appUrl } from '../lib/format'
  * 旧路径；:param 占位符用路由参数插值。
  */
 const route = useRoute()
+const { resolved: resolvedTheme } = useTheme()
 
 const title = computed(() => (route.meta.title as string) ?? '')
 const hint = computed(() => (route.meta.hint as string) ?? '')
@@ -44,10 +46,11 @@ const frameSrc = computed(() => {
     </header>
     <div class="embed-card">
       <iframe
+        :key="resolvedTheme"
         class="embed-frame"
         :src="frameSrc"
         :title="title"
-        sandbox="allow-forms allow-same-origin allow-downloads"
+        sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"
       />
     </div>
   </div>
@@ -64,7 +67,7 @@ const frameSrc = computed(() => {
 .embed-frame {
   display: block;
   width: 100%;
-  min-height: calc(100vh - 210px);
+  height: max(720px, calc(100vh - 210px));
   border: 0;
   background: var(--bg);
 }

@@ -75,6 +75,13 @@ def home(tmp_path: Path, monkeypatch) -> Path:
     return tmp_path
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：研究链路测试对本地 [debug] enabled 配置免疫（debug 下
+    claims/publication 审核跳过，readiness/verdict 断言随环境漂移）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 class TestStat:
     def test_2x2_and_fisher(self, home: Path):
         stat = analyze_amr_association(home, "run-1", "blaKPC-33", "meropenem")

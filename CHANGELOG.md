@@ -5,6 +5,56 @@
 
 ## [Unreleased]
 
+### bug 修复：iframe 高度 / 报告按钮缺失 / 别名自愈 / status() 列缺失
+
+- **iframe 塌缩**：智能体内嵌与旧工具嵌入页改 `height: max(720px, calc(100vh - 210px))`
+  （低矮容器如 DSH 侧栏下 100vh 会塌缩，固定地板兜底；报告 iframe 已有 760px 地板）。
+- **"完整报告"按钮缺失**：按钮此前依赖 HTML 已存在——被中断批次的样本
+  （ECO/SAL 群，prelim 抢占别名后中断、无最终 HTML）永远看不到按钮。
+  改为"有 summary 即可进"（最终 HTML 缺失时路由按需重渲染，只有 prelim
+  summary 时按需生成 prelim 报告）；报告路由优先最终 summary 重渲染再落回 prelim。
+- **别名自愈 `repair_flat_aliases`**（启动恢复第三步）：别名指向的 run 缺
+  最终报告且存在含报告的更完整 run 时重指（实测 26OTH0027 从残缺 1719d5c3
+  → 完整 52a21bfc）。
+- **`status()` IndexError**：debug 自动审批分支的 SELECT 缺 `current_step` 列。
+- **test_tasks_openpath 环境免疫**：debug 下审批门自动通过——引用门测试的
+  REJECT 断言随本地配置漂移；autouse fixture 钉死（同 test_web_* 三件套）。
+
+### 控制台内嵌智能体对话（DSH / Hermes / opencode）
+
+- **单窗口工作流**：`config.toml` 的 `[[web.agent_embed]]` 声明本机智能体
+  web UI（回环地址 only，ADR-16；云托管前端不可嵌入），控制台侧边栏出现
+  "智能体对话"分组，`/agent/:idx` 以 iframe 内嵌。实测三端：DSH（3080，
+  browser-trust token 需写进 URL）、Hermes Dashboard（56791）、opencode
+  serve（49374）——三者均未设 frame 拦截头，直接可嵌。Pi 为 TUI 无 web 面，
+  暂不可嵌。
+- **CSP 精确放行**：配置 origin 注入 `frame-src`（default-src 'self' 会拦
+  跨源 iframe）；`SecurityHeadersMiddleware` 参数化（MCP HTTP 侧不受影响）。
+- **鉴权测试环境免疫**（三个文件）：开发机 `[debug] enabled` 下 Web 免
+  鉴权——test_web_interface / test_web_api / test_web_auth 增加 autouse
+  fixture 钉死 debug_mode，防止 401/CSRF 断言随本地配置漂移。
+- gmlst **最小生成树已由 gvixb 接入**（`/gvixb/runs/{run_id}/mst/{group}`，
+  3D 渲染 `cgmlst/<group>/mst_payload.json`）——跑一次含 cgmlst 队列的
+  analyze 后即可点亮。
+
+### 研究工作台主题贯通（嵌入页三态跟随）
+
+### 研究工作台主题贯通（嵌入页三态跟随）
+
+- **为什么是独立页**：研究工作台是 Jinja 时代的服务端渲染表单流（study/
+  cohort/claim/实验/打包，CSRF+POST 闭环），早于 Vue 控制台重设计；完整
+  Vue 化（10+ 表单流）为后续路线图，当前经 LegacyEmbedView 沙箱嵌入。
+- **主题打通**：legacy `static/css/app.css` 为变量驱动（225 处 var()）——
+  新增 `html[data-theme="light"|"gray"]` 令牌覆盖（与控制台 tokens 逐值
+  镜像，gray 含网格纸背景）；`base.html` 引入外置同源 `theme-sync.js`
+  （内联脚本会被 CSP `script-src 'self'` 拦截）从**同源共享 localStorage**
+  读取 `bacmap-theme`；嵌入 iframe 补 `allow-scripts` 并按主题 key 化
+  （切换主题即重载跟随）。Playwright 三态实测：gray=#deded8 /
+  light=#f9fafb / dark=#08090a。
+- **鉴权测试环境免疫**：开发机开 `[debug] enabled`（D4 调试）时 Web 免
+  鉴权——`test_web_interface` 增加 autouse fixture 钉死 debug_mode，
+  防止 401 断言随本地配置漂移（gvixb 合入后的唯一失败项即此因，非 gvixb）。
+
 ### gvixb 3D 可视化集成
 
 - **结果启动的 3D 视图**：从控制台样本/运行/GOM 页面打开线性组装图、Bakta/eggNOG

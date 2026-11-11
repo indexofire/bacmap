@@ -57,6 +57,13 @@ def _valid_candidate() -> dict:
     }
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：审批流转测试对本地 [debug] enabled 配置免疫（debug 下审批门
+    自动通过，awaiting_approval 断言随环境漂移——与其余门/鉴权测试同一防线）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 class TestBaselineReleaseGate:
     def test_valid_candidate_passes(self):
         r = gates.evaluate_baseline_release(_valid_candidate())

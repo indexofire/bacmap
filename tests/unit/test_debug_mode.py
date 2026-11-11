@@ -25,6 +25,8 @@ class TestDebugFlag:
             monkeypatch.setenv("BACMAP_DEBUG", value)
             assert debug_mode() is False
         monkeypatch.delenv("BACMAP_DEBUG", raising=False)
+        # 环境变量之外 config.toml 也会开 debug（开发机常态）——钉死 config 侧
+        monkeypatch.setattr("bacmap.config._debug_from_config", lambda: False)
         assert debug_mode() is False
 
     def test_debug_mode_from_config(self, monkeypatch, tmp_path: Path):
@@ -51,6 +53,7 @@ class TestDebugFlag:
         import bacmap.config as config
 
         monkeypatch.delenv("BACMAP_DEBUG", raising=False)
+        monkeypatch.setattr("bacmap.config._debug_from_config", lambda: False)
         monkeypatch.setattr(config, "BACMAP_HOME", tmp_path)
         (tmp_path / "config.toml").write_text("not valid ==", encoding="utf-8")
         assert debug_mode() is False
@@ -72,6 +75,7 @@ class TestWebDebug:
         from bacmap.interfaces.web.auth import require_auth_when_exposed
 
         monkeypatch.delenv("BACMAP_DEBUG", raising=False)
+        monkeypatch.setattr("bacmap.config._debug_from_config", lambda: False)
         with pytest.raises(SystemExit):
             require_auth_when_exposed("192.0.2.1", None)
 
@@ -93,6 +97,7 @@ class TestMcpDebug:
         from bacmap.interfaces.mcp.profiles import ProfileNotAllowedError, resolve_profile
 
         monkeypatch.delenv("BACMAP_DEBUG", raising=False)
+        monkeypatch.setattr("bacmap.config._debug_from_config", lambda: False)
         with pytest.raises(ProfileNotAllowedError):
             resolve_profile("local-trusted", tmp_path, "stdio")
 
@@ -139,6 +144,8 @@ class TestDoctorDebug:
         (tmp_path / "config.toml").write_text(
             "[debug]\nenabled = true\n", encoding="utf-8"
         )
+        # 本测试自建 tmp BACMAP_HOME + config（debug=true）验证 config 级告警——
+        # 环境自洽，不能钉死 debug_mode=False（v1.10.24 修正批量替换误伤）。
         checks = collect_checks(tmp_path)
         assert any(c["name"] == "debug" and c["status"] == "warn" for c in checks)
 
@@ -146,6 +153,8 @@ class TestDoctorDebug:
         from bacmap.interfaces.cli.ops import collect_checks
 
         monkeypatch.delenv("BACMAP_DEBUG", raising=False)
+        monkeypatch.setattr("bacmap.config._debug_from_config", lambda: False)
+        monkeypatch.setattr("bacmap.config._debug_from_config", lambda: False)
         assert all(c["name"] != "debug" for c in collect_checks(tmp_path))
 
 
@@ -159,7 +168,11 @@ class TestSandboxDebug:
         from bacmap.agent.sandbox import SandboxExecutor
 
         monkeypatch.delenv("BACMAP_DEBUG", raising=False)
+        monkeypatch.setattr("bacmap.config._debug_from_config", lambda: False)
         monkeypatch.delenv("BACMAP_ALLOW_UNSANDBOXED", raising=False)
+        # 环境变量之外，[debug] enabled=true 的 config.toml 也会开 debug——
+        # 本测试验证的是"非 debug"侧，须钉死（v1.10.24）。
+        monkeypatch.setattr("bacmap.config._debug_from_config", lambda: False)
         assert SandboxExecutor(runners=[]).backend_name() == "unavailable"
 
 

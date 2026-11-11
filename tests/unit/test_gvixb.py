@@ -121,6 +121,12 @@ def seeded(tmp_path: Path):
     eng.shutdown_dbos()
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：gvixb 鉴权测试对本地 [debug] enabled 配置免疫（debug 下 Web 免鉴权）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 class TestGvixbPayloads:
     def test_latest_genome_is_real_assembly_not_orf_inference(self, seeded):
         engine, client, _, _ = seeded

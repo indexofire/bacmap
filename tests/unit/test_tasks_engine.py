@@ -13,6 +13,13 @@ import bacmap.tasks.engine.dbos_engine as eng
 from bacmap.tasks.spec import Approval, TaskState, TaskType
 
 
+@pytest.fixture(autouse=True)
+def _no_debug_mode(monkeypatch):
+    """v1.10.24：任务状态测试对本地 [debug] enabled 配置免疫（debug 下
+    status() 对 awaiting_approval 自动审批，状态断言随环境漂移）。"""
+    monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
+
+
 class _Proc:
     def __init__(self, rc: int) -> None:
         self.returncode = rc

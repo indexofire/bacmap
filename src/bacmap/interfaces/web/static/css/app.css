@@ -1018,3 +1018,63 @@ code {
   font-size: var(--fs-caption);
 }
 .checklist-table textarea { resize: vertical; }
+
+/* ==========================================================================
+   v1.10.23 主题三态（与 Vue 控制台 tokens 镜像；html[data-theme] 由
+   base.html 的同步脚本从共享 localStorage 读取）。默认 :root = dark 原值。
+   ========================================================================== */
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f9fafb;
+  --panel: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #f2f4f7;
+  --surface-raise: #ffffff;
+  --text-1: #101828;
+  --text-2: #344054;
+  --text-3: #475467;
+  --text-4: #98a2b3;
+  --accent: #5e6ad2;
+  --accent-hover: #4f5ac4;
+  --link: #444ce7;
+  --border: #e4e7ec;
+  --border-subtle: #eef0f3;
+  --border-strong: #cfd4dc;
+  --st-running-text: #1570ef;
+  --st-await-text: #b54708;
+  --st-ok-text: #067647;
+  --st-fail-text: #b42318;
+}
+
+html[data-theme="gray"] {
+  color-scheme: light;
+  --bg: #deded8;
+  --panel: #f1f1eb;
+  --surface: #f7f7f2;
+  --surface-hover: #e7e7e0;
+  --surface-raise: #ffffff;
+  --text-1: #0a0a0a;
+  --text-2: #1c1c1a;
+  --text-3: #3f3f3b;
+  --text-4: #75756e;
+  --accent: #111111;
+  --accent-hover: #2c2c28;
+  --link: #0a4a8f;
+  --border: rgba(10, 10, 10, 0.22);
+  --border-subtle: rgba(10, 10, 10, 0.12);
+  --border-strong: #111111;
+  --st-running-text: #0b5cad;
+  --st-await-text: #8a5a00;
+  --st-ok-text: #0a6b3d;
+  --st-fail-text: #a1160f;
+}
+
+/* CONCRETE 细节：硬边框 + 网格纸（与控制台 gray 主题同语言） */
+html[data-theme="gray"] body {
+  background-image:
+    linear-gradient(to right, rgba(10, 10, 10, 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(10, 10, 10, 0.055) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
+}
