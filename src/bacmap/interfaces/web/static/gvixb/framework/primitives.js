@@ -65,6 +65,107 @@ export function lineFromPoints(points, color = 0x6d8bff, opacity = 0.5) {
   );
 }
 
+/** Soft round sprite texture for particles; shared per-material and disposed with it. */
+function softParticleTexture() {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/**
+ * Texture for the flat "video-style" sample dots: a crisp solid core with a
+ * tight soft rim, drawn once per view and shared by every dot sprite.
+ */
+export function makeDotTexture() {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const mid = size / 2;
+  const core = ctx.createRadialGradient(mid, mid, 0, mid, mid, mid * 0.62);
+  core.addColorStop(0, 'rgba(255,255,255,1)');
+  core.addColorStop(0.72, 'rgba(255,255,255,1)');
+  core.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.arc(mid, mid, mid * 0.62, 0, Math.PI * 2);
+  ctx.fill();
+  const halo = ctx.createRadialGradient(mid, mid, mid * 0.55, mid, mid, mid);
+  halo.addColorStop(0, 'rgba(255,255,255,0.35)');
+  halo.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, size, size);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/**
+ * Camera-facing flat dot, the node style of the reference video: a 2D round
+ * marker floating in 3D space rather than a shaded sphere. `size` is the world
+ * diameter; the shared `texture` comes from makeDotTexture() per view.
+ */
+export function makeDotSprite({ color, size, texture }) {
+  const material = new THREE.SpriteMaterial({
+    map: texture, color, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, fog: true,
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(size, size, 1);
+  sprite.userData.dotSize = size;
+  sprite.renderOrder = 10;
+  return sprite;
+}
+
+/**
+ * Ambient dust field: a deterministic cloud of soft points that gives the
+ * scene spatial depth. Purely decorative — carries no data meaning.
+ * Pixel-sized stars (no size attenuation) stay crisp at any camera distance.
+ */
+export function makeDustField({ count = 800, radius = 58, color = 0x8fa3d8, size = 2.2, opacity = 0.5 } = {}) {
+  const positions = new Float32Array(count * 3);
+  let seed = 20240611;
+  const rand = () => {
+    // Mulberry32: stable per-mount particle cloud, no Math.random jitter.
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  for (let i = 0; i < count; i++) {
+    const u = rand() * 2 - 1;
+    const theta = rand() * Math.PI * 2;
+    const r = radius * Math.cbrt(rand());
+    const s = Math.sqrt(Math.max(0, 1 - u * u));
+    positions[i * 3] = r * s * Math.cos(theta);
+    positions[i * 3 + 1] = r * s * Math.sin(theta) * 0.72;
+    positions[i * 3 + 2] = r * u;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.PointsMaterial({
+    color, size, map: softParticleTexture(), transparent: true, opacity,
+    depthWrite: false, sizeAttenuation: false, blending: THREE.AdditiveBlending,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.name = 'dust-field';
+  points.renderOrder = -5;
+  points.frustumCulled = false;
+  return points;
+}
+
 export function disposeHierarchy(root) {
   if (!root) return;
   const geometries = new Set(), materials = new Set(), textures = new Set();

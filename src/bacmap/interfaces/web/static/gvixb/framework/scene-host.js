@@ -24,6 +24,8 @@ export class SceneHost {
     this.definition = null;
     this.pickables = [];
     this.cameraAnim = null;
+    this.autoRotateDesired = false;
+    this._rotateResume = null;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x05070d);
@@ -40,7 +42,8 @@ export class SceneHost {
 
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.24, 0.30, 0.84));
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.24, 0.30, 0.84);
+    this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
 
     this.scene.add(new THREE.HemisphereLight(0xa9c2ff, 0x080b13, 2.1));
@@ -63,7 +66,11 @@ export class SceneHost {
       if (!this.active) return;
       down = { x: event.clientX, y: event.clientY };
       lastDown = down;
+      this._pauseAutoRotate();
     });
+    this.canvas.addEventListener('wheel', () => {
+      if (this.active) this._pauseAutoRotate();
+    }, { passive: true });
     this.canvas.addEventListener('pointermove', event => {
       if (!this.active || !this.view) return;
       if (down && Math.hypot(event.clientX - down.x, event.clientY - down.y) > 4) {
@@ -123,6 +130,32 @@ export class SceneHost {
     if (index >= 0) this.pickables.splice(index, 1);
   }
 
+  /**
+   * Request cinematic slow orbiting. User interaction (drag/zoom/focus) pauses
+   * it and it resumes automatically after a short idle period.
+   */
+  setAutoRotate(enabled, speed) {
+    this.autoRotateDesired = !!enabled;
+    if (Number.isFinite(speed)) this.controls.autoRotateSpeed = speed;
+    this.controls.autoRotate = this.autoRotateDesired;
+  }
+
+  _pauseAutoRotate() {
+    if (!this.autoRotateDesired) return;
+    this.controls.autoRotate = false;
+    clearTimeout(this._rotateResume);
+    this._rotateResume = setTimeout(() => {
+      if (this.active && this.autoRotateDesired) this.controls.autoRotate = true;
+    }, 6000);
+  }
+
+  /** Per-view bloom tuning. Views restore defaults when they unmount. */
+  setBloom({ strength, radius, threshold } = {}) {
+    if (Number.isFinite(strength)) this.bloomPass.strength = strength;
+    if (Number.isFinite(radius)) this.bloomPass.radius = radius;
+    if (Number.isFinite(threshold)) this.bloomPass.threshold = threshold;
+  }
+
   async mount(definition, data) {
     this.clearView();
     this.definition = definition;
@@ -148,7 +181,12 @@ export class SceneHost {
 
   clearView() {
     this.cameraAnim = null;
+    this.autoRotateDesired = false;
+    clearTimeout(this._rotateResume);
+    this._rotateResume = null;
     this.controls.autoRotate = false;
+    this.scene.fog = null;
+    this.setBloom({ strength: 0.24, radius: 0.30, threshold: 0.84 });
     this.onHover(null, null);
     if (this.view?.dispose) this.view.dispose();
     if (this.root) {
@@ -164,6 +202,9 @@ export class SceneHost {
   deactivate() {
     this.active = false;
     this.controls.enabled = false;
+    this.autoRotateDesired = false;
+    clearTimeout(this._rotateResume);
+    this._rotateResume = null;
     this.controls.autoRotate = false;
     this.cameraAnim = null;
     this.onHover(null, null);
@@ -178,7 +219,8 @@ export class SceneHost {
   }
 
   flyTo(position, target, duration = 0.7) {
-    this.controls.autoRotate = false;
+    this._pauseAutoRotate();
+    if (!this.autoRotateDesired) this.controls.autoRotate = false;
     this.cameraAnim = {
       fromPosition: this.camera.position.clone(), toPosition: position.clone(),
       fromTarget: this.controls.target.clone(), toTarget: target.clone(),

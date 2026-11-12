@@ -88,7 +88,7 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
     $('analysis-source').textContent = data.source || '本地数据';
     $('crumb-sub').textContent = `ANALYSIS // ${definition.subtitle} · ${data.demo ? 'DEMO DATA' : 'LOCAL DATA'}`;
     $('analysis-head').textContent = `${definition.title} · Selection`;
-    $('btn-analysis-auto').classList.toggle('on', host.controls.autoRotate);
+    $('btn-analysis-auto').classList.toggle('on', host.autoRotateDesired);
 
     $('analysis-controls').querySelectorAll('input,select').forEach(input => {
       input.addEventListener('input', () => {
@@ -147,8 +147,8 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
 
   $('btn-analysis-reset').addEventListener('click', () => host.resetCamera());
   $('btn-analysis-auto').addEventListener('click', event => {
-    host.controls.autoRotate = !host.controls.autoRotate;
-    event.currentTarget.classList.toggle('on', host.controls.autoRotate);
+    host.setAutoRotate(!host.autoRotateDesired);
+    event.currentTarget.classList.toggle('on', host.autoRotateDesired);
   });
   $('btn-analysis-export').addEventListener('click', () => {
     if (host.view && activeDefinition) host.exportPng(`bacmap-${activeDefinition.id}.png`);
