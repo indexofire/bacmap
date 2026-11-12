@@ -14,6 +14,7 @@ import hmac
 import logging
 import os
 import secrets
+import socket
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -32,6 +33,8 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 # 回环绑定（文档化的免鉴权单机形态；ADR-16 默认只绑本机）
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"})
+_WILDCARD_BINDS = frozenset({"", "0.0.0.0", "::"})  # noqa: S104 — 仅用于识别通配绑定
+ALLOWED_HOSTS_ENV = "BACMAP_WEB_ALLOWED_HOSTS"
 
 
 def require_auth_when_exposed(
@@ -279,11 +282,100 @@ class WebAuthMiddleware:
         await send({"type": "http.response.body", "body": b"unauthorized"})
 
 
+def normalize_host(value: str) -> str:
+    """Host 头/绑定地址 → 小写主机名（去端口、IPv6 方括号与末尾点）。"""
+    v = value.strip().lower()
+    if v.startswith("["):
+        end = v.find("]")
+        v = v[1:end] if end != -1 else v[1:]
+    elif v.count(":") == 1:
+        v = v.split(":", 1)[0]
+    return v.rstrip(".")
+
+
+def web_allowed_hosts(
+    bind_host: str, *, allow_any: bool, env: Mapping[str, str] | None = None
+) -> frozenset[str] | None:
+    """Web 控制台 Host 白名单（防 DNS rebinding）；``None`` = 不校验。
+
+    回环名 + 绑定地址（通配绑定时加本机主机名）+ ``BACMAP_WEB_ALLOWED_HOSTS``
+    （逗号分隔，反向代理/局域网域名用）。``*`` 仅在已启用鉴权时生效：无鉴权
+    的控制台关掉 Host 校验等于把数据交给任意网页。
+    """
+    env = os.environ if env is None else env
+    hosts = set(_LOOPBACK_HOSTS)
+    bind = normalize_host(bind_host)
+    if bind in _WILDCARD_BINDS:
+        hosts.update(normalize_host(n) for n in (socket.gethostname(), socket.getfqdn()))
+    else:
+        hosts.add(bind)
+    for item in (env.get(ALLOWED_HOSTS_ENV) or "").split(","):
+        item = item.strip()
+        if item == "*":
+            if allow_any:
+                return None
+            _logger.warning(
+                "%s='*' ignored: Web auth is disabled, Host checking stays on",
+                ALLOWED_HOSTS_ENV,
+            )
+        elif item:
+            hosts.add(normalize_host(item))
+    hosts.discard("")
+    return frozenset(hosts)
+
+
+class HostAllowlistMiddleware:
+    """纯 ASGI：Host 头不在白名单即 400（DNS rebinding 防护，对齐 MCP HTTP）。"""
+
+    def __init__(self, app: Any, allowed_hosts: frozenset[str]) -> None:
+        self._app = app
+        self._allowed = allowed_hosts
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") not in ("http", "websocket"):
+            await self._app(scope, receive, send)
+            return
+        host = normalize_host(_headers(scope).get("host", ""))
+        if host and host in self._allowed:
+            await self._app(scope, receive, send)
+            return
+        if scope.get("type") == "websocket":
+            await send({"type": "websocket.close", "code": 1008})
+            return
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 400,
+                "headers": [(b"content-type", b"text/plain; charset=utf-8")],
+            }
+        )
+        await send({"type": "http.response.body", "body": b"invalid host header"})
+
+
+def _cross_site_browser_request(request: Request) -> bool:
+    """无鉴权模式下识别浏览器跨站请求（Sec-Fetch-Site → 自定义头 → Origin/Referer）。
+
+    自定义 ``X-CSRF-Token`` 头跨源必须过 CORS 预检（本应用不开 CORS），带它即
+    同源或非浏览器客户端；``Origin: null``（no-referrer/沙箱 iframe）视为跨站。
+    """
+    site = request.headers.get("sec-fetch-site", "")
+    if site:
+        return site not in ("same-origin", "none")
+    if "x-csrf-token" in request.headers:
+        return False
+    source = request.headers.get("origin", "") or request.headers.get("referer", "")
+    if not source:
+        return False
+    return urlparse(source).netloc != request.headers.get("host", "")
+
+
 def verify_csrf(request: Request, form_csrf: str) -> bool:
-    """状态变更 POST 的 CSRF 校验：bearer 模式放行（无 cookie）；cookie 模式需
-    同步令牌一致 + Origin/Referer 同源。"""
+    """状态变更 POST 的 CSRF 校验：无鉴权时拒绝浏览器跨站请求；bearer 模式放行
+    （无 cookie）；cookie 模式需同步令牌一致 + Origin/Referer 同源。"""
     cfg: WebAuthConfig = request.app.state.web_auth
-    if not cfg.enabled or cfg.mode != "cookie":
+    if not cfg.enabled:
+        return not _cross_site_browser_request(request)
+    if cfg.mode != "cookie":
         return True
     host = request.headers.get("host", "")
     origin = request.headers.get("origin", "")

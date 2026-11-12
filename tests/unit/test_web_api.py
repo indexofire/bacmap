@@ -232,3 +232,47 @@ class TestCookieMode:
         assert c.post(f"/api/v1/tasks/{tid}/cancel", headers=h).status_code == 403
         h["x-csrf-token"] = c.cookies.get("bacmap_csrf")
         assert c.post(f"/api/v1/tasks/{tid}/cancel", headers=h).status_code == 200
+
+
+class TestDnsRebindingProtection:
+    """Host 白名单（任何模式）+ 无鉴权时拒绝浏览器跨站状态变更。"""
+
+    def test_foreign_host_rejected_without_token(self, env, monkeypatch):
+        engine, _, _ = env
+        monkeypatch.delenv("BACMAP_WEB_ALLOWED_HOSTS", raising=False)
+        c = TestClient(create_app(engine), base_url="http://127.0.0.1:8800")
+        assert c.get("/api/v1/tasks").status_code == 200
+        assert c.get("/api/v1/tasks", headers={"host": "localhost:8800"}).status_code == 200
+        assert c.get("/api/v1/tasks", headers={"host": "[::1]:8800"}).status_code == 200
+        r = c.get("/api/v1/tasks", headers={"host": "evil.example:8800"})
+        assert r.status_code == 400
+        assert r.headers["x-frame-options"] == "DENY"
+        assert c.post("/api/v1/tasks", headers={"host": "evil.example:8800"}).status_code == 400
+
+    def test_foreign_host_rejected_with_token(self, env, monkeypatch):
+        engine, _, _ = env
+        monkeypatch.delenv("BACMAP_WEB_ALLOWED_HOSTS", raising=False)
+        c = TestClient(create_app(engine, auth_token="tok"), base_url="http://127.0.0.1:8800")
+        h = {"Authorization": "Bearer tok"}
+        assert c.get("/api/v1/tasks", headers=h).status_code == 200
+        h["host"] = "evil.example"
+        assert c.get("/api/v1/tasks", headers=h).status_code == 400
+
+    def test_bind_host_and_env_extras_allowed(self, env, monkeypatch):
+        engine, _, _ = env
+        monkeypatch.setenv("BACMAP_WEB_ALLOWED_HOSTS", "bacmap.lab.example, *")
+        c = TestClient(create_app(engine, host="10.0.0.5"), base_url="http://10.0.0.5:8800")
+        assert c.get("/api/v1/tasks").status_code == 200
+        ok = {"host": "bacmap.lab.example"}
+        assert c.get("/api/v1/tasks", headers=ok).status_code == 200
+        # 无鉴权时 "*" 被忽略：Host 校验保持开启。
+        assert c.get("/api/v1/tasks", headers={"host": "evil.example"}).status_code == 400
+
+    def test_cross_site_post_rejected_without_token(self, env):
+        engine, c, _ = env
+        tid = engine.submit(TaskType.ANALYZE, {"samples": ["S1"]}, "cli")
+        url = f"/api/v1/tasks/{tid}/cancel"
+        assert c.post(url, headers={"sec-fetch-site": "cross-site"}).status_code == 403
+        assert c.post(url, headers={"origin": "http://evil.example"}).status_code == 403
+        assert c.post(url, headers={"origin": "null"}).status_code == 403
+        assert c.post(url, headers={"sec-fetch-site": "same-origin"}).status_code == 200

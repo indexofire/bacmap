@@ -50,6 +50,7 @@ export BACMAP_CONFIG="$PWD/config.toml"
 | `BACMAP_WEB_AUTH` | `bearer` | `bearer` 或 `cookie` |
 | `BACMAP_WEB_SECRET` | 由 token 派生 | 会话 cookie 的 HMAC 密钥 |
 | `BACMAP_WEB_COOKIE_SECURE` | 关 | `1` 给 cookie 加上 `Secure` |
+| `BACMAP_WEB_ALLOWED_HOSTS` | — | Web 控制台额外接受的 `Host` 名（逗号分隔；反向代理/局域网域名）；回环名与绑定地址始终放行；`*` 仅在启用 Web 鉴权时关闭校验 |
 | `BACMAP_LANG` | — | CLI 显示语言覆盖（`en`/`zh`）；优先于 `[ui].language` |
 | `BACMAP_TOOL_SELECTION` | — | 显式 `tool_selection.yaml` 覆盖层路径（§13） |
 | `BACMAP_DB_SELECTION` | — | 旧版 gspec-only 覆盖层路径（加载时翻译为 `tool_selection.yaml`） |

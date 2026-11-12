@@ -199,7 +199,8 @@ def _run_web(args: argparse.Namespace) -> None:
     if debug_mode():
         print(debug_warning("bacmap start web"), file=sys.stderr)
     print(f"bacmap start web → http://{args.host}:{args.port}/  ·  {hint}")
-    uvicorn.run(create_app(engine, auth_token=token or None), host=args.host, port=args.port)
+    app = create_app(engine, auth_token=token or None, host=args.host)
+    uvicorn.run(app, host=args.host, port=args.port)
 
 
 def _run_tui(args: argparse.Namespace) -> None:

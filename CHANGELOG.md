@@ -5,6 +5,14 @@
 
 ## [Unreleased]
 
+### Web 控制台 DNS rebinding 防护（安全）
+
+- `create_app` 在任何模式下挂 `HostAllowlistMiddleware`：`Host` 只接受回环名、绑定地址
+  （通配绑定时为本机主机名）与 `BACMAP_WEB_ALLOWED_HOSTS`，否则 `400`——此前无令牌的
+  回环控制台可被 DNS rebinding 网页读取全部数据并提交/审批任务。`*` 仅在启用鉴权时生效。
+- `verify_csrf` 在无鉴权时不再一律放行：拒绝浏览器跨站请求（`Sec-Fetch-Site`、外站或
+  `null` Origin/Referer 且无 `X-CSRF-Token` 头）。CLI/脚本（无这些头）不受影响。
+
 ### gside 0.2.4（依赖升级）
 
 - `pixi.toml`：`gside ==0.2.3` → `==0.2.4`。gmlst 0.6.1 / gseek 0.10.5 已是 PyPI 最新；

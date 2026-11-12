@@ -73,6 +73,10 @@ MCP elicitation 与 harness 工具审批由客户端/模型作答。因此 bacma
 ### Web
 
 - 默认绑定回环地址；非回环主机若无令牌则拒绝启动。
+- 任何模式都有 DNS rebinding 防护：`Host` 不是回环名、绑定地址（`0.0.0.0`/`::` 时为本机
+  主机名）且不在 `BACMAP_WEB_ALLOWED_HOSTS` 中的请求返回 `400`。
+- 无令牌时，浏览器标记为跨站的状态变更请求（`Sec-Fetch-Site`，或 Origin/Referer 为外站/`null`
+  且不带 `X-CSRF-Token` 头）返回 `403`。
 - `bearer` 模式：`Authorization: Bearer <BACMAP_WEB_TOKEN>`；浏览器无法设置该头，
   因此请使用 SSH 隧道或 cookie 模式。
 - `cookie` 模式：`/login` 签发带签名的 `HttpOnly`、`SameSite=Strict` 会话 cookie；

@@ -49,6 +49,7 @@ export BACMAP_CONFIG="$PWD/config.toml"
 | `BACMAP_WEB_AUTH` | `bearer` | `bearer` or `cookie` |
 | `BACMAP_WEB_SECRET` | derived from token | HMAC key for session cookies |
 | `BACMAP_WEB_COOKIE_SECURE` | off | `1` adds `Secure` to cookies |
+| `BACMAP_WEB_ALLOWED_HOSTS` | — | extra comma-separated `Host` names the Web console accepts (reverse proxy / LAN DNS name); loopback names and the bind address are always allowed; `*` disables the check only when Web auth is enabled |
 | `BACMAP_LANG` | — | CLI display language override (`en`/`zh`); takes precedence over `[ui].language` |
 | `BACMAP_TOOL_SELECTION` | — | explicit `tool_selection.yaml` overlay path (§13) |
 | `BACMAP_DB_SELECTION` | — | legacy gspec-only overlay path (translated to `tool_selection.yaml`) |
