@@ -30,7 +30,9 @@ pathogens:
     mlst_scheme: senterica_1
     cgmlst_scheme: senterica_2
     amrfinder_organism: Salmonella
-    serotype_engine: sistr
+    # v1.10.24：血清型迁移到 gspec sen_sero_sistr（SISTR 退役）。
+    # 需 gspec >= 0.10.3（serotype/2 schema 支持）。
+    gspec_screens: [sen_sero_sistr]
     snp_group: salmonella
     plan: {snp: true, cgmlst: true, recombination: true}
   SHI:

@@ -94,8 +94,9 @@ summary["steps"]["serotype"] = {
     "h2": sistr.get("h2", "N/A"),
 }
 if sistr_path is None:
-    summary["steps"]["serotype"]["sistr_status"] = "not_applicable"
-    summary["steps"]["serotype"]["sistr_reason"] = "SISTR 仅用于沙门菌血清型预测"
+    # v1.10.24：沙门菌已迁移到 gspec sen_sero_sistr——不再因无 SISTR 报
+    # not_applicable；血清型从 gspec typing 的 schemes 取（下方统一入口）。
+    pass
 
 # gspec 分型（registry 驱动；lmo_sero 等带 typing scheme 的库给出表型）
 from bacmap.core.analysis.gspec_typing import (  # noqa: E402
@@ -222,6 +223,30 @@ else:
         "status": "not_applicable",
         "reason": "DEC 致病型 / 志贺菌血清型仅适用于大肠埃希菌与志贺菌",
     }
+
+# v1.10.24：沙门菌血清型经 gspec sen_sero_sistr（serotype/2 schema）。
+# _salmonella_gspec 来自 gspec typing 的 databases.sen_sero_sistr.schemes。
+_salmonella_gspec_entry = gspec_tp["databases"].get("sen_sero_sistr")
+if isinstance(_salmonella_gspec_entry, dict) and _salmonella_gspec_entry.get("schemes"):
+    _sal_schemes = _salmonella_gspec_entry["schemes"]
+    _sal_serotype = str(_sal_schemes.get("serotype", "") or "").strip()
+    if _sal_serotype:
+        summary["steps"]["serotype"]["value"] = _sal_serotype
+        summary["steps"]["serotype"]["method"] = "gspec sen_sero_sistr"
+        summary["steps"]["dec"]["shigella_serotype"] = _sal_serotype
+        summary["steps"]["dec"]["primary_serotype"] = _sal_serotype
+        summary["steps"]["dec"]["serotype_method"] = "gspec sen_sero_sistr"
+    else:
+        summary["steps"]["serotype"]["value"] = "N/A"
+        summary["steps"]["serotype"]["method"] = "gspec sen_sero_sistr"
+        summary["steps"]["serotype"]["sistr_status"] = str(
+            _salmonella_gspec_entry.get("status", "unknown")
+        )
+elif "value" not in summary["steps"]["serotype"]:
+    summary["steps"]["serotype"]["value"] = str(
+        summary["steps"]["serotype"].get("sistr", "N/A")
+    )
+    summary["steps"]["serotype"]["method"] = "sistr"
 
 # VPA O/K 血清型（gspec `vpa_ok` cluster 库是权威来源；未选库/无表型时如实
 # unavailable，不再由占位规则产出文件）。段仅在该样本物种声明了 vpa_ok 或

@@ -5,6 +5,19 @@
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-11-12
+
+### 沙门菌血清型迁移到 gspec sen_sero_sistr（SISTR 退役）
+
+- **pathogens.yaml**：SAL `serotype_engine: sistr` → `gspec_screens: [sen_sero_sistr]`——
+  血清型由 gspec sen_sero_sistr 库（serotype/2 schema）承担，与志贺 shi_sero/
+  大肠 ecoh/弧菌 vpa_ok 同一通用 gspec_typing 通道。SISTR CLI 规则保留但
+  不再对沙门菌生效。实测 26SAL0501 → Indiana。
+- **pixi.toml**：`gspec` 从 `==0.10.2`（PyPI）改为 `{ path = "../gspec" }`
+  （本地 0.10.3，含 serotype/2 支持；等 PyPI 发版后改回版本钉）。
+- **collect_summary**：新增沙门菌 gspec 血清型读取段；无 SISTR 输入时不再报
+  not_applicable。样本列表流式兼容（prelim 回退）与 SPA `<base href>` 修复。
+
 ### bug 修复：iframe 高度 / 报告按钮缺失 / 别名自愈 / status() 列缺失
 
 - **iframe 塌缩**：智能体内嵌与旧工具嵌入页改 `height: max(720px, calc(100vh - 210px))`

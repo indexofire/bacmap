@@ -3,7 +3,7 @@ authors = ["indexofire <indexofire@gmail.com>"]
 channels = ["conda-forge", "bioconda"]
 name = "bacmap"
 platforms = ["linux-64"]
-version = "0.1.5"
+version = "0.1.7"
 
 # 环境分两层：default = 运行时（Python + 域依赖）；dev = 开发工具。
 # 生信 CLI 工具与 Snakemake 9 在迁移第 4 步（workflow 层）加入，避免骨架阶段拖入 4GB 依赖。
@@ -60,7 +60,7 @@ mappy = ">=2.24"
 pyhmmer = ">=0.10"
 pyyaml = ">=6.0"
 sourmash = ">=4.8"
-gspec = "==0.10.2"
+gspec = { path = "../gspec" }
 # gside 0.2+ 与 gspec 0.10 的可选 gseek 引擎共同使用 gseek 0.10.5；
 # 显式钉住，避免 extras 缺失时落回旧适配器。
 gseek = "==0.10.5"

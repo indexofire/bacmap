@@ -42,7 +42,7 @@ class TestAssemblyEntryGating:
 
 class TestSerotypeEngine:
     def test_engines(self):
-        assert serotype_engine("SAL") == "sistr"
+        assert serotype_engine("SAL") == ""  # v1.10.24：沙门菌迁移到 gspec sen_sero_sistr
         assert serotype_engine("Shigella") == ""  # 志贺菌血清型由 gspec shi_sero 承担
         assert serotype_engine("DEC") == "ecoh"
         assert serotype_engine("Escherichia_coli") == "ecoh"
@@ -77,8 +77,9 @@ class TestReportInputsGating:
         assert extra == {"pathotype"}
 
     def test_salmonella(self):
+        # v1.10.24：沙门菌迁移到 gspec sen_sero_sistr——无 SISTR 专用输入
         extra = _extra("SAL")
-        assert extra == {"sistr"}
+        assert extra == set()
 
     def test_shigella(self):
         # 志贺菌血清型由 gspec shi_sero（通用 gspec_typing 产物）承担，

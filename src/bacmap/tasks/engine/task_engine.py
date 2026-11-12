@@ -36,6 +36,56 @@ from bacmap.tools.spec import DataClass
 logger = logging.getLogger(__name__)
 
 
+def _kill_task_pipeline_processes(task_id: str) -> int:
+    """杀掉该任务关联的生信进程树（v1.10.24：cancel 即时终止 CPU 占用）。
+
+    DBOS 的 cancel 是协作式的——只标记工作流状态，不会终止正在执行的
+    subprocess。不杀的话 diamond 会持续吃满 CPU 直到自然结束（实测
+    取消后 >10 分钟仍在跑）。按 run 目录路径匹配 snakemake 命令行，
+    杀主进程后扫尾孤儿子进程（bakta/diamond/emapper 等）。
+    """
+    import os
+    import signal
+    import subprocess as _sp
+    import time
+
+    marker = f"runs/{task_id}"
+    killed = 0
+    try:
+        out = _sp.run(
+            ["ps", "-eo", "pid,cmd"], capture_output=True, text=True, timeout=10
+        ).stdout
+    except (OSError, _sp.TimeoutExpired):
+        return 0
+    for line in out.splitlines():
+        if marker not in line:
+            continue
+        parts = line.strip().split(None, 1)
+        if len(parts) < 2 or "snakemake" not in parts[1]:
+            continue
+        try:
+            os.kill(int(parts[0]), signal.SIGKILL)
+            killed += 1
+        except (ValueError, ProcessLookupError, PermissionError):
+            continue
+    if killed:
+        time.sleep(0.5)
+        for proc in ("bakta", "diamond", "emapper.py", "gmlst"):
+            try:
+                pids = _sp.run(
+                    ["pgrep", "-x", proc], capture_output=True, text=True, timeout=5
+                ).stdout.split()
+                for pid_s in pids:
+                    try:
+                        os.kill(int(pid_s), signal.SIGKILL)
+                        killed += 1
+                    except (ProcessLookupError, PermissionError):
+                        pass
+            except (OSError, _sp.TimeoutExpired):
+                continue
+    return killed
+
+
 class DbosTaskEngine:
     """analyze 任务的 DBOS 实现（curate/mine/write 随迁移第 7/10 步接入）。"""
 
@@ -307,6 +357,11 @@ class DbosTaskEngine:
         if row["workflow_id"]:
             DBOS.cancel_workflow(row["workflow_id"])
         self._update_state(task_id, TaskState.CANCELLED)
+        # v1.10.24：杀掉该任务遗留的生信进程树（snakemake 及其子进程
+        # diamond/bakta/emapper 等）。DBOS 的 cancel 是协作式的——只标记
+        # 工作流状态，不会终止正在执行的 subprocess。不杀的话 diamond
+        # 会持续吃满 CPU 直到自然结束（实测取消后 >10 分钟仍在跑）。
+        _kill_task_pipeline_processes(str(task_id))
 
     def pause(self, task_id: TaskId) -> None:
         """用户暂停（v1.10.22）：工作流在下一个边界（管线结束/步骤间）收场。

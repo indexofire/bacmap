@@ -100,7 +100,8 @@ def test_non_salmonella_marks_sistr_not_applicable(tmp_path):
             },
         },
     )
-    assert summary["steps"]["serotype"]["sistr_status"] == "not_applicable"
+    # v1.10.24：SAL 已迁移到 gspec——不再因无 SISTR 报 not_applicable
+    assert "sistr_status" not in summary["steps"]["serotype"] or summary["steps"]["serotype"].get("sistr_status") != "not_applicable"
     assert "vpa_serotype" not in summary["steps"]
     assert "vpa_virulence" not in summary["steps"]
     # DEC 段适用（ecoh 库已跑）；桩未提供 pathotype 文件 → 该子步骤不适用
