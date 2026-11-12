@@ -373,7 +373,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/ea/68/eb401fc340f743695fb93dcc73218fbdfc30b60deb2d64ba70f955231239/gmlst-0.6.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/e5/0ae74c83c1cab2c14daadf28bd0143eb14bb81503834af987b66badc7b61/griffelib-2.3.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ad/8e/4bbfa12429ea0145e4bf069b2423abdb8579838ab6d1e76d80a044dfd0ca/gseek-0.10.5-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/bd/00/f7df8a4d4a8e306172902eb2c75debff383daaceeb9216739add9e38e767/gside-0.2.3-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/e4/a6/9dc1776d31e7c35c91a227eaa64bbfd6fec57bb9bc8e5161f75640bfc806/gside-0.2.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7e/f5/f66802a942d491edb555dd61e3a9961140fd64c90bce1eafd741609d334d/httpcore-1.0.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl
@@ -845,7 +845,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/ea/68/eb401fc340f743695fb93dcc73218fbdfc30b60deb2d64ba70f955231239/gmlst-0.6.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/e5/0ae74c83c1cab2c14daadf28bd0143eb14bb81503834af987b66badc7b61/griffelib-2.3.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ad/8e/4bbfa12429ea0145e4bf069b2423abdb8579838ab6d1e76d80a044dfd0ca/gseek-0.10.5-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/bd/00/f7df8a4d4a8e306172902eb2c75debff383daaceeb9216739add9e38e767/gside-0.2.3-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/e4/a6/9dc1776d31e7c35c91a227eaa64bbfd6fec57bb9bc8e5161f75640bfc806/gside-0.2.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/09/ba/a4568248771ce81957bfb7cc600264a40fbcda092391ee1c415c50be4bea/httpcore2-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/d8/9c/6fe8931fd9f381042a9e4c7d5a7b4cbf7016b252bec0c99a49fce42c3326/httpx2-2.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl
@@ -1440,8 +1440,8 @@ packages:
   requires_python: '>=3.10'
 - pypi: ./
   name: bacmap
-  version: 0.1.5
-  sha256: 51683dae0c095d345fd0f0d6585edf405a30b9f473cb541c989d75732d2fd14e
+  version: 0.1.7
+  sha256: 66e198015fb21c8cfd7e8398bd0be74c996cc74473a02dad690cc902f7f8d63b
   requires_dist:
   - biopython>=1.83
   - pydantic>=2.0
@@ -2910,10 +2910,10 @@ packages:
   - mkdocs-static-i18n>=1.2 ; extra == 'docs'
   - mkdocs>=1.6 ; extra == 'docs'
   requires_python: '>=3.12'
-- pypi: https://files.pythonhosted.org/packages/bd/00/f7df8a4d4a8e306172902eb2c75debff383daaceeb9216739add9e38e767/gside-0.2.3-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/e4/a6/9dc1776d31e7c35c91a227eaa64bbfd6fec57bb9bc8e5161f75640bfc806/gside-0.2.4-py3-none-any.whl
   name: gside
-  version: 0.2.3
-  sha256: 65554d087c945364a89333f525eb751501f77b1dd183e87e31d49cb27ac36a65
+  version: 0.2.4
+  sha256: ae3c2902cbff3f6d45b38c5b5c5994d62dd27e5d833cd9761cfd7f460a704a55
   requires_dist:
   - click>=8.0
   - gseek>=0.10.4
@@ -2942,8 +2942,8 @@ packages:
   timestamp: 1626369596591
 - pypi: ../gspec
   name: gspec
-  version: 0.10.3
-  sha256: 8cd6e940a45ef265111d39e1d0104675e53bb05ce5200f05746e787c71f8ef19
+  version: 0.10.2
+  sha256: 3794ecd4bb32c84f605f527539002d643ec7d4c6bc727ac2390c504febabc981
   requires_dist:
   - click>=8.2
   - pydantic>=2.7

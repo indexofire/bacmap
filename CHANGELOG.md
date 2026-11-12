@@ -5,6 +5,22 @@
 
 ## [Unreleased]
 
+### gside 0.2.4（依赖升级）
+
+- `pixi.toml`：`gside ==0.2.3` → `==0.2.4`。gmlst 0.6.1 / gseek 0.10.5 已是 PyPI 最新；
+  gspec 走本地路径依赖（`../gspec`，领先 PyPI 0.10.2），无需动作。
+- **复核（ADR-20 升级清单：CLI 签名 + 解析器 + 冒烟）**：`gside scan <contigs> --mode`
+  签名不变；0.2.4 把模式名归一为 canonical（`panel`→`ani`、`mash_refseq`→`mash`），
+  legacy 名仍被归一接受——`gside_species.py` 适配器发送的 legacy 名与解析的 JSON
+  契约（顶层 `tool/version/verdict/methods`，`methods.marker.*`、
+  `verdict.{species,confidence,basis}`）逐字段核对不变；`verdict.basis` 值改为
+  canonical 名，仅影响展示拼接（`method` 字段），无键名分支。数据库目录布局重组
+  与 `db list/status` JSON 变更不影响 bacmap（`bio_db_*` 尚未实现，无调用方）。
+- **冒烟**：微型 FASTA 实跑 `gside scan --mode marker`（无库环境）——exit 0、
+  JSON 顶层键与 `verdict.basis=['marker']` 如期；legacy `-m panel` / `-m mash_refseq`
+  均归一通过；`gside_species.py` 适配器按"全档无 verdict → Unknown + 诊断"路径
+  正常降级。测试基线不变。
+
 ## [0.1.7] - 2026-11-12
 
 ### 沙门菌血清型迁移到 gspec sen_sero_sistr（SISTR 退役）

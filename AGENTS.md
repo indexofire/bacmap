@@ -91,7 +91,8 @@ bacmap mcp --read-only          # 只读 MCP 服务器（安全冒烟；默认 c
 
 ## 外部工具依赖（pixi [pypi-dependencies]）
 
-- `gside ==0.2.3`、`gspec ==0.10.2`、`gmlst ==0.6.1`、`gseek ==0.10.5`：PyPI 发布版
+- `gside ==0.2.4`、`gmlst ==0.6.1`、`gseek ==0.10.5`：PyPI 发布版
+- `gspec`：本地路径依赖（`../gspec`，领先 PyPI 0.10.2）；升级 = 在该仓库 pull
 - `gmeta ==0.1.0`：mNGS 宏基因组分析与监测报告（可选依赖，不进入默认分析路径）
 - 升级这些工具后必须复核：CLI 接口签名 + bacmap 侧解析器 + V10 式单株冒烟
 - 长读组装：`flye >=2.9.5`、`unicycler >=0.5.1` 已加入 conda 依赖（0.1.5）；
