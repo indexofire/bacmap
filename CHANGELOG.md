@@ -5,6 +5,32 @@
 
 ## [Unreleased]
 
+### 修复 Bakta v6 schema 变更导致特征计数为 0
+
+- **根因**：`core/annotation_parse.py` 从 Bakta JSON 的 `stats` 取
+  rRNA/tRNA/tmRNA/ncRNA/CRISPR/sORF/pseudogene 计数与 `coding_density`；
+  Bakta v6 的 `stats` 只剩 `size/gc/n_ratio/n50/n90/coding_ratio`——报告
+  「Bakta 特征计数」因此全为 0、`coding_density` 为 null。
+- **修复**：v6 布局下按 `features[].type` 统计（`ncrna-region` 不计入 ncRNA），
+  假基因按 `features[].pseudogene` 标记计数，`coding_density` 取
+  `coding_ratio × 100`；v5 的 `stats` 计数保持优先（旧运行目录不受影响）。
+- **回归**：对现有 20 个 run 的 Bakta v6 JSON 全量重算——tRNA 79–87、
+  rRNA 11–16、CRISPR 0–4、pseudogenes 3–11、coding_density 87–88%，
+  与报告预期一致。新增 v6/v5 两个单测。
+- 注意：已生成的 `annotation.json`/summary 里存的是旧值，需要 expand 冷产物后
+  重跑注释汇总才会刷新（方法见报告相关文档）。
+
+### 守护进程健壮性（承接 stop/restart）
+
+- **启动握手**：`start web -D` / `restart` 的父进程等待子进程引擎初始化完成，
+  失败时打印日志末尾并以非 0 退出（此前 DBOS 初始化失败也返回 0，只留日志）。
+- **pidfile 丢失兜底**：按 `/proc` 识别同一 BACMAP_HOME 的守护进程（含
+  `restart` 派生的），`stop` 可停止、`start` 会给出明确指引而不是再起第二个实例；
+  启动前增加端口占用守卫。
+- **DBOS 系统库半迁移自愈**：迁移中途 I/O 失败会留下"表已建、版本未记录"的库，
+  重试永久失败；启动时检测该签名并隔离为 `dbos.sqlite.corrupt-<ts>` 后重建
+  （tasks.sqlite 与结果目录不受影响）。
+
 ### `bacmap stop` / `bacmap restart`（后台 Web 守护进程生命周期）
 
 - **新增顶层命令**：`bacmap stop [web]` 优雅停止 `start web -D` 守护进程
