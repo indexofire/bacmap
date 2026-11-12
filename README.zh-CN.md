@@ -60,6 +60,8 @@ bacmap config init      # 可选：从 config.example.toml 生成配置
 bacmap doctor           # 只读体检
 bacmap start web        # http://127.0.0.1:8800/console/
 bacmap start web -D      # 守护进程后台运行（PID/日志在 $BACMAP_HOME）
+bacmap stop               # 停止守护进程
+bacmap restart            # 按上次参数重启
 ```
 
 第一次分析：

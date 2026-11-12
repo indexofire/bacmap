@@ -5,6 +5,7 @@
 - ``bacmap start web``       Web 控制台（默认 127.0.0.1:8800，ADR-16 只绑本机）
 - ``bacmap start tui``       全屏 TUI（Textual；任务/样本监控、写操作与签批，无内置对话）
 - ``bacmap start console``   交互式菜单（面向不使用子命令的用户）
+- ``bacmap stop|restart``    后台 Web 守护进程（``start web -D``）的停止/重启
 
 一次性命令（做完即退）：
 - ``bacmap overview``  系统概览
@@ -20,8 +21,10 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json as _json
 import os
+import signal
 import sys
 from datetime import UTC, datetime
 from importlib.metadata import version as pkg_version
@@ -101,14 +104,125 @@ def _run_mcp(args: argparse.Namespace) -> None:
 
 
 def _pid_alive(pid: int) -> bool:
-    """PID 是否仍存活（signal 0 探测；无权限/不存在都视为已死）。"""
+    """PID 是否仍存活（signal 0 探测；僵尸/无权限/不存在都视为已死）。"""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
     except PermissionError:
         return True
-    return True
+    # 僵尸进程（已退出未回收）仍在进程表里，但对守护进程语义"已死"：
+    # /proc/<pid>/stat 第 3 字段为 Z。非 Linux/无 /proc 时保守视为存活。
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="ascii", errors="replace")
+    except OSError:
+        return True
+    tail = stat.rsplit(")", 1)[-1].split()
+    return not (tail and tail[0] == "Z")
+
+
+_WEB_DAEMON_STATE = "web.daemon.json"
+
+
+def _read_pidfile(pid_path: Path) -> int | None:
+    """读 PID 文件；缺失或内容非法返回 None。"""
+    try:
+        return int(pid_path.read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _web_daemon_home(args: argparse.Namespace) -> Path:
+    return Path(args.home or BACMAP_HOME)
+
+
+def _stop_web_daemon(home: Path, *, timeout: float = 10.0) -> int:
+    """停止后台 Web 守护进程（SIGTERM → 超时 SIGKILL 兜底）。
+
+    幂等：未运行/陈旧 PID 文件都返回 0（先清理残留再报告）。返回进程退出码。
+    """
+    import time
+
+    pid_path = home / "web.pid"
+    if not pid_path.exists():
+        print(T("bacmap web is not running (no pidfile)", "bacmap web 未运行（无 PID 文件）"))
+        return 0
+    pid = _read_pidfile(pid_path)
+    if pid is None or not _pid_alive(pid):
+        with contextlib.suppress(OSError):
+            pid_path.unlink(missing_ok=True)
+        print(T(f"stale pidfile removed: {pid_path}", f"已清理陈旧 PID 文件：{pid_path}"))
+        return 0
+
+    with contextlib.suppress(ProcessLookupError):
+        os.kill(pid, signal.SIGTERM)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not _pid_alive(pid):
+            break
+        time.sleep(0.1)
+    if _pid_alive(pid):
+        print(
+            T(
+                f"process {pid} did not exit within {timeout:g}s; sending SIGKILL",
+                f"进程 {pid} 在 {timeout:g}s 内未退出，发送 SIGKILL",
+            )
+        )
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(pid, signal.SIGKILL)
+        for _ in range(20):
+            if not _pid_alive(pid):
+                break
+            time.sleep(0.1)
+    with contextlib.suppress(OSError):
+        pid_path.unlink(missing_ok=True)
+    print(T(f"bacmap web stopped (pid {pid})", f"bacmap web 已停止（pid {pid}）"))
+    return 0
+
+
+def _load_daemon_state(home: Path) -> dict[str, Any]:
+    """读取上次 `start web -D` 的启动参数（供 restart 复用）；缺失/损坏返回 {}。"""
+    try:
+        raw = (home / _WEB_DAEMON_STATE).read_text(encoding="utf-8")
+        value = _json.loads(raw)
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _save_daemon_state(home: Path, args: argparse.Namespace) -> None:
+    payload = {
+        "host": str(args.host),
+        "port": int(args.port),
+        "token_env": str(args.token_env),
+    }
+    with contextlib.suppress(OSError):
+        (home / _WEB_DAEMON_STATE).write_text(
+            _json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+
+
+def _run_stop(args: argparse.Namespace) -> None:
+    raise SystemExit(_stop_web_daemon(_web_daemon_home(args), timeout=args.timeout))
+
+
+def _run_restart(args: argparse.Namespace) -> None:
+    """停止（若在运行）后按上次的启动参数重新拉起守护进程。"""
+    home = _web_daemon_home(args)
+    state = _load_daemon_state(home)
+    host = args.host or str(state.get("host") or "127.0.0.1")
+    port = args.port or int(state.get("port") or 8800)
+    token_env = args.token_env or str(state.get("token_env") or "BACMAP_WEB_TOKEN")
+    _stop_web_daemon(home, timeout=args.timeout)
+    _run_web(
+        argparse.Namespace(
+            daemon=True,
+            host=host,
+            port=port,
+            home=str(home),
+            token_env=token_env,
+        )
+    )
 
 
 def _daemonize(log_path: Path, pid_path: Path) -> None:
@@ -171,6 +285,8 @@ def _run_web(args: argparse.Namespace) -> None:
             f"  ·  pidfile: {pid_path}  ·  log: {log_path}"
         )
         _daemonize(log_path, pid_path)
+        # 记录启动参数供 `bacmap restart` 复用（守护子进程内执行）。
+        _save_daemon_state(home, args)
 
     token = os.environ.get(args.token_env, "")
     _warn_if_exposed(args.host)
@@ -659,9 +775,9 @@ def _add_start_parsers(sub: Any) -> None:
         action="store_true",
         help=T(
             "run in the background (daemon); PID file at $BACMAP_HOME/web.pid, "
-            "log at $BACMAP_HOME/web.log; stop with kill $(cat $BACMAP_HOME/web.pid)",
+            "log at $BACMAP_HOME/web.log; stop with `bacmap stop`",
             "后台守护进程方式运行；PID 写入 $BACMAP_HOME/web.pid，日志 "
-            "$BACMAP_HOME/web.log；停止用 kill $(cat $BACMAP_HOME/web.pid)",
+            "$BACMAP_HOME/web.log；停止用 `bacmap stop`",
         ),
     )
     p_web.set_defaults(func=_run_web)
@@ -679,6 +795,55 @@ def _add_start_parsers(sub: Any) -> None:
     p_console.set_defaults(func=_run_console)
 
 
+def _add_daemon_parsers(sub: Any) -> None:
+    """后台 Web 守护进程的生命周期管理（stop/restart）。
+
+    目前只有 ``start web -D`` 会守护化；``stop``/``restart`` 默认目标即 web，
+    保留显式 ``web`` 目标以便与 ``bacmap start web`` 对称书写。
+    """
+    for command, func, help_text, help_zh in (
+        (
+            "stop",
+            _run_stop,
+            "stop the background Web daemon (SIGTERM, then SIGKILL on timeout)",
+            "停止后台 Web 守护进程（SIGTERM，超时后 SIGKILL）",
+        ),
+        (
+            "restart",
+            _run_restart,
+            "restart the background Web daemon (reuses the last start options)",
+            "重启后台 Web 守护进程（复用上次启动参数）",
+        ),
+    ):
+        p = sub.add_parser(command, help=T(help_text, help_zh))
+        p.add_argument(
+            "target",
+            nargs="?",
+            default="web",
+            choices=["web"],
+            help=T("daemon target (only web for now)", "守护进程目标（目前仅 web）"),
+        )
+        _add_home(p)
+        p.add_argument(
+            "--timeout",
+            type=float,
+            default=10.0,
+            help=T(
+                "seconds to wait for graceful shutdown before SIGKILL",
+                "优雅退出等待秒数，超时后 SIGKILL",
+            ),
+        )
+        if command == "restart":
+            p.add_argument("--host", default="", help=T("override host", "覆盖绑定地址"))
+            p.add_argument("--port", type=int, default=0, help=T("override port", "覆盖端口"))
+            p.add_argument(
+                "--token-env",
+                default="",
+                help=T("override bearer token env var", "覆盖 Bearer 令牌环境变量名"),
+            )
+        p.set_defaults(func=func)
+
+
 def _epilog() -> str:
     """双列分组帮助：长驻界面 vs 一次性命令（`bacmap --help` 尾部说明）。"""
     interfaces_label = T(
@@ -694,7 +859,7 @@ def _epilog() -> str:
         "注：各界面保留自己的参数，如 `bacmap start mcp --profile local-trusted`。",
     )
     return (
-        f"{interfaces_label}: bacmap start {{mcp|web|tui|console}}\n"
+        f"{interfaces_label}: bacmap start {{mcp|web|tui|console}} · bacmap stop|restart\n"
         f"{commands_label}: overview · task · plan · record · run · gom · "
         "sample · search · selection · research · agent\n"
         f"{note}"
@@ -726,6 +891,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     _add_start_parsers(sub)
+    _add_daemon_parsers(sub)
 
     p_ov = sub.add_parser("overview", help=T("system overview", "系统概览"))
     _add_home(p_ov)

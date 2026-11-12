@@ -4,6 +4,7 @@
 
 - **`start`**，启动一个接管终端或绑定端口的长驻界面：
   `bacmap start mcp|web|tui|console`；各界面保留自己的参数；
+- **`stop` / `restart`**，后台 Web 守护进程（`bacmap start web -D`）的生命周期管理；
 - **命令**，执行一次操作后退出：`overview`、`task`、`plan`、`record`、`run`、
   `gom`、`isolate`、`sample`、`search`、`selection`、`doctor`、`backup`、`restore`、
   `results`、`events`。
@@ -56,6 +57,27 @@ bacmap start web [--home H] [--host 127.0.0.1] [--port 8800] [--token-env BACMAP
 bacmap start web
 BACMAP_WEB_TOKEN=secret bacmap start web --host 0.0.0.0 --port 8800
 BACMAP_WEB_AUTH=cookie BACMAP_WEB_TOKEN=secret bacmap start web
+```
+
+`-D/--daemon` 以后台守护进程方式运行（PID 写 `$BACMAP_HOME/web.pid`，日志
+`$BACMAP_HOME/web.log`），用 `bacmap stop` / `bacmap restart` 管理。
+
+## `bacmap stop` / `bacmap restart`
+
+```text
+bacmap stop    [web] [--home H] [--timeout 10]
+bacmap restart [web] [--home H] [--timeout 10] [--host H] [--port P] [--token-env ENV]
+```
+
+停止/重启后台 Web 守护进程。`stop` 幂等：会清理陈旧 PID 文件，未运行时同样返回 0；
+先 SIGTERM，`--timeout` 秒后仍未退出则 SIGKILL。`restart` 先停止（若在运行），再用上次
+守护启动时记录的参数（`$BACMAP_HOME/web.daemon.json`）重新拉起——端口与 token 环境变量
+无需重输；`--host/--port/--token-env` 可覆盖记录值。
+
+```bash
+bacmap start web -D --port 8899
+bacmap restart            # 仍是 8899 端口
+bacmap stop
 ```
 
 ## `bacmap start tui` / `bacmap start console`

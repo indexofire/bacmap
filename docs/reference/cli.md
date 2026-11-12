@@ -4,6 +4,7 @@ The `bacmap` executable has two kinds of top-level entries:
 
 - **`start`** — launches a long-running interface that takes over the terminal or binds a port:
   `bacmap start mcp|web|tui|console`; each interface keeps its own flags;
+- **`stop` / `restart`** — lifecycle of the background Web daemon (`bacmap start web -D`);
 - **commands** that perform one operation and exit: `overview`, `task`, `plan`, `record`, `run`,
   `gom`, `isolate`, `sample`, `search`, `selection`, `doctor`, `backup`, `restore`, `results`,
   `events`.
@@ -57,6 +58,28 @@ Binds loopback by default. A non-loopback host without a token refuses to start.
 bacmap start web
 BACMAP_WEB_TOKEN=secret bacmap start web --host 0.0.0.0 --port 8800
 BACMAP_WEB_AUTH=cookie BACMAP_WEB_TOKEN=secret bacmap start web
+```
+
+`-D/--daemon` runs it in the background (PID `$BACMAP_HOME/web.pid`, log
+`$BACMAP_HOME/web.log`); manage it with `bacmap stop` / `bacmap restart`.
+
+## `bacmap stop` / `bacmap restart`
+
+```text
+bacmap stop    [web] [--home H] [--timeout 10]
+bacmap restart [web] [--home H] [--timeout 10] [--host H] [--port P] [--token-env ENV]
+```
+
+Stop/restart the background Web daemon. `stop` is idempotent: it removes stale PID files and
+returns 0 when nothing is running; SIGTERM first, SIGKILL after `--timeout` seconds. `restart`
+stops the daemon (if running) and starts it again with the options recorded at the last daemon
+start (`$BACMAP_HOME/web.daemon.json`), so the port and token env survive without retyping;
+`--host/--port/--token-env` override the recorded values.
+
+```bash
+bacmap start web -D --port 8899
+bacmap restart            # same port 8899
+bacmap stop
 ```
 
 ## `bacmap start tui` / `bacmap start console`

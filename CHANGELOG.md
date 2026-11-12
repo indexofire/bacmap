@@ -5,6 +5,30 @@
 
 ## [Unreleased]
 
+### `bacmap stop` / `bacmap restart`（后台 Web 守护进程生命周期）
+
+- **新增顶层命令**：`bacmap stop [web]` 优雅停止 `start web -D` 守护进程
+  （SIGTERM → `--timeout` 后 SIGKILL；幂等，未运行/陈旧 PID 文件也返回 0 并清理）；
+  `bacmap restart [web]` 停止后按上次启动参数重新拉起。
+- **启动参数持久化**：守护启动时记录 `$BACMAP_HOME/web.daemon.json`
+  （host/port/token_env），`restart` 直接复用，端口与令牌环境变量无需重输；
+  `--host/--port/--token-env` 可覆盖。
+- **僵尸 PID 视为已死**：`_pid_alive` 读 `/proc/<pid>/stat` 排除僵尸态，
+  避免崩溃残留的 PID 文件挡住启动/停止判定。
+- 文档：CLI 参考、界面指南与 README 双语同步（原“用 kill 停止”的手工说明替换为命令）。
+
+### 报告 QUAST 组装质控可视化（v1.10.25 模板 content=8）
+
+- **指标卡 + 图表替代原始 TSV 文本块**：组装质控一节渲染为 8 张关键指标卡
+  （总长度 / contigs / 最大 contig / N50 / N90 / auN / GC / N's per 100 kbp，带
+  L50/L90 与阈值计数提示）、「组装连续性」条形图（最大 contig、auN、N50、N90
+  占总长度的比例）与「片段化剖面」（≥0/1k/5k/10k/25k/50k bp 各阈值的 contig
+  数与长度占比）；原始 QUAST 表折叠保留供溯源。纯 CSS 实现，符合报告沙箱
+  CSP（禁脚本）；两种文本布局（纵向 report.tsv / 横向 transposed_report.tsv）
+  均可解析。
+- **模板版本标记 7 → 8**：旧报告首次访问自动重渲染（`_REPORT_MARKER`）。
+- 文档：`docs/guide/results(.zh).md` 报告一节同步。
+
 ### gside 0.2.4（依赖升级）
 
 - `pixi.toml`：`gside ==0.2.3` → `==0.2.4`。gmlst 0.6.1 / gseek 0.10.5 已是 PyPI 最新；

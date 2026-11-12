@@ -280,10 +280,13 @@ embed).
 ```bash
 bacmap start web -D            # or --daemon
 # PID file: $BACMAP_HOME/web.pid · log: $BACMAP_HOME/web.log
-kill "$(cat $BACMAP_HOME/web.pid)"   # stop
+bacmap stop                    # graceful stop (SIGTERM, SIGKILL after --timeout)
+bacmap restart                 # stop + start again with the last options
 ```
 
 Starting again while a live daemon is running is refused (stale PID files are ignored).
+`bacmap restart` reuses the host/port/token-env recorded at the last daemon start; pass
+`--host`/`--port`/`--token-env` to override.
 
 If you bind a non-loopback address, bacmap refuses to start without a token:
 

@@ -263,10 +263,12 @@ Hermes Dashboard、`opencode serve` 三端可嵌；Pi 为纯 TUI（无 web 面�
 ```bash
 bacmap start web -D            # 或 --daemon
 # PID 文件：$BACMAP_HOME/web.pid · 日志：$BACMAP_HOME/web.log
-kill "$(cat $BACMAP_HOME/web.pid)"   # 停止
+bacmap stop                    # 优雅停止（SIGTERM，超时后 SIGKILL）
+bacmap restart                 # 停止后按上次启动参数重新拉起
 ```
 
 守护进程已在运行时再次启动会被拒绝（陈旧 PID 文件自动放行）。
+`bacmap restart` 复用上次守护启动记录的 host/port/token-env；可用 `--host`/`--port`/`--token-env` 覆盖。
 
 如果绑定非回环地址，bacmap 在缺少令牌时会拒绝启动：
 
