@@ -330,6 +330,10 @@ treated as a patch and skipped.
       failOnStartupError: true
 ```
 
+Research tools are D2: use `--profile local-trusted` to expose them (or only
+`bacmap_research_capabilities` is registered). See the end-to-end DSH research tutorial in
+[Research Workbench §19](research-workbench.md#19-tutorial-driving-research-from-an-external-agent-dsh).
+
 Check the composed configuration:
 
 ```bash

@@ -126,12 +126,16 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 
 MCP Profile 允许 D2 时暴露：
 
-- `bacmap_research_capabilities`
-- `bacmap_research_sessions`
-- `bacmap_research_session`
+- `bacmap_research_capabilities`（所有 Profile，包括 `cloud`/D1）
+- `bacmap_research_sessions`、`bacmap_research_session`
+- `bacmap_research_request`、`bacmap_research_requests`（仅草案提案——见 §13）
+- `bacmap_research_power`、`bacmap_research_reporting_checklist`、`bacmap_research_evidence`
+- `bacmap_research_figure_spec`、`bacmap_research_figure_recipes`、`bacmap_research_figure_drafts`
+- `bacmap_research_analyses`、`bacmap_research_analysis`、`bacmap_research_logistic`、`bacmap_research_phylo_profile`、`bacmap_research_phylo_plan`
 
-`cloud`（D1）只拿到 capabilities；session 内容是 D2，不注册。研究写入当前不暴露为 MCP
-工具，创建走 CLI/Web/API。
+`cloud`（D1）只拿到 capabilities；session 内容是 D2，不注册。MCP 上唯一的研究写入是
+**请求草案**（`bacmap_research_request`）；会话/Study/Cohort/Plan 的创建仍在 CLI/Web/API，
+需人确认。用外部 Agent（DSH）驱动的端到端教程见 §19。
 
 ## 7. 治理 Profile
 
@@ -666,3 +670,91 @@ bacmap research analysis save --study <study_id> --type phylo --result result.js
 
 Web：`/research/studies/{study_id}/analyses` 与 `/research/analyses/{analysis_id}`。
 MCP（只读）：`bacmap_research_analyses`、`bacmap_research_analysis`。
+
+## 19. 教程：用外部 Agent（DSH）发起研究
+
+本节回答两个最常被问的问题：**怎么在 DSH 里和 bacmap 交流？** 以及 **什么才算一个研究项目？**
+
+### 19.1 一次性接入
+
+在你实际使用的 DSH Profile 里注册 MCP 服务器（`$DSH_HOME` 默认 `~/.dsh`；每个
+`profiles/<name>/` 目录各有一份副本，改你实际启动的那个）：
+
+```yaml
+# $DSH_HOME/profiles/<profile>/cordis.patch.yml
+- insert:
+  - id: mcp-bacmap
+    name: '@deepseek-ai/dsh-mcp-client'
+    config:
+      serverName: bacmap
+      transport: stdio
+      command: pixi
+      args: ['run', '--manifest-path', '/path/to/bacmap/pixi.toml', '-e', 'default',
+             'bacmap', 'start', 'mcp', '--profile', 'local-trusted']
+      failOnStartupError: true
+```
+
+**研究功能必须用 `--profile local-trusted`**：会话内容是 D2，默认的 `cloud`（D1）Profile 只注册
+`bacmap_research_capabilities`。
+
+然后安装角色指引并检查接线：
+
+```bash
+bacmap agent install --harness generic --with-skills   # DSH 走 generic + .bacmap/skills
+bacmap agent doctor
+dsh tui --dump-config
+```
+
+连通性检查：让 Agent“列出 bacmap 的研究能力”——它应调用 `bacmap_research_capabilities`
+（所有 Profile 都可见）。
+
+### 19.2 检索还是研究：你的问题属于哪一种？
+
+| 你想要 | 性质 | 工具 / 入口 |
+|---|---|---|
+| “哪些菌株携带基因 X？” | **检索**（只读） | `bio_search_samples`（`organism` + `amr_gene`）、`bio_query_lab_results`、`bio_query_metadata` |
+| “基因 X 与表型 Y 在队列里是否关联？” | **研究**（统计） | `bacmap_research_request` → 人确认 → 会话（2×2、OR/CI、Fisher p、图、报告） |
+
+查询本身不是研究项目；当队列变成**带治理 Profile、可评审、需人签字**的统计命题时，才是研究项目。
+
+### 19.3 `run_id` 是必须的吗？
+
+P1 会话确实必填 `run_id + gene + test_name`，但 run 只是**队列选择器**，不是被分析的对象：
+
+```python
+strain_ids = _run_strains(home, run_id)       # 圈定进入分析的菌株
+genes      = _gene_present(home, strain_ids)  # 基因存在性：strain_amr_genes（GOM 全库）
+phenos     = _phenotypes(home, strain_ids)    # 表型：lab_results（全库）
+```
+
+实际含义：
+
+- 沙门菌都在**同一次批量 analyze** 里 → 这个 `run_id` 就等于“数据库中所有沙门菌”，直接用；
+- 菌株分散在**多次运行** → 用 `run_ids` / `members` + `pathogen_scope` 提交研究请求
+  （Study/Cohort 线，§13），或先提交一个批量 analyze 任务形成单一队列 run。
+
+### 19.4 端到端对话示例
+
+```text
+1. “搜索所有携带 blaCTX-M-55 的沙门菌，给出它们的环丙沙星药敏结果”
+   → bio_search_samples { organism: "Salmonella", amr_gene: "blaCTX-M-55" } + bio_query_lab_results
+
+2. “这个队列够做关联检验吗？”
+   → bacmap_research_power
+
+3. “发起研究请求：blaCTX-M-55 携带 vs 环丙沙星耐药，沙门菌范围，run 用 <run_id>”
+   → bacmap_research_request（只写 `proposed` 草案）
+
+4. 人工步骤：Web → 研究请求收件箱 → 审阅 members/plan spec → 确认并创建
+   → Study → 冻结 Cohort → 冻结 Plan → 会话（2×2 / OR / 图 / 报告）
+```
+
+### 19.5 必须知道的边界
+
+1. **提案不是执行**。`bacmap_research_request` 只写草案；确认发生在 bacmap 自有界面
+   （Web 收件箱、`bacmap research request approve`、`/api/v1`）。MCP elicitation 或 Harness
+   工具审批不算确认证据（ADR-21）。
+2. **P1 能力范围**：每次会话一个 AMR 关联、确定性统计、无 LLM 生成文本、不采新数据。
+   `open-test` 输出标 `TEST/UNVERIFIED`；`research` / `publication` 为 `REVIEW REQUIRED`。
+3. **数据前置**：已存在的 run（`runs.sqlite`）、`strain_amr_genes` 中的基因（`gom.sqlite`）、
+   `lab_results` 中的表型。缺了就先跑 analyze 或补录药敏。

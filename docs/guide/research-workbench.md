@@ -134,12 +134,17 @@ See [Research API](../reference/research-api.md) for all endpoints.
 
 If the MCP profile allows D2, the server exposes:
 
-- `bacmap_research_capabilities`
-- `bacmap_research_sessions`
-- `bacmap_research_session`
+- `bacmap_research_capabilities` (every profile, including `cloud`/D1)
+- `bacmap_research_sessions`, `bacmap_research_session`
+- `bacmap_research_request`, `bacmap_research_requests` (draft proposals only — see §13)
+- `bacmap_research_power`, `bacmap_research_reporting_checklist`, `bacmap_research_evidence`
+- `bacmap_research_figure_spec`, `bacmap_research_figure_recipes`, `bacmap_research_figure_drafts`
+- `bacmap_research_analyses`, `bacmap_research_analysis`, `bacmap_research_logistic`, `bacmap_research_phylo_profile`, `bacmap_research_phylo_plan`
 
 `cloud` (D1) only receives `bacmap_research_capabilities`; session content is D2 and is not
-registered. Research writes are not exposed as MCP tools: creation currently happens via CLI/Web/API.
+registered. The only research write exposed over MCP is the **request draft**
+(`bacmap_research_request`); session/Study/Cohort/Plan creation stays on CLI/Web/API behind human
+confirmation. See §19 for an end-to-end tutorial with an external agent (DSH).
 
 ## 7. Governance profiles
 
@@ -715,3 +720,98 @@ bacmap research analysis save --study <study_id> --type phylo --result result.js
 
 Web: `/research/studies/{study_id}/analyses` and `/research/analyses/{analysis_id}`.
 MCP (read-only): `bacmap_research_analyses`, `bacmap_research_analysis`.
+
+## 19. Tutorial: driving research from an external agent (DSH)
+
+This tutorial covers the two questions asked most often: *how do I talk to bacmap from DSH?* and
+*what actually counts as a research project?*
+
+### 19.1 One-time setup
+
+Register the MCP server in the DSH profile you use (`$DSH_HOME` defaults to `~/.dsh`; each
+`profiles/<name>/` directory carries its own copy — edit the profile you actually launch):
+
+```yaml
+# $DSH_HOME/profiles/<profile>/cordis.patch.yml
+- insert:
+  - id: mcp-bacmap
+    name: '@deepseek-ai/dsh-mcp-client'
+    config:
+      serverName: bacmap
+      transport: stdio
+      command: pixi
+      args: ['run', '--manifest-path', '/path/to/bacmap/pixi.toml', '-e', 'default',
+             'bacmap', 'start', 'mcp', '--profile', 'local-trusted']
+      failOnStartupError: true
+```
+
+`--profile local-trusted` is **required for research**: session content is D2, and the default
+`cloud` (D1) profile only registers `bacmap_research_capabilities`.
+
+Then install the role guidance and check the wiring:
+
+```bash
+bacmap agent install --harness generic --with-skills   # DSH uses generic + .bacmap/skills
+bacmap agent doctor
+dsh tui --dump-config
+```
+
+Connectivity check: ask the agent to “list bacmap research capabilities” — it should call
+`bacmap_research_capabilities`, which is visible in every profile.
+
+### 19.2 Retrieval vs research: which one is my question?
+
+| What you want | It is | Tool / surface |
+|---|---|---|
+| “Which strains carry gene X?” | **retrieval** (read-only) | `bio_search_samples` (`organism` + `amr_gene`), `bio_query_lab_results`, `bio_query_metadata` |
+| “Is gene X associated with phenotype Y in this cohort?” | **research** (statistics) | `bacmap_research_request` → human confirms → session (2×2, OR/CI, Fisher p, figure, report) |
+
+A lookup is not a research project; the research project starts when the cohort becomes a
+reviewable statistical question with a governance profile and human sign-off.
+
+### 19.3 Is `run_id` mandatory?
+
+For a P1 session, yes — `run_id + gene + test_name` are required — but the run is only the
+**cohort selector**, not the object being analysed:
+
+```python
+strain_ids = _run_strains(home, run_id)       # selects which isolates enter the analysis
+genes      = _gene_present(home, strain_ids)  # gene presence from strain_amr_genes (whole GOM DB)
+phenos     = _phenotypes(home, strain_ids)    # phenotype from lab_results (whole DB)
+```
+
+Practical consequences:
+
+- Salmonella isolated in **one batch analyze run** → that `run_id` already means “all Salmonella in
+  the database”; use it directly.
+- Strains spread over **several runs** → propose with `run_ids` / `members` + `pathogen_scope`
+  (Study/Cohort line, §13), or submit one batch analyze task first so a single cohort run exists.
+
+### 19.4 End-to-end dialogue
+
+```text
+1. "Search all Salmonella carrying blaCTX-M-55 and show their ciprofloxacin results"
+   → bio_search_samples { organism: "Salmonella", amr_gene: "blaCTX-M-55" } + bio_query_lab_results
+
+2. "Is that cohort large enough for an association test?"
+   → bacmap_research_power
+
+3. "Propose a research request: blaCTX-M-55 carriage vs ciprofloxacin resistance,
+    Salmonella scope, runs <run_id>"
+   → bacmap_research_request (writes a `proposed` draft only)
+
+4. Human step: Web → 研究请求收件箱 → review members/plan spec → 确认并创建
+   → Study → frozen Cohort → frozen Plan → session with 2×2 / OR / figure / report
+```
+
+### 19.5 Boundaries you must know
+
+1. **A proposal is not an execution.** `bacmap_research_request` only writes a draft; confirmation
+   happens in bacmap's own surfaces (Web inbox, `bacmap research request approve`, `/api/v1`).
+   MCP elicitation or harness tool approval is not confirmation evidence (ADR-21).
+2. **P1 scope**: one AMR association per session, deterministic statistics, no LLM-written text and
+   no new data collection. `open-test` output is labelled `TEST/UNVERIFIED`; `research` /
+   `publication` are `REVIEW REQUIRED`.
+3. **Data prerequisites**: an existing run (`runs.sqlite`), the gene in `strain_amr_genes`
+   (`gom.sqlite`) and the phenotype in `lab_results`. If they are missing, run an analyze task or
+   ingest lab results first.

@@ -316,6 +316,10 @@ DSH 通过插件连接 MCP。补丁文件**按 profile 分层**：`$DSH_HOME/pro
       failOnStartupError: true
 ```
 
+研究工具是 D2：需要 `--profile local-trusted` 才会注册（否则只有
+`bacmap_research_capabilities`）。DSH 发起研究的端到端教程见
+[研究工作台 §19](research-workbench.zh.md#19-agentdsh)。
+
 检查组合结果：
 
 ```bash
