@@ -8,10 +8,17 @@ eggNOG-mapper（功能分类），本模块把两种输出归一为 ``annotation
 - ``summary.eggnog``（COG 分类计数、GO/KEGG/CAZy/Pfam 计数）
 - ``features``（非 hypothetical 的 CDS，附带 eggNOG 功能字段）
 - ``eggnog``（eggNOG 原始行，供下游报告/挖掘使用）
+
+Bakta v6 schema 变更（v1.10.25）：``stats`` 只剩
+``size/gc/n_ratio/n50/n90/coding_ratio``——rRNA/tRNA/tmRNA/ncRNA/CRISPR/sORF/
+pseudogene 计数改由 ``features[].type``（及 ``pseudogene`` 标记）统计，
+``coding_density`` 由 ``coding_ratio`` × 100 换算。v5 的 ``stats`` 计数仍优先，
+旧运行目录的 JSON 不受影响。
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 
 _HYPOTHETICAL = {
@@ -65,6 +72,32 @@ def parse_bakta(data: dict[str, Any]) -> dict[str, Any]:
         1 for feat in cds_features if str(feat.get("type", "")).lower() == "cds"
     )
 
+    # Bakta v6：stats 不再带特征计数，按 features[].type 统计（v5 stats 优先）。
+    type_counts: Counter[str] = Counter(
+        str(feat.get("type", "")).lower() for feat in features if isinstance(feat, dict)
+    )
+
+    def _stat(names: tuple[str, ...], feat_type: str) -> int:
+        for name in names:
+            if name in stats and stats.get(name) is not None:
+                return _count(stats.get(name))
+        return type_counts.get(feat_type, 0)
+
+    if "pseudogenes" in stats and stats.get("pseudogenes") is not None:
+        pseudogenes = _count(stats.get("pseudogenes"))
+    else:
+        pseudogenes = sum(
+            1
+            for feat in features
+            if isinstance(feat, dict)
+            and str(feat.get("type", "")).lower() == "cds"
+            and bool(feat.get("pseudogene"))
+        )
+    coding_density = stats.get("coding_density")
+    if coding_density is None and isinstance(stats.get("coding_ratio"), (int, float)):
+        # v6：coding_ratio 为 0-1 比例；报告沿用百分数口径。
+        coding_density = round(float(stats["coding_ratio"]) * 100, 2)
+
     annotated: list[dict[str, Any]] = []
     for feat in cds_features:
         product = _clean(feat.get("product"))
@@ -105,14 +138,14 @@ def parse_bakta(data: dict[str, Any]) -> dict[str, Any]:
         "features": annotated,
         "stats": {
             "cds": total_cds,
-            "rrna": _count(stats.get("rrna")),
-            "trna": _count(stats.get("trna")),
-            "tmrna": _count(stats.get("tmrna")),
-            "ncrna": _count(stats.get("ncrna")),
-            "crispr": _count(stats.get("crispr")),
-            "orfs": _count(stats.get("orfs") or stats.get("sorf")),
-            "pseudogenes": _count(stats.get("pseudogenes")),
-            "coding_density": stats.get("coding_density"),
+            "rrna": _stat(("rrna",), "rrna"),
+            "trna": _stat(("trna",), "trna"),
+            "tmrna": _stat(("tmrna",), "tmrna"),
+            "ncrna": _stat(("ncrna",), "ncrna"),
+            "crispr": _stat(("crispr",), "crispr"),
+            "orfs": _stat(("orfs", "sorf"), "sorf"),
+            "pseudogenes": pseudogenes,
+            "coding_density": coding_density,
         },
     }
 

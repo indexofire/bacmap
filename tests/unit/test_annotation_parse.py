@@ -95,6 +95,59 @@ def test_parse_bakta_counts_and_features():
     assert parsed["features"][1]["hypothetical"] is True
 
 
+BAKTA_V6 = {
+    "version": "6.0.0",
+    "stats": {
+        "size": 4_837_600,
+        "gc": 0.5205895485364643,
+        "n_ratio": 0.0,
+        "n50": 77888,
+        "n90": 26805,
+        "coding_ratio": 0.874417893170167,
+    },
+    "features": [
+        {"type": "cds", "gene": "gyrA", "locus": "S1_0001", "product": "DNA gyrase subunit A"},
+        {"type": "cds", "gene": "x", "locus": "S1_0002", "product": "hypothetical protein"},
+        {"type": "cds", "gene": "p1", "locus": "S1_0003", "product": "pseudo one",
+         "pseudogene": True},
+        {"type": "cds", "gene": "p2", "locus": "S1_0004", "product": "pseudo two",
+         "pseudogene": {"start": 1, "stop": 2}},
+        {"type": "trna", "gene": "t1"}, {"type": "trna", "gene": "t2"},
+        {"type": "rrna", "gene": "r1"},
+        {"type": "tmrna", "gene": "tm1"},
+        {"type": "ncrna", "gene": "n1"},
+        {"type": "ncrna-region", "gene": "n1.region"},
+        {"type": "crispr", "gene": "c1"}, {"type": "crispr", "gene": "c2"},
+        {"type": "sorf", "gene": "s1"}, {"type": "sorf", "gene": "s2"},
+        {"type": "sorf", "gene": "s3"},
+        {"type": "oric", "gene": "ori"},
+    ],
+}
+
+
+def test_parse_bakta_v6_counts_from_features_and_coding_ratio():
+    """Bakta v6：stats 只余 size/gc/n_*/coding_ratio → 计数按 features[].type 统计。"""
+    parsed = parse_bakta(BAKTA_V6)
+    stats = parsed["stats"]
+    assert stats["rrna"] == 1
+    assert stats["trna"] == 2
+    assert stats["tmrna"] == 1
+    assert stats["ncrna"] == 1          # ncrna-region 是 ncRNA 区域，不重复计数
+    assert stats["crispr"] == 2
+    assert stats["orfs"] == 3
+    assert stats["pseudogenes"] == 2    # pseudogene 标记（true 或对象）均计数
+    assert stats["coding_density"] == 87.44  # coding_ratio × 100
+    assert stats["cds"] == 4            # 含假基因的 CDS 计数
+
+
+def test_parse_bakta_v5_stats_still_win():
+    """旧布局（v5 stats 带计数）不受 v6 适配影响。"""
+    parsed = parse_bakta(BAKTA)
+    assert parsed["stats"]["trna"] == 20
+    assert parsed["stats"]["pseudogenes"] == 0
+    assert parsed["stats"]["coding_density"] == 0.88
+
+
 def test_parse_eggnog_skips_comments_and_normalises_dash():
     rows = parse_eggnog(EGGNOG)
     assert len(rows) == 4
