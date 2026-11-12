@@ -694,8 +694,12 @@ MCP（只读）：`bacmap_research_analyses`、`bacmap_research_analysis`。
       failOnStartupError: true
 ```
 
-**研究功能必须用 `--profile local-trusted`**：会话内容是 D2，默认的 `cloud`（D1）Profile 只注册
-`bacmap_research_capabilities`。
+Harness 背后的模型是云端 LLM 时应使用 `--profile cloud`（默认），DSH 接
+`deepseek-account` 就属于这一类：cloud Profile 默认 D1、管理员最多放宽到 D2
+（`[llm.data_policy] cloud_max_data_class = "D2"`）；D3/D4 永不出本地网络（ADR-16）。
+研究会话内容是 D2，管理员把 cloud 上限放宽到 D2 后即可见。**只有对接本地/内网模型时**
+才使用 `--profile local-trusted`（D4）——它需要 `[mcp] allow_local_trusted = true`，
+且不得与云端端点搭配使用。
 
 然后安装角色指引并检查接线：
 
