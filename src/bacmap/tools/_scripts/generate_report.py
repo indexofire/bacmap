@@ -14,6 +14,7 @@ import argparse
 import html
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -136,6 +137,76 @@ def _stat_strip(items: list[tuple[str, str, str]]) -> str:
         "</div>"
         for label, value, hint in items
     ) + "</div>"
+
+
+_QUAST_THRESHOLD_RE = re.compile(r">= (\d+) bp\)")
+
+
+def _quast_metrics(text: str) -> dict[str, str]:
+    """QUAST 报告文本 → {指标: 值}。
+
+    同时接受两种布局：``report.tsv``（纵向，一行一指标）与
+    ``transposed_report.tsv``（横向，首行指标名 + 单行值），分别对应
+    collect_summary 嵌入的历史文本与测试夹具。
+    """
+    lines = [line for line in text.strip().splitlines() if line.strip()]
+    first = lines[0].split("\t") if lines else []
+    # 转置布局：首行 "Assembly" + ≥2 个指标名，且数据行列数与表头一致；
+    # 纵向 report.tsv 首行是 "Assembly\t<样本名>"（恒 2 列），逐行解析。
+    if len(lines) >= 2 and first[0] == "Assembly" and len(first) >= 3 and len(lines[1].split("\t")) == len(first):
+        values = lines[1].split("\t")[1:]
+        return dict(zip(first[1:], values, strict=False))
+    out: dict[str, str] = {}
+    for line in lines:
+        cells = line.split("\t")
+        if len(cells) == 2 and cells[0] != "Assembly":
+            out[cells[0].strip()] = cells[1].strip()
+    return out
+
+
+def _fmt_bp(value: object) -> str:
+    """碱基数 → 人类可读长度（4703412 → 4.70 Mb；170133 → 170.1 kb）。"""
+    try:
+        n = float(str(value).replace(",", ""))
+    except (TypeError, ValueError):
+        return "—"
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.2f} Mb"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f} kb"
+    return f"{n:g} bp"
+
+
+def _quast_threshold_rows(
+    metrics: dict[str, str], prefix: str
+) -> list[tuple[int, str, float]]:
+    """抽取 "# contigs (>= X bp)" / "Total length (>= X bp)" 系列并按阈值升序。"""
+    rows: list[tuple[int, str, float]] = []
+    for name, value in metrics.items():
+        match = _QUAST_THRESHOLD_RE.search(name)
+        if not match or not name.startswith(prefix):
+            continue
+        rows.append((int(match.group(1)), f"≥ {int(match.group(1)):,} bp", _num(value)))
+    rows.sort(key=lambda row: row[0])
+    return rows
+
+
+def _quast_bars(rows: list[tuple[str, float, str]], scale: float) -> str:
+    """纯 CSS 水平条（复用报告既有 bar-row 体系；CSP 禁脚本，不用 SVG/JS）。
+
+    ``rows`` 为 (标签, 数值, 值标签)；条宽按 ``scale`` 归一。
+    """
+    pieces = []
+    for label, value, shown in rows:
+        width = max(1.0, (value / scale * 100) if scale > 0 else 100.0)
+        pieces.append(
+            '<div class="bar-row">'
+            f'<span class="bar-label">{html.escape(label)}</span>'
+            f'<span class="bar-track"><span class="bar-fill" style="width:{width:.1f}%"></span></span>'
+            f'<span class="bar-value mono quast-bar-value">{html.escape(shown)}</span>'
+            "</div>"
+        )
+    return '<div class="bars quast-bars">' + "".join(pieces) + "</div>"
 
 
 def _extract_species(summary: dict) -> str:
@@ -386,6 +457,80 @@ def _render_plasmid_section(genes: list[dict]) -> str:
 """
 
 
+def _render_quast_section(text: str) -> str:
+    """QUAST 组装质控的可视化渲染（v1.10.25：替代原始 TSV 文本块）。
+
+    数据源是 ``steps.assembly_quast`` 内嵌的 QUAST 汇总指标（pipeline 固定
+    ``--no-html``，QUAST 自带的 icarus 可视化不落盘；报告 CSP 禁脚本，故用
+    纯 CSS 条形图 + 指标卡），原始文本保留在折叠块供溯源。
+    """
+    metrics = _quast_metrics(text)
+    if not metrics:
+        return ""
+    total = _num(metrics.get("Total length"))
+    contigs = _num(metrics.get("# contigs"))
+    largest = _num(metrics.get("Largest contig"))
+    n50, n90 = _num(metrics.get("N50")), _num(metrics.get("N90"))
+    l50, l90 = metrics.get("L50", "—"), metrics.get("L90", "—")
+    count_rows = _quast_threshold_rows(metrics, "# contigs")
+    len_rows = dict(
+        (threshold, _num(value))
+        for threshold, _label, value in _quast_threshold_rows(metrics, "Total length")
+    )
+
+    hint_1kb = next(
+        (f"≥{label[1:].split()[0].replace(',', '')}: {value:g}" for t, label, value in count_rows if t == 1000),
+        "",
+    )
+    items: list[tuple[str, str, str]] = [
+        ("总长度", _fmt_bp(metrics.get("Total length")), "组装碱基总量"),
+        ("Contigs", f"{contigs:g}", (f"{hint_1kb} " if hint_1kb else "") + "条序列"),
+        ("最大 contig", _fmt_bp(largest), f"占总长 {largest / total * 100:.1f}%" if total > 0 else "—"),
+        ("N50", _fmt_bp(n50), f"{l50} 条 contig 覆盖 50%"),
+        ("N90", _fmt_bp(n90), f"{l90} 条 contig 覆盖 90%"),
+        ("auN", _fmt_bp(metrics.get("auN")), "面积加权连续性"),
+        ("GC", f"{metrics.get('GC (%)', '—')}%", "鸟嘌呤 + 胞嘧啶占比"),
+        ("N's / 100 kbp", metrics.get("# N's per 100 kbp", "—"), "未知碱基密度"),
+    ]
+
+    continuity_rows = [
+        (label, value, f"{_fmt_bp(value)} · {value / total * 100:.1f}%" if total > 0 else _fmt_bp(value))
+        for label, key in (
+            ("最大 contig", "Largest contig"), ("auN", "auN"), ("N50", "N50"), ("N90", "N90")
+        )
+        for value in [_num(metrics.get(key))]
+        if value > 0
+    ]
+    continuity = _quast_bars(continuity_rows, largest)
+
+    max_count = max((value for _t, _l, value in count_rows), default=0)
+    profile_rows = []
+    for threshold, label, count in count_rows:
+        shown = f"{count:g} 条"
+        length_at = len_rows.get(threshold)
+        if total > 0 and length_at:
+            shown += f" · {length_at / total * 100:.1f}% 长度"
+        profile_rows.append((label, count, shown))
+    profile = _quast_bars(profile_rows, max_count)
+
+    return (
+        "<h3>QUAST 组装质控</h3>"
+        + _stat_strip(items)
+        + '<div class="chart-grid">'
+        + '<div class="chart-card"><h3>组装连续性（相对总长度）</h3>'
+        + "<p class=\"muted\" style=\"margin:0 0 10px;font-size:11px;\">条越长连续性越好；N50/N90 越接近最大 contig，组装越接近完成图。</p>"
+        + continuity
+        + "</div>"
+        + '<div class="chart-card"><h3>片段化剖面（按长度阈值）</h3>'
+        + "<p class=\"muted\" style=\"margin:0 0 10px;font-size:11px;\">各长度阈值下的 contig 数与长度占比；阈值升高时数量骤降说明序列集中在少数长 contig。</p>"
+        + profile
+        + "</div>"
+        + "</div>"
+        + '<details class="gene-details"><summary>原始 QUAST 汇总数据</summary>'
+        + f'<pre class="quast">{html.escape(text)}</pre></details>'
+    )
+
+
 def _render_annotation_section(summary: dict) -> str:
     """QUAST 组装质控 + Bakta/eggNOG 注释摘要（无数据时返回空串）。"""
     steps = summary.get("steps", {})
@@ -396,8 +541,7 @@ def _render_annotation_section(summary: dict) -> str:
 
     parts: list[str] = ['<h2>组装质控与基因组注释</h2>']
     if quast:
-        parts.append("<h3>QUAST 组装质控</h3>")
-        parts.append(f'<pre class="quast">{html.escape(str(quast))}</pre>')
+        parts.append(_render_quast_section(str(quast)))
 
     if isinstance(ann, dict) and ann:
         status = ann.get("status", "ok")
@@ -555,7 +699,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="bacmap-report" content="7">
+<meta name="bacmap-report" content="8">
 <title>{sample_id} · 分析报告 · bacmap</title>
 <style>
   :root {{
@@ -717,6 +861,8 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
   .chart-card h3 {{ margin: 0 0 10px; }}
   .bars {{ display: grid; gap: 7px; }}
   .bar-row {{ display: grid; grid-template-columns: minmax(86px, 150px) minmax(0, 1fr) 52px; align-items: center; gap: 9px; font-size: 11px; }}
+  .quast-bars .bar-row {{ grid-template-columns: minmax(64px, 110px) minmax(0, 1fr) auto; }}
+  .quast-bar-value {{ white-space: nowrap; }}
   .bar-label {{ overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }}
   .bar-track {{ height: 7px; overflow: hidden; border-radius: 999px; background: var(--code-bg); }}
   .bar-fill {{ display: block; height: 100%; border-radius: inherit; background: var(--accent); }}

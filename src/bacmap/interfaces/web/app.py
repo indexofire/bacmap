@@ -76,7 +76,7 @@ _TEMPLATES = _Templates(directory=str(Path(__file__).parent / "templates"))
 logger = logging.getLogger(__name__)
 
 # 报告模板版本标记：旧模板生成的 HTML 在首次访问时原地重渲染。
-_REPORT_MARKER = b'name="bacmap-report" content="7"'
+_REPORT_MARKER = b'name="bacmap-report" content="8"'
 _REPORT_LOCK = threading.Lock()
 
 

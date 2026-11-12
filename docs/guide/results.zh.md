@@ -65,6 +65,11 @@ ls "$BACMAP_HOME/results/runs/<task_id>/SAM-TYP-001/report/"
 
 报告是自包含的（内联样式，无外部请求），因此可以归档并离线查看。PDF 生成是可选项，需要本地转换器。
 
+组装质控一节将 QUAST 汇总指标可视化为关键指标卡（总长度、contig 数、最大 contig、N50/N90/auN、
+L50/L90、GC、N's per 100 kbp）、组装连续性图（各长度占总长度的比例）与片段化剖面（各长度阈值下的
+contig 数与长度占比），原始 QUAST 表折叠保留供溯源。模板升级后报告会在首次访问时自动重渲染
+（`bacmap-report` 版本标记）。
+
 summary JSON 现在包含 `steps.assembly_quast`（QUAST 转置报告）与 `steps.annotation`
 （`status`、`total_CDS`、`annotated_CDS`、`annotation_rate`、`bakta` 计数、
 `eggnog` 的 COG/GO/KEGG 计数，以及 `top_genes`）。
