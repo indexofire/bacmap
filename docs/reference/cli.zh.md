@@ -52,10 +52,15 @@ bacmap start web [--home H] [--host 127.0.0.1] [--port 8800] [--token-env BACMAP
 ```
 
 默认绑定回环地址。非回环主机且无 token 时拒绝启动。
+`Host` 头须为回环名、绑定地址（`0.0.0.0`/`::` 时为本机主机名）或列在
+`BACMAP_WEB_ALLOWED_HOSTS` 中；其它主机名（如 `--host 0.0.0.0` 后用局域网 IP 访问）返回
+`400`（DNS rebinding 防护）。
 
 ```bash
 bacmap start web
 BACMAP_WEB_TOKEN=secret bacmap start web --host 0.0.0.0 --port 8800
+BACMAP_WEB_ALLOWED_HOSTS=192.168.1.20,bacmap.lab.example BACMAP_WEB_TOKEN=secret \
+  bacmap start web --host 0.0.0.0
 BACMAP_WEB_AUTH=cookie BACMAP_WEB_TOKEN=secret bacmap start web
 ```
 

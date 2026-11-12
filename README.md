@@ -71,6 +71,9 @@ bacmap stop               # stop the daemon
 bacmap restart            # restart with the last options
 ```
 
+The console accepts only loopback/bind-address `Host` headers (DNS-rebinding protection); add
+LAN or reverse-proxy names via `BACMAP_WEB_ALLOWED_HOSTS`.
+
 First analysis:
 
 ```bash

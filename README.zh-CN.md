@@ -64,6 +64,9 @@ bacmap stop               # 停止守护进程
 bacmap restart            # 按上次参数重启
 ```
 
+控制台只接受回环名/绑定地址作为 `Host`（DNS rebinding 防护）；局域网或反向代理域名用
+`BACMAP_WEB_ALLOWED_HOSTS` 添加。
+
 第一次分析：
 
 ```bash
