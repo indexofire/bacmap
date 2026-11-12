@@ -20,7 +20,7 @@ def test_report_template_is_dark_and_versioned(tmp_path):
     out = tmp_path / "S1_report.html"
     gr.generate_html("S1", summary, DeterministicVerifier().verify_all(summary), out)
     text = out.read_text(encoding="utf-8")
-    assert 'name="bacmap-report" content="7"' in text
+    assert 'name="bacmap-report" content="8"' in text
     assert "--bg: #08090a" in text
     assert "max-width: 900px" not in text  # 旧浅色模板已淘汰
 
@@ -85,6 +85,45 @@ def test_annotation_section_quast_only_when_annotation_disabled():
     )
     assert "QUAST" in html_text
     assert "Bakta" not in html_text
+
+
+def test_quast_section_renders_visualization_from_report_tsv():
+    """v1.10.25：QUAST 汇总指标渲染为指标卡 + 连续性/片段化图表，原始文本折叠。"""
+    quast = "\n".join(
+        [
+            "Assembly\t26SAL0505",
+            "# contigs (>= 0 bp)\t71",
+            "# contigs (>= 1000 bp)\t53",
+            "# contigs (>= 5000 bp)\t43",
+            "# contigs\t55",
+            "Largest contig\t439282",
+            "Total length\t4703412",
+            "GC (%)\t52.14",
+            "N50\t170133",
+            "N90\t54917",
+            "auN\t195354.3",
+            "L50\t9",
+            "L90\t28",
+            "# N's per 100 kbp\t0.00",
+        ]
+    )
+    html_text = gr._render_annotation_section({"steps": {"assembly_quast": quast}})
+    assert "QUAST 组装质控" in html_text
+    assert "组装连续性" in html_text and "片段化剖面" in html_text
+    assert "4.70 Mb" in html_text and "170.1 kb" in html_text
+    assert "9 条 contig 覆盖 50%" in html_text
+    assert "≥ 5,000 bp" in html_text and "43 条" in html_text
+    assert "原始 QUAST 汇总数据" in html_text
+
+
+def test_quast_section_handles_transposed_layout():
+    quast = (
+        "Assembly\t# contigs\tTotal length\tN50\tGC (%)\n"
+        "contigs.fasta\t12\t4700000\t170133\t52.14"
+    )
+    html_text = gr._render_annotation_section({"steps": {"assembly_quast": quast}})
+    assert "4.70 Mb" in html_text and "170.1 kb" in html_text
+    assert "52.14%" in html_text
 
 
 def test_annotation_section_empty_when_no_data():

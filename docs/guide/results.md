@@ -67,6 +67,12 @@ Open it from the Web:
 The report is self-contained (inline style, no external requests), so it can be archived and viewed
 offline. PDF generation is optional and needs a local converter.
 
+The assembly QC section renders QUAST summary metrics visually — key-metric cards (total length,
+contig count, largest contig, N50/N90/auN, L50/L90, GC, N's per 100 kbp), a continuity chart
+(contig lengths as a share of the total) and a fragmentation profile (contig counts and length
+share per length threshold), with the raw QUAST table collapsed below for traceability. Reports
+regenerate on first view after template upgrades (the `bacmap-report` marker version).
+
 The summary JSON now includes `steps.assembly_quast` (QUAST transposed report) and
 `steps.annotation` (`status`, `total_CDS`, `annotated_CDS`, `annotation_rate`,
 `bakta` counts, `eggnog` COG/GO/KEGG counts, and `top_genes`).
