@@ -136,48 +136,116 @@ def _web_daemon_home(args: argparse.Namespace) -> Path:
     return Path(args.home or BACMAP_HOME)
 
 
-def _stop_web_daemon(home: Path, *, timeout: float = 10.0) -> int:
-    """停止后台 Web 守护进程（SIGTERM → 超时 SIGKILL 兜底）。
+def _web_daemon_pids(home: Path) -> list[int]:
+    """扫描 /proc 找出同一 BACMAP_HOME 的 ``bacmap start web`` 守护进程。
 
-    幂等：未运行/陈旧 PID 文件都返回 0（先清理残留再报告）。返回进程退出码。
+    PID 文件随数据目录被删时的兜底：不依赖 pidfile 也能发现/停止旧实例，
+    避免 restart 起第二个实例撞端口（实测事故：删目录后旧进程仍在服务）。
     """
-    import time
+    home_str = str(home)
+    found: list[int] = []
+    try:
+        entries = list(Path("/proc").iterdir())
+    except OSError:
+        return found
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        if pid == os.getpid():
+            continue
+        try:
+            raw = (entry / "cmdline").read_bytes()
+        except OSError:
+            continue
+        parts = [part.decode("utf-8", "replace") for part in raw.split(b"\0") if part]
+        # 只认真正的控制台脚本进程（shebang 展开后 argv[1] 形如 .../bin/bacmap），
+        # 排除 `pixi run bacmap ...` 之类的父进程（其 argv 里也有同样词元）。
+        if len(parts) < 2 or not parts[1].endswith("/bacmap"):
+            continue
+        # `start web` 直启，或 `restart`（总是针对 web）派生的守护进程。
+        is_web_daemon = ("start" in parts and "web" in parts) or "restart" in parts
+        if not is_web_daemon:
+            continue
+        if home_str in parts or ("--home" not in parts and home_str == str(BACMAP_HOME)):
+            found.append(pid)
+    return found
 
-    pid_path = home / "web.pid"
-    if not pid_path.exists():
-        print(T("bacmap web is not running (no pidfile)", "bacmap web 未运行（无 PID 文件）"))
-        return 0
-    pid = _read_pidfile(pid_path)
-    if pid is None or not _pid_alive(pid):
-        with contextlib.suppress(OSError):
-            pid_path.unlink(missing_ok=True)
-        print(T(f"stale pidfile removed: {pid_path}", f"已清理陈旧 PID 文件：{pid_path}"))
-        return 0
+
+def _port_in_use(host: str, port: int) -> bool:
+    """端口是否已有监听者（守护启动前的快速守卫，避免"假成功"）。"""
+    import socket
+
+    target = host
+    if host in {"0.0.0.0", ""}:  # noqa: S104 — 仅比较监听地址，不实际绑定
+        target = "127.0.0.1"
+    elif host == "::":
+        target = "::1"
+    try:
+        with socket.create_connection((target, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+def _terminate_pid(pid: int, timeout: float) -> bool:
+    """SIGTERM → 超时 SIGKILL；返回进程是否确认退出。"""
+    import time
 
     with contextlib.suppress(ProcessLookupError):
         os.kill(pid, signal.SIGTERM)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if not _pid_alive(pid):
-            break
+            return True
         time.sleep(0.1)
-    if _pid_alive(pid):
-        print(
-            T(
-                f"process {pid} did not exit within {timeout:g}s; sending SIGKILL",
-                f"进程 {pid} 在 {timeout:g}s 内未退出，发送 SIGKILL",
-            )
+    if not _pid_alive(pid):
+        return True
+    print(
+        T(
+            f"process {pid} did not exit within {timeout:g}s; sending SIGKILL",
+            f"进程 {pid} 在 {timeout:g}s 内未退出，发送 SIGKILL",
         )
-        with contextlib.suppress(ProcessLookupError):
-            os.kill(pid, signal.SIGKILL)
-        for _ in range(20):
-            if not _pid_alive(pid):
-                break
-            time.sleep(0.1)
+    )
+    with contextlib.suppress(ProcessLookupError):
+        os.kill(pid, signal.SIGKILL)
+    for _ in range(20):
+        if not _pid_alive(pid):
+            return True
+        time.sleep(0.1)
+    return not _pid_alive(pid)
+
+
+def _stop_web_daemon(home: Path, *, timeout: float = 10.0) -> int:
+    """停止后台 Web 守护进程（pidfile 优先，丢失时按 /proc 兜底发现）。
+
+    幂等：未运行/陈旧 PID 文件都返回 0（先清理残留再报告）。返回进程退出码。
+    """
+    pid_path = home / "web.pid"
+    pid = _read_pidfile(pid_path) if pid_path.exists() else None
+    targets: list[int] = []
+    if pid is not None and _pid_alive(pid):
+        targets = [pid]
+    elif pid_path.exists():
+        with contextlib.suppress(OSError):
+            pid_path.unlink(missing_ok=True)
+        print(T(f"stale pidfile removed: {pid_path}", f"已清理陈旧 PID 文件：{pid_path}"))
+    if not targets:
+        targets = _web_daemon_pids(home)
+    if not targets:
+        print(T("bacmap web is not running (no pidfile)", "bacmap web 未运行（无 PID 文件）"))
+        return 0
+    ok = True
+    for target in targets:
+        if not _terminate_pid(target, timeout):
+            ok = False
+            print(T(f"failed to stop process {target}", f"无法停止进程 {target}"))
     with contextlib.suppress(OSError):
         pid_path.unlink(missing_ok=True)
-    print(T(f"bacmap web stopped (pid {pid})", f"bacmap web 已停止（pid {pid}）"))
-    return 0
+    if ok:
+        for target in targets:
+            print(T(f"bacmap web stopped (pid {target})", f"bacmap web 已停止（pid {target}）"))
+    return 0 if ok else 1
 
 
 def _load_daemon_state(home: Path) -> dict[str, Any]:
@@ -225,20 +293,49 @@ def _run_restart(args: argparse.Namespace) -> None:
     )
 
 
-def _daemonize(log_path: Path, pid_path: Path) -> None:
+def _tail_lines(path: Path, count: int) -> list[str]:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    return text.splitlines()[-count:]
+
+
+def _daemonize(log_path: Path, pid_path: Path) -> int:
     """双 fork 守护进程化：脱离会话、stdio 重定向到日志、PID 落盘。
 
-    仅在最终孙进程返回；父/子进程 ``os._exit`` 直接退出（不走 atexit/flush，
-    避免把父进程的清理副作用带进 daemon）。PID 文件由 atexit 摘除
-    （uvicorn 优雅退出会触发）；SIGKILL 后残留的陈旧 PID 由启动时探测兜底。
+    返回子进程的**启动握手 fd**：子进程在 engine 初始化成功后写一字节，
+    父进程阻塞等待并据此返回 0；子进程在握手前退出（初始化失败）→ 父进程
+    读到 EOF，打印日志末尾并以非 0 退出。这样 ``start -D`` / ``restart``
+    不会在守护进程已死时仍报告成功（实测事故：DBOS 初始化失败但 CLI 返回 0）。
+
+    仅在最终孙进程返回（父/中间子进程 ``os._exit`` 直接退出，不走 atexit/flush）。
+    PID 文件由 atexit 摘除（uvicorn 优雅退出会触发）；SIGKILL 后残留的陈旧 PID
+    由启动时探测兜底。
     """
     import atexit
-    import contextlib
 
     sys.stdout.flush()
     sys.stderr.flush()
+    read_fd, write_fd = os.pipe()
     if os.fork() > 0:
-        os._exit(0)
+        # 原始父进程：等待守护子进程的初始化握手。
+        os.close(write_fd)
+        with os.fdopen(read_fd, "rb", buffering=0) as pipe:
+            status = pipe.read(1)
+        if status == b"1":
+            os._exit(0)
+        sys.stderr.write(
+            T(
+                "bacmap web daemon failed to start; last log lines:\n",
+                "bacmap web 守护进程启动失败；日志末尾：\n",
+            )
+        )
+        for line in _tail_lines(log_path, 15):
+            sys.stderr.write(f"  {line}\n")
+        sys.stderr.flush()
+        os._exit(1)
+    os.close(read_fd)
     os.setsid()
     if os.fork() > 0:
         os._exit(0)
@@ -259,6 +356,7 @@ def _daemonize(log_path: Path, pid_path: Path) -> None:
             pid_path.unlink(missing_ok=True)
 
     atexit.register(_remove_pidfile)
+    return write_fd
 
 
 def _run_web(args: argparse.Namespace) -> None:
@@ -267,31 +365,60 @@ def _run_web(args: argparse.Namespace) -> None:
     from bacmap.interfaces.web.app import create_app
     from bacmap.interfaces.web.auth import require_auth_when_exposed
 
+    ready_fd: int | None = None
     if getattr(args, "daemon", False):
         home = Path(args.home or BACMAP_HOME)
         pid_path = home / "web.pid"
         log_path = home / "web.log"
-        if pid_path.exists():
-            try:
-                old_pid = int(pid_path.read_text().strip())
-            except ValueError:
-                old_pid = 0
-            if old_pid and _pid_alive(old_pid):
-                raise SystemExit(
-                    f"bacmap web already running (pid {old_pid}); pidfile: {pid_path}"
+        old_pid = _read_pidfile(pid_path) if pid_path.exists() else None
+        if old_pid and _pid_alive(old_pid):
+            raise SystemExit(
+                f"bacmap web already running (pid {old_pid}); pidfile: {pid_path}"
+            )
+        # pidfile 可能随数据目录被删：按 /proc 找出同一 HOME 的旧守护进程，
+        # 否则会起第二个实例并撞端口（且它持有已删除文件的句柄，停止后数据不可见）。
+        orphans = _web_daemon_pids(home)
+        if orphans:
+            raise SystemExit(
+                T(
+                    f"a bacmap web daemon for {home} is running (pid {orphans[0]}) "
+                    f"but its pidfile is missing; run `bacmap stop --home {home}` first",
+                    f"{home} 的 bacmap web 守护进程仍在运行（pid {orphans[0]}），"
+                    f"但 PID 文件已丢失；请先运行 `bacmap stop --home {home}`",
                 )
+            )
+        if _port_in_use(args.host, args.port):
+            raise SystemExit(
+                T(
+                    f"port {args.host}:{args.port} is already in use; "
+                    "stop the process serving it or choose another --port",
+                    f"端口 {args.host}:{args.port} 已被占用；"
+                    "请停止监听该端口的进程或换用其它 --port",
+                )
+            )
         print(
             f"bacmap start web -D → http://{args.host}:{args.port}/"
             f"  ·  pidfile: {pid_path}  ·  log: {log_path}"
         )
-        _daemonize(log_path, pid_path)
+        ready_fd = _daemonize(log_path, pid_path)
         # 记录启动参数供 `bacmap restart` 复用（守护子进程内执行）。
         _save_daemon_state(home, args)
 
     token = os.environ.get(args.token_env, "")
     _warn_if_exposed(args.host)
     require_auth_when_exposed(args.host, token or None)
-    engine = _engine(args.home)
+    try:
+        engine = _engine(args.home)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            if ready_fd is not None:
+                os.close(ready_fd)
+        raise
+    if ready_fd is not None:
+        # 初始化成功 → 握手；父进程据此判定启动成功并返回 0。
+        with contextlib.suppress(OSError):
+            os.write(ready_fd, b"1")
+            os.close(ready_fd)
     mode = (os.environ.get("BACMAP_WEB_AUTH") or "bearer").strip().lower()
     if not token:
         hint = T(
