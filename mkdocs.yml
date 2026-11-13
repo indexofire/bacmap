@@ -118,7 +118,6 @@ nav:
       - Flexible Workflow: concepts/flexible-workflow.md
       - GBrain: concepts/gbrain.md
       - Accounts & Multi-user: concepts/accounts.md
-      - User Management & Federation: concepts/user-management-and-federation.md
       - Glossary: concepts/glossary.md
       - Frozen Design: concepts/frozen-design.md
   - Operations:
