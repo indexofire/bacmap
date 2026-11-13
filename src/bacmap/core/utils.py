@@ -282,10 +282,85 @@ def _cgmlst_header_indices(header: list[str]) -> tuple[int, int, int]:
     return (file_idx, scheme_idx, st_idx)
 
 
-def parse_cgmlst_profiles(tsv_text: str) -> list[CgmlstProfile]:
-    """Parse a (possibly multi-sample) cgMLST TSV into a list of profiles.
+def _cgmlst_call_from_json(call: dict[str, Any]) -> tuple[int | None, str]:
+    """gmlst JSON 的单个位点调用 → (等位基因号, 类别)。
 
-    Format produced by ``gmlst typing cgmlst --format tsv``::
+    优先用 ``call_type``（exact/novel/partial/missing），无法判定时回退到
+    等位基因标记语法（``23*``/``~23``/``15?``/``1,2``/``-``）。
+    """
+    allele_id = call.get("allele_id")
+    call_type = str(call.get("call_type") or "").lower()
+    allele_ids = call.get("allele_ids")
+    if isinstance(allele_ids, list) and len(set(str(a) for a in allele_ids)) > 1:
+        return None, "ambiguous"
+    if call_type == "exact" and allele_id not in (None, ""):
+        try:
+            return int(str(allele_id).rstrip("*")), "called"
+        except ValueError:
+            pass
+    if call_type in {"novel", "new"}:
+        return None, "novel"
+    if call_type in {"partial", "missing"}:
+        return None, "missing"
+    marker = str(allele_id) if allele_id not in (None, "") else "-"
+    return _classify_cgmlst_allele(marker)
+
+
+def _cgmlst_profiles_from_json(payload: dict[str, Any]) -> list[Any]:
+    """gmlst ``typing cgmlst --format json`` → CgmlstProfile 列表。"""
+    from .analysis.cgmlst_types import CgmlstProfile
+
+    rows = payload.get("data")
+    if not isinstance(rows, list):
+        return []
+    profiles: list[CgmlstProfile] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        calls = row.get("allele_calls")
+        calls = calls if isinstance(calls, dict) else {}
+        alleles: dict[str, int | None] = {}
+        missing_loci: list[str] = []
+        novel_loci: list[str] = []
+        ambiguous_loci: list[str] = []
+        n_called = 0
+        for locus, call in calls.items():
+            if not isinstance(call, dict):
+                continue
+            allele, category = _cgmlst_call_from_json(call)
+            alleles[str(locus)] = allele
+            if category == "called":
+                n_called += 1
+            elif category == "novel":
+                novel_loci.append(str(locus))
+            elif category == "ambiguous":
+                ambiguous_loci.append(str(locus))
+            else:
+                missing_loci.append(str(locus))
+        st = row.get("st")
+        profiles.append(
+            CgmlstProfile(
+                sample_id=str(row.get("sample_id") or ""),
+                scheme=str(row.get("scheme") or ""),
+                st_raw="N/A" if st in (None, "") else str(st),
+                alleles=alleles,
+                n_called=n_called,
+                n_total=len(alleles),
+                missing_loci=missing_loci,
+                novel_loci=novel_loci,
+                ambiguous_loci=ambiguous_loci,
+            )
+        )
+    return profiles
+
+
+def parse_cgmlst_profiles(value: Any) -> list[Any]:
+    """Parse cgMLST typing results (JSON primary, legacy TSV fallback).
+
+    Accepts:
+
+    - gmlst native JSON (dict or JSON text, ``{"schema_version","data":[...]}``);
+    - legacy ``gmlst typing cgmlst --format tsv`` text::
 
         File\\tScheme\\tST\\t<locus_1>\\t...\\t<locus_N>
         <sample>\\t<scheme>\\t<ST>\\t<allele_1>\\t...\\t<allele_N>
@@ -297,17 +372,27 @@ def parse_cgmlst_profiles(tsv_text: str) -> list[CgmlstProfile]:
     ``parse_mlst`` convention of returning defaults rather than raising).
 
     The fallback 3-column row ``File\\tScheme\\tST\\n<sample>\\t<scheme>\\tN/A``
-    (emitted when the gmlst binary is unavailable — see typing_amr.smk) parses
-    gracefully to a profile with ``n_total=0`` and all locus lists empty.
+    (emitted when the gmlst binary is unavailable) parses gracefully to a
+    profile with ``n_total=0`` and all locus lists empty.
     """
     # Lazy import: analysis.deterministic_verifier imports parse_mlst from this
     # module at load time, so a top-level import here would create a cycle.
     from .analysis.cgmlst_types import CgmlstProfile
 
-    if not tsv_text or tsv_text == "N/A":
+    if isinstance(value, dict):
+        return _cgmlst_profiles_from_json(value)
+    if not isinstance(value, str) or not value.strip() or value.strip() == "N/A":
         return []
 
-    lines = tsv_text.strip().split("\n")
+    text = value.strip()
+    if text.startswith("{"):
+        try:
+            payload = json.loads(text)
+        except ValueError:
+            return []
+        return _cgmlst_profiles_from_json(payload) if isinstance(payload, dict) else []
+
+    lines = text.strip().split("\n")
     if len(lines) < 2:
         return []
 
@@ -363,8 +448,8 @@ def parse_cgmlst_profiles(tsv_text: str) -> list[CgmlstProfile]:
     return profiles
 
 
-def parse_cgmlst_profile(tsv_text: str) -> CgmlstProfile:
-    """Parse a single-sample cgMLST TSV. See ``parse_cgmlst_profiles`` for format.
+def parse_cgmlst_profile(value: Any) -> Any:
+    """Parse a single-sample cgMLST result (JSON dict/text or legacy TSV).
 
     Expects exactly one data row. If two or more rows are present, raises
     ``ValueError`` directing the caller to ``parse_cgmlst_profiles`` rather
@@ -377,7 +462,7 @@ def parse_cgmlst_profile(tsv_text: str) -> CgmlstProfile:
     # Lazy import — see parse_cgmlst_profiles for the cycle rationale.
     from .analysis.cgmlst_types import CgmlstProfile
 
-    profiles = parse_cgmlst_profiles(tsv_text)
+    profiles = parse_cgmlst_profiles(value)
     if len(profiles) >= 2:
         raise ValueError(
             f"parse_cgmlst_profile received {len(profiles)} data rows; "

@@ -299,12 +299,13 @@ def _cgmlst_caveats_html(caveats: list[str]) -> str:
 
 
 def _render_cgmlst_section(sample_id: str, summary: dict) -> str:
-    # Returns "" when cgmlst.tsv is absent so the section is omitted cleanly
-    # (plan todo 9 acceptance). When the TSV exists but no reference library is
-    # available, renders profile stats only without projection (graceful
-    # degradation).
-    cgmlst_path = RESULTS_DIR / sample_id / "typing" / "cgmlst.tsv"
-    if not cgmlst_path.exists():
+    # Returns "" when the cgMLST profile is absent so the section is omitted
+    # cleanly (plan todo 9 acceptance). JSON is the canonical format
+    # (typing/cgmlst.json); legacy runs fall back to typing/cgmlst.tsv.
+    cgmlst_path = RESULTS_DIR / sample_id / "typing" / "cgmlst.json"
+    if not cgmlst_path.is_file():
+        cgmlst_path = RESULTS_DIR / sample_id / "typing" / "cgmlst.tsv"
+    if not cgmlst_path.is_file():
         return ""
 
     try:

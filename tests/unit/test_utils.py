@@ -11,6 +11,8 @@ sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
 from bacmap.core.utils import (  # noqa: E402
     parse_abricate_tsv,
+    parse_cgmlst_profile,
+    parse_cgmlst_profiles,
     parse_db_header,
     parse_mlst,
     read_json_file,
@@ -112,6 +114,64 @@ class TestParseMlst:
         r = parse_mlst("FILE\tSCHEME\tST\taroC\ncontigs\tsalmonella_2\t19\t10")
         assert r["scheme"] == "salmonella_2"
         assert "scheme" not in r["alleles"] and "file" not in r["alleles"]
+
+
+class TestParseCgmlstProfiles:
+    def test_native_json_single_sample(self):
+        payload = {
+            "schema_version": "gmlst-typing-v1",
+            "data": [
+                {
+                    "sample_id": "S1",
+                    "scheme": "senterica_2",
+                    "st": 19,
+                    "status": "PERFECT",
+                    "allele_calls": {
+                        "L1": {"allele_id": "1", "call_type": "exact"},
+                        "L2": {"allele_id": "2", "call_type": "exact"},
+                    },
+                }
+            ],
+        }
+        profile = parse_cgmlst_profile(json.dumps(payload))
+        assert profile.sample_id == "S1"
+        assert profile.scheme == "senterica_2"
+        assert profile.st_raw == "19"
+        assert profile.alleles == {"L1": 1, "L2": 2}
+        assert profile.n_called == 2 and profile.n_total == 2
+
+    def test_json_call_categories(self):
+        payload = {
+            "schema_version": "gmlst-typing-v1",
+            "data": [
+                {
+                    "sample_id": "S1",
+                    "scheme": "senterica_2",
+                    "st": None,
+                    "allele_calls": {
+                        "A": {"allele_id": "5", "call_type": "exact"},
+                        "B": {"allele_id": "~7", "call_type": "novel"},
+                        "C": {"allele_id": "3", "call_type": "partial"},
+                        "D": {"allele_id": "1", "call_type": "exact",
+                              "allele_ids": ["1", "2"]},
+                    },
+                }
+            ],
+        }
+        profile = parse_cgmlst_profile(payload)
+        assert profile.alleles["A"] == 5
+        assert profile.n_called == 1
+        assert profile.novel_loci == ["B"]
+        assert profile.missing_loci == ["C"]
+        assert profile.ambiguous_loci == ["D"]
+        assert profile.st_raw == "N/A"
+
+    def test_legacy_tsv_still_parses(self):
+        text = "File\tScheme\tST\tL1\tL2\nS1\tsenterica_2\t-\t1\t~2"
+        profiles = parse_cgmlst_profiles(text)
+        assert len(profiles) == 1
+        assert profiles[0].alleles["L1"] == 1
+        assert profiles[0].novel_loci == ["L2"]
 
 
 class TestParseAbricateTsv:

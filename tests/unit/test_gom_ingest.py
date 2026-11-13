@@ -45,7 +45,24 @@ _SUMMARY = {
     },
 }
 
-_CGMLST_TSV = "File\tScheme\tST\tL1\tL2\tL3\nSAM-001\tsenterica_2\t19\t1\t2\t3\n"
+# v1.10.26 规范产物：per-sample cgmlst.json（gmlst-typing-v1）。
+_CGMLST_JSON = {
+    "schema_version": "gmlst-typing-v1",
+    "data": [
+        {
+            "sample_id": "SAM-001",
+            "scheme": "senterica_2",
+            "st": 19,
+            "status": "PERFECT",
+            "score": 100.0,
+            "allele_calls": {
+                "L1": {"allele_id": "1", "call_type": "exact"},
+                "L2": {"allele_id": "2", "call_type": "exact"},
+                "L3": {"allele_id": "3", "call_type": "exact"},
+            },
+        }
+    ],
+}
 
 _SNP_COHORT = {
     "tree_newick": "(SAM-001:0.1,SAM-002:0.2);",
@@ -75,7 +92,9 @@ def _write_results(home: Path) -> None:
     (rep / "SAM-001_summary.json").write_text(json.dumps(_SUMMARY), encoding="utf-8")
     typing = home / "results" / "SAM-001" / "typing"
     typing.mkdir()
-    (typing / "cgmlst.tsv").write_text(_CGMLST_TSV, encoding="utf-8")
+    (typing / "cgmlst.json").write_text(
+        json.dumps(_CGMLST_JSON), encoding="utf-8"
+    )
     snp = home / "results" / "snp" / "salmonella"
     snp.mkdir(parents=True)
     (snp / "snp_summary.json").write_text(json.dumps(_SNP_COHORT), encoding="utf-8")

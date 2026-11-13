@@ -68,7 +68,7 @@ rule typing_cgmlst_batch:
             for _s in _CGMLST_SCHEME_SAMPLES.get(wc.scheme, [])
         ]
     output:
-        combined=str(WORKDIR) + "/cgmlst/.batch/{scheme}/cgmlst_combined.tsv",
+        combined=str(WORKDIR) + "/cgmlst/.batch/{scheme}/cgmlst_combined.json",
     params:
         sample_list=lambda wc: " ".join(
             _CGMLST_SCHEME_SAMPLES.get(wc.scheme, [])
@@ -77,64 +77,118 @@ rule typing_cgmlst_batch:
     threads: _CGMLST_MAX_WORKERS
     wildcard_constraints:
         scheme="[^/]+"
-    shell:
-        "mkdir -p $(dirname {output.combined}) " + _CGMLST_BATCH_TMP + " && "
-        "GMLST_TMPDIR=" + _CGMLST_BATCH_TMP + " "
-        + (
-            "GMLST_CGMLST_CANDIDATE_MAX_ALLELES={params.candidate_cap} "
-            if _CGMLST_CANDIDATE_CAP > 0
-            else ""
-        )
-        + "{GMLST_BIN} typing cgmlst -s {wildcards.scheme} --format tsv "
-        "-t 1 --max-workers {threads} "
-        "-o {output.combined} {input.contigs} || "
-        "(printf 'File\\tScheme\\tST\\n'; "
-        "for _s in {params.sample_list}; do "
-        "printf '%s\\t{wildcards.scheme}\\tN/A\\n' \"$_s\"; done) "
-        "> {output.combined}"
+    run:
+        # v1.10.26：结果统一为 JSON（gmlst-typing-v1 envelope）；失败时写同构
+        # 占位 JSON（status=FAILED），由拆分规则还原为逐样本文件。
+        import json as _json
+        import os as _os
+        import subprocess as _subprocess
+
+        _os.makedirs(_os.path.dirname(str(output.combined)), exist_ok=True)
+        _os.makedirs(_CGMLST_BATCH_TMP, exist_ok=True)
+        _env = dict(_os.environ)
+        _env["GMLST_TMPDIR"] = _CGMLST_BATCH_TMP
+        if params.candidate_cap > 0:
+            _env["GMLST_CGMLST_CANDIDATE_MAX_ALLELES"] = str(params.candidate_cap)
+        _samples = list(params.sample_list.split())
+        _cmd = [
+            GMLST_BIN, "typing", "cgmlst", "-s", str(wildcards.scheme),
+            "--format", "json", "-t", "1", "--max-workers", str(threads),
+            "-o", str(output.combined),
+        ] + [str(_p) for _p in input]
+        try:
+            _ok = (
+                _subprocess.run(
+                    _cmd, env=_env, check=False,
+                    stdout=_subprocess.DEVNULL, stderr=_subprocess.DEVNULL,
+                ).returncode
+                == 0
+            )
+        except OSError:
+            _ok = False
+        if not _ok:
+            _data = [
+                {
+                    "sample_id": _s,
+                    "scheme": str(wildcards.scheme),
+                    "st": None,
+                    "status": "FAILED",
+                }
+                for _s in _samples
+            ]
+            output.combined.write_text(
+                _json.dumps(
+                    {"schema_version": "gmlst-typing-v1", "data": _data}
+                ),
+                encoding="utf-8",
+            )
 
 
 def _cgmlst_combined_input(wc):
     _scheme = _CGMLST_SAMPLE_SCHEME.get(wc.sample, "")
     if not _scheme:
         return []
-    return [str(WORKDIR) + f"/cgmlst/.batch/{_scheme}/cgmlst_combined.tsv"]
+    return [str(WORKDIR) + f"/cgmlst/.batch/{_scheme}/cgmlst_combined.json"]
 
 
 rule typing_cgmlst:
-    """Slice the batched cgMLST TSV back into per-sample files.
+    """Slice the batched cgMLST JSON back into per-sample files.
 
-    Keeps the historical per-sample interface (WORKDIR/<sample>/typing/
-    cgmlst.tsv) so downstream rules are unchanged. Samples without a
-    scheme get the same File/Scheme/ST N/A row the old per-sample rule
-    emitted.
+    Keeps the per-sample interface (WORKDIR/<sample>/typing/cgmlst.json,
+    gmlst-typing-v1) so downstream rules are unchanged. Samples without a
+    scheme get a NO_SCHEME stub with no allele calls.
     """
     input:
         _cgmlst_combined_input
     output:
-        str(WORKDIR) + "/{sample}/typing/cgmlst.tsv"
+        str(WORKDIR) + "/{sample}/typing/cgmlst.json"
     wildcard_constraints:
         sample="[^/]+"
     run:
+        import json as _json
+        import os as _os
+
         _scheme = _CGMLST_SAMPLE_SCHEME.get(str(wildcards.sample), "")
         _os.makedirs(_os.path.dirname(str(output)), exist_ok=True)
+
+        def _stub(status: str, scheme: str) -> dict:
+            return {
+                "schema_version": "gmlst-typing-v1",
+                "data": [
+                    {
+                        "sample_id": str(wildcards.sample),
+                        "scheme": scheme,
+                        "st": None,
+                        "status": status,
+                    }
+                ],
+            }
+
         if not _scheme:
-            with open(str(output), "w") as _fh:
-                _fh.write(f"File\tScheme\tST\n{wildcards.sample}\t-\tN/A\n")
+            payload = _stub("NO_SCHEME", "-")
         else:
-            _lines = [_ln.rstrip("\n") for _ln in open(str(input[0])) if _ln.strip()]
+            try:
+                combined = _json.loads(open(str(input[0]), encoding="utf-8").read())
+            except (OSError, ValueError):
+                combined = {}
             _rows = [
-                _ln
-                for _ln in _lines[1:]
-                if _ln.split("\t", 1)[0] == str(wildcards.sample)
+                _row
+                for _row in (combined.get("data") or [])
+                if isinstance(_row, dict)
+                and str(_row.get("sample_id")) == str(wildcards.sample)
             ]
-            with open(str(output), "w") as _fh:
-                if _rows:
-                    _fh.write(_lines[0] + "\n" + "\n".join(_rows) + "\n")
-                else:
-                    _fh.write(
-                        f"File\tScheme\tST\n{wildcards.sample}\t{_scheme}\tN/A\n"
-                    )
+            payload = (
+                {
+                    "schema_version": combined.get(
+                        "schema_version", "gmlst-typing-v1"
+                    ),
+                    "data": _rows,
+                }
+                if _rows
+                else _stub("FAILED", _scheme)
+            )
+        with open(str(output), "w", encoding="utf-8") as _fh:
+            _json.dump(payload, _fh, ensure_ascii=False)
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -195,15 +249,16 @@ _CGMLST_ACTIVE_GROUPS = (
 if _RUN_CGMLST_COHORT:
 
     # ───────────────────────────────────────────────────────────
-    # Per-group merged allele profiles (cat per-sample cgmlst.tsv into one
-    # multi-sample TSV). Same scheme across all samples in a group, so the
-    # locus columns line up; gmlst fallback rows (File/Scheme/ST only) are
-    # padded with "-" (missing) so the merged TSV stays rectangular.
+    # Per-group merged allele profiles (derived intermediate).
+    # Authoritative per-sample results are JSON (typing/cgmlst.json);
+    # `gmlst visual matrix/mst` still take a profile TSV, so this rule
+    # derives a merged TSV for the external visualizer. Non-exact calls
+    # are written as "-" (missing) — they carry no distance information.
     # ───────────────────────────────────────────────────────────
     rule cgmlst_cohort_profiles:
         input:
             lambda wc: expand(
-                str(WORKDIR) + "/{sample}/typing/cgmlst.tsv",
+                str(WORKDIR) + "/{sample}/typing/cgmlst.json",
                 sample=_CGMLST_GROUP_SAMPLES.get(wc.group, []),
             )
         output:
@@ -213,34 +268,40 @@ if _RUN_CGMLST_COHORT:
             scheme=lambda wc: _CGMLST_GROUP_SCHEMES[wc.group],
             group="{group}"
         run:
+            from bacmap.core.utils import parse_cgmlst_profiles
+
             _cgmlst_os.makedirs(
                 _cgmlst_os.path.dirname(str(output)), exist_ok=True
             )
-            header: list[str] | None = None
-            rows: list[list[str]] = []
-            for _sample, _path in zip(params.samples, input):
-                with open(str(_path)) as _fh:
-                    _lines = [ln.rstrip("\n") for ln in _fh if ln.strip()]
-                if not _lines:
+            profiles = []
+            for _path in input:
+                try:
+                    profiles.extend(
+                        parse_cgmlst_profiles(open(str(_path)).read())
+                    )
+                except (OSError, ValueError):
                     continue
-                if header is None:
-                    header = _lines[0].split("\t")
-                for _row in _lines[1:]:
-                    _cols = _row.split("\t")
-                    # Pad short rows so every row matches the header width;
-                    # gmlst fallback rows (File/Scheme/ST only) pad with "-"
-                    # (missing), which the parser treats as a missing call.
-                    if len(_cols) < len(header):
-                        _cols = _cols + ["-"] * (len(header) - len(_cols))
-                    rows.append(_cols)
-            if header is None:
-                # No usable input rows — emit a header-only TSV so downstream
-                # rules see a well-formed (if empty) file rather than crashing.
-                header = ["File", "Scheme", "ST"]
+            loci = list(profiles[0].alleles) if profiles else []
             with open(str(output), "w") as _fh:
-                _fh.write("\t".join(header) + "\n")
-                for _r in rows:
-                    _fh.write("\t".join(_r) + "\n")
+                _fh.write("\t".join(["File", "Scheme", "ST", *loci]) + "\n")
+                for _p in profiles:
+                    _cells = [
+                        str(_p.alleles.get(_locus))
+                        if isinstance(_p.alleles.get(_locus), int)
+                        else "-"
+                        for _locus in loci
+                    ]
+                    _fh.write(
+                        "\t".join(
+                            [
+                                _p.sample_id or "",
+                                _p.scheme,
+                                _p.st_raw or "-",
+                                *_cells,
+                            ]
+                        )
+                        + "\n"
+                    )
 
     # ───────────────────────────────────────────────────────────
     # Per-group Hamming distance matrix (JSON)

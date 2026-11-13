@@ -274,7 +274,7 @@ def main() -> int:
         targets = _cohort_targets(WORKFLOW_DIR / "config" / "samples.tsv", "snp")
     elif args.cgmlst:
         samples = validate_all_sample_names()
-        targets = [str(RESULTS_DIR / s / "typing" / "cgmlst.tsv") for s in samples]
+        targets = [str(RESULTS_DIR / s / "typing" / "cgmlst.json") for s in samples]
     elif args.cgmlst_cohort:
         targets = _cohort_targets(WORKFLOW_DIR / "config" / "samples.tsv", "cgmlst")
     elif args.sample:
@@ -302,7 +302,7 @@ def main() -> int:
             print("   Report: python workflows/bacmap/scripts/generate_report.py --cohort")
         elif args.cgmlst:
             print("\n✅ cgMLST per-sample typing 完成。")
-            print(f"   Profiles: {RESULTS_DIR}/{{sample}}/typing/cgmlst.tsv")
+            print(f"   Profiles: {RESULTS_DIR}/{{sample}}/typing/cgmlst.json")
             print("   Ingest: python scripts/ingest_results.py --cgmlst")
         elif args.cgmlst_cohort:
             print("\n✅ cgMLST cohort analysis 完成。")

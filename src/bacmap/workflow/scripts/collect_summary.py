@@ -85,8 +85,9 @@ summary["steps"]["mlst"] = parse_mlst(mlst_text) if mlst_text != "N/A" else {
 tgmlst_path = opt_input("tgmlst")
 if tgmlst_path:
     tgmlst_text = read_file(tgmlst_path, "")
-    if tgmlst_text:
-        summary["steps"]["gmlst_tgmlst"] = tgmlst_text
+    if tgmlst_text and tgmlst_text != "N/A":
+        # v1.10.26：tgMLST 与 MLST 同为 gmlst-typing-v1 JSON。
+        summary["steps"]["gmlst_tgmlst"] = parse_mlst(tgmlst_text)
 
 sistr_path = opt_input("sistr")  # 非沙门菌：不适用（不进入 DAG，不跑 SISTR）
 sistr = read_json(sistr_path, []) if sistr_path else []
@@ -278,6 +279,13 @@ if isinstance(_vpa_ok, dict) and _vpa_ok.get("status") == "ran":
             "k_confidence": str(_k.get("confidence") or "Unknown"),
             "source": "gspec:vpa_ok",
         }
+        # v1.10.26：统一入口——VPA 的 O:K 同时写入 steps.serotype。此前只写
+        # vpa_serotype 段，而 Web/报告/校验/检索都读 steps.serotype.value，
+        # 结果界面显示 N/A、报告缺血清型（数据其实在库里）。
+        summary["steps"]["serotype"]["value"] = _serotype
+        summary["steps"]["serotype"]["method"] = "gspec vpa_ok"
+        summary["steps"]["serotype"]["o_antigen"] = str(_o.get("phenotype") or "")
+        summary["steps"]["serotype"]["k_antigen"] = str(_k.get("phenotype") or "")
 # VPA 毒力标记（tdh/trh/tlh）按基因名扫 gspec 各库（官方 vpa_vf 或用户
 # 显式选择的库；v1.4.41 前的私有 vpara_virulence 库同样命中）；
 # O/K 血清型的 unavailable 语义按样本物种（registry 解析）判定。

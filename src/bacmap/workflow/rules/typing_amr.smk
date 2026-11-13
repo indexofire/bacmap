@@ -91,18 +91,20 @@ rule typing_tgmlst:
     input:
         contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     output:
-        result = str(WORKDIR) + "/{sample}/typing/tgmlst.tsv"
+        result = str(WORKDIR) + "/{sample}/typing/tgmlst.json"
     params:
         enabled = lambda wc: _tgmlst_enabled(wc.sample)
     threads: 4
     shell:
         "mkdir -p $(dirname {output.result}) && "
         "if [ '{params.enabled}' = '1' ]; then "
-        "{GMLST_BIN} typing tgmlst --format tsv -t {threads} "
+        "{GMLST_BIN} typing tgmlst --format json -t {threads} "
         "-o {output.result} {input.contigs} || "
-        "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\ttgmlst\\tN/A' > {output.result}; "
+        "echo '{{\"schema_version\":\"gmlst-typing-v1\",\"data\":[{{\"sample_id\":\"{wildcards.sample}\","
+        "\"scheme\":\"tgmlst\",\"st\":null,\"status\":\"FAILED\"}}]}}' > {output.result}; "
         "else "
-        "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\ttgmlst\\tN/A' > {output.result}; "
+        "echo '{{\"schema_version\":\"gmlst-typing-v1\",\"data\":[{{\"sample_id\":\"{wildcards.sample}\","
+        "\"scheme\":\"tgmlst\",\"st\":null,\"status\":\"NO_SCHEME\"}}]}}' > {output.result}; "
         "fi"
 
 rule typing_sistr:

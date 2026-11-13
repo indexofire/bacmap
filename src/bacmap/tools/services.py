@@ -307,14 +307,17 @@ def _load_cgmlst_profile_payload(sample_id: str) -> dict[str, Any] | None:
                 sample_id,
             )
 
+    # v1.10.26：JSON 为规范产物；旧运行目录回退 cgmlst.tsv。
+    json_path = _RESULTS_DIR / sample_id / "typing" / "cgmlst.json"
     tsv_path = _RESULTS_DIR / sample_id / "typing" / "cgmlst.tsv"
-    if not tsv_path.exists():
+    path = json_path if json_path.is_file() else tsv_path
+    if not path.is_file():
         return None
 
     try:
-        profile = parse_cgmlst_profile(tsv_path.read_text())
+        profile = parse_cgmlst_profile(path.read_text())
     except (ValueError, OSError):
-        logger.exception("cgmlst.tsv parse failed for %s", sample_id)
+        logger.exception("cgmlst profile parse failed for %s", sample_id)
         return None
 
     if not profile.scheme or profile.n_total == 0:

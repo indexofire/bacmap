@@ -90,5 +90,5 @@ def report_inputs(
         if code is not None:
             plan = selection.effective_gmlst(code, sample=sample)
             if "tgmlst" in plan.modes:
-                files["tgmlst"] = f"{base}/typing/tgmlst.tsv"
+                files["tgmlst"] = f"{base}/typing/tgmlst.json"
     return files

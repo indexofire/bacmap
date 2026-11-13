@@ -519,11 +519,14 @@ def _step_ingest_cgmlst_profiles(
     provenance = _analysis_provenance(home, run_id)
     count = 0
     for sample in samples:
-        tsv = base / sample / "typing" / "cgmlst.tsv"
-        if not tsv.is_file():
+        # v1.10.26：per-sample 结果为 cgmlst.json；旧运行目录回退 cgmlst.tsv。
+        json_path = base / sample / "typing" / "cgmlst.json"
+        tsv_path = base / sample / "typing" / "cgmlst.tsv"
+        path = json_path if json_path.is_file() else tsv_path
+        if not path.is_file():
             continue
         try:
-            profile = parse_cgmlst_profile(tsv.read_text(encoding="utf-8"))
+            profile = parse_cgmlst_profile(path.read_text(encoding="utf-8"))
         except (ValueError, OSError):
             logger.exception("cgmlst profile parse failed for %s", sample)
             continue
