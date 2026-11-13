@@ -167,6 +167,14 @@ class TestGetProfile:
 
 
 class TestExtractGenotype:
+    def test_extract_from_structured_mlst_json(self):
+        """v1.10.26：GOM payload 的 mlst 为归一 JSON（dict）时仍可索引。"""
+        result = _extract_genotype(
+            {"mlst": {"st": "17", "scheme": "senterica_1", "alleles": {"aroc": "8"}}}
+        )
+        assert result["mlst_scheme"] == "senterica_1"
+        assert result["mlst_st"] == "ST17"
+
     def test_extract_from_full_payload(self):
         payload = {
             "species_verdict": "Salmonella",

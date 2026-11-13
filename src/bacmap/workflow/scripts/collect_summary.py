@@ -2,6 +2,8 @@
 import json
 from pathlib import Path
 
+from bacmap.core.utils import parse_mlst
+
 sample = snakemake.wildcards.sample
 summary = {"sample": sample, "steps": {}}
 
@@ -72,7 +74,13 @@ if not isinstance(species_id, dict):
 summary["steps"]["species"] = species_id
 
 mlst_text = read_file(snakemake.input.mlst, "")
-summary["steps"]["mlst"] = mlst_text
+# v1.10.26：MLST 结果统一为 JSON（gmlst --format json）；旧运行目录的 TSV
+# 文本仍由 parse_mlst 兼容。summary 内嵌归一结构供视图/报告/校验直接消费。
+summary["steps"]["mlst"] = parse_mlst(mlst_text) if mlst_text != "N/A" else {
+    "st": "N/A",
+    "scheme": "",
+    "alleles": {},
+}
 
 tgmlst_path = opt_input("tgmlst")
 if tgmlst_path:

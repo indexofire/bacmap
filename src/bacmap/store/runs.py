@@ -217,7 +217,15 @@ def create_run(
     db_path: Path | None = None,
     task_id: str = "",
     refs_dir: Path | None = None,
+    started_at: datetime | None = None,
+    finished_at: datetime | None = None,
 ) -> AnalysisRun:
+    """登记一次运行记录。
+
+    ``started_at`` / ``finished_at`` 由调用方传入**真实执行区间**（v1.10.25）。
+    运行记录在管线结束后才登记，历史上两个字段都由 ``default_factory`` 取
+    "登记此刻"，导致每轮运行耗时恒为几十毫秒；缺省值保留，供离线构造/测试。
+    """
     from bacmap.config import BACMAP_HOME, REFS_DIR, env_lock_path
     from bacmap.core.tool_selection import file_hash, is_legacy_path
 
@@ -250,6 +258,8 @@ def create_run(
         workflow=workflow,
         workflow_commit=commit,
         workflow_dirty=dirty,
+        started_at=started_at or datetime.now(UTC),
+        finished_at=finished_at,
         resolved_config=resolved,
         config_sha256=hashlib.sha256(
             json.dumps(resolved, sort_keys=True, ensure_ascii=False).encode()
@@ -285,14 +295,16 @@ def create_run(
     with conn:
         conn.execute(
             "INSERT INTO analysis_runs (run_id, task_id, strain_ids, workflow, workflow_commit,"
-            " workflow_dirty, started_at, resolved_config, config_sha256, ref_databases,"
-            " tool_versions, env_lock_sha256, input_files, seeds, nondeterministic_steps, host,"
-            " manifest_sha256)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " workflow_dirty, started_at, finished_at, resolved_config, config_sha256,"
+            " ref_databases, tool_versions, env_lock_sha256, input_files, seeds,"
+            " nondeterministic_steps, host, manifest_sha256)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 run.run_id, run.task_id, json.dumps(run.strain_ids), run.workflow,
                 run.workflow_commit, int(run.workflow_dirty),
-                run.started_at.isoformat(), json.dumps(run.resolved_config, ensure_ascii=False),
+                run.started_at.isoformat(),
+                run.finished_at.isoformat() if run.finished_at else None,
+                json.dumps(run.resolved_config, ensure_ascii=False),
                 run.config_sha256, json.dumps([r.model_dump() for r in run.ref_databases]),
                 json.dumps(run.tool_versions), run.env_lock_sha256,
                 json.dumps(run.input_files), json.dumps(run.seeds),

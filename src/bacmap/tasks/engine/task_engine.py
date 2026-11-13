@@ -164,6 +164,11 @@ class DbosTaskEngine:
             new_id = str(task_id)
         p["task_id"] = new_id
         now = datetime.now(UTC).isoformat()
+        if task_type == TaskType.ANALYZE:
+            # v1.10.25：运行记录 started_at 优先取管线真实开始时间（_step_run），
+            # 缺失时退回提交时间——不再是"登记运行记录那一刻"。仅 analyze 需要：
+            # 其它任务把 params 交给严格校验（extra="forbid"），不能夹带字段。
+            p.setdefault("submitted_at", now)
 
         # 先落任务行（可见性）：workflow_id 用确定性的 SetWorkflowID(task_id)，
         # 因此可在启动前就写死映射；启动失败回滚为 FAILED，不留孤儿工作流。

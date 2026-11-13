@@ -23,6 +23,7 @@ import csv
 import hashlib
 import json
 import logging
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -267,18 +268,48 @@ def _progress(params: dict[str, Any], step: str) -> None:
 
 @DBOS.step()
 def _step_run(params: dict[str, Any]) -> dict[str, Any]:
+    """跑管线并回传**真实执行区间**（v1.10.25）。
+
+    时间戳在 step 内取：step 结果被 DBOS 记忆化，工作流重放时直接复用，
+    不会产生新的"开始/结束"时间。
+    """
     _progress(params, "pipeline")
+    started_at = datetime.now(UTC)
     try:
         with _memory_arbiter().heavy_step():
             proc = _run_snakemake(params)
     except Exception as exc:  # 记录而非静默：失败以 FAILED + message 呈现，不留裸 DBOS 堆栈
         logger.exception("analyze step failed")
-        return {"returncode": 1, "error": f"{type(exc).__name__}: {exc}"}
+        return {
+            "returncode": 1,
+            "error": f"{type(exc).__name__}: {exc}",
+            "started_at": started_at.isoformat(),
+            "ended_at": datetime.now(UTC).isoformat(),
+        }
     return {
         "returncode": proc.returncode,
         "error": None,
         "stderr_tail": (getattr(proc, "stderr", "") or "").strip()[-500:],
+        "started_at": started_at.isoformat(),
+        "ended_at": datetime.now(UTC).isoformat(),
     }
+
+
+def _run_times(
+    run_result: dict[str, Any], params: dict[str, Any]
+) -> tuple[datetime | None, datetime | None]:
+    """``_step_run`` 结果 → (started_at, finished_at)；缺失时退回提交时间。"""
+
+    def _parse(value: Any) -> datetime | None:
+        try:
+            return datetime.fromisoformat(str(value))
+        except (TypeError, ValueError):
+            return None
+
+    started = _parse(run_result.get("started_at")) or _parse(params.get("submitted_at"))
+    ended = _parse(run_result.get("ended_at"))
+    return started, ended
+
 
 
 @DBOS.step()
@@ -287,6 +318,9 @@ def _step_create_run(params: dict[str, Any]) -> dict[str, Any]:
 
     _progress(params, "run_record")
     home = Path(params["home"])
+    # 真实执行区间由 _step_run 产出、经 params["_run_times"] 传入（v1.10.25）；
+    # 本 step 保持单参签名，测试对它的 monkeypatch 契约不变。
+    started_at, finished_at = _run_times(params.get("_run_times") or {}, params)
     run = runs.create_run(
         workflow="bacmap",
         workflow_dir=home / "workflows" / "bacmap",
@@ -294,8 +328,53 @@ def _step_create_run(params: dict[str, Any]) -> dict[str, Any]:
         input_files=_fastqs(home, params["samples"]),
         db_path=home / "runs.sqlite",
         task_id=params.get("task_id", ""),
+        started_at=started_at,
+        finished_at=finished_at,
     )
     return {"run_id": run.run_id}
+
+
+def mark_task_terminal(home: Path, task_id: str, result: dict[str, Any]) -> bool:
+    """把工作流终态写回 ``tasks.sqlite``；返回是否真的发生了状态迁移（v1.10.25）。
+
+    历史行为：终态只在 ``DbosTaskEngine.status()`` 被读取时才对账写入——任务
+    00:26 已跑完，库里却直到 06:21 有人打开界面才变成 succeeded，运行记录
+    因此显示错误的结束时间。终态必须在工作流结束时落库；读取侧对账保留为
+    崩溃/恢复兜底（条件更新保证终态不被降级）。
+    """
+    from bacmap.tasks.events import EventLog, EventType
+    from bacmap.tools.spec import DataClass
+
+    if not task_id:
+        return False
+    mapped = _map_workflow_outcome("SUCCESS", result, None)
+    if mapped is None:
+        return False
+    state, message = mapped
+    db = Path(home) / "tasks.sqlite"
+    with sqlite3.connect(db) as conn:
+        changed = (
+            conn.execute(
+                "UPDATE tasks SET state = ?, message = ?, updated_at = ?"
+                " WHERE task_id = ? AND state = ?",
+                (state.value, message, datetime.now(UTC).isoformat(), task_id, "running"),
+            ).rowcount
+            > 0
+        )
+    if changed:
+        EventLog(db).append(
+            EventType.TASK_STATE,
+            task_id=task_id,
+            actor="engine",
+            payload={"state": state.value, "message": message or ""},
+            data_class=DataClass.D2,
+        )
+    return changed
+
+
+@DBOS.step()
+def _step_mark_terminal(params: dict[str, Any], result: dict[str, Any]) -> None:
+    mark_task_terminal(Path(params["home"]), str(params.get("task_id") or ""), result)
 
 
 @DBOS.step()
@@ -394,7 +473,7 @@ def _step_ingest_gom(home_s: str, sample: str, run_id: str, summary: dict[str, A
         "run_id": run_id,
         "species_verdict": species,
         "serotype": steps.get("serotype") if isinstance(steps.get("serotype"), dict) else {},
-        "mlst": steps.get("mlst") if isinstance(steps.get("mlst"), str) else "",
+        "mlst": steps.get("mlst") or "",
         "amr": steps.get("amr") if isinstance(steps.get("amr"), dict) else {},
         "dec": steps.get("dec") if isinstance(steps.get("dec"), dict) else {},
         "plasmid": steps.get("plasmid") if isinstance(steps.get("plasmid"), dict) else {},
@@ -664,35 +743,45 @@ def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
             # 登记失败（目录不存在/非法样本名/写盘失败）要给可执行原因，而不是
             # 让 DBOS 只留下 "workflow ERROR"（v1.9.2 巡检）。
             logger.exception("input registration failed")
-            return {
+            failed = {
                 "status": "FAILED",
                 "snakemake_returncode": 0,
                 "message": f"输入登记失败：{type(exc).__name__}: {exc}",
                 "gates": {},
             }
+            _step_mark_terminal(params, failed)
+            return failed
         if not reg["samples"]:
             reasons = "；".join(f"{s['file']}: {s['reason']}" for s in reg["skipped"][:3])
-            return {
+            failed = {
                 "status": "FAILED",
                 "snakemake_returncode": 0,
                 "message": f"目录登记后无可分析样本。{reasons}",
                 "gates": {},
             }
+            _step_mark_terminal(params, failed)
+            return failed
         params = {**params, "samples": reg["samples"]}
 
     rc = _step_run(params)
+    params = {
+        **params,
+        "_run_times": {"started_at": rc.get("started_at"), "ended_at": rc.get("ended_at")},
+    }
     # 防唤醒守卫②：管线可能运行数小时，期间用户可能取消——结束后
     # 再查一次，已取消则不再入库/出报告，直接终态收场。
     if task_id_guard and _step_cancelled(task_id_guard, str(home)):
         return _cancelled_envelope(task_id_guard)
     if rc["returncode"] != 0:
         detail = rc.get("error") or rc.get("stderr_tail") or "无 stderr 输出"
-        return {
+        failed = {
             "status": "FAILED",
             "snakemake_returncode": rc["returncode"],
             "message": f"snakemake 退出码 {rc['returncode']}：{detail}",
             "gates": {},
         }
+        _step_mark_terminal(params, failed)
+        return failed
 
     run = _step_create_run(params)
     _step_finish_run(run["run_id"], params)
@@ -727,6 +816,8 @@ def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
         out["compacted"] = _step_compact(run_dir_s, params["samples"])
     if any(g["verdict"] != "pass" for g in out["gates"].values()):
         out["status"] = "AWAITING_APPROVAL"
+    # v1.10.25：终态在工作流结束时落库，而不是等下一次 status() 读取。
+    _step_mark_terminal(params, out)
     return out
 
 

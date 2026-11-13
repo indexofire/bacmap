@@ -81,12 +81,13 @@ tools:
       data_dir: ""
       tax_scope: "Bacteria"
       mode: "diamond"
-      # 速度档位（v1.10.19）：实测 sensitive+迭代在 8 线程上仅 diamond 就
-      # >50 分钟/基因组，不可用。默认 mid-sensitive + 关闭迭代（肠杆菌等
-      # 覆盖好的物种注释损失可忽略，diamond 阶段 ~3-5x 提速）。
-      # 需要极限灵敏度时改 sensmode: "sensitive" 且 iterate: true。
+      # 速度档位（v1.10.26）：默认 fast。同株同线程实测（4.5k 蛋白、12 线程）：
+      #   fast 99 s vs mid-sensitive 3,151 s（~32x）；注释量 4,290 vs 4,342
+      #   （-1.2%），共有条目的 COG 类别一致率 100%。
+      # cohort 筛查用 fast；追远源同源/新功能时改 mid-sensitive 或 sensitive
+      # （sensitive + iterate: true 最慢，仅按需）。
       # usemem: true 让 diamond 库常驻内存（批量时省重复读盘，需 ~10G 空闲内存）。
-      sensmode: "mid-sensitive"
+      sensmode: "fast"
       iterate: false
       usemem: false
   quast:
@@ -114,6 +115,15 @@ tools:
 # Interpretation" for the full per-species rubric and citations.
 cgmlst:
   run_cgmlst_cohort: false
+  # 批量 typing：同一方案的所有样本合并为一次 gmlst 调用（固定准备成本
+  # ~3.5-4 分钟只付一次），样本内通过 --max-workers 并行、每样本 1 线程。
+  batch_max_workers: 8
+  # 每位点参与比对的候选等位基因上限（0 = 不封顶）。不封顶时 senterica_2
+  # 每个样本需要约 14 GB 临时磁盘；100 足以覆盖单拷贝匹配（候选按预过滤
+  # 得分排序），临时占用降到约 0.2 GB/样本。实测代价：约 0.17% 的多重拷
+  # 贝位点（5/3002）退化为只报主拷贝等位基因；对聚类距离影响可忽略，
+  # 需要完整多重拷贝信息时设为 0 并相应减少 batch_max_workers。
+  candidate_max_alleles: 100
   # 阈值键 = 三字母物种码（core/species_codes.py）；查表由 species_code 归一，
   # 故 Salmonella/E.coli/Escherichia coli 等写法都命中同一键。
   thresholds:

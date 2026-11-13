@@ -91,7 +91,7 @@ def get_result(args: dict[str, Any], **kwargs: Any) -> str:
         verdict = str(sp) if sp else "N/A"
 
     mlst_raw = steps.get("mlst", "")
-    st = parse_mlst(mlst_raw)["st"] if isinstance(mlst_raw, str) and mlst_raw else "N/A"
+    st = parse_mlst(mlst_raw)["st"] if mlst_raw else "N/A"
 
     sero = steps.get("serotype", {})
     if isinstance(sero, dict):

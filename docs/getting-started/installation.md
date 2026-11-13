@@ -78,13 +78,14 @@ What `pixi install` provides:
   `BACMAP_BAKTA_DB` / `BACMAP_EGGNOG_DATA_DIR`. If you do not need annotation, set
   `BACMAP_ANNOTATION_ENABLED=0` (the pipeline writes a `disabled` placeholder, never fake
   annotations).
-- **eggNOG speed tuning** (batch runs): the default is `mid-sensitive` without iterative
-  search (measured: emapper's quality-first `sensitive` + iterate takes >50 min/genome
-  for the diamond stage alone on 8 threads). For well-covered species (Enterobacteriaceae
-  etc.) the annotation loss is negligible; for maximum sensitivity set
-  `tools.annotation.eggnog.sensmode: "sensitive"` and `iterate: true` in the workflow
-  `config.yaml`. `usemem: true` keeps the diamond DB in RAM for consecutive samples
-  (~10 GB free memory required).
+- **eggNOG speed tuning** (batch runs): the default is `fast` without iterative
+  search. Measured on the same 4.5k-protein input with 12 threads: `fast` 99 s vs
+  `mid-sensitive` 3,151 s (~32x), with 4,290 vs 4,342 annotated queries (-1.2%) and
+  100% COG-category agreement on the shared hits. For higher sensitivity set
+  `tools.annotation.eggnog.sensmode: "mid-sensitive"` or `"sensitive"` (the latter
+  with `iterate: true` is slowest; use only on demand) in the workflow `config.yaml`.
+  `usemem: true` keeps the diamond DB in RAM for consecutive samples (~10 GB free
+  memory required).
 - **Publication-grade figure skill (optional)**: `pixi run python
   scripts/install_figure_skill.py` installs the
   [figures4papers](https://github.com/ChenLiu-1996/figures4papers)

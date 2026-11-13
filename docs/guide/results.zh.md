@@ -19,7 +19,7 @@ $BACMAP_HOME/results/
 │       │   ├── species/
 │       │   ├── gspec/               # gspec screen JSON（card/vfdb/plasmidfinder，
 │       │   │                        #   含工具版本与参数）+ typing.json
-│       │   ├── typing/
+│       │   ├── typing/              # mlst.json（gmlst JSON；旧 mlst.tsv 回退）
 │       │   ├── amr/                 # amrfinderplus.tsv
 │       │   └── report/
 │       │       ├── <dataset>_summary.json

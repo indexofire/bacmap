@@ -11,35 +11,101 @@ if TYPE_CHECKING:
     from .analysis.cgmlst_types import CgmlstProfile
 
 
-def parse_mlst(mlst_tsv: str) -> dict[str, Any]:
-    """Parse MLST TSV output into structured dict.
+_MLST_META_COLUMNS = frozenset({"file", "scheme", "st"})
 
-    Handles gmlst output format: header line + data line, tab-separated.
-    Returns {"st": str, "alleles": {locus: allele}}.
-    """
-    if not mlst_tsv or mlst_tsv == "N/A":
-        return {"st": "N/A", "alleles": {}}
 
-    lines = mlst_tsv.strip().split("\n")
+def _mlst_from_native(payload: dict[str, Any]) -> dict[str, Any]:
+    """gmlst ``typing mlst --format json`` → 归一结构（st/scheme/alleles）。"""
+    rows = payload.get("data")
+    row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else {}
+    raw_calls = row.get("allele_calls")
+    calls: dict[str, Any] = raw_calls if isinstance(raw_calls, dict) else {}
+    alleles: dict[str, str] = {}
+    for locus, call in calls.items():
+        if not isinstance(call, dict):
+            continue
+        allele_id = call.get("allele_id")
+        if allele_id not in (None, ""):
+            alleles[str(locus).lower()] = str(allele_id)
+    result: dict[str, Any] = {
+        "st": "N/A" if row.get("st") in (None, "") else str(row.get("st")),
+        "scheme": str(row.get("scheme") or ""),
+        "alleles": alleles,
+    }
+    for key in ("score", "status"):
+        if row.get(key) is not None:
+            result[key] = row[key]
+    return result
+
+
+def _mlst_from_tsv(text: str) -> dict[str, Any]:
+    """旧版 ``gmlst typing mlst`` TSV（header + 数据行）→ 归一结构。"""
+    lines = text.strip().splitlines()
     if len(lines) < 2:
-        return {"st": "N/A", "alleles": {}}
-
+        return {"st": "N/A", "scheme": "", "alleles": {}}
     header = lines[0].split("\t")
     data = lines[1].split("\t")
-
-    result: dict[str, Any] = {"alleles": {}}
+    result: dict[str, Any] = {"st": "N/A", "scheme": "", "alleles": {}}
     for i, col in enumerate(header):
         if i >= len(data):
             break
-        col_lower = col.lower()
-        if col_lower == "st":
-            result["st"] = data[i]
+        key = col.strip().lower()
+        value = data[i]
+        if key == "st":
+            result["st"] = value
+        elif key == "scheme":
+            result["scheme"] = value
+        elif key == "file":
+            continue
         else:
-            result["alleles"][col_lower] = data[i]
-
-    # 无 ST 列时给出 "N/A" 默认（原实现有一段重复的 fallback 查找，已删除）。
-    result.setdefault("st", "N/A")
+            result["alleles"][key] = value
     return result
+
+
+def parse_mlst(value: Any) -> dict[str, Any]:
+    """MLST 结果 → ``{"st", "scheme", "alleles"}``（三形态兼容，v1.10.26）。
+
+    结果产物统一为 JSON（``typing/mlst.json``，gmlst ``--format json``）；
+    这里同时接受：
+
+    - 已归一的 dict（summary ``steps.mlst``）；
+    - gmlst 原生 JSON（dict 或 JSON 文本，``{"schema_version","data":[...]}``）；
+    - 旧版 TSV 文本（header + 数据行；FILE/SCHEME/ST 为元列，兼容旧运行目录）。
+    """
+    if isinstance(value, dict):
+        if isinstance(value.get("data"), list):
+            return _mlst_from_native(value)
+        raw_alleles = value.get("alleles")
+        alleles: dict[str, str] = {}
+        if isinstance(raw_alleles, dict):
+            for locus, allele in raw_alleles.items():
+                key = str(locus).lower()
+                if key not in _MLST_META_COLUMNS:
+                    alleles[key] = str(allele)
+        st = value.get("st")
+        result: dict[str, Any] = {
+            "st": "N/A" if st in (None, "") else str(st),
+            "scheme": str(value.get("scheme") or ""),
+            "alleles": alleles,
+        }
+        for key in ("score", "status"):
+            if value.get(key) is not None:
+                result[key] = value[key]
+        return result
+    if not isinstance(value, str) or not value.strip() or value.strip() == "N/A":
+        return {"st": "N/A", "scheme": "", "alleles": {}}
+    text = value.strip()
+    if text.startswith("{"):
+        try:
+            payload = json.loads(text)
+        except ValueError:
+            return {"st": "N/A", "scheme": "", "alleles": {}}
+        return parse_mlst(payload) if isinstance(payload, dict) else {
+            "st": "N/A",
+            "scheme": "",
+            "alleles": {},
+        }
+    return _mlst_from_tsv(text)
 
 
 def parse_db_header(sseqid: str) -> tuple[str, str, str, str]:

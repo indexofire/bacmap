@@ -136,6 +136,16 @@ class TestSummaryFields:
             "serotype": "Typhimurium",
         }
 
+    def test_structured_mlst_json_summary(self):
+        """v1.10.26：summary 内嵌归一 JSON（不再要求字符串）。"""
+        summary = {
+            "steps": {
+                "species": {"species": "Salmonella"},
+                "mlst": {"st": "19", "scheme": "senterica_1", "alleles": {"aroc": "8"}},
+            }
+        }
+        assert summary_fields(summary)["mlst_st"] == "19"
+
     def test_empty_summary(self):
         assert summary_fields({}) == {"species": "N/A", "mlst_st": "N/A", "serotype": "N/A"}
 

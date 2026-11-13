@@ -81,7 +81,7 @@ def sample_digest(summary: dict[str, Any]) -> dict[str, Any]:
     else:
         verdict = str(sp) if sp else "N/A"
     mlst_raw = steps.get("mlst", "")
-    st = parse_mlst(mlst_raw)["st"] if isinstance(mlst_raw, str) and mlst_raw else "N/A"
+    st = parse_mlst(mlst_raw)["st"] if mlst_raw else "N/A"
     sero = steps.get("serotype", {}) or {}
     if isinstance(sero, dict):
         serovar = str(sero.get("value") or sero.get("sistr") or "N/A")

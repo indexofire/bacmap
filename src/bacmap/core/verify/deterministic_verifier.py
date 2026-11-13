@@ -254,17 +254,18 @@ class DeterministicVerifier:
         )
 
     @staticmethod
-    def _parse_mlst(mlst_text: str) -> tuple[str, dict[str, str], str]:
-        if not isinstance(mlst_text, str) or not mlst_text:
+    def _parse_mlst(mlst_value: Any) -> tuple[str, dict[str, str], str]:
+        if not mlst_value:
             return "", {}, ""
-        parsed = parse_mlst(mlst_text)
+        parsed = parse_mlst(mlst_value)
         raw_alleles = parsed.get("alleles", {})
 
-        st = parsed.get("st", "")
+        st = str(parsed.get("st", ""))
         if st == "N/A":
             st = ""
 
-        scheme = str(raw_alleles.get("scheme", "") or "").strip()
+        # v1.10.26：结构化结果把 scheme 放在顶层；旧 TSV 解析曾放进 alleles。
+        scheme = str(parsed.get("scheme") or raw_alleles.get("scheme", "") or "").strip()
         alleles: dict[str, str] = {}
         for locus, value in raw_alleles.items():
             if locus in _MLST_META_COLUMNS:

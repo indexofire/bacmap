@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -75,6 +76,42 @@ class TestParseMlst:
         tsv = "FILE\tSCHEME\tST\taroC\ns1\tsal_2\t19\t10\ns2\tsal_2\t11\t7"
         r = parse_mlst(tsv)
         assert r["st"] == "19"
+
+    def test_native_gmlst_json_text(self):
+        payload = json.dumps(
+            {
+                "schema_version": "gmlst-typing-v1",
+                "data": [
+                    {
+                        "sample_id": "S1",
+                        "scheme": "senterica_1",
+                        "st": 17,
+                        "score": 100.0,
+                        "status": "PERFECT",
+                        "allele_calls": {
+                            "aroC": {"allele_id": "8", "call_type": "exact"},
+                            "dnaN": {"allele_id": "8"},
+                        },
+                    }
+                ],
+            }
+        )
+        r = parse_mlst(payload)
+        assert r["st"] == "17"
+        assert r["scheme"] == "senterica_1"
+        assert r["alleles"] == {"aroc": "8", "dnan": "8"}
+        assert r["status"] == "PERFECT"
+
+    def test_normalized_dict_input(self):
+        r = parse_mlst({"st": "19", "scheme": "senterica_1", "alleles": {"aroC": "10"}})
+        assert r["st"] == "19"
+        assert r["scheme"] == "senterica_1"
+        assert r["alleles"] == {"aroc": "10"}
+
+    def test_tsv_scheme_exposed_at_top_level(self):
+        r = parse_mlst("FILE\tSCHEME\tST\taroC\ncontigs\tsalmonella_2\t19\t10")
+        assert r["scheme"] == "salmonella_2"
+        assert "scheme" not in r["alleles"] and "file" not in r["alleles"]
 
 
 class TestParseAbricateTsv:

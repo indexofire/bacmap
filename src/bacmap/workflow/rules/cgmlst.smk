@@ -27,23 +27,114 @@ def _cgmlst_scheme(sample):
         return plan.schemes.get("wgmlst", "")
     return ""
 
-rule typing_cgmlst:
+# ─────────────────────────────────────────────────────────────────
+# Batched invocation (2026-11 benchmark, senterica_2 / 3002 loci):
+# every `gmlst typing cgmlst` command pays a fixed setup cost
+# (~3.5-4 min: parsing the merged allele DB + loading the exact-hash
+# cache) before any alignment, while the per-sample alignment itself is
+# ~20-30 s and barely thread-sensitive (4m12s @ 1 thread vs 3m48s @ 16).
+# Per-sample candidate temp copies reach ~14 GB uncapped, so parallel
+# samples must not host them in a small tmpfs (/tmp) and typically need
+# GMLST_CGMLST_CANDIDATE_MAX_ALLELES to stay inside btrfs qgroup quotas.
+# Therefore: one batched gmlst invocation per scheme (setup amortized,
+# samples parallelized via --max-workers with 1 alignment thread each),
+# then a cheap split rule restores the per-sample cgmlst.tsv interface.
+# ─────────────────────────────────────────────────────────────────
+import os as _os
+
+_CGMLST_SAMPLE_SCHEME: dict[str, str] = {
+    _sample: _cgmlst_scheme(_sample) for _sample in SAMPLES
+}
+_CGMLST_SCHEME_SAMPLES: dict[str, list[str]] = {}
+for _sample, _scheme in _CGMLST_SAMPLE_SCHEME.items():
+    if _scheme:
+        _CGMLST_SCHEME_SAMPLES.setdefault(_scheme, []).append(_sample)
+
+_CGMLST_CFG = config.get("cgmlst", {})
+_CGMLST_MAX_WORKERS = int(_CGMLST_CFG.get("batch_max_workers", 8))
+# 0 = uncapped (max sensitivity, ~14 GB temp per sample for senterica_2);
+# e.g. 100 shrinks the per-sample temp to ~0.2 GB at minimal sensitivity
+# cost (candidates are ranked by the representative prefilter).
+_CGMLST_CANDIDATE_CAP = int(_CGMLST_CFG.get("candidate_max_alleles", 100))
+
+_CGMLST_BATCH_TMP = str(WORKDIR) + "/cgmlst/.tmp"
+
+
+rule typing_cgmlst_batch:
+    """Run gmlst once for every sample sharing a cgMLST/wgMLST scheme."""
     input:
-        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
+        contigs=lambda wc: [
+            str(WORKDIR) + f"/{_s}/assembly/{_s}.fasta"
+            for _s in _CGMLST_SCHEME_SAMPLES.get(wc.scheme, [])
+        ]
+    output:
+        combined=str(WORKDIR) + "/cgmlst/.batch/{scheme}/cgmlst_combined.tsv",
+    params:
+        sample_list=lambda wc: " ".join(
+            _CGMLST_SCHEME_SAMPLES.get(wc.scheme, [])
+        ),
+        candidate_cap=_CGMLST_CANDIDATE_CAP,
+    threads: _CGMLST_MAX_WORKERS
+    wildcard_constraints:
+        scheme="[^/]+"
+    shell:
+        "mkdir -p $(dirname {output.combined}) " + _CGMLST_BATCH_TMP + " && "
+        "GMLST_TMPDIR=" + _CGMLST_BATCH_TMP + " "
+        + (
+            "GMLST_CGMLST_CANDIDATE_MAX_ALLELES={params.candidate_cap} "
+            if _CGMLST_CANDIDATE_CAP > 0
+            else ""
+        )
+        + "{GMLST_BIN} typing cgmlst -s {wildcards.scheme} --format tsv "
+        "-t 1 --max-workers {threads} "
+        "-o {output.combined} {input.contigs} || "
+        "(printf 'File\\tScheme\\tST\\n'; "
+        "for _s in {params.sample_list}; do "
+        "printf '%s\\t{wildcards.scheme}\\tN/A\\n' \"$_s\"; done) "
+        "> {output.combined}"
+
+
+def _cgmlst_combined_input(wc):
+    _scheme = _CGMLST_SAMPLE_SCHEME.get(wc.sample, "")
+    if not _scheme:
+        return []
+    return [str(WORKDIR) + f"/cgmlst/.batch/{_scheme}/cgmlst_combined.tsv"]
+
+
+rule typing_cgmlst:
+    """Slice the batched cgMLST TSV back into per-sample files.
+
+    Keeps the historical per-sample interface (WORKDIR/<sample>/typing/
+    cgmlst.tsv) so downstream rules are unchanged. Samples without a
+    scheme get the same File/Scheme/ST N/A row the old per-sample rule
+    emitted.
+    """
+    input:
+        _cgmlst_combined_input
     output:
         str(WORKDIR) + "/{sample}/typing/cgmlst.tsv"
-    params:
-        scheme = lambda wc: _cgmlst_scheme(wc.sample)
-    threads: 4
-    shell:
-        "mkdir -p $(dirname {output}) && "
-        "if [ -z '{params.scheme}' ]; then "
-        "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\t-\\tN/A' > {output}; "
-        "else "
-        "{GMLST_BIN} typing cgmlst -s {params.scheme} --format tsv "
-        "-o {output} {input.contigs} || "
-        "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\t{params.scheme}\\tN/A' > {output}; "
-        "fi"
+    wildcard_constraints:
+        sample="[^/]+"
+    run:
+        _scheme = _CGMLST_SAMPLE_SCHEME.get(str(wildcards.sample), "")
+        _os.makedirs(_os.path.dirname(str(output)), exist_ok=True)
+        if not _scheme:
+            with open(str(output), "w") as _fh:
+                _fh.write(f"File\tScheme\tST\n{wildcards.sample}\t-\tN/A\n")
+        else:
+            _lines = [_ln.rstrip("\n") for _ln in open(str(input[0])) if _ln.strip()]
+            _rows = [
+                _ln
+                for _ln in _lines[1:]
+                if _ln.split("\t", 1)[0] == str(wildcards.sample)
+            ]
+            with open(str(output), "w") as _fh:
+                if _rows:
+                    _fh.write(_lines[0] + "\n" + "\n".join(_rows) + "\n")
+                else:
+                    _fh.write(
+                        f"File\tScheme\tST\n{wildcards.sample}\t{_scheme}\tN/A\n"
+                    )
 
 
 # ─────────────────────────────────────────────────────────────────

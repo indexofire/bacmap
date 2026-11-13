@@ -421,13 +421,13 @@ def _extract_serotype(payload: dict[str, Any]) -> tuple[str, str]:
 
 
 def _extract_mlst(payload: dict[str, Any]) -> tuple[str, str]:
-    """MLST (scheme, ST)：原始串经 parse_mlst 归一（ST 前缀去重）。"""
+    """MLST (scheme, ST)：归一 JSON/dict 或旧 TSV 串经 parse_mlst 统一。"""
     mlst_scheme = ""
     mlst_st = ""
     mlst_raw = payload.get("mlst", "")
-    if mlst_raw and isinstance(mlst_raw, str):
+    if mlst_raw:
         parsed = parse_mlst(mlst_raw)
-        mlst_scheme = parsed["alleles"].get("scheme", "")
+        mlst_scheme = str(parsed.get("scheme") or parsed["alleles"].get("scheme", ""))
         raw_st = parsed["st"]
         if raw_st and raw_st not in ("N/A", "-", ""):
             mlst_st = f"ST{raw_st}" if not raw_st.upper().startswith("ST") else raw_st

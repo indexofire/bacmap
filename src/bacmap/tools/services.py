@@ -462,7 +462,7 @@ def _search_fulltext(query: str, limit: int) -> str:
 
         mlst_raw = p.get("mlst", "")
         st_val = ""
-        if mlst_raw and isinstance(mlst_raw, str):
+        if mlst_raw:
             parsed_st = parse_mlst(mlst_raw)["st"]
             if parsed_st != "N/A":
                 st_val = parsed_st

@@ -25,7 +25,8 @@ def sample_steps(results_dir: Path, sample_id: str) -> dict[str, bool]:
         "assembly": (base / "assembly" / f"{sample_id}.fasta").exists()
         or (base / "assembly" / "contigs.fasta").exists(),
         "species": (base / "species" / "species_id.json").exists(),
-        "mlst": (base / "typing" / "mlst.tsv").exists(),
+        "mlst": (base / "typing" / "mlst.json").exists()
+        or (base / "typing" / "mlst.tsv").exists(),
         # v1.10.19：gspec screen 以 JSON 为主产物；旧运行目录的 TSV 兼容
         "amr": (base / "gspec" / "card.json").exists()
         or (base / "amr" / "abricate_card.tsv").exists(),
@@ -91,7 +92,7 @@ def summary_fields(summary: dict[str, Any]) -> dict[str, str]:
     species_name = species.get("species", "N/A") if isinstance(species, dict) else str(species)
 
     mlst_raw = steps.get("mlst", "")
-    st = parse_mlst(mlst_raw)["st"] if mlst_raw and isinstance(mlst_raw, str) else "N/A"
+    st = parse_mlst(mlst_raw)["st"] if mlst_raw else "N/A"
 
     sero = steps.get("serotype", {})
     if isinstance(sero, dict):

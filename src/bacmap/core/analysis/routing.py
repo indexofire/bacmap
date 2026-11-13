@@ -65,7 +65,7 @@ def report_inputs(
         "assembly_stats": f"{base}/assembly/assembly_stats.tsv",
         "quast": f"{base}/assembly/quast/transposed_report.tsv",
         "species_id": f"{base}/species/species_id.json",
-        "mlst": f"{base}/typing/mlst.tsv",
+        "mlst": f"{base}/typing/mlst.json",
         # v1.10.19：gspec screen 以 JSON 为主输出（保留 provenance），
         # TSV 布局仅在旧运行目录由读取层回退。
         "vfdb": f"{base}/gspec/vfdb.json",

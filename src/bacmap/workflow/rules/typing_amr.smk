@@ -71,18 +71,20 @@ rule typing_mlst:
     input:
         contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
     output:
-        result = str(WORKDIR) + "/{sample}/typing/mlst.tsv"
+        result = str(WORKDIR) + "/{sample}/typing/mlst.json"
     params:
         scheme = lambda wc: _mlst_scheme(wc.sample),
     threads: 4
     shell:
         "mkdir -p $(dirname {output.result}) && "
         "if [ -n \"{params.scheme}\" ]; then "
-        "{GMLST_BIN} typing mlst -s {params.scheme} "
+        "{GMLST_BIN} typing mlst -s {params.scheme} --format json "
         "-o {output.result} {input.contigs} || "
-        "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\t{params.scheme}\\tN/A' > {output.result}; "
+        "echo '{{\"schema_version\":\"gmlst-typing-v1\",\"data\":[{{\"sample_id\":\"{wildcards.sample}\","
+        "\"scheme\":\"{params.scheme}\",\"st\":null,\"status\":\"FAILED\"}}]}}' > {output.result}; "
         "else "
-        "echo -e 'File\\tScheme\\tST\\n{wildcards.sample}\\tnone\\tN/A' > {output.result}; "
+        "echo '{{\"schema_version\":\"gmlst-typing-v1\",\"data\":[{{\"sample_id\":\"{wildcards.sample}\","
+        "\"scheme\":\"\",\"st\":null,\"status\":\"NO_SCHEME\"}}]}}' > {output.result}; "
         "fi"
 
 rule typing_tgmlst:

@@ -5,6 +5,52 @@
 
 ## [Unreleased]
 
+### eggNOG 默认档位改为 fast
+
+- `workflow/config/config.yaml` 的 `tools.annotation.eggnog.sensmode` 默认值
+  `mid-sensitive` → `fast`（`iterate: false` 不变）。
+- 依据（同株、同 12 线程、4.5k 蛋白）：`fast` 99 s vs `mid-sensitive` 3,151 s
+  （约 32 倍）；注释量 4,290 vs 4,342（−1.2%），共有条目的 COG 类别一致率
+  100%（4,289/4,290）。cohort 筛查用 fast；追远源同源/新功能再上调档位。
+- 安装文档（中/英）同步实测口径，并写明如何改回 `mid-sensitive`/`sensitive`。
+- 运维提醒：deploy() 在包内容变化时会重写部署副本的 `config/config.yaml`，
+  部署本地设置（Bakta/eggNOG 库路径）需重新填写；本次已重新部署并回填。
+
+### 修复运行记录耗时恒为 0、任务终态延迟落库
+
+- **根因 1（运行记录时间）**：`runs.create_run` 在管线跑完之后才被调用，
+  `started_at` 由 `default_factory` 取"登记此刻"，`finished_at` 紧接着写入，
+  于是每轮运行耗时恒为几十毫秒（实测 `058bbbde…` 37 ms、`34a14fef…` 34 ms，
+  真实耗时分别是 4 min 33 s、2 h 02 min）。
+  现在 `_step_run` 在 step 内记录真实执行区间（DBOS 记忆化，重放安全），
+  经 `params["_run_times"]` 传入 `_step_create_run`；`create_run` 新增
+  `started_at`/`finished_at` 入参并落库，缺失时退回提交时间。step 签名保持
+  单参，测试 monkeypatch 契约不变。
+- **根因 2（终态延迟）**：任务终态只在 `DbosTaskEngine.status()` 被读取时才对账
+  写入——工作流 00:26:34 已 SUCCESS，`tasks.sqlite` 直到 06:21 有人打开界面
+  才变 succeeded，运行记录因此显示错误的结束时间。新增 `mark_task_terminal`
+  + `_step_mark_terminal`：工作流结束（含输入登记失败、目录无样本、snakemake
+  失败等早退路径）时条件写终态并记 `task.state` 事件；`status()` 对账保留为
+  崩溃/恢复兜底，条件更新保证终态不被降级。
+- **测试**：新增 `tests/unit/test_run_record_times.py`（7 项：真实区间落库、
+  缺省回退、终态写入/幂等/失败消息）；`test_tasks_engine`、`test_gom_ingest`、
+  `test_mcp_interface`、`test_record_tasks`、`test_workflow_fasta_entry` 全绿。
+- 注意：`submitted_at` 只注入 analyze 任务参数——record 等任务对 params 做
+  `extra="forbid"` 严格校验，不能夹带额外字段。
+
+### MLST 结果统一为 JSON（typing/mlst.json）
+
+- **产物**：`typing_mlst` 规则改用 `gmlst typing mlst --format json`，输出
+  `typing/mlst.json`（`gmlst-typing-v1` schema，含 scheme/ST/得分/等位基因调用
+  与状态）；失败/无方案时写同构占位 JSON（`status=FAILED`/`NO_SCHEME`），
+  不再输出 TSV。与 gspec screen/typing 的 JSON 结果布局一致——机器读 JSON，
+  人读表格由报告/CLI 从 JSON 渲染。
+- **消费侧**：`parse_mlst` 同时接受归一 dict、gmlst 原生 JSON 与旧 TSV 文本
+  （旧运行目录兼容）；`collect_summary` 内嵌归一结构（st/scheme/alleles，
+  含 score/status 时保留）；视图/报告/校验/GOM payload 统一走该解析。
+  校验器改为从顶层 `scheme` 取方案名（旧 TSV 的 alleles 内嵌仍兼容）。
+- 文档：结果目录布局标注 `typing/mlst.json`。
+
 ### Web 控制台 DNS rebinding 防护（安全）
 
 - `create_app` 在任何模式下挂 `HostAllowlistMiddleware`：`Host` 只接受回环名、绑定地址
