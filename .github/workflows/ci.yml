@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # pixi.toml 有 ../gspec 本地路径依赖（本地 gspec 开发分支）：CI 需同级克隆。
+      - name: checkout gspec sibling (pixi path dependency)
+        run: git clone --depth 1 https://github.com/indexofire/gspec ../gspec
 
       - uses: prefix-dev/setup-pixi@v0.11.3
         with:
@@ -31,6 +34,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # pixi.toml 有 ../gspec 本地路径依赖（本地 gspec 开发分支）：CI 需同级克隆。
+      - name: checkout gspec sibling (pixi path dependency)
+        run: git clone --depth 1 https://github.com/indexofire/gspec ../gspec
       - uses: prefix-dev/setup-pixi@v0.11.3
         with:
           environments: dev
@@ -43,6 +49,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # pixi.toml 有 ../gspec 本地路径依赖（本地 gspec 开发分支）：CI 需同级克隆。
+      - name: checkout gspec sibling (pixi path dependency)
+        run: git clone --depth 1 https://github.com/indexofire/gspec ../gspec
       - uses: prefix-dev/setup-pixi@v0.11.3
         with:
           environments: web
