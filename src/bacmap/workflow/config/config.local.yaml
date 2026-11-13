@@ -1,0 +1,16 @@
+# 部署本地覆盖（模板占位，deploy() 重部署时保留部署副本）。
+#
+# 这里写"只属于这台机器"的设置，覆盖 config/config.yaml 的同名项；Snakefile 把它
+# 作为第二个 configfile 叠加（Snakemake 深合并，后者优先）。典型用法：
+#
+#   tools:
+#     annotation:
+#       enabled: true
+#       bakta:
+#         db: "/path/to/bakta-db"
+#       eggnog:
+#         data_dir: "/path/to/eggnog"
+#         sensmode: "fast"
+#
+# 保持 {} 表示不做任何覆盖。
+{}

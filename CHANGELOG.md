@@ -5,6 +5,34 @@
 
 ## [Unreleased]
 
+### 部署本地配置覆盖 config.local.yaml（修复注释库路径被重部署清空）
+
+- **现象**：`24VPA0275` 的运行在 `bakta_annotate` 失败，
+  `Bakta database not found: $BACMAP_HOME/refs/bakta/db-light`；而分型/AMR/QUAST
+  等前置结果都已产出（物种 *V. parahaemolyticus*、ST3、`blaCARB-22`/`tet(35)`）。
+- **根因**：`deploy()` 在包内容变化时 rmtree 部署目录后重拷模板，只保留
+  `config/samples.tsv` 与 `.snakemake`；部署侧对 `config/config.yaml` 的修改
+  （Bakta/eggNOG 库路径）被静默清空，注释因此退回默认库路径。
+- **修复**：模板新增 `config/config.local.yaml`（占位 `{}`）；Snakefile 在主配置
+  之后叠加它（Snakemake 深合并，后者覆盖前者）；`deploy()` 将其加入保留清单，
+  升级重部署不再丢部署侧设置。
+- **测试**：`tests/unit/test_deploy_local_config.py`（保留性、模板占位、加载顺序）。
+
+### cgMLST / tgMLST 结果统一为 JSON
+
+- **产物**：`typing_cgmlst_batch` 改用 `gmlst typing cgmlst --format json`，
+  批量合并产物为 `cgmlst/.batch/<scheme>/cgmlst_combined.json`；拆分规则写
+  `typing/cgmlst.json`（逐样本 `gmlst-typing-v1`）。`typing_tgmlst` 同样输出
+  `typing/tgmlst.json`。失败/无方案写同构占位 JSON（`FAILED`/`NO_SCHEME`）。
+- **队列**：`cgmlst_cohort_profiles` 从逐样本 JSON 读取并派生合并
+  `cgmlst_profiles.tsv` 仅供 `gmlst visual matrix/mst` 使用（外部工具输入）；
+  距离矩阵/MST/summary 结果仍为 JSON。
+- **解析**：`parse_cgmlst_profiles/profile` 接受原生 JSON（dict 或文本）与旧
+  TSV（参考库 `reference_profiles.tsv` 与旧运行目录继续可用）；按
+  `call_type`/`allele_ids` 分类 exact/novel/partial/missing/ambiguous。
+  入库、报告、服务与 CLI 目标路径统一为 `cgmlst.json`（旧 `cgmlst.tsv` 回退）。
+- 文档：结果目录布局标注 mlst/cgmlst/tgmlst JSON。
+
 ### eggNOG 默认档位改为 fast
 
 - `workflow/config/config.yaml` 的 `tools.annotation.eggnog.sensmode` 默认值

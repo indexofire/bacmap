@@ -8,6 +8,11 @@ from pathlib import Path
 from bacmap.core.tool_selection import load_selection
 
 configfile: str(Path(workflow.basedir) / "config" / "config.yaml")
+# 部署本地覆盖（v1.10.26）：deploy() 保留 config.local.yaml，升级重部署不覆盖。
+# 库路径、速度档位等"只属于这台机器"的设置放这里，避免改模板默认值。
+# 注意：Snakemake 对已声明但不存在的 configfile 会直接报错，故模板必须自带该文件
+# （占位 `{}`）；deploy() 拷贝模板时它会随之落到部署目录，之后重部署则保留部署副本。
+configfile: str(Path(workflow.basedir) / "config" / "config.local.yaml")
 
 PROJECT_ROOT = Path(config["project_root"]).resolve()
 WORKDIR = PROJECT_ROOT / config["workdir"]

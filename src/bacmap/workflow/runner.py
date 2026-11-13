@@ -79,7 +79,9 @@ def deploy(force: bool = False) -> Path:
         return deployed
 
     keeps: list[tuple[Path, Path]] = []
-    for rel in ("config/samples.tsv", ".snakemake"):
+    # config.local.yaml：部署侧覆盖（库路径/档位），重部署必须保留——
+    # 它在模板里不存在，若被 rmtree 掉，下一次注释就会退回默认库路径而失败。
+    for rel in ("config/samples.tsv", "config/config.local.yaml", ".snakemake"):
         src = deployed / rel
         if src.exists():
             bak = deployed.parent / (src.name + ".keep")
