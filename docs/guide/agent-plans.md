@@ -330,8 +330,10 @@ treated as a patch and skipped.
       failOnStartupError: true
 ```
 
-Research tools are D2: use `--profile local-trusted` to expose them (or only
-`bacmap_research_capabilities` is registered). See the end-to-end DSH research tutorial in
+Research tools carry D2 data: under `cloud` they appear only when the administrator relaxes
+`[llm.data_policy] cloud_max_data_class` to `"D2"` (D1 by default). `--profile local-trusted`
+(D4) is only for local/intranet models, never for cloud endpoints (ADR-16). See the end-to-end
+DSH research tutorial in
 [Research Workbench §19](research-workbench.md#19-tutorial-driving-research-from-an-external-agent-dsh).
 
 Check the composed configuration:

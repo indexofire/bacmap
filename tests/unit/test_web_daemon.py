@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -85,9 +87,6 @@ class TestStopCommand:
         assert not pidfile.exists()
 
     def test_stop_terminates_running_process(self, tmp_path):
-        import subprocess
-        import sys
-
         from bacmap.interfaces.cli.main import _stop_web_daemon
 
         proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
@@ -101,6 +100,126 @@ class TestStopCommand:
             if proc.poll() is None:
                 proc.kill()
                 proc.wait(timeout=5)
+
+
+class TestDaemonDiscovery:
+    """pidfile 随数据目录被删的场景：按 /proc 发现并停止旧守护进程。"""
+
+    def _spawn_fake(self, home: Path, argv: list[str] | None = None) -> subprocess.Popen:
+        """伪造与真实守护同形的 cmdline：python <.../bin/bacmap> start web -D。"""
+        script = home.parent / "fakebin" / "bacmap"
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text("import time\ntime.sleep(60)\n", encoding="utf-8")
+        return subprocess.Popen(
+            [sys.executable, str(script)]
+            + (argv if argv is not None else ["start", "web", "-D"])
+            + ["--home", str(home)]
+        )
+
+    def test_finds_daemon_without_pidfile(self, tmp_path):
+        from bacmap.interfaces.cli.main import _web_daemon_pids
+
+        proc = self._spawn_fake(tmp_path)
+        try:
+            assert proc.pid in _web_daemon_pids(tmp_path)
+        finally:
+            proc.kill()
+            proc.wait(timeout=5)
+
+    def test_finds_restart_spawned_daemon(self, tmp_path):
+        from bacmap.interfaces.cli.main import _web_daemon_pids
+
+        proc = self._spawn_fake(tmp_path, ["restart"])
+        try:
+            assert proc.pid in _web_daemon_pids(tmp_path)
+        finally:
+            proc.kill()
+            proc.wait(timeout=5)
+
+    def test_ignores_wrapper_without_bacmap_script(self, tmp_path):
+        """pixi/bash 包装进程（argv 词元相同但不是控制台脚本）不得误报。"""
+        import subprocess
+        import sys
+
+        from bacmap.interfaces.cli.main import _web_daemon_pids
+
+        proc = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)", "bacmap", "start", "web",
+             "--home", str(tmp_path)]
+        )
+        try:
+            assert proc.pid not in _web_daemon_pids(tmp_path)
+        finally:
+            proc.kill()
+            proc.wait(timeout=5)
+
+    def test_stop_kills_pidfileless_daemon(self, tmp_path):
+        from bacmap.interfaces.cli.main import _stop_web_daemon
+
+        proc = self._spawn_fake(tmp_path)
+        try:
+            assert _stop_web_daemon(tmp_path, timeout=5) == 0
+            proc.wait(timeout=5)
+            assert proc.returncode is not None
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=5)
+
+    def test_port_in_use_detects_listener(self):
+        import socket
+
+        from bacmap.interfaces.cli.main import _port_in_use
+
+        server = socket.socket()
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        try:
+            port = server.getsockname()[1]
+            assert _port_in_use("127.0.0.1", port) is True
+        finally:
+            server.close()
+        assert _port_in_use("127.0.0.1", port) is False
+
+    def test_start_refuses_when_port_busy(self, tmp_path):
+        import socket
+
+        from bacmap.interfaces.cli.main import _run_web
+
+        server = socket.socket()
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        try:
+            port = server.getsockname()[1]
+            args = argparse.Namespace(
+                daemon=True,
+                host="127.0.0.1",
+                port=port,
+                home=str(tmp_path),
+                token_env="BACMAP_WEB_TOKEN",
+            )
+            with pytest.raises(SystemExit, match="already in use"):
+                _run_web(args)
+        finally:
+            server.close()
+
+    def test_start_refuses_when_orphan_daemon_running(self, tmp_path):
+        from bacmap.interfaces.cli.main import _run_web
+
+        proc = self._spawn_fake(tmp_path)
+        try:
+            args = argparse.Namespace(
+                daemon=True,
+                host="127.0.0.1",
+                port=18898,
+                home=str(tmp_path),
+                token_env="BACMAP_WEB_TOKEN",
+            )
+            with pytest.raises(SystemExit, match="pidfile is missing"):
+                _run_web(args)
+        finally:
+            proc.kill()
+            proc.wait(timeout=5)
 
 
 class TestRestartCommand:

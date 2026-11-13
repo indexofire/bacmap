@@ -745,8 +745,13 @@ Register the MCP server in the DSH profile you use (`$DSH_HOME` defaults to `~/.
       failOnStartupError: true
 ```
 
-`--profile local-trusted` is **required for research**: session content is D2, and the default
-`cloud` (D1) profile only registers `bacmap_research_capabilities`.
+`--profile cloud` (the default) is the right choice when the harness model is a cloud LLM —
+including DSH with `deepseek-account`. The cloud profile exposes D1 by default and at most D2
+(admin relaxation via `[llm.data_policy] cloud_max_data_class = "D2"`); D3/D4 never leave the
+local network (ADR-16). Research session content is D2, so it appears once the admin relaxes the
+cloud ceiling to D2. Use `--profile local-trusted` (D4) **only when the harness talks to a local or
+intranet model** — it is gated by `[mcp] allow_local_trusted = true` and must not be used with
+cloud endpoints.
 
 Then install the role guidance and check the wiring:
 
