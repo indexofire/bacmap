@@ -29,11 +29,13 @@ from bacmap.interfaces.views import report_path
 from bacmap.interfaces.web.auth import (
     CSRF_COOKIE,
     SESSION_COOKIE,
+    HostAllowlistMiddleware,
     WebAuthConfig,
     WebAuthMiddleware,
     issue_session,
     safe_next,
     verify_csrf,
+    web_allowed_hosts,
 )
 from bacmap.interfaces.web.static import STATIC_DIR
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
@@ -338,7 +340,9 @@ def _build_redirect_routes(app: FastAPI) -> None:  # noqa: C901
         return RedirectResponse("/console/overview", status_code=307)
 
 
-def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI:
+def create_app(
+    engine: DbosTaskEngine, auth_token: str | None = None, host: str = "127.0.0.1"
+) -> FastAPI:
     """组装 Web 应用：中间件/静态 + 六组页面路由 + /api/v1。
 
     页面组：auth / sample / task / plan / record / evidence（运行记录与 GOM）。
@@ -355,6 +359,10 @@ def create_app(engine: DbosTaskEngine, auth_token: str | None = None) -> FastAPI
     if cfg.enabled:
         # ADR-14/v1.4.15：bearer（API）与 cookie（浏览器）双通道；cookie 模式配 CSRF。
         app.add_middleware(WebAuthMiddleware, cfg=cfg)
+    # DNS rebinding 防护：任何模式都校验 Host（位于鉴权外层、安全头内层）。
+    allowed_hosts = web_allowed_hosts(host, allow_any=cfg.enabled)
+    if allowed_hosts is not None:
+        app.add_middleware(HostAllowlistMiddleware, allowed_hosts=allowed_hosts)
     # 安全响应头（含 CSP）：最后加入 → 位于最外层，鉴权 401/303 也带安全头。
     # v1.10.24：配置了智能体嵌入时，其回环 origin 加入 frame-src（default-src
     # 'self' 会拦跨源 iframe；仅放行配置内显式声明的本机地址）。

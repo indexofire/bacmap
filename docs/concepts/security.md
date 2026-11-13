@@ -77,6 +77,11 @@ deliberately unsupported. The container, not an allow-list, is the security boun
 ### Web
 
 - Loopback bind by default; a non-loopback host without a token refuses to start.
+- DNS-rebinding protection in every mode: requests whose `Host` is not a loopback name, the bind
+  address (or the machine's hostname for `0.0.0.0`/`::`) or listed in `BACMAP_WEB_ALLOWED_HOSTS`
+  get `400`.
+- Without a token, state-changing requests that a browser marks cross-site (`Sec-Fetch-Site`, or a
+  foreign/`null` Origin/Referer without the `X-CSRF-Token` header) get `403`.
 - `bearer` mode: `Authorization: Bearer <BACMAP_WEB_TOKEN>`; browsers cannot set it, so use an SSH
   tunnel or cookie mode.
 - `cookie` mode: `/login` issues a signed `HttpOnly`, `SameSite=Strict` session cookie; every

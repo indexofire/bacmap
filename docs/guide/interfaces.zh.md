@@ -277,6 +277,14 @@ export BACMAP_WEB_TOKEN="$(openssl rand -hex 24)"
 bacmap start web --host 0.0.0.0 --port 8800
 ```
 
+控制台只响应 `Host` 为回环名、绑定地址（`0.0.0.0`/`::` 时为本机主机名）或列在
+`BACMAP_WEB_ALLOWED_HOSTS`（逗号分隔）中的请求，其余返回 `400`。请把浏览器访问用的局域网
+IP/域名或反向代理转发的主机名加进去：
+
+```bash
+export BACMAP_WEB_ALLOWED_HOSTS=192.168.1.20,bacmap.lab.example
+```
+
 两种鉴权模式：
 
 - `bearer`（默认）：API 客户端发送 `Authorization: Bearer <token>`；浏览器无法设置该请求头，

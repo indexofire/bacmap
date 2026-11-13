@@ -53,10 +53,15 @@ bacmap start web [--home H] [--host 127.0.0.1] [--port 8800] [--token-env BACMAP
 ```
 
 Binds loopback by default. A non-loopback host without a token refuses to start.
+The `Host` header must be a loopback name, the bind address (the machine's hostname for
+`0.0.0.0`/`::`) or listed in `BACMAP_WEB_ALLOWED_HOSTS`; other hosts (e.g. a LAN IP after
+`--host 0.0.0.0`) get `400` (DNS-rebinding protection).
 
 ```bash
 bacmap start web
 BACMAP_WEB_TOKEN=secret bacmap start web --host 0.0.0.0 --port 8800
+BACMAP_WEB_ALLOWED_HOSTS=192.168.1.20,bacmap.lab.example BACMAP_WEB_TOKEN=secret \
+  bacmap start web --host 0.0.0.0
 BACMAP_WEB_AUTH=cookie BACMAP_WEB_TOKEN=secret bacmap start web
 ```
 

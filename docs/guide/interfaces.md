@@ -295,6 +295,15 @@ export BACMAP_WEB_TOKEN="$(openssl rand -hex 24)"
 bacmap start web --host 0.0.0.0 --port 8800
 ```
 
+The console only answers requests whose `Host` is a loopback name, the bind address (the
+machine's hostname for `0.0.0.0`/`::`) or a name in `BACMAP_WEB_ALLOWED_HOSTS`
+(comma-separated); anything else gets `400`. Add the LAN IP or DNS name you browse to, or the
+name a reverse proxy forwards:
+
+```bash
+export BACMAP_WEB_ALLOWED_HOSTS=192.168.1.20,bacmap.lab.example
+```
+
 Two auth modes:
 
 - `bearer` (default): API clients send `Authorization: Bearer <token>`; browsers cannot set this

@@ -28,7 +28,7 @@ def main() -> None:
     engine = DbosTaskEngine(Path(args.home))
     token = os.environ.get(args.token_env, "")
     require_auth_when_exposed(args.host, token or None)
-    app = create_app(engine, auth_token=token or None)
+    app = create_app(engine, auth_token=token or None, host=args.host)
     uvicorn.run(app, host=args.host, port=args.port)
 
 

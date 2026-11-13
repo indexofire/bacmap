@@ -6,6 +6,12 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _web_allowed_testserver(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Starlette TestClient 默认 ``Host: testserver``；Web Host 白名单需显式放行。"""
+    monkeypatch.setenv("BACMAP_WEB_ALLOWED_HOSTS", "testserver")
+
+
 @pytest.fixture
 def tmp_db_path(tmp_path: Path) -> Path:
     return tmp_path / "test_gom.sqlite"
