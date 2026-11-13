@@ -132,6 +132,11 @@ def test_vpa_ok_populates_serotype_from_gspec(tmp_path):
     assert summary["steps"]["vpa_serotype"]["o_locus"] == "O3"
     assert summary["steps"]["vpa_serotype"]["k_locus"] == "K6"
     assert summary["steps"]["vpa_serotype"]["source"] == "gspec:vpa_ok"
+    # v1.10.26：O:K 必须同时进入统一入口 steps.serotype（Web/报告/检索读它）
+    assert summary["steps"]["serotype"]["value"] == "O3:K6"
+    assert summary["steps"]["serotype"]["method"] == "gspec vpa_ok"
+    assert summary["steps"]["serotype"]["o_antigen"] == "O3"
+    assert summary["steps"]["serotype"]["k_antigen"] == "K6"
 
 
 def test_shigella_serotype_from_gspec_shi_sero(tmp_path):
