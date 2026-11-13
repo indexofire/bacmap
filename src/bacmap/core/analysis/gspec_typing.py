@@ -105,13 +105,27 @@ def virulence_marks(databases: Any) -> dict[str, Any] | None:
             status = str(entry.get("status", ""))
     if not merged:
         return None
+    return virulence_marks_from_genes(merged, source=source, status=status)
+
+
+def virulence_marks_from_genes(
+    genes: Any, *, source: str, status: str = "ran"
+) -> dict[str, Any] | None:
+    """基因名集合 → ``steps.vpa_virulence`` 契约（tdh/trh/tlh）。
+
+    VFDB 筛查同样覆盖 tdh/tlh/trh（且官方 gspec 目录并无 ``vpa_vf`` 库），
+    因此 collect_summary 在 gspec 库筛查无命中时以此作为回退来源。
+    """
+    marks = {str(g).strip().lower() for g in (genes or [])} & set(_VPARA_VIRULENCE_MARKS)
+    if not marks:
+        return None
     return {
         "tool": "gspec",
         "database": source,
         "status": status,
-        **{mark: (mark in merged) for mark in _VPARA_VIRULENCE_MARKS},
-        "n_hits": len(merged),
-        "hits": [{"gene": g} for g in sorted(merged)],
+        **{mark: (mark in marks) for mark in _VPARA_VIRULENCE_MARKS},
+        "n_hits": len(marks),
+        "hits": [{"gene": g} for g in sorted(marks)],
     }
 
 

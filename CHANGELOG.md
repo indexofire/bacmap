@@ -5,6 +5,15 @@
 
 ## [Unreleased]
 
+### VPA 毒力标记回退 VFDB 筛查（vpa_vf 库缺失时，过渡措施）
+
+- **背景**：gspec 官方目录当前没有 `vpa_vf` 库；**新版 gspec 将提供该库**，
+  届时自动走主路径，此回退不再触发。
+- gspec 库筛查无 `vpa_vf` 命中时，`steps.vpa_virulence`（tdh/trh/tlh）回退到
+  同一运行的 VFDB screen 命中（实测 100% identity），避免"有结果却不显示"；
+  溯源写 `database: vfdb`。`virulence_marks` 抽取为
+  `virulence_marks_from_genes` 供两处复用。
+
 ### 部署本地配置覆盖 config.local.yaml（修复注释库路径被重部署清空）
 
 - **现象**：`24VPA0275` 的运行在 `bakta_annotate` 失败，

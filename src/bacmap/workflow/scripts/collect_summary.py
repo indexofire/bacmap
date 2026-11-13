@@ -295,6 +295,20 @@ _sample_code = _resolve_species(
     str(species_id.get("species") or species_id.get("verdict") or "")
 )
 _vpa_virulence = _virulence_marks(gspec_tp["databases"])
+if _vpa_virulence is None and _sample_code == "VPA":
+    # 过渡措施（v1.10.26）：gspec 目录当前没有 vpa_vf 库（新版 gspec 将提供，
+    # 届时主路径直接命中，不再走此分支）。VFDB 筛查同样覆盖 tdh/tlh/trh
+    # （实测 100% identity），库筛查无命中时以其回退，避免"有结果却不显示"。
+    from bacmap.core.analysis.gspec_typing import (
+        virulence_marks_from_genes as _marks_from_genes,
+    )
+
+    _vf_genes = [
+        h.get("GENE", "")
+        for h in (summary["steps"].get("amr", {}) or {}).get("abricate_vfdb", [])
+        if isinstance(h, dict)
+    ]
+    _vpa_virulence = _marks_from_genes(_vf_genes, source="vfdb")
 if _vpa_virulence is not None:
     summary["steps"]["vpa_virulence"] = _vpa_virulence
 if "vpa_serotype" not in summary["steps"] and _sample_code == "VPA":

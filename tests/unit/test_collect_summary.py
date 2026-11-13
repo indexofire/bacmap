@@ -18,6 +18,7 @@ def _run(
     omit: set[str] | None = None,
     gspec_typing: dict | None = None,
     annotation: dict | None = None,
+    vfdb_genes: list[str] | None = None,
 ) -> dict:
     rep = tmp_path / "results" / "S1" / "report"
     rep.mkdir(parents=True, exist_ok=True)
@@ -36,13 +37,33 @@ def _run(
         gspec_typing = {"status": "empty", "databases": {}}
     gspec_path = str(tmp_path / "gspec_typing.json")
     Path(gspec_path).write_text(json.dumps(gspec_typing), encoding="utf-8")
+    vfdb_path = missing
+    if vfdb_genes is not None:
+        vfdb_path = str(tmp_path / "vfdb.json")
+        Path(vfdb_path).write_text(
+            json.dumps(
+                {
+                    "schema": "gspec.screen/1",
+                    "files": [
+                        {
+                            "file": str(tmp_path / "S1.fasta"),
+                            "hits": [
+                                {"gene": g, "database": "vfdb", "product": f"{g}"}
+                                for g in vfdb_genes
+                            ],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
     attrs = {
         "qc_json": missing,
         "assembly_stats": missing,
         "quast": missing,
         "mlst": missing,
         "sistr": missing,
-        "vfdb": missing,
+        "vfdb": vfdb_path,
         "card": missing,
         "amrfinderplus": missing,
         "plasmidfinder": missing,
@@ -137,6 +158,40 @@ def test_vpa_ok_populates_serotype_from_gspec(tmp_path):
     assert summary["steps"]["serotype"]["method"] == "gspec vpa_ok"
     assert summary["steps"]["serotype"]["o_antigen"] == "O3"
     assert summary["steps"]["serotype"]["k_antigen"] == "K6"
+
+
+def test_vpa_virulence_falls_back_to_vfdb(tmp_path):
+    """gspec 目录无 vpa_vf 库时，tdh/tlh/trh 仍应从 VFDB 筛查结果得出。"""
+    summary = _run(
+        tmp_path,
+        {"verdict": "V_parahaemolyticus"},
+        gspec_typing={
+            "status": "ran",
+            "databases": {
+                "vpa_vf": {
+                    "kind": "gene",
+                    "status": "unavailable",
+                    "error": "Database vpa_vf is not in datadir",
+                }
+            },
+        },
+        vfdb_genes=["tdh", "tlh", "cheW"],
+    )
+    vpa = summary["steps"]["vpa_virulence"]
+    assert vpa["database"] == "vfdb"
+    assert vpa["tdh"] is True
+    assert vpa["tlh"] is True
+    assert vpa["trh"] is False
+    assert vpa["n_hits"] == 2
+
+
+def test_vpa_virulence_absent_when_vfdb_has_no_marker(tmp_path):
+    summary = _run(
+        tmp_path,
+        {"verdict": "V_parahaemolyticus"},
+        vfdb_genes=["cheW", "flaA"],
+    )
+    assert "vpa_virulence" not in summary["steps"]
 
 
 def test_shigella_serotype_from_gspec_shi_sero(tmp_path):
