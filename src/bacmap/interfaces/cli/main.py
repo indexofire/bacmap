@@ -996,7 +996,7 @@ def _epilog() -> str:
 
 _COMMAND_METAVAR = (
     "{start,overview,task,plan,record,run,gom,config,doctor,backup,"
-    "restore,results,events,isolate,sample,search,selection,db,research,"
+    "restore,results,events,isolate,specimen,sample,search,selection,db,research,"
     "agent,stats,detect,species,reference,completion,ops}"
 )
 
@@ -1137,6 +1137,7 @@ def build_parser() -> argparse.ArgumentParser:
     from bacmap.interfaces.cli.quickwin import add_parser as add_quickwin_parser
     from bacmap.interfaces.cli.records import add_parser as add_record_parser
     from bacmap.interfaces.cli.research import add_parser as add_research_parser
+    from bacmap.interfaces.cli.specimens import add_parser as add_specimen_parser
 
     add_record_parser(sub, _add_home, _add_json)
     add_config_parser(sub, _add_home, _add_json)
@@ -1144,6 +1145,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_agent_parser(sub, _add_home, _add_json)
     add_evidence_parser(sub, _add_home, _add_json)
     add_isolate_parser(sub, _add_home, _add_json)
+    add_specimen_parser(sub, _add_home, _add_json)
     add_ops_parser(sub, _add_home, _add_json)
     add_quickwin_parser(sub, _add_home, _add_json)
 

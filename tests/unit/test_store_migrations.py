@@ -191,7 +191,7 @@ class TestDataDbVersioned:
         assert strain_metadata.StrainMetadataService(db).get("S1") is not None
         from bacmap.store.schema import data_migrations
 
-        assert schema_version(db) == len(data_migrations()) == 2
+        assert schema_version(db) == len(data_migrations()) == 3
         assert (tmp_path / "bacmap.sqlite.bak-v0").is_file()
 
 

@@ -23,12 +23,13 @@ from bacmap.tools._common import _validate_sample_id
 
 _FASTA_EXTS = {".fna", ".fasta", ".fa"}
 # `sample` 列语义 = dataset_id（历史列名保留，避免改 10 个 .smk 规则）；
-# isolate/platform 为 v1.8 身份模型列；checksum 用于同名冲突检测。
+# isolate/platform 为 v1.8 身份模型列；checksum 用于同名冲突检测；
+# specimen（v1.10.27）为样本（送检编号），可空，后续由 `bacmap specimen import` 补录。
 _HEADER = [
     "sample", "species", "R1", "R2", "longread",
-    "assembly", "isolate", "platform", "checksum",
+    "assembly", "isolate", "platform", "checksum", "specimen",
 ]
-_IDENTITY_COLUMNS = ("isolate", "platform", "checksum")
+_IDENTITY_COLUMNS = ("isolate", "platform", "checksum", "specimen")
 
 _READ_STEMS = (".fastq.gz", ".fq.gz", ".fastq.bz2", ".fq.bz2", ".fastq", ".fq")
 _MATE_PAT = re.compile(r"^(?P<prefix>.+?)[_.]?(?P<mate>R?[12])(_001)?$", re.IGNORECASE)
@@ -184,6 +185,7 @@ def _load_table(home: Path) -> tuple[Path, list[str], list[list[str]]]:
         record.setdefault("isolate", record.get("sample", ""))
         record.setdefault("platform", "unknown")
         record.setdefault("checksum", "")
+        record.setdefault("specimen", "")
         rows.append([str(record.get(col, "")) for col in header])
     return tsv, header, rows
 
@@ -249,19 +251,105 @@ def _guard_collision(
 
 
 def _ensure_isolates(home: Path, rows: list[list[str]], header: list[str]) -> None:
-    """把 samples.tsv 中的 isolate 同步进 isolates 表（幂等；失败不阻断登记）。"""
+    """把 samples.tsv 中的 isolate/specimen 同步进身份表（幂等；失败不阻断登记）。"""
     if "isolate" not in header:
         return
     from bacmap.store.isolates import IsolateService
+    from bacmap.store.specimens import SpecimenService
 
     idx = header.index("isolate")
+    sidx = header.index("specimen") if "specimen" in header else None
     try:
-        with IsolateService(home / "data" / "bacmap.sqlite") as svc:
+        with (
+            IsolateService(home / "data" / "bacmap.sqlite") as svc,
+            SpecimenService(home / "data" / "bacmap.sqlite") as specimens,
+        ):
             for row in rows:
-                if len(row) > idx and row[idx]:
-                    svc.ensure(row[idx])
+                isolate = row[idx] if len(row) > idx else ""
+                specimen = row[sidx] if sidx is not None and len(row) > sidx else ""
+                if specimen:
+                    specimens.ensure(specimen)
+                if isolate:
+                    svc.ensure(isolate, specimen_id=specimen or None)
+                elif specimen:
+                    # 样本级测序（mNGS/tNGS 预留）：library 直接挂样本，无 isolate。
+                    specimens.ensure(specimen)
     except (OSError, ValueError):  # 注册表不可写不应让数据登记失败（登记本身已完成）
         pass
+
+
+def assign_specimens(
+    home: Path,
+    assignments: dict[str, str],
+    *,
+    by: str = "dataset",
+    origin: str = "import",
+) -> dict[str, Any]:
+    """把已有登记数据关联到样本（v1.10.27，导入/补录入口）。
+
+    ``assignments``: ``{标识: specimen_id}``；``by="dataset"`` 时标识是
+    samples.tsv 的 sample 列（library/dataset id），``by="isolate"`` 时是菌株 ID。
+    同时更新 samples.tsv 的 specimen 列、isolates.specimen_id 与 specimens 表；
+    返回 ``{"updated": n, "specimens": [...], "missing": [...]}``。
+    """
+    from bacmap.store.isolates import IsolateService
+    from bacmap.store.specimens import SpecimenService, validate_specimen_id
+
+    if by not in ("dataset", "isolate"):
+        raise ValueError("by must be 'dataset' or 'isolate'")
+    for specimen in assignments.values():
+        if not validate_specimen_id(specimen):
+            raise ValueError(f"invalid specimen id: {specimen!r}")
+
+    tsv, header, rows = _load_table(home)
+    if "specimen" not in header:
+        header.append("specimen")
+    spec_idx = header.index("specimen")
+    id_idx = header.index("sample" if by == "dataset" else "isolate")
+    iso_idx = header.index("isolate") if "isolate" in header else None
+
+    updated = 0
+    matched: set[str] = set()
+    used_specimens: set[str] = set()
+    for row in rows:
+        key = row[id_idx] if len(row) > id_idx else ""
+        target = assignments.get(key)
+        if target is None:
+            continue
+        matched.add(key)
+        if len(row) <= spec_idx:
+            row.extend([""] * (spec_idx + 1 - len(row)))
+        row[spec_idx] = target
+        updated += 1
+        used_specimens.add(target)
+
+    with (
+        IsolateService(home / "data" / "bacmap.sqlite") as svc,
+        SpecimenService(home / "data" / "bacmap.sqlite") as specimens,
+    ):
+        for specimen in used_specimens:
+            specimens.ensure(specimen, origin=origin)
+        for row in rows:
+            key = row[id_idx] if len(row) > id_idx else ""
+            target = assignments.get(key)
+            if target is None:
+                continue
+            isolate = (
+                (row[iso_idx] if iso_idx is not None and len(row) > iso_idx else "")
+                or (key if by == "isolate" else "")
+            )
+            if isolate:
+                svc.ensure(isolate, specimen_id=target)
+                svc.set_specimen(isolate, target)
+    if updated:
+        _save_table(tsv, header, rows)
+    return {
+        "updated": updated,
+        "specimens": sorted(used_specimens),
+        "missing": sorted(set(assignments) - matched),
+        "by": by,
+        "tsv": str(tsv),
+    }
 
 
 

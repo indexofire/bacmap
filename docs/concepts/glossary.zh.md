@@ -6,14 +6,15 @@ bacmap 的核心概念定义，消歧常见混淆。
 
 | 术语 | 定义 | 示例 |
 |---|---|---|
-| **isolate** | 菌株分离物——一个物理实体（从一份样本分离出的纯培养物）。GOM 中有 `isolate_id`，附 lineage（谱系）和 passage（传代次数）。 | `ISO-2024-001` |
-| **sample** | 一次分析的样本 ID——等于 `strain_id`，是 GOM 中菌株的标识符。一个 isolate 可以有多份 sample（不同批次/方法），但通常一一对应。 | `SAM-001` |
-| **run** | 一次分析运行的记录——包含输入文件清单、工具版本、参考数据库版本、输出目录。一个 run 覆盖多个 sample。 | `546857e317cd...` |
+| **specimen** | 样本——唯一送检编号。一份样本可产出 0..N 个菌株，也可直接测序（mNGS/tNGS，下一大版本）。编号可为空，后续用 `bacmap specimen import` 补录。 | `A03-SN-001` |
+| **isolate** | 菌株——从样本分离出的纯培养物，只属于一份样本。GOM 中有 `isolate_id`，附 lineage（谱系）和 passage（传代次数）。 | `A03-ISO-01` |
+| **library** | 测序数据——一次测序文库或组装。其 ID 是 `samples.tsv` 的 `sample` 列（历史列名保留）；挂在菌株上（样本直接测序时挂在样本上）。 | `A03-ISO-01__ilm__20261012` |
+| **run** | 一次分析运行的记录——包含输入文件清单、工具版本、参考数据库版本、输出目录。一个 run 覆盖多个测序数据。 | `546857e317cd...` |
 | **dataset** | 已登记的外部数据（零拷贝，SHA-256 溯源）——可以是 FASTA 目录、CSV 表或任何文件。供 mine 沙箱只读挂载。 | `ds-f01a0256...` |
 
-> **isolate vs sample**：在日常使用中几乎同义。技术上，isolate 强调物理实体
-> （分离物），sample 强调分析单元（用于 pipeline 的输入标识）。bacmap 的
-> `samples.tsv` 中 `species` 列写的就是 sample/isolate 共用的 `strain_id`。
+> **specimen vs isolate vs library**：样本是送检材料；菌株是从样本分离出的培养物
+> （一份样本多株是常态）；测序数据是某个菌株的一次测序文库/组装。`samples.tsv` 的
+> `sample` 列是**测序数据 ID**，`isolate`/`specimen` 列把它挂到上层实体。
 
 ## 任务与计划
 

@@ -5,6 +5,19 @@
 
 ## [Unreleased]
 
+### 身份模型 P1：样本（specimen）与菌株分离
+
+- **新层级**：`specimen（样本）→ isolate（菌株）→ library（测序数据）→ run（分析执行）`；
+  样本可产出 0..N 个菌株，也可直接测序（mNGS/tNGS 属下一大版本）。
+- **存储**：`data/bacmap.sqlite` 新增 `specimens` 表与 `isolates.specimen_id`（迁移 3，
+  只追加）；`samples.tsv` 追加 `specimen` 列（`sample` 列语义仍为测序数据 ID，
+  管线规则不变），旧表自动升级。
+- **迁移**：旧库每株 isolate 生成影子样本（`specimen_id = isolate_id`，`origin=legacy`，
+  1:1），查询/报告/策展行为不变；真实样本编号后续补录。
+- **补录入口**：`bacmap specimen list|show|import|assign`（编号可空；导入 TSV 支持
+  `specimen` + `dataset`/`sample`/`isolate` 列）；注册时同步 isolate↔specimen。
+- 文档：数据模型/数据指南/术语表双语更新（specimen/isolate/library/run）。
+
 ### 代码质量与边界加固批次（任务恢复/取消、Web 安全、连接生命周期、契约收口）
 
 - **任务引擎正确性（P0）**：

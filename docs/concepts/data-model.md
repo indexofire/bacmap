@@ -3,45 +3,56 @@
 bacmap uses SQLite for structured state and plain directories for result files. Everything lives
 under `BACMAP_HOME`.
 
-## 1. Identity: isolate → dataset → run
+## 1. Identity: specimen → isolate → library → run
 
 ```text
-isolate: HZCPE-01                  biological strain (stable)
-   ├── dataset: HZCPE-01__ilm__20261012   one sequencing library
-   │      └── run: 4f2c…                   one analysis execution
-   └── dataset: HZCPE-01__ont__20261020
-          └── run: 9a31…
+specimen: A03-SN-001                        unique specimen / submission ID
+   ├── isolate: A03-ISO-01                  biological strain (0..N per specimen)
+   │      ├── library: A03-ISO-01__ilm__20261012   one sequencing library
+   │      │      └── run: 4f2c…                    one analysis execution
+   │      └── library: A03-ISO-01__ont__20261020
+   └── library: A03-SN-001__mngs__20261101  direct specimen sequencing (mNGS/tNGS, next major release)
 ```
 
+- **specimen** — the unique specimen / submission ID (e.g. `A03-SN-001`). One specimen can
+  yield 0..N isolates, and may also be sequenced directly (mNGS/tNGS, next major release).
+  The ID may be empty when the lab has not supplied it; `bacmap specimen import` backfills it.
 - **isolate** — the entity you track epidemiologically; can have lineage/passage
-  (`EVO-001-P037` → lineage `EVO-001`, passage 37).
-- **dataset** — one input library or assembly. Its ID is the `sample` column in `samples.tsv`.
-- **run** — one execution of the pipeline over one or more datasets. Results are never shared
-  between runs, even for the same dataset.
+  (`EVO-001-P037` → lineage `EVO-001`, passage 37). An isolate belongs to one specimen.
+- **library** — one input library or assembly. Its ID is the `sample` column in
+  `samples.tsv` (legacy column name kept so the pipeline rules stay unchanged). A library
+  hangs off exactly one isolate — or, for direct specimen sequencing, off the specimen.
+- **run** — one execution of the pipeline over one or more libraries. Results are never
+  shared between runs, even for the same library.
 
-This separation lets a strain be sequenced twice without overwriting results, and lets curation
-count the strain once.
+This separation lets a strain be sequenced twice without overwriting results, lets one
+specimen carry several isolates, and lets curation count the strain once.
 
-## 2. `samples.tsv` (the dataset registry)
+Legacy migration (v1.10.27): every pre-existing isolate received a **shadow specimen**
+(`specimen_id = isolate_id`, `origin=legacy`) so queries, reports and curation behave
+exactly as before until real specimen IDs are imported.
+
+## 2. `samples.tsv` (the library registry)
 
 ```tsv
-sample	species	R1	R2	longread	assembly	isolate	platform	checksum
-SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>
-ASM-STD-001	Salmonella				gs/ASM-STD-001/ASM-STD-001.fasta	ASM-STD-001	ont	<sha256>
-ONT-ONLY-001	VPA			gs/ONT-ONLY-001/ONT-ONLY-001.fastq.gz		ONT-ONLY-001	ont	<sha256>
-HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.fastq.gz	gs/HYBRID-001/HYBRID-001.fastq.gz		HYBRID-001	ont	<sha256>
+sample	species	R1	R2	longread	assembly	isolate	platform	checksum	specimen
+SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>	
+ASM-STD-001	Salmonella				gs/ASM-STD-001/ASM-STD-001.fasta	ASM-STD-001	ont	<sha256>	
+HZCPE-01__ilm__20261012	VPA	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R1.fastq.gz	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R2.fastq.gz			HZCPE-01	ilm	<sha256>	A03-SN-001
+HZCPE-01__ont__20261020	VPA	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R1.fastq.gz	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R2.fastq.gz			HZCPE-01	ont	<sha256>	A03-SN-001
 ```
 
 | Column | Semantics |
 |---|---|
-| `sample` | dataset ID; `^[A-Za-z0-9._-]+$`, not `.`/`..` |
+| `sample` | **library ID**; `^[A-Za-z0-9._-]+$`, not `.`/`..` (column name kept for pipeline compatibility) |
 | `species` | code or name; `UNK` when unknown |
 | `R1`, `R2` | paired reads; relative to `BACMAP_HOME` or absolute |
 | `longread` | long-read FASTQ; alone runs flye, with `R1`/`R2` runs unicycler |
 | `assembly` | pre-assembled FASTA; skips QC/assembly |
-| `isolate` | biological strain; defaults to dataset ID |
+| `isolate` | biological strain; defaults to the library ID for old tables |
 | `platform` | `ilm`, `ont`, `pacbio`, `unknown` |
 | `checksum` | registration-maintained content hash |
+| `specimen` | specimen ID (`A03-SN-001`); may be empty, imported later with `bacmap specimen import` |
 
 Registration writes the row and registers the isolate. A dataset ID collision with different
 content is a hard error, never a silent overwrite. A dataset may be short reads (`R1`/`R2`),
@@ -57,7 +68,7 @@ long reads (`longread`), hybrid (both), or a pre-assembled FASTA (`assembly`).
 | `gom.sqlite` | genome objects, GOM events, datasets, strain genotype index, AMR gene index |
 | `baseline.sqlite` | baseline candidates and published releases |
 | `research.sqlite` | Research Workbench sessions, stat results, artifacts, ledger (P1) |
-| `data/bacmap.sqlite` | strain metadata, lab results, isolates |
+| `data/bacmap.sqlite` | strain metadata, lab results, isolates, specimens |
 | `data/knowledge.sqlite` | literature/method entries + FTS5 index |
 | `refs/manifest.json` | external database versions/checksums |
 

@@ -2,46 +2,55 @@
 
 bacmap 用 SQLite 保存结构化状态，用普通目录保存结果文件。所有内容都位于 `BACMAP_HOME` 之下。
 
-## 1. 身份标识：菌株实体 → 数据集 → 运行
+## 1. 身份标识：样本 → 菌株 → 测序数据 → 运行
 
 ```text
-isolate: HZCPE-01                  biological strain (stable)
-   ├── dataset: HZCPE-01__ilm__20261012   one sequencing library
-   │      └── run: 4f2c…                   one analysis execution
-   └── dataset: HZCPE-01__ont__20261020
-          └── run: 9a31…
+specimen: A03-SN-001                        唯一送检编号（样本）
+   ├── isolate: A03-ISO-01                  菌株（每份样本 0..N 株）
+   │      ├── library: A03-ISO-01__ilm__20261012   一次测序数据
+   │      │      └── run: 4f2c…                    一次分析执行
+   │      └── library: A03-ISO-01__ont__20261020
+   └── library: A03-SN-001__mngs__20261101  样本直接测序（mNGS/tNGS，下一大版本）
 ```
 
-- **isolate（菌株实体）** —— 你在流行病学上追踪的实体；可以带谱系/传代信息
-  （`EVO-001-P037` → 谱系 `EVO-001`，第 37 代）。
-- **dataset（数据集）** —— 一个输入文库或组装。其 ID 即 `samples.tsv` 中的 `sample` 列。
-- **run（运行）** —— 管线对一个或多个数据集的一次执行。结果从不跨运行共享，即使数据集相同。
+- **specimen（样本）** —— 唯一送检编号（如 `A03-SN-001`）。一份样本可分离出 0..N 个
+  菌株，也可直接测序（mNGS/tNGS，下一大版本接入）。编号可暂时为空（外部未提供），
+  后续用 `bacmap specimen import` 补录。
+- **isolate（菌株）** —— 流行病学追踪的实体；可带谱系/传代信息
+  （`EVO-001-P037` → 谱系 `EVO-001`，第 37 代）。一个菌株只属于一份样本。
+- **library（测序数据）** —— 一个输入文库或组装。其 ID 是 `samples.tsv` 的 `sample`
+  列（历史列名保留，避免改管线规则）。测序数据挂在一个菌株上；样本直接测序时挂在样本上。
+- **run（运行）** —— 管线对一个或多个测序数据的一次执行。结果从不跨运行共享。
 
-这种分离使得同一菌株可以测序两次而不覆盖结果，也使得策展时该菌株只计一次。
+这种分离使得同一菌株可以多次测序而不覆盖结果、一份样本可携带多个菌株，也让策展时
+菌株只计一次。
 
-## 2. `samples.tsv`（数据集登记表）
+旧库迁移（v1.10.27）：每个已存在的 isolate 自动生成一个**影子样本**
+（`specimen_id = isolate_id`，`origin=legacy`），在补录真实样本编号前，查询/报告/策展
+行为与迁移前完全一致。
+
+## 2. `samples.tsv`（测序数据登记表）
 
 ```tsv
-sample	species	R1	R2	longread	assembly	isolate	platform	checksum
-SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>
-ASM-STD-001	Salmonella				gs/ASM-STD-001/ASM-STD-001.fasta	ASM-STD-001	ont	<sha256>
-ONT-ONLY-001	VPA			gs/ONT-ONLY-001/ONT-ONLY-001.fastq.gz		ONT-ONLY-001	ont	<sha256>
-HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.fastq.gz	gs/HYBRID-001/HYBRID-001.fastq.gz		HYBRID-001	ont	<sha256>
+sample	species	R1	R2	longread	assembly	isolate	platform	checksum	specimen
+SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>	
+ASM-STD-001	Salmonella				gs/ASM-STD-001/ASM-STD-001.fasta	ASM-STD-001	ont	<sha256>	
+HZCPE-01__ilm__20261012	VPA	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R1.fastq.gz	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R2.fastq.gz			HZCPE-01	ilm	<sha256>	A03-SN-001
+HZCPE-01__ont__20261020	VPA	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R1.fastq.gz	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R2.fastq.gz			HZCPE-01	ont	<sha256>	A03-SN-001
 ```
 
 | 列 | 语义 |
 |---|---|
-| `sample` | 数据集 ID；`^[A-Za-z0-9._-]+$`，不得为 `.`/`..` |
-| `species` | 物种代码或名称；未知时为 `UNK` |
-| `R1`、`R2` | 双端读段；相对于 `BACMAP_HOME` 或绝对路径 |
-| `longread` | 长读 FASTQ；单独存在走 flye，与 `R1`/`R2` 同时存在走 unicycler |
+| `sample` | **测序数据 ID**；`^[A-Za-z0-9._-]+$`，不得 `.`/`..`（列名为管线兼容保留） |
+| `species` | 物种码或名称；未知为 `UNK` |
+| `R1`、`R2` | 双端 reads；相对 `BACMAP_HOME` 或绝对路径 |
+| `longread` | 长读 FASTQ；单独 → flye，与 `R1`/`R2` 同时 → unicycler 混合组装 |
 | `assembly` | 预组装 FASTA；跳过 QC/组装 |
-| `isolate` | 生物学菌株；默认为数据集 ID |
+| `isolate` | 菌株 ID；旧表缺省为测序数据 ID |
 | `platform` | `ilm`、`ont`、`pacbio`、`unknown` |
-| `checksum` | 由登记流程维护的内容哈希 |
+| `checksum` | 登记维护的内容哈希 |
+| `specimen` | 样本编号（`A03-SN-001`）；可为空，后续用 `bacmap specimen import` 补录 |
 
-登记会写入该行并登记菌株实体。数据集 ID 冲突且内容不同是硬错误，绝不静默覆盖。
-一个数据集可以是短读（`R1`/`R2`）、长读（`longread`）、混合（两者都有）或预组装 FASTA（`assembly`）。
 
 ## 3. 数据库
 
@@ -53,7 +62,7 @@ HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.
 | `gom.sqlite` | 基因组对象、GOM 事件、数据集、菌株基因型索引、AMR 基因索引 |
 | `baseline.sqlite` | 基线候选与已发布版本 |
 | `research.sqlite` | Research Workbench 会话、统计结果、产物与账本（P1） |
-| `data/bacmap.sqlite` | 菌株元数据、实验室结果、菌株实体 |
+| `data/bacmap.sqlite` | 菌株元数据、实验室结果、菌株实体、样本（specimens） |
 | `data/knowledge.sqlite` | 文献/方法条目 + FTS5 索引 |
 | `refs/manifest.json` | 外部数据库版本/校验和 |
 

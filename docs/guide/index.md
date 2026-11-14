@@ -22,7 +22,7 @@
 
     ---
 
-    isolate → dataset → run, `samples.tsv`, registration, records and external datasets.
+    specimen → isolate → library → run, `samples.tsv`, registration, records and external datasets.
 
     [Data & identity](data.md)
 

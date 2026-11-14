@@ -22,7 +22,7 @@
 
     ---
 
-    isolate → dataset → run、`samples.tsv`、登记、记录与外部数据集。
+    specimen → isolate → library → run、`samples.tsv`、登记、记录与外部数据集。
 
     [数据与身份](data.zh.md)
 

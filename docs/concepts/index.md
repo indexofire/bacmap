@@ -17,7 +17,7 @@ code, reviewing a security boundary, or interpreting an audit trail.
 
     ---
 
-    isolate → dataset → run, databases, storage layout and lifecycle.
+    specimen → isolate → library → run, databases, storage layout and lifecycle.
 
     [Data model](data-model.md)
 

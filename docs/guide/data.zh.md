@@ -1,42 +1,47 @@
 # 数据与身份
 
-bacmap 区分三个层级的身份：
+bacmap 区分四个层级的身份：
 
 ```text
-isolate (biological strain, stable)
-   └── dataset (one sequencing library / assembly)
-          └── run (one analysis execution)
+specimen（样本，唯一送检编号，如 A03-SN-001）
+   ├── isolate（菌株，每份样本 0..N 株）
+   │      └── library（一次测序数据/组装，每株 1..N 份）
+   │             └── run（一次分析执行）
+   └── library（样本直接测序：mNGS/tNGS，下一大版本）
 ```
 
-一个菌株可能被测序多次；一个数据集可能被分析多次。结果绝不会在运行之间混淆，整理基线时也绝不
-会把同一个菌株实体重复计数。
+一个菌株可能被测序多次；一份测序数据可能被分析多次。结果绝不会在运行之间混淆，整理基线时
+也绝不会把同一个菌株实体重复计数。样本编号由实验室提供，可在登记后通过
+`bacmap specimen import` 补录；旧库自动生成影子样本（`specimen_id = isolate_id`）。
 
 ## 1. samples.tsv 表
 
 位置：`$BACMAP_HOME/workflows/bacmap/config/samples.tsv`。
 
 ```tsv
-sample	species	R1	R2	longread	assembly	isolate	platform	checksum
-SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>
-ASM-STD-001	Salmonella				gs/ASM-STD-001/ASM-STD-001.fasta	ASM-STD-001	ont	<sha256>
-HZCPE-01__ilm__20261012	VPA	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R1.fastq.gz	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R2.fastq.gz			HZCPE-01	ilm	<sha256>
-HZCPE-01__ont__20261020	VPA	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R1.fastq.gz	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R2.fastq.gz			HZCPE-01	ont	<sha256>
-ONT-ONLY-001	VPA			gs/ONT-ONLY-001/ONT-ONLY-001.fastq.gz		ONT-ONLY-001	ont	<sha256>
-HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.fastq.gz	gs/HYBRID-001/HYBRID-001.fastq.gz		HYBRID-001	ont	<sha256>
+sample	species	R1	R2	longread	assembly	isolate	platform	checksum	specimen
+SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>	
+ASM-STD-001	Salmonella				gs/ASM-STD-001/ASM-STD-001.fasta	ASM-STD-001	ont	<sha256>	
+HZCPE-01__ilm__20261012	VPA	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R1.fastq.gz	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R2.fastq.gz			HZCPE-01	ilm	<sha256>	A03-SN-001
+HZCPE-01__ont__20261020	VPA	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R1.fastq.gz	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R2.fastq.gz			HZCPE-01	ont	<sha256>	A03-SN-001
+ONT-ONLY-001	VPA			gs/ONT-ONLY-001/ONT-ONLY-001.fastq.gz		ONT-ONLY-001	ont	<sha256>	
+HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.fastq.gz	gs/HYBRID-001/HYBRID-001.fastq.gz		HYBRID-001	ont	<sha256>	
 ```
 
 | 列 | 含义 |
 |---|---|
-| `sample` | **数据集 ID**。允许字符：`A-Z a-z 0-9 . _ -`；永远不能是 `.` 或 `..` |
+| `sample` | **测序数据 ID**。允许字符：`A-Z a-z 0-9 . _ -`；永远不能是 `.` 或 `..`（列名为管线兼容保留） |
 | `species` | 三字母代码或 gside 标签/名称；尚未鉴定的 reads 用 `UNK` |
 | `R1`/`R2` | 成对 FASTQ 路径，相对于 `BACMAP_HOME` 或绝对路径 |
 | `longread` | 长读 FASTQ 路径（ONT/PacBio）；单独 → flye，与 `R1`/`R2` 同时存在 → unicycler 混合组装 |
 | `assembly` | 组装后的 FASTA 路径；跳过 QC/组装；两者都设置时 reads 优先 |
-| `isolate` | 生物学菌株 ID；旧表默认等于数据集 ID |
+| `isolate` | 菌株 ID；旧表默认等于测序数据 ID |
 | `platform` | 测序平台（`ilm`、`ont`、`pacbio` 等）；未提供时为 `unknown` |
 | `checksum` | 输入文件的 SHA-256；由登记流程维护 |
+| `specimen` | 样本编号（`A03-SN-001`）；可为空，后续用 `bacmap specimen import` 补录 |
 
-assembly 直入样本没有 reads：`fastp` 等读段级步骤不会进入 DAG。志贺菌血清型统一由
+assembly 直入样本没有 reads：`fastp` 等读段级步骤不会进入 DAG。登记单元是**测序数据
+（library）**（`samples.tsv` 的 `sample` 列）；代码与旧日志中的 "dataset" 为兼容叫法。志贺菌血清型统一由
 gspec `shi_sero` 库对组装 contigs 判定（marker-set 血清型，不需要 reads）。
 如果数据目录中的 `shi_sero` 是旧版（缺 `serotype.json`），先备份再重建：
 

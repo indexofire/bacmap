@@ -1,43 +1,48 @@
 # Data and identity
 
-bacmap separates three levels of identity:
+bacmap separates four levels of identity:
 
 ```text
-isolate (biological strain, stable)
-   └── dataset (one sequencing library / assembly)
-          └── run (one analysis execution)
+specimen (unique submission ID, e.g. A03-SN-001)
+   ├── isolate (biological strain, 0..N per specimen)
+   │      └── library (one sequencing library / assembly, 1..N per isolate)
+   │             └── run (one analysis execution)
+   └── library (direct specimen sequencing: mNGS/tNGS, next major release)
 ```
 
-A strain may be sequenced many times; a dataset may be analysed many times. Results never mix
-between runs, and curation never counts one isolate twice.
+A strain may be sequenced many times; a library may be analysed many times. Results never mix
+between runs, and curation never counts one isolate twice. Specimen IDs are supplied by the lab
+and may be imported after registration (`bacmap specimen import`).
 
 ## 1. The samples.tsv table
 
 Location: `$BACMAP_HOME/workflows/bacmap/config/samples.tsv`.
 
 ```tsv
-sample	species	R1	R2	longread	assembly	isolate	platform	checksum
-SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>
-ASM-STD-001	Salmonella				gs/ASM-STD-001/ASM-STD-001.fasta	ASM-STD-001	ont	<sha256>
-HZCPE-01__ilm__20261012	VPA	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R1.fastq.gz	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R2.fastq.gz			HZCPE-01	ilm	<sha256>
-HZCPE-01__ont__20261020	VPA	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R1.fastq.gz	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R2.fastq.gz			HZCPE-01	ont	<sha256>
-ONT-ONLY-001	VPA			gs/ONT-ONLY-001/ONT-ONLY-001.fastq.gz		ONT-ONLY-001	ont	<sha256>
-HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.fastq.gz	gs/HYBRID-001/HYBRID-001.fastq.gz		HYBRID-001	ont	<sha256>
+sample	species	R1	R2	longread	assembly	isolate	platform	checksum	specimen
+SAM-TYP-001	Salmonella	gs/SAM-TYP-001/SAM-TYP-001_R1.fastq.gz	gs/SAM-TYP-001/SAM-TYP-001_R2.fastq.gz			SAM-TYP-001	ilm	<sha256>	
+ASM-STD-001	Salmonella				gs/ASM-STD-001/ASM-STD-001.fasta	ASM-STD-001	ont	<sha256>	
+HZCPE-01__ilm__20261012	VPA	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R1.fastq.gz	gs/HZCPE-01__ilm__20261012/HZCPE-01__ilm__20261012_R2.fastq.gz			HZCPE-01	ilm	<sha256>	A03-SN-001
+HZCPE-01__ont__20261020	VPA	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R1.fastq.gz	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R2.fastq.gz			HZCPE-01	ont	<sha256>	A03-SN-001
+ONT-ONLY-001	VPA			gs/ONT-ONLY-001/ONT-ONLY-001.fastq.gz		ONT-ONLY-001	ont	<sha256>	
+HYBRID-001	VPA	gs/HYBRID-001/HYBRID-001_R1.fastq.gz	gs/HYBRID-001/HYBRID-001_R2.fastq.gz	gs/HYBRID-001/HYBRID-001.fastq.gz		HYBRID-001	ont	<sha256>	
 ```
 
 | Column | Meaning |
 |---|---|
-| `sample` | **dataset ID**. Allowed: `A-Z a-z 0-9 . _ -`; never `.` or `..` |
+| `sample` | **library ID**. Allowed: `A-Z a-z 0-9 . _ -`; never `.` or `..` (column name kept for pipeline compatibility) |
 | `species` | 3-letter code or gside label/name; `UNK` for reads not yet identified |
 | `R1`/`R2` | paired FASTQ paths, relative to `BACMAP_HOME` or absolute |
 | `longread` | long-read FASTQ path (ONT/PacBio); alone → flye, with `R1`/`R2` → unicycler hybrid assembly |
 | `assembly` | assembled FASTA path; skips QC/assembly; reads win if both are set |
-| `isolate` | biological strain ID; defaults to the dataset ID for old tables |
+| `isolate` | biological strain ID; defaults to the library ID for old tables |
 | `platform` | sequencing platform (`ilm`, `ont`, `pacbio`, …); `unknown` when not provided |
 | `checksum` | SHA-256 over the input file(s); maintained by registration |
+| `specimen` | specimen ID (`A03-SN-001`); may be empty, backfilled with `bacmap specimen import` |
 
 Assembly-only samples have no reads: read-level steps such as `fastp` are not added to the
-DAG. Shigella serotyping is handled for both input types by the gspec `shi_sero` marker-set
+DAG. The registration unit is a **library** (the `sample` column); the code and older logs
+still say "dataset" for backward compatibility. Shigella serotyping is handled for both input types by the gspec `shi_sero` marker-set
 library on assembled contigs; no reads are required. If the local `shi_sero` is stale
 (missing `serotype.json`), back it up and rebuild:
 

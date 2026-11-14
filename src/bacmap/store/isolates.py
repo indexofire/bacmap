@@ -62,22 +62,44 @@ class IsolateService:
         *,
         lineage_id: str | None = None,
         passage: int | None = None,
+        specimen_id: str | None = None,
     ) -> None:
-        """登记 isolate；已存在时不覆盖显式 lineage/passage（幂等）。"""
+        """登记 isolate；已存在时不覆盖显式 lineage/passage（幂等）。
+
+        ``specimen_id``（v1.10.27）把菌株挂到样本；为空表示外部尚未提供样本
+        信息（后续可用 ``bacmap specimen import`` 补录）。
+        """
         auto_lineage, auto_passage, _ = parse_isolate_identity(isolate_id)
         now = datetime.now(UTC).isoformat()
         self._conn.execute(
             "INSERT OR IGNORE INTO isolates"
-            " (isolate_id, lineage_id, passage, created_at, updated_at)"
-            " VALUES (?,?,?,?,?)",
+            " (isolate_id, lineage_id, passage, specimen_id, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?)",
             (
                 isolate_id,
                 lineage_id if lineage_id is not None else auto_lineage,
                 passage if passage is not None else auto_passage,
+                specimen_id or None,
                 now,
                 now,
             ),
         )
+        if specimen_id:
+            # 已存在的 isolate：仅补空关联（幂等）；更换样本走显式 set_specimen。
+            self._conn.execute(
+                "UPDATE isolates SET specimen_id = ?, updated_at = ?"
+                " WHERE isolate_id = ? AND (specimen_id IS NULL OR specimen_id = ?)",
+                (specimen_id, now, isolate_id, specimen_id),
+            )
+
+    def set_specimen(self, isolate_id: str, specimen_id: str) -> bool:
+        """显式设置菌株所属样本；返回是否命中该菌株。"""
+        now = datetime.now(UTC).isoformat()
+        cur = self._conn.execute(
+            "UPDATE isolates SET specimen_id = ?, updated_at = ? WHERE isolate_id = ?",
+            (specimen_id, now, isolate_id),
+        )
+        return cur.rowcount > 0
 
     def get(self, isolate_id: str) -> dict[str, Any] | None:
         row = self._conn.execute(

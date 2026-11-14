@@ -6,15 +6,16 @@ Core bacmap concepts, disambiguating common confusions.
 
 | Term | Definition | Example |
 |---|---|---|
-| **isolate** | A physical entity — a pure culture recovered from a specimen. Has an `isolate_id` in the GOM, with lineage and passage count. | `ISO-2024-001` |
-| **sample** | The sample ID for one analysis — equal to `strain_id`, the strain identifier in the GOM. One isolate can yield several samples (different batches/methods), but they usually correspond one-to-one. | `SAM-001` |
-| **run** | The record of one analysis execution — input file list, tool versions, reference database versions, output directory. One run covers multiple samples. | `546857e317cd...` |
+| **specimen** | Unique specimen / submission ID. One specimen may yield 0..N isolates, and may itself be sequenced directly (mNGS/tNGS, next major release). May be empty until imported with `bacmap specimen import`. | `A03-SN-001` |
+| **isolate** | A pure culture recovered from a specimen; belongs to exactly one specimen. Has an `isolate_id` with lineage and passage count. | `A03-ISO-01` |
+| **library** | One sequencing library or assembly. Its ID is the `sample` column in `samples.tsv` (legacy name kept for pipeline compatibility); it hangs off an isolate, or off a specimen for direct specimen sequencing. | `A03-ISO-01__ilm__20261012` |
+| **run** | The record of one analysis execution — input file list, tool versions, reference database versions, output directory. One run covers multiple libraries. | `546857e317cd...` |
 | **dataset** | Registered external data (zero-copy, SHA-256 provenance) — a FASTA directory, CSV table or any file. Mounted read-only into the mine sandbox. | `ds-f01a0256...` |
 
-> **isolate vs sample**: nearly synonymous in daily use. Technically, isolate
-> emphasises the physical entity, sample the analysis unit (the input identifier
-> for the pipeline). The `species` column of bacmap's `samples.tsv` holds the
-> shared `strain_id`.
+> **specimen vs isolate vs library**: a specimen is the submitted material; isolates are the
+> cultures recovered from it (several per specimen is normal); a library is one sequencing
+> library/assembly of an isolate. The `samples.tsv` `sample` column names the **library**, while
+> the `isolate` and `specimen` columns link it to the higher levels.
 
 ## Tasks and plans
 

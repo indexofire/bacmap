@@ -60,11 +60,32 @@ def data_migrations() -> tuple[Migration, ...]:
     """data/bacmap.sqlite 的清单：菌株元数据与检验结果共用同一文件。"""
     from bacmap.store.isolates import ISOLATES_DDL
     from bacmap.store.lab_results import DDL_STATEMENTS as LAB_DDL
+    from bacmap.store.specimens import SPECIMENS_DDL
     from bacmap.store.strain_metadata import DDL_STATEMENTS as META_DDL
 
     return (
         Migration(1, "baseline: strain metadata, lab results", (*META_DDL, *LAB_DDL)),
         Migration(2, "isolates: biological entity + lineage", (ISOLATES_DDL,)),
+        Migration(
+            3,
+            "specimens: sample entity + isolate specimen link (legacy shadow 1:1)",
+            (
+                SPECIMENS_DDL,
+                "ALTER TABLE isolates ADD COLUMN specimen_id TEXT",
+                "CREATE INDEX IF NOT EXISTS idx_isolates_specimen"
+                " ON isolates(specimen_id)",
+                # 影子样本：旧库里每株 isolate 生成一个同名样本（1:1，origin=legacy），
+                # 查询/报表行为与迁移前完全一致；真实样本编号后续可导入覆盖关联。
+                "INSERT OR IGNORE INTO specimens"
+                " (specimen_id, origin, note, created_at, updated_at)"
+                " SELECT isolate_id, 'legacy',"
+                " 'shadow specimen migrated 1:1 (v1.10.27)',"
+                " created_at, updated_at FROM isolates"
+                " WHERE isolate_id NOT IN (SELECT specimen_id FROM specimens)",
+                "UPDATE isolates SET specimen_id = isolate_id"
+                " WHERE specimen_id IS NULL",
+            ),
+        ),
     )
 
 

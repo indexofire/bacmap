@@ -17,7 +17,7 @@
 
     ---
 
-    isolate → dataset → run、数据库、存储布局与生命周期。
+    specimen → isolate → library → run、数据库、存储布局与生命周期。
 
     [数据模型](data-model.zh.md)
 
