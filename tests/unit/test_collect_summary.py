@@ -167,9 +167,9 @@ def test_contig_stats_builds_nx_curve_and_bins(tmp_path):
         tmp_path,
         {"species": "Salmonella"},
         contig_stats=[
-            ("c1", 100_000, 0.50),
-            ("c2", 50_000, 0.50),
-            ("c3", 10_000, 0.40),
+            ("c1", 100_000, 50.0),
+            ("c2", 50_000, 50.0),
+            ("c3", 10_000, 40.0),
         ],
     )
     stats = summary["steps"]["assembly_contig_stats"]

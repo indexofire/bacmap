@@ -163,3 +163,18 @@ def test_assign_specimen_endpoint(tmp_path):
         assert client.post("/api/v1/specimens/assign", json={"specimen_id": "X"}).status_code == 400
     finally:
         eng.shutdown_dbos()
+
+def test_identity_search_pagination(tmp_path):
+    home = _home(tmp_path)
+    engine = eng.DbosTaskEngine(home)
+    try:
+        client = TestClient(create_app(engine))
+        body = client.get(
+            "/api/v1/search/identity?q=A03&specimen_limit=1&isolate_limit=1"
+        ).json()
+        assert body["specimen_total"] == 1
+        assert body["specimen_offset"] == 0
+        assert len(body["specimens"]) == 1
+        assert "isolate_total" in body and "isolate_offset" in body
+    finally:
+        eng.shutdown_dbos()

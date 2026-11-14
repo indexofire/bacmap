@@ -278,3 +278,42 @@ class TestDnsRebindingProtection:
         assert c.post(url, headers={"origin": "http://evil.example"}).status_code == 403
         assert c.post(url, headers={"origin": "null"}).status_code == 403
         assert c.post(url, headers={"sec-fetch-site": "same-origin"}).status_code == 200
+
+class TestPaginationContract:
+    """v1.10.31：数据列表统一 offset/limit + total 分页。"""
+
+    def test_tasks_offset_and_total(self, env):
+        engine, c, _ = env
+        for _ in range(3):
+            engine.submit(TaskType.ANALYZE, {"samples": ["S1"]}, "cli")
+        body = c.get("/api/v1/tasks?limit=2&offset=1").json()
+        assert body["total"] == 3
+        assert body["offset"] == 1 and body["limit"] == 2
+        assert len(body["items"]) == 2
+
+    def test_samples_offset_and_total(self, env):
+        _, c, _ = env
+        body = c.get("/api/v1/samples?limit=1&offset=1").json()
+        assert body["total"] == 3
+        assert body["offset"] == 1 and body["limit"] == 1
+        assert len(body["items"]) == 1
+
+    def test_search_offset_and_total(self, env):
+        _, c, _ = env
+        body = c.get("/api/v1/search?limit=2&offset=0").json()
+        assert body["total"] == 3
+        assert body["offset"] == 0 and body["limit"] == 2
+        assert len(body["items"]) == 2
+
+    def test_other_lists_return_page_shape(self, env):
+        _, c, _ = env
+        for path in (
+            "/api/v1/runs",
+            "/api/v1/gom/objects",
+            "/api/v1/specimens",
+            "/api/v1/isolates",
+            "/api/v1/records",
+        ):
+            body = c.get(f"{path}?limit=10&offset=0").json()
+            assert set(body) >= {"items", "total", "offset", "limit"}, path
+            assert body["offset"] == 0 and body["limit"] == 10

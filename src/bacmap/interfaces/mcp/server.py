@@ -112,6 +112,9 @@ def build_server(engine: Any = None, profile: ProfileSpec | None = None) -> MCPS
         _register_legacy_tool(server, spec, model, profile)
 
     if engine is not None:
+        from bacmap.tasks.notifier import start as start_task_notifier
+
+        start_task_notifier(engine.home)
         _register_task_tools(server, engine, profile)
         _register_task_control_tools(server, engine, profile)
         _register_record_tool(server, engine, profile)
@@ -184,13 +187,15 @@ def _register_task_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -
             "直接提交任务（兼容入口；新客户端请优先用 bacmap_create_plan，经用户在 bacmap 中"
             "确认后执行）。task_type: analyze（基因组分析）| curate（特征库构建）。"
             "analyze 需要 samples（样本 ID 列表）；curate 可选 scope（pathogen 等筛选）。"
-            "返回 task_id，用 bacmap_task_status 轮询。"
+            "返回 task_id，用 bacmap_task_status 轮询；可传 callback_url（本机 HTTP 端点）"
+            "在 step/进度/终态时接收 POST 通知。"
         ),
     )
     def submit_task(
         task_type: str,
         samples: list[str] | None = None,
         scope: dict[str, Any] | None = None,
+        callback_url: str = "",
     ) -> str:
         try:
             tt = TaskType(task_type)
@@ -218,6 +223,14 @@ def _register_task_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -
             params["samples"] = samples
         if scope:
             params["scope"] = scope
+        if callback_url:
+            from bacmap.tasks.notifications import validate_callback_url
+
+            try:
+                validate_callback_url(callback_url)
+            except ValueError as exc:
+                return json.dumps({"error": str(exc)}, ensure_ascii=False)
+            params["callback_url"] = callback_url
         try:
             # 提交者身份由服务端（Profile/传输）决定，不接受客户端自填（审计链）。
             tid = engine.submit(tt, params, actor)
@@ -245,7 +258,7 @@ def _register_task_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -
         return json.dumps(data, ensure_ascii=False)
 
 
-def _register_plan_tools(server: MCPServer, engine: Any, actor: str) -> None:
+def _register_plan_tools(server: MCPServer, engine: Any, actor: str) -> None:  # noqa: C901
     """计划工具（ADR-21）：Harness 创建/修订/查询；确认只在可信界面或服务端预授权策略。"""
     from pathlib import Path
 
@@ -290,9 +303,20 @@ def _register_plan_tools(server: MCPServer, engine: Any, actor: str) -> None:
             "parameters (including the script/draft) before confirming."
         ),
     )
-    def create_plan(tasks: list[PlannableTask], rationale: str = "") -> str:
+    def create_plan(
+        tasks: list[PlannableTask], rationale: str = "", callback_url: str = ""
+    ) -> str:
+        from bacmap.tasks.notifications import register_watch, validate_callback_url
+
+        if callback_url:
+            try:
+                validate_callback_url(callback_url)
+            except ValueError as exc:
+                return json.dumps({"error": str(exc)}, ensure_ascii=False)
         try:
             rec = service.create(tasks, rationale, actor)
+            if callback_url:
+                register_watch(engine.home, "plan", rec.plan_id, callback_url)
             return _out(_maybe_auto_confirm(rec))
         except ApplicationError as exc:
             return _err(exc)
@@ -371,7 +395,10 @@ def _register_capabilities(server: MCPServer, profile: ProfileSpec) -> None:
                     "bacmap_create_plan -> user confirms in bacmap CLI/Web -> "
                     "bacmap_get_plan -> bacmap_task_status"
                 ),
-                "long_running": "explicit task handles (bacmap_task_status polling)",
+                "long_running": (
+                    "explicit task handles; callback_url (loopback) or "
+                    "bacmap_task_notifications long-poll for step/progress/finished"
+                ),
                 # 2026-07-28 规范把 Tasks 移为官方扩展；Python SDK 2.3 尚未实现，
                 # 因此 bacmap 继续用显式句柄，语义对齐该扩展以便日后迁移。
                 "tasks_extension": "unsupported_by_sdk",
@@ -599,7 +626,7 @@ def _gate_summary(result: dict[str, Any], profile: ProfileSpec) -> dict[str, Any
     return {"gate_counts": counts}
 
 
-def _register_task_control_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -> None:
+def _register_task_control_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -> None:  # noqa: C901
     from bacmap.tasks.spec import TaskId
 
     def _err(code: str, message: str) -> str:
@@ -645,6 +672,68 @@ def _register_task_control_tools(server: MCPServer, engine: Any, profile: Profil
             out["run_id"] = result.get("run_id")
             out.update(_gate_summary(result, profile))
         return json.dumps(out, ensure_ascii=False)
+
+
+    @server.tool(
+        name="bacmap_task_watch",
+        description=(
+            "Register a local HTTP callback for an existing task. The callback receives POST "
+            "JSON on step/progress/finished events (D1 metadata only: task_id, state, step, "
+            "progress_pct). Loopback hosts only unless BACMAP_NOTIFY_ALLOWED_HOSTS is set."
+        ),
+    )
+    def task_watch(task_id: str, callback_url: str) -> str:
+        from bacmap.tasks.notifications import register_watch
+
+        try:
+            task = engine.get_task(TaskId(task_id))
+        except KeyError:
+            return _err("not_found", f"no such task: {task_id}")
+        if not _owns_task(engine, task, profile.actor):
+            return _err("forbidden", "only tasks submitted by this client can be watched")
+        try:
+            watch_id = register_watch(engine.home, "task", task_id, callback_url)
+        except ValueError as exc:
+            return _err("validation_error", str(exc))
+        return json.dumps({"task_id": task_id, "watch_id": watch_id})
+
+    @server.tool(
+        name="bacmap_task_notifications",
+        description=(
+            "Read task notifications from the durable outbox (submitted/step/progress/finished). "
+            "Pass after=cursor from the previous call; task_id or plan_id limits the scope; "
+            "wait_seconds (0-30) long-polls for the next event. Notifications contain D1 "
+            "metadata only; use bacmap_task_status/result for details."
+        ),
+    )
+    def task_notifications(
+        after: int = 0,
+        task_id: str = "",
+        plan_id: str = "",
+        wait_seconds: int = 0,
+    ) -> str:
+        import time as _time
+
+        from bacmap.tasks import notifications
+
+        cursor = max(0, after)
+        deadline = _time.monotonic() + max(0, min(wait_seconds, 30))
+        items: list[dict[str, Any]] = []
+        while True:
+            items = notifications.list_after(
+                engine.home,
+                after=cursor,
+                task_id=task_id,
+                plan_id=plan_id,
+            )
+            if items or _time.monotonic() >= deadline:
+                break
+            _time.sleep(1)
+        if items:
+            cursor = int(items[-1]["seq"])
+        return json.dumps(
+            {"notifications": items, "cursor": cursor}, ensure_ascii=False
+        )
 
 
 def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -> None:

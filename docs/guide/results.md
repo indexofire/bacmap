@@ -67,7 +67,13 @@ Open it from the Web:
 ```
 
 The report is self-contained (inline style, no external requests), so it can be archived and viewed
-offline. PDF generation is optional and needs a local converter.
+offline. It opens as a standalone page with a sticky section navigation, anchor bookmarks
+(collapsible TOC on narrow screens) and a “back to console” link; it is no longer embedded in an
+iframe. PDF generation is optional and needs a local converter.
+
+Besides the assembly-QC charts, *V. parahaemolyticus* reports include a circular **VPAI structure
+map** (locus arcs coloured by coverage, inner gene-present/partial/absent ticks, plus a locus
+table) generated as inline SVG from `gspec/vpa_pai_screen.json`.
 
 Antigen rows are species-aware: *Salmonella* shows O:H1:H2, *V. parahaemolyticus* shows O:K using
 the OL/KL locus IDs (e.g. `OL10:KL4`), *E. coli* shows O:H, while species without an antigen scheme
@@ -85,6 +91,10 @@ SVG/CSS, while the console overview uses interactive charts). Older runs without
 `contig_stats.tsv` fall back read-only to the assembly FASTA; re-analysis writes the full
 statistics. Reports regenerate on first view after template upgrades (the `bacmap-report` marker
 version).
+
+The dashboard's species/typing panel reads `strain_genotype_index`, which is updated when an
+analyze task reaches `ingest_and_gates`. Legacy results created outside that path can be
+reconciled with `bacmap results reindex`.
 
 The summary JSON now includes `steps.assembly_quast` (QUAST transposed report), `steps.assembly_contig_stats` (seqkit-derived Nx curve, length/GC bins) and
 `steps.annotation` (`status`, `total_CDS`, `annotated_CDS`, `annotation_rate`,

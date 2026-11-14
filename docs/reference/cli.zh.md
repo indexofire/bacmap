@@ -418,9 +418,12 @@ bacmap restore --from FILE [--home DIR] [--force]
 
 ```text
 bacmap results migrate [--dry-run]
+bacmap results reindex [--dry-run] [--force] [--json]
 ```
 
-把遗留的扁平结果目录移入 `runs/legacy-<name>/`，并用链接替换它们。
+`migrate` 把遗留的扁平结果目录移入 `runs/legacy-<name>/` 并用链接替换。`reindex` 从现有
+final summary 回填 `strain_genotype_index`（适用于未经过当前 analyze/ingest 路径的历史结果）；
+已存在的菌株默认跳过，`--force` 覆盖；不创建 GOM 对象、不修改原始结果。
 
 ## `bacmap events`
 

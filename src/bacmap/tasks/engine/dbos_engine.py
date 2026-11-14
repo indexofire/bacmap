@@ -108,6 +108,54 @@ def _run_targets_with_retry(
     return result
 
 
+def _merge_config(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """深合并两份部署配置（后者覆盖前者），与 Snakefile 的双 configfile 语义一致。"""
+    out = dict(base)
+    for key, value in (override or {}).items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = _merge_config(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def _deployed_config(deployed: Path) -> dict[str, Any]:
+    """读取部署目录的 config.yaml + config.local.yaml（部署本地覆盖优先）。"""
+    import yaml
+
+    cfg: dict[str, Any] = {}
+    for name in ("config.yaml", "config.local.yaml"):
+        path = Path(deployed) / "config" / name
+        if not path.is_file():
+            continue
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:  # 配置不可读时不阻断分析（core 解析有兜底）
+            logger.warning("deployed config unreadable: %s", path, exc_info=True)
+            continue
+        if isinstance(data, dict):
+            cfg = _merge_config(cfg, data)
+    return cfg
+
+
+def _snakemake_cores(deployed: Path, params: dict[str, Any]) -> int:
+    """``--cores`` = 并发总线程数（v1.10.27）。
+
+    历史上 ``--cores`` 与规则线程都取 ``threads``，因而无法"少线程、多并发"。
+    现在优先读部署配置的 ``cores``，缺省回退 ``threads``（旧行为不变）。
+    """
+    if params.get("cores"):
+        try:
+            return int(params["cores"])
+        except (TypeError, ValueError):
+            pass
+    cfg = _deployed_config(deployed)
+    try:
+        return int(cfg.get("cores") or cfg.get("threads", 8))
+    except (TypeError, ValueError):
+        return 8
+
+
 def _run_snakemake(params: dict[str, Any]) -> Any:
     from bacmap.workflow.runner import WorkflowRunner, deploy
 
@@ -144,15 +192,7 @@ def _run_snakemake(params: dict[str, Any]) -> Any:
     overrides = {"workdir": f"results/runs/{task_id}"} if task_id else None
     # v1.10.19：cores 默认取部署 config.yaml 的 threads（此前写死 8，
     # 多核机器上 config.threads 被 --cores 截断，规则线程永远 ≤8）。
-    cores = params.get("cores")
-    if not cores:
-        try:
-            import yaml
-
-            _cfg = yaml.safe_load((deployed / "config" / "config.yaml").read_text()) or {}
-            cores = int(_cfg.get("threads", 8))
-        except Exception:  # 配置不可读时退回保守默认，不阻断分析
-            cores = 8
+    cores = _snakemake_cores(deployed, params)
     # 阶段1：prelim（快步骤）。失败不致命——最终阶段会重跑并补全；
     # 成功即建立扁平别名（web 立即可读 live 步骤状态与 prelim 报告）。
     prelim = _run_targets_with_retry(
@@ -369,6 +409,16 @@ def mark_task_terminal(home: Path, task_id: str, result: dict[str, Any]) -> bool
             payload={"state": state.value, "message": message or ""},
             data_class=DataClass.D2,
         )
+        from bacmap.tasks import notifications
+
+        notifications.append(
+            Path(home),
+            task_id,
+            "finished",
+            state=state.value,
+            progress_pct=100,
+        )
+        notifications.deliver_task(Path(home), task_id)
     return changed
 
 

@@ -518,6 +518,23 @@ bacmap plan reject 9a3f2c1b7d4e4f60 --version 1 --reason "wrong sample"
 
 确认之后，任务以 `submitted_by="<confirmer> via plan <id>@v1"` 提交。
 
+### 5.4 不再空轮询：完成与进度反馈
+
+计划确认后任务可能运行数小时；v1.10.30 提供两种反馈方式：
+
+1. **回调 URL**——在 `bacmap_create_plan` 传入 `callback_url`（watch 覆盖该计划提交的全部
+   任务），或在 `bacmap_submit_task` / `bacmap_task_watch` 传入。bacmap 在 `submitted`、
+   `step`、`progress`、`finished` 时 POST JSON，只含 D1 元数据：`task_id`、`state`、`step`、
+   `progress_pct`、`seq`、`plan_id`。默认只允许 loopback；局域网端点需设置
+   `BACMAP_NOTIFY_ALLOWED_HOSTS`。
+2. **持久 outbox 轮询**——`bacmap_task_notifications(after=cursor, task_id=... 或 plan_id=...,
+   wait_seconds=30)` 返回下一批事件；下次调用传回返回的 `cursor`。可选长轮询（最多 30 秒）
+   让智能体低成本等待，然后向用户汇报进度。
+
+进度是估计值：当前阶段下限 + 已耗时/同类型历史成功任务中位耗时（`estimated=true`）。无历史
+时只报阶段下限（`estimated=false`）；终态恒为 100。通知不包含任务 message（可能含样本
+ID/路径，D2）——需要详情时调用 `bacmap_task_status`。
+
 ## 6. 开放路径审阅
 
 `mine` 与 `write` 计划在确认时会展示**完整的**脚本/草稿；它们是计划哈希的一部分。确认前请先阅读。

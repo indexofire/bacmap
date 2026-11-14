@@ -181,6 +181,7 @@ class DbosTaskEngine:
         if task_type not in workflows:
             raise NotImplementedError(f"unsupported task type: {task_type}")
         p = params.model_dump() if isinstance(params, BaseModel) else dict(params)
+        callback_url = str(p.pop("callback_url", "") or "")
         p.setdefault("home", str(self.home))
         # cores 不在此处给默认值（v1.10.19）：显式传入才生效，
         # 缺省由引擎读部署 config.yaml 的 threads（多核机器不再被写死的 8 截断）。
@@ -253,6 +254,24 @@ class DbosTaskEngine:
             actor=submitted_by,
             payload={"task_type": task_type.value},
         )
+        from bacmap.tasks import notifications
+
+        notifications.append(
+            self.home,
+            new_id,
+            "submitted",
+            state=TaskState.RUNNING.value,
+            step=task_type.value,
+            progress_pct=0,
+            payload={"task_type": task_type.value},
+        )
+        if callback_url:
+            try:
+                notifications.register_watch(
+                    self.home, "task", new_id, callback_url
+                )
+            except ValueError:
+                logger.warning("ignoring invalid callback_url for %s", new_id)
         try:
             with SetWorkflowID(new_id):
                 DBOS.start_workflow(workflows[task_type], p)
@@ -264,7 +283,8 @@ class DbosTaskEngine:
     def status(self, task_id: TaskId) -> TaskStatus:
         with self._conn() as conn:
             row = conn.execute(
-                "SELECT state, workflow_id, current_step, message FROM tasks WHERE task_id = ?",
+                "SELECT state, workflow_id, current_step, message, task_type, created_at"
+                " FROM tasks WHERE task_id = ?",
                 (task_id,),
             ).fetchone()
         if row is None:
@@ -307,14 +327,37 @@ class DbosTaskEngine:
             )
             with self._conn() as conn:
                 row = conn.execute(
-                    "SELECT state, message, current_step FROM tasks WHERE task_id = ?",
+                    "SELECT state, message, current_step, task_type, created_at"
+                    " FROM tasks WHERE task_id = ?",
                     (task_id,),
                 ).fetchone()
             if row is not None:
                 state, message = TaskState(row["state"]), row["message"]
 
+        from bacmap.tasks.progress import compute as compute_progress
+
+        with self._conn() as conn:
+            fresh = conn.execute(
+                "SELECT state, current_step, task_type, created_at FROM tasks"
+                " WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            progress = compute_progress(conn, fresh) if fresh is not None else {}
+        pct_raw = progress.get("progress_pct")
+        elapsed_raw = progress.get("elapsed_seconds")
+        eta_raw = progress.get("eta_seconds")
         return TaskStatus(
-            task_id=task_id, state=state, current_step=row["current_step"], message=message
+            task_id=task_id,
+            state=state,
+            current_step=row["current_step"],
+            message=message,
+            stage=str(progress.get("stage") or ""),
+            progress_pct=int(pct_raw) if isinstance(pct_raw, (int, float)) else None,
+            elapsed_seconds=(
+                int(elapsed_raw) if isinstance(elapsed_raw, (int, float)) else None
+            ),
+            eta_seconds=int(eta_raw) if isinstance(eta_raw, (int, float)) else None,
+            estimated=bool(progress.get("estimated", False)),
         )
 
     def get_task(self, task_id: TaskId) -> dict[str, Any]:
@@ -400,6 +443,18 @@ class DbosTaskEngine:
             payload={"state": state, "message": message or ""},
             data_class=DataClass.D2,
         )
+        if state in {"succeeded", "failed", "cancelled"}:
+            from bacmap.tasks import notifications
+
+            notifications.append(
+                self.home,
+                str(task_id),
+                "finished",
+                state=state,
+                progress_pct=100,
+            )
+            # 终态同步投递（不依赖 Web 的 notifier 线程）；失败只记录在 watch。
+            notifications.deliver_task(self.home, str(task_id))
 
     def cancel(self, task_id: TaskId) -> None:
         with self._conn() as conn:
@@ -565,16 +620,39 @@ class DbosTaskEngine:
             except Exception:  # 对账失败不得影响列表读取
                 logger.warning("reconcile failed for %s", row["task_id"], exc_info=True)
 
-    def list_tasks(self, limit: int = 50) -> list[dict[str, Any]]:
+    def list_tasks(
+        self, limit: int = 50, *, offset: int = 0, task_type: str = ""
+    ) -> list[dict[str, Any]]:
         """最近任务列表（Web 列表页消费）。读取前先对账 running 的终态。"""
         self._reconcile_running()
+        base = (
+            "SELECT task_id, task_type, state, submitted_by, created_at, updated_at,"
+            " current_step, message FROM tasks"
+        )
         with self._conn() as conn:
-            rows = conn.execute(
-                "SELECT task_id, task_type, state, submitted_by, created_at, updated_at,"
-                " current_step, message FROM tasks ORDER BY created_at DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
+            if task_type:
+                rows = conn.execute(
+                    base + " WHERE task_type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    (task_type, max(1, min(limit, 500)), max(0, offset)),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    base + " ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                    (max(1, min(limit, 500)), max(0, offset)),
+                ).fetchall()
         return [dict(r) for r in rows]
+
+    def count_tasks(self, *, task_type: str = "") -> int:
+        """任务总数（分页用）；type 为空时统计全部。"""
+        self._reconcile_running()
+        with self._conn() as conn:
+            if task_type:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM tasks WHERE task_type = ?", (task_type,)
+                ).fetchone()
+            else:
+                row = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()
+        return int(row[0]) if row else 0
 
     def count_states(self) -> dict[str, int]:
         """按状态统计全部任务（概览页用；不受 list_tasks 的 limit 截断）。"""

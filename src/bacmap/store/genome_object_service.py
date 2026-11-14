@@ -501,6 +501,15 @@ class GenomeObjectService:
             suffix="ORDER BY g.created_at DESC LIMIT ? OFFSET ?",
         )
 
+    def count_by_type(self, object_type: ObjectType) -> int:
+        """最新版本对象数（分页 total；每个 object_id 只计一次）。"""
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM (SELECT object_id FROM genome_objects"
+            " WHERE object_type = ? GROUP BY object_id)",
+            (object_type.value,),
+        ).fetchone()
+        return int(row[0]) if row else 0
+
     def list_species_identifications(self, strain_id: str) -> list[GenomeObject]:
         """Latest-version species_identification ANALYSIS objects for one strain."""
         return [

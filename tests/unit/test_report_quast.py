@@ -75,3 +75,21 @@ def test_quast_section_still_works_without_contig_stats():
     assert "组装连续性" in html
     assert "片段化剖面" in html
     assert "Contig 长度分布" not in html
+
+def test_report_has_navigation_and_section_anchors(tmp_path):
+    summary = {
+        "steps": {
+            "species": {"species": "Vibrio_parahaemolyticus"},
+            "assembly_quast": _QUAST,
+            "assembly_contig_stats": _stats(),
+        }
+    }
+    out = tmp_path / "S1_report.html"
+    gr.generate_html("S1", summary, gr.DeterministicVerifier().verify_all(summary), out)
+    text = out.read_text(encoding="utf-8")
+    assert 'class="report-nav"' in text
+    assert 'href="#basic"' in text and 'id="basic"' in text
+    assert 'href="#assembly"' in text and 'id="assembly"' in text
+    assert 'href="#evidence"' in text and 'id="evidence"' in text
+    assert 'class="report-toc"' in text
+    assert "返回控制台" in text

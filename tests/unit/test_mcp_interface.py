@@ -293,6 +293,24 @@ class TestPlanTools:
         assert "bacmap_confirm_plan_locally" in names
         assert not any("approve" in n or n == "bacmap_confirm_plan" for n in names)
 
+    def test_notification_tools_exposed_and_pollable(self, server):
+        names = _list_tool_names(server)
+        assert {"bacmap_task_notifications", "bacmap_task_watch"} <= names
+        out = _call(server, "bacmap_task_notifications", {"after": 0})
+        assert out == {"notifications": [], "cursor": 0}
+
+    def test_task_watch_rejects_non_loopback(self, server):
+        out = _call(
+            server,
+            "bacmap_submit_task",
+            {
+                "task_type": "analyze",
+                "samples": ["SAM-001"],
+                "callback_url": "http://evil.example/hook",
+            },
+        )
+        assert "not allowed" in out["error"] or "loopback" in out["error"]
+
     def test_plan_tools_absent_in_read_only(self):
         names = _list_tool_names(build_server())
         assert "bacmap_create_plan" not in names

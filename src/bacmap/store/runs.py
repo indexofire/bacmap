@@ -336,7 +336,9 @@ def mark_ingested(run_id: str, db_path: Path) -> None:
         )
 
 
-def list_runs(db_path: Path, limit: int = 50) -> list[dict[str, Any]]:
+def list_runs(
+    db_path: Path, limit: int = 50, *, offset: int = 0
+) -> list[dict[str, Any]]:
     """最近运行记录（证据可见性，v1.7.1）：按开始时间倒序的摘要行。"""
     migrate(Path(db_path), RUNS_MIGRATIONS)
     conn = sqlite3.connect(db_path)
@@ -345,8 +347,8 @@ def list_runs(db_path: Path, limit: int = 50) -> list[dict[str, Any]]:
         rows = conn.execute(
             "SELECT run_id, task_id, strain_ids, workflow, workflow_commit, started_at,"
             " finished_at, baseline_version FROM analysis_runs"
-            " ORDER BY started_at DESC LIMIT ?",
-            (max(1, min(limit, 500)),),
+            " ORDER BY started_at DESC LIMIT ? OFFSET ?",
+            (max(1, min(limit, 500)), max(0, offset)),
         ).fetchall()
     finally:
         conn.close()
@@ -356,6 +358,14 @@ def list_runs(db_path: Path, limit: int = 50) -> list[dict[str, Any]]:
         item["strain_ids"] = json.loads(item.get("strain_ids") or "[]")
         out.append(item)
     return out
+
+
+def count_runs(db_path: Path) -> int:
+    """运行记录总数（分页用）。"""
+    migrate(Path(db_path), RUNS_MIGRATIONS)
+    with closing(sqlite3.connect(db_path)) as conn:
+        row = conn.execute("SELECT COUNT(*) FROM analysis_runs").fetchone()
+    return int(row[0]) if row else 0
 
 
 def read_run(run_id: str, db_path: Path) -> AnalysisRun | None:

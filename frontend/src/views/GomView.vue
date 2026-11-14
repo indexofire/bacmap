@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import EmptyState from '../components/EmptyState.vue'
+import Pager from '../components/Pager.vue'
 import { api } from '../api'
 import type { GomObject } from '../types'
 import { fmtTime, shortId } from '../lib/format'
@@ -13,6 +14,9 @@ const allTypes = ref<string[]>([])
 const type = ref('')
 const loading = ref(true)
 const error = ref('')
+const offset = ref(0)
+const limit = ref(50)
+const total = ref(0)
 
 function goRow(event: Event, path: string) {
   const target = event.target
@@ -24,10 +28,13 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const items = await api.listGom(type.value.trim() || undefined, 200)
-    objects.value = items
+    const page = await api.gomPage(type.value.trim(), offset.value, limit.value)
+    objects.value = page.items
+    total.value = page.total
     if (!type.value.trim()) {
-      allTypes.value = Array.from(new Set(items.map((o) => o.object_type))).sort()
+      allTypes.value = Array.from(
+        new Set([...allTypes.value, ...page.items.map((o) => o.object_type)]),
+      ).sort()
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载 GOM 对象失败'
@@ -36,8 +43,22 @@ async function load() {
   }
 }
 
+function changePage(value: number) {
+  offset.value = value
+  void load()
+}
+
+function changeLimit(value: number) {
+  limit.value = value
+  offset.value = 0
+  void load()
+}
+
 onMounted(() => void load())
-watch(type, () => void load())
+watch(type, () => {
+  offset.value = 0
+  void load()
+})
 </script>
 
 <template>
@@ -110,6 +131,14 @@ watch(type, () => void load())
         title="暂无 GOM 对象"
         hint="完成一次分析后，样本与分析对象会出现在这里。"
         icon="records"
+      />
+      <Pager
+        :offset="offset"
+        :limit="limit"
+        :total="total"
+        :disabled="loading"
+        @update:offset="changePage"
+        @update:limit="changeLimit"
       />
     </section>
   </div>

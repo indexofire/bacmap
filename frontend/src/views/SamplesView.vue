@@ -3,16 +3,18 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import EmptyState from '../components/EmptyState.vue'
+import Pager from '../components/Pager.vue'
 import { api } from '../api'
 import type { SampleRow } from '../types'
 
 const router = useRouter()
 const rows = ref<SampleRow[]>([])
-const nextCursor = ref<string | null>(null)
 const loading = ref(true)
-const loadingMore = ref(false)
 const error = ref('')
 const query = ref('')
+const offset = ref(0)
+const limit = ref(50)
+const total = ref(0)
 
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()
@@ -35,9 +37,9 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const page = await api.listSamples(undefined, 100)
+    const page = await api.samplesPage(offset.value, limit.value)
     rows.value = page.items
-    nextCursor.value = page.next_cursor
+    total.value = page.total
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载样本失败'
   } finally {
@@ -45,18 +47,15 @@ async function load() {
   }
 }
 
-async function loadMore() {
-  if (!nextCursor.value) return
-  loadingMore.value = true
-  try {
-    const page = await api.listSamples(nextCursor.value, 100)
-    rows.value = [...rows.value, ...page.items]
-    nextCursor.value = page.next_cursor
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '加载更多失败'
-  } finally {
-    loadingMore.value = false
-  }
+function changePage(value: number) {
+  offset.value = value
+  void load()
+}
+
+function changeLimit(value: number) {
+  limit.value = value
+  offset.value = 0
+  void load()
 }
 
 onMounted(() => void load())
@@ -143,13 +142,14 @@ function displayOrDash(value: string): string {
       />
       <EmptyState v-else title="没有匹配的样本" hint="调整关键词。" icon="search" />
 
-      <div v-if="nextCursor && !loading" class="card__foot" style="display: flex; justify-content: center">
-        <button class="btn btn--ghost" type="button" :disabled="loadingMore" @click="loadMore">
-          <span v-if="loadingMore" class="spinner" />
-          <Icon v-else name="arrow-right" />
-          {{ loadingMore ? '加载中…' : '加载更多' }}
-        </button>
-      </div>
+      <Pager
+        :offset="offset"
+        :limit="limit"
+        :total="total"
+        :disabled="loading"
+        @update:offset="changePage"
+        @update:limit="changeLimit"
+      />
     </section>
   </div>
 </template>

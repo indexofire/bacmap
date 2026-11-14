@@ -128,7 +128,8 @@ def from_seqkit_tsv(path: Path | str) -> dict[str, Any]:
         if length <= 0:
             continue
         try:
-            gc = float(cells[2]) * 100.0
+            # seqkit -g 已是百分数（如 45.38），不再乘 100。
+            gc = float(cells[2])
         except ValueError:
             gc = None
         contigs.append((cells[0], length, gc))
@@ -166,6 +167,20 @@ def from_fasta(path: Path | str) -> dict[str, Any]:
         gc_pct = 100.0 * gc_bases / atgc if atgc else None
         contigs.append((name, length, gc_pct))
     return summarize(contigs)
+
+
+def is_usable(stats: Any) -> bool:
+    """summary 里的统计块是否可信（v1.10.29 修复前的 GC 被错误乘 100）。
+
+    ``gc_mean`` 应在 0–100；越界视为旧版错误数据，让调用方回退到磁盘重算。
+    """
+    if not isinstance(stats, dict) or not stats:
+        return False
+    gc = stats.get("gc_mean")
+    try:
+        return gc is None or 0.0 <= float(gc) <= 100.0
+    except (TypeError, ValueError):
+        return False
 
 
 def load(sample_dir: Path) -> dict[str, Any]:

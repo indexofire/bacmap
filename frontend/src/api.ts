@@ -2,6 +2,7 @@ import { appUrl } from './lib/format'
 import type {
   AuthStatus,
   Capabilities,
+  Page,
   DatabaseStats,
   GomObject,
   IsolateDetail,
@@ -93,6 +94,13 @@ export const api = {
 
   listTasks: (limit = 200) =>
     request<{ items: TaskRow[] }>(`/tasks?limit=${limit}`).then((r) => r.items),
+  taskPage: (offset = 0, limit = 50, taskType = '') => {
+    const q = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+    if (taskType) q.set('task_type', taskType)
+    return request<Page<TaskRow>>(`/tasks?${q.toString()}`)
+  },
+  recordPage: (offset = 0, limit = 50) =>
+    request<Page<TaskRow>>(`/records?offset=${offset}&limit=${limit}`),
   getTask: (id: string) => request<TaskRow>(`/tasks/${encodeURIComponent(id)}`),
   submitTask: (body: {
     task_type: string
@@ -128,6 +136,8 @@ export const api = {
 
   listRuns: (limit = 100) =>
     request<{ items: RunRow[] }>(`/runs?limit=${limit}`).then((r) => r.items),
+  runsPage: (offset = 0, limit = 50) =>
+    request<Page<RunRow>>(`/runs?offset=${offset}&limit=${limit}`),
   getRun: (id: string) => request<RunRow>(`/runs/${encodeURIComponent(id)}`),
   compareRuns: (id: string, other: string) =>
     request<Record<string, unknown>>(
@@ -140,9 +150,28 @@ export const api = {
     if (params.plan_id) q.set('plan_id', params.plan_id)
     if (params.after) q.set('after', String(params.after))
     q.set('limit', String(params.limit ?? 100))
-    return request<{ events: TaskEvent[]; last_seq: number }>(`/events?${q.toString()}`)
+    return request<{ events: TaskEvent[]; last_seq: number; max_seq: number }>(
+      `/events?${q.toString()}`,
+    )
   },
 
+  searchPage: (params: {
+    q?: string
+    serotype?: string
+    mlst_st?: string
+    amr_gene?: string
+    offset?: number
+    limit?: number
+  }) => {
+    const q = new URLSearchParams()
+    if (params.q) q.set('q', params.q)
+    if (params.serotype) q.set('serotype', params.serotype)
+    if (params.mlst_st) q.set('mlst_st', params.mlst_st)
+    if (params.amr_gene) q.set('amr_gene', params.amr_gene)
+    q.set('offset', String(params.offset ?? 0))
+    q.set('limit', String(params.limit ?? 50))
+    return request<Page<SampleRow>>(`/search?${q.toString()}`)
+  },
   search: (params: {
     q?: string
     serotype?: string
@@ -168,15 +197,40 @@ export const api = {
     )
   },
   getSample: (id: string) => request<SampleDetail>(`/samples/${encodeURIComponent(id)}`),
+  samplesPage: (offset = 0, limit = 50) =>
+    request<Page<SampleRow> & { next_cursor: string | null }>(
+      `/samples?offset=${offset}&limit=${limit}`,
+    ),
 
   listSpecimens: (limit = 200) =>
     request<{ items: SpecimenRow[] }>(`/specimens?limit=${limit}`).then((r) => r.items),
+  specimensPage: (offset = 0, limit = 50) =>
+    request<Page<SpecimenRow>>(`/specimens?offset=${offset}&limit=${limit}`),
   getSpecimen: (id: string) =>
     request<SpecimenDetail>(`/specimens/${encodeURIComponent(id)}`),
   searchIdentity: (q: string) =>
     request<{ specimens: SpecimenRow[]; isolates: IsolateRow[] }>(
       `/search/identity?${new URLSearchParams({ q }).toString()}`,
     ),
+  searchIdentityPage: (params: {
+    q: string
+    specimen_offset?: number
+    specimen_limit?: number
+    isolate_offset?: number
+    isolate_limit?: number
+  }) => {
+    const q = new URLSearchParams({ q: params.q })
+    q.set('specimen_offset', String(params.specimen_offset ?? 0))
+    q.set('specimen_limit', String(params.specimen_limit ?? 25))
+    q.set('isolate_offset', String(params.isolate_offset ?? 0))
+    q.set('isolate_limit', String(params.isolate_limit ?? 25))
+    return request<{
+      specimens: SpecimenRow[]
+      isolates: IsolateRow[]
+      specimen_total: number
+      isolate_total: number
+    }>(`/search/identity?${q.toString()}`)
+  },
   assignSpecimen: (body: {
     specimen_id: string
     isolates?: string[]
@@ -195,12 +249,19 @@ export const api = {
     }>(`/specimens/${encodeURIComponent(id)}/delete`, json({ force })),
   listIsolates: (limit = 500) =>
     request<{ items: IsolateRow[] }>(`/isolates?limit=${limit}`).then((r) => r.items),
+  isolatesPage: (offset = 0, limit = 50) =>
+    request<Page<IsolateRow>>(`/isolates?offset=${offset}&limit=${limit}`),
   getIsolate: (id: string) => request<IsolateDetail>(`/isolates/${encodeURIComponent(id)}`),
 
   listGom: (type?: string, limit = 100) => {
     const q = new URLSearchParams({ limit: String(limit) })
     if (type) q.set('type', type)
     return request<{ items: GomObject[] }>(`/gom/objects?${q.toString()}`).then((r) => r.items)
+  },
+  gomPage: (type: string, offset = 0, limit = 50) => {
+    const q = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+    if (type) q.set('type', type)
+    return request<Page<GomObject>>(`/gom/objects?${q.toString()}`)
   },
   getGom: (id: string, version?: number) =>
     request<GomObject>(

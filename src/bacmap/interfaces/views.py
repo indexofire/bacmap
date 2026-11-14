@@ -149,14 +149,25 @@ def endpoint_status(engine: Any) -> str:
     return f"{endpoint.name} [{endpoint.location}] {endpoint.model} · {conn}"
 
 
-def list_runs(home: Path | str, limit: int = 50) -> list[dict[str, Any]]:
+def list_runs(
+    home: Path | str, limit: int = 50, offset: int = 0
+) -> list[dict[str, Any]]:
     """运行记录列表（ADR-18 证据链的只读入口）。"""
     from bacmap.store import runs as runs_store
 
     db = Path(home) / "runs.sqlite"
     if not db.is_file():
         return []
-    return runs_store.list_runs(db, limit)
+    return runs_store.list_runs(db, limit, offset=offset)
+
+
+def count_runs(home: Path | str) -> int:
+    from bacmap.store import runs as runs_store
+
+    db = Path(home) / "runs.sqlite"
+    if not db.is_file():
+        return 0
+    return runs_store.count_runs(db)
 
 
 def run_detail(home: Path | str, run_id: str) -> dict[str, Any] | None:
@@ -185,7 +196,7 @@ def compare_run_records(home: Path | str, run_a: str, run_b: str) -> dict[str, A
 
 
 def list_gom_objects(
-    home: Path | str, object_type: str | None = None, limit: int = 100
+    home: Path | str, object_type: str | None = None, limit: int = 100, offset: int = 0
 ) -> list[dict[str, Any]]:
     """GOM 最新版本对象（只读摘要：类型/版本/菌株/时间 + 载荷键名）。"""
     from bacmap.store.genome_object_service import GenomeObjectService, ObjectType
@@ -203,8 +214,9 @@ def list_gom_objects(
     svc = GenomeObjectService(db)
     try:
         out: list[dict[str, Any]] = []
+        fetch = max(1, min(offset + limit, 5000))
         for t in types:
-            for go in svc.list_by_type(t, limit=limit):
+            for go in svc.list_by_type(t, limit=fetch, offset=0):
                 out.append(
                     {
                         "object_id": go.object_id,
@@ -220,7 +232,29 @@ def list_gom_objects(
     finally:
         svc.close()
     out.sort(key=lambda o: str(o["created_at"]), reverse=True)
-    return out[: max(1, min(limit, 500))]
+    start = max(0, offset)
+    return out[start : start + max(1, min(limit, 500))]
+
+
+def count_gom_objects(home: Path | str, object_type: str | None = None) -> int:
+    """GOM 最新版本对象总数（分页 total）。"""
+    from bacmap.store.genome_object_service import GenomeObjectService, ObjectType
+
+    db = Path(home) / "gom.sqlite"
+    if not db.is_file():
+        return 0
+    if object_type:
+        try:
+            types = [ObjectType(object_type)]
+        except ValueError:
+            return 0
+    else:
+        types = list(ObjectType)
+    svc = GenomeObjectService(db)
+    try:
+        return sum(svc.count_by_type(t) for t in types)
+    finally:
+        svc.close()
 
 
 def gom_object(
@@ -326,6 +360,16 @@ def sample_page(
     return page, next_cursor
 
 
+def count_samples(home: Path | str) -> int:
+    """样本 summary 数量（分页 total；不解析内容）。"""
+    results = Path(home) / "results"
+    return sum(
+        1
+        for p in results.glob("*/report/*_summary.json")
+        if p.name == f"{p.parent.parent.name}_summary.json"
+    )
+
+
 def sample_rows(engine: DbosTaskEngine) -> list[dict[str, Any]]:
     """所有已完成样本的展示行。"""
     return [sample_digest(s) for s in load_summaries(engine)]
@@ -358,14 +402,20 @@ def sample_detail(home: Path | str, sample_id: str) -> dict[str, Any] | None:
         base / "report" / f"{sample_id}_report.prelim.html"
     ).is_file()
     steps = data.get("steps", {})
-    if isinstance(steps, dict) and not steps.get("assembly_contig_stats"):
-        # 旧运行（v1.10.28 前）没有逐 contig 统计：只读回退到 assembly FASTA，
-        # 让概览立刻有 Nx/长度/GC 图；新运行直接用 summary 内的 seqkit 结果。
-        from bacmap.core.analysis.assembly_qc import load as load_assembly_qc
+    if isinstance(steps, dict):
+        # 旧运行（v1.10.28 前）没有逐 contig 统计，或 v1.10.29 前 GC 被误乘
+        # 100：只读回退到 assembly TSV/FASTA，让概览立刻有正确的 Nx/GC 图。
+        from bacmap.core.analysis.assembly_qc import (
+            is_usable as assembly_stats_usable,
+        )
+        from bacmap.core.analysis.assembly_qc import (
+            load as load_assembly_qc,
+        )
 
-        contig_stats = load_assembly_qc(base)
-        if contig_stats:
-            steps["assembly_contig_stats"] = contig_stats
+        if not assembly_stats_usable(steps.get("assembly_contig_stats")):
+            contig_stats = load_assembly_qc(base)
+            if contig_stats:
+                steps["assembly_contig_stats"] = contig_stats
     return {
         "digest": digest,
         "steps": steps,
@@ -443,7 +493,9 @@ def _libraries_by_isolate(home: Path | str) -> dict[str, list[dict[str, str]]]:
     return grouped
 
 
-def specimen_rows(home: Path | str, limit: int = 200) -> list[dict[str, Any]]:
+def specimen_rows(
+    home: Path | str, limit: int = 200, offset: int = 0
+) -> list[dict[str, Any]]:
     """样本列表（含菌株数）；库缺失返回 []（全新数据根）。"""
     db = _identity_db(home)
     if not db.is_file():
@@ -451,10 +503,12 @@ def specimen_rows(home: Path | str, limit: int = 200) -> list[dict[str, Any]]:
     from bacmap.store.specimens import SpecimenService
 
     with SpecimenService(db) as svc:
-        return svc.list(limit)
+        return svc.list(limit, offset)
 
 
-def isolate_rows(home: Path | str, limit: int = 500) -> list[dict[str, Any]]:
+def isolate_rows(
+    home: Path | str, limit: int = 500, offset: int = 0
+) -> list[dict[str, Any]]:
     """菌株列表（含其测序数据数量）。"""
     db = _identity_db(home)
     if not db.is_file():
@@ -463,10 +517,30 @@ def isolate_rows(home: Path | str, limit: int = 500) -> list[dict[str, Any]]:
 
     libraries = _libraries_by_isolate(home)
     with IsolateService(db) as svc:
-        rows = svc.list()
+        rows = svc.list(limit=limit, offset=offset)
     for row in rows:
         row["n_libraries"] = len(libraries.get(str(row.get("isolate_id")), []))
-    return rows[:limit]
+    return rows
+
+
+def count_specimens(home: Path | str) -> int:
+    from bacmap.store.specimens import SpecimenService
+
+    db = _identity_db(home)
+    if not db.is_file():
+        return 0
+    with SpecimenService(db) as svc:
+        return svc.count()
+
+
+def count_isolates(home: Path | str) -> int:
+    from bacmap.store.isolates import IsolateService
+
+    db = _identity_db(home)
+    if not db.is_file():
+        return 0
+    with IsolateService(db) as svc:
+        return svc.count()
 
 
 def specimen_detail(home: Path | str, specimen_id: str) -> dict[str, Any] | None:
@@ -527,6 +601,48 @@ def isolate_detail(home: Path | str, isolate_id: str) -> dict[str, Any] | None:
         "libraries": libraries,
         "metadata": metadata,
         "lab_results": lab_results,
+    }
+
+
+def search_page(
+    rows: list[dict[str, Any]],
+    *,
+    query: str = "",
+    serotype: str = "",
+    mlst_st: str = "",
+    amr_gene: str = "",
+    offset: int = 0,
+    limit: int = 50,
+) -> tuple[list[dict[str, Any]], int]:
+    """search_rows + offset/limit/total（v1.10.31）。"""
+    hits = search_rows(rows, query, serotype, mlst_st, amr_gene)
+    start = max(0, offset)
+    return hits[start : start + max(1, limit)], len(hits)
+
+
+def identity_page(
+    home: Path | str,
+    query: str = "",
+    *,
+    specimen_offset: int = 0,
+    specimen_limit: int = 50,
+    isolate_offset: int = 0,
+    isolate_limit: int = 50,
+) -> dict[str, Any]:
+    """统一检索的样本/菌株分页（v1.10.31）。"""
+    full = identity_search(home, query, 5000)
+    specimens = full["specimens"]
+    isolates = full["isolates"]
+    so, io = max(0, specimen_offset), max(0, isolate_offset)
+    return {
+        "specimens": specimens[so : so + max(1, specimen_limit)],
+        "isolates": isolates[io : io + max(1, isolate_limit)],
+        "specimen_total": len(specimens),
+        "isolate_total": len(isolates),
+        "specimen_offset": so,
+        "isolate_offset": io,
+        "specimen_limit": max(1, specimen_limit),
+        "isolate_limit": max(1, isolate_limit),
     }
 
 

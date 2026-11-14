@@ -7,6 +7,7 @@ from pathlib import Path
 from bacmap.core.analysis.assembly_qc import (
     from_fasta,
     from_seqkit_tsv,
+    is_usable,
     load,
     summarize,
 )
@@ -30,13 +31,16 @@ def test_summarize_nx_and_bins():
 def test_from_seqkit_tsv(tmp_path: Path):
     path = tmp_path / "contig_stats.tsv"
     path.write_text(
-        "#name\tlength\tGC\ncontig1\t2000\t0.5\ncontig2\t1000\t0.4\n",
+        "#name\tlength\tGC\ncontig1\t2000\t50.0\ncontig2\t1000\t40.0\n",
         encoding="utf-8",
     )
     stats = from_seqkit_tsv(path)
     assert stats["count"] == 2
     assert stats["total_length"] == 3000
     assert stats["gc_mean"] == 46.67
+    # seqkit -g 已经是百分数：不能再乘 100（回归 v1.10.29 的 4538% bug）
+    path.write_text("#name\tlength\tGC\ncontig1\t1000\t45.0\n", encoding="utf-8")
+    assert from_seqkit_tsv(path)["gc_mean"] == 45.0
 
 
 def test_from_fasta_fallback_and_load(tmp_path: Path):
@@ -62,3 +66,9 @@ def test_empty_inputs():
     assert from_seqkit_tsv(Path("/nonexistent/x.tsv")) == {}
     assert from_fasta(Path("/nonexistent/x.fasta")) == {}
     assert load(Path("/nonexistent")) == {}
+
+def test_is_usable_rejects_old_multiplied_gc():
+    assert is_usable({"gc_mean": 45.3})
+    assert is_usable({"gc_mean": None})
+    assert not is_usable({"gc_mean": 4530.0})
+    assert not is_usable({})

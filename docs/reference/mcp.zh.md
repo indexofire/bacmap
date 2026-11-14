@@ -55,7 +55,7 @@ bacmap start mcp --profile local-trusted  # 要求 [mcp] allow_local_trusted = t
   "max_data_class": "D1",
   "plannable_task_types": ["analyze", "curate", "mine", "write", "research"],
   "recommended_write_path": "bacmap_create_plan -> user confirms in bacmap CLI/Web -> bacmap_get_plan -> bacmap_task_status",
-  "long_running": "explicit task handles (bacmap_task_status polling)",
+  "long_running": "explicit task handles; callback_url or bacmap_task_notifications long-poll",
   "tasks_extension": "unsupported_by_sdk"
 }
 ```
@@ -93,10 +93,12 @@ bacmap start mcp --profile local-trusted  # 要求 [mcp] allow_local_trusted = t
 
 | 工具 | 参数 | 说明 |
 |---|---|---|
-| `bacmap_submit_task` | `task_type`（`analyze`/`curate`）、`samples?`、`scope?` | 兼容性直接提交；无 `submitted_by`（由服务端认定） |
+| `bacmap_submit_task` | `task_type`（`analyze`/`curate`）、`samples?`、`scope?`、`callback_url?` | 兼容性直接提交；可选 loopback 回调，接收 step/进度/终态 POST |
 | `bacmap_task_status` | `task_id` | 状态、步骤、消息（cloud 下脱敏）、failure 块 |
 | `bacmap_task_result` | `task_id` | `finished`、`run_id`、门/计数 |
 | `bacmap_task_cancel` | `task_id` | 仅限本客户端提交的任务或其自己的计划 |
+| `bacmap_task_watch` | `task_id`、`callback_url` | 为已提交任务注册回调（同样归属校验） |
+| `bacmap_task_notifications` | `after?`、`task_id?`、`plan_id?`、`wait_seconds?` | 持久 outbox 轮询；`wait_seconds` 0–30 长轮询下一条事件 |
 
 ```json
 // bacmap_task_status → （cloud，失败）
@@ -113,6 +115,15 @@ bacmap start mcp --profile local-trusted  # 要求 [mcp] allow_local_trusted = t
   }
 }
 ```
+
+`bacmap_create_plan` 也接受 `callback_url`；watch 跟随计划，覆盖其提交的全部任务。回调
+JSON 只含 D1 元数据——`task_id`、`kind`（`submitted|step|progress|finished`）、`state`、
+`step`、`progress_pct`、`seq`、`plan_id`；任务 message 不含在内（可能含样本 ID/路径，D2）。
+详情请用 `bacmap_task_status` / `bacmap_task_result`。
+
+回调主机默认只允许 loopback；局域网智能体端点需设置 `BACMAP_NOTIFY_ALLOWED_HOSTS`。
+周期进度默认每 `BACMAP_TASK_PROGRESS_INTERVAL_S`（600 秒）一条，按阶段 + 同类型历史任务
+中位耗时估算；`estimated=false` 表示只有阶段下限。
 
 ### 3.4 记录（仅 `local-trusted`）
 

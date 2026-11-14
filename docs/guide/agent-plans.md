@@ -535,6 +535,25 @@ Invariants:
 
 After confirmation, the tasks are submitted with `submitted_by="<confirmer> via plan <id>@v1"`.
 
+### 5.4 Completion and progress without busy polling
+
+Two mechanisms (v1.10.30) keep the agent informed after the user confirms a long-running plan:
+
+1. **Callback URL** — pass `callback_url` to `bacmap_create_plan` (the watch covers every task the
+   plan submits) or to `bacmap_submit_task` / `bacmap_task_watch`. bacmap POSTs JSON on
+   `submitted`, `step`, `progress` and `finished` with D1 metadata only: `task_id`, `state`,
+   `step`, `progress_pct`, `seq`, `plan_id`. Loopback hosts are allowed by default; set
+   `BACMAP_NOTIFY_ALLOWED_HOSTS` for a LAN agent endpoint.
+2. **Durable outbox polling** — `bacmap_task_notifications(after=cursor, task_id=... | plan_id=...,
+   wait_seconds=30)` returns the next events; pass the returned `cursor` on the next call. The
+   optional long-poll (up to 30 s) lets an agent wait cheaply and then relay a progress update to
+   the user.
+
+Progress is an estimate: the current stage floor plus elapsed time versus the median duration of
+previous successful tasks of the same type (`estimated=true`). Without history only the stage
+floor is reported (`estimated=false`); terminal states are always 100. The notification payload
+never includes the task message (sample IDs/paths, D2) — call `bacmap_task_status` for details.
+
 ## 6. Open-path review
 
 `mine` and `write` plans show the **entire** script/draft at confirmation; they are part of the plan

@@ -33,6 +33,8 @@ Origin: http://127.0.0.1:8800
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
+所有列表接口接受 `offset`/`limit`（`/search/identity` 使用 specimen/isolate 各自的 offset），返回 `{items, total, offset, limit}`；`/samples` 保留 cursor 模式兼容，控制台使用 offset。`/tasks` 支持 `task_type`，`/gom/objects` 支持 `type`。
+
 | GET | `/api/v1/capabilities` | API 版本、bacmap 版本、可计划类型、特性 |
 | GET | `/api/v1/auth/status` | 鉴权模式、登录状态与操作员指纹（公开） |
 | POST | `/api/v1/auth/login` | 用部署令牌换取签名会话 cookie（公开；仅 cookie 模式） |
@@ -61,7 +63,7 @@ Origin: http://127.0.0.1:8800
 | GET | `/api/v1/plans/{id}?version=` | 计划详情 |
 | POST | `/api/v1/plans/{id}/confirm` | 确认 + 提交 |
 | POST | `/api/v1/plans/{id}/reject` | 拒绝 |
-| GET | `/api/v1/events?after=&limit=&task_id=&plan_id=` | 事件轮询 |
+| GET | `/api/v1/events?after=&limit=&task_id=&plan_id=` | 事件轮询（`last_seq` 分页游标 + `max_seq` SSE 起点） |
 | GET | `/api/v1/events/stream?after=&timeout=` | SSE 流（从 `Last-Event-ID` 续传） |
 | GET | `/api/v1/runs?limit=` | 运行记录 |
 | GET | `/api/v1/runs/{id}` | 运行详情 + gvixb 视图 |

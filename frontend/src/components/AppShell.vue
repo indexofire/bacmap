@@ -4,8 +4,10 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Icon from './Icon.vue'
 import ToastHost from './ToastHost.vue'
 import { api } from '../api'
+import { appUrl } from '../lib/format'
 import type { AgentEmbedLink, AuthStatus } from '../types'
 import { useTheme } from '../composables/useTheme'
+import { useToast } from '../composables/useToast'
 
 const route = useRoute()
 const router = useRouter()
@@ -26,6 +28,9 @@ const title = computed(() => (route.meta.title as string | undefined) ?? '控制
 
 const agentEmbeds = ref<AgentEmbedLink[]>([])
 const auth = ref<AuthStatus | null>(null)
+const toast = useToast()
+const handledTaskStates = new Set<string>()
+let eventSource: EventSource | undefined
 
 const groups = computed(() => {
   const base = [
@@ -94,6 +99,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  eventSource?.close()
+  eventSource = undefined
   if (pendingTimer) clearInterval(pendingTimer)
   window.removeEventListener('click', onDocumentClick)
   window.removeEventListener('keydown', onDocumentKey)
@@ -126,8 +133,41 @@ async function loadPending() {
 async function loadAuth() {
   try {
     auth.value = await api.authStatus()
+    if (!auth.value.enabled || auth.value.authenticated) {
+      void startTaskStream()
+    }
   } catch {
     // 旧服务端没有 /auth/status：不显示操作员信息，控制台照常使用。
+  }
+}
+
+async function startTaskStream() {
+  if (eventSource) return
+  try {
+    const { max_seq } = await api.listEvents({ limit: 1 })
+    eventSource = new EventSource(appUrl(`/api/v1/events/stream?after=${max_seq}`))
+    eventSource.addEventListener('task.state', (event) => {
+      try {
+        const data = JSON.parse((event as MessageEvent<string>).data) as {
+          task_id?: string
+          payload?: { state?: string }
+        }
+        const state = data.payload?.state ?? ''
+        if (!data.task_id || !['succeeded', 'failed', 'cancelled'].includes(state)) return
+        const key = `${data.task_id}:${state}`
+        if (handledTaskStates.has(key)) return
+        handledTaskStates.add(key)
+        const label =
+          state === 'succeeded' ? '已完成' : state === 'failed' ? '失败' : '已取消'
+        const text = `任务 ${data.task_id.slice(0, 10)} ${label}`
+        if (state === 'succeeded') toast.ok(text)
+        else toast.err(text)
+      } catch {
+        // 忽略非 JSON/未知事件，SSE 连接保持。
+      }
+    })
+  } catch {
+    // 统计/事件接口不可用（旧服务或未登录）时不提示，不影响控制台。
   }
 }
 

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import EmptyState from '../components/EmptyState.vue'
+import Pager from '../components/Pager.vue'
 import { api } from '../api'
 import type { IsolateRow, SampleRow, SpecimenRow } from '../types'
 
@@ -16,31 +17,104 @@ const gene = ref(String(route.query.amr_gene ?? ''))
 const results = ref<SampleRow[]>([])
 const specimens = ref<SpecimenRow[]>([])
 const isolates = ref<IsolateRow[]>([])
+const offset = ref(0)
+const limit = ref(25)
+const totalResults = ref(0)
+const specimenOffset = ref(0)
+const specimenLimit = ref(25)
+const specimenTotal = ref(0)
+const isolateOffset = ref(0)
+const isolateLimit = ref(25)
+const isolateTotal = ref(0)
 const loading = ref(false)
 const searched = ref(false)
 const error = ref('')
 
 const total = computed(
-  () => results.value.length + specimens.value.length + isolates.value.length,
+  () => totalResults.value + specimenTotal.value + isolateTotal.value,
 )
+
+async function loadIdentity() {
+  const page = await api.searchIdentityPage({
+    q: query.value.trim(),
+    specimen_offset: specimenOffset.value,
+    specimen_limit: specimenLimit.value,
+    isolate_offset: isolateOffset.value,
+    isolate_limit: isolateLimit.value,
+  })
+  specimens.value = page.specimens
+  isolates.value = page.isolates
+  specimenTotal.value = page.specimen_total
+  isolateTotal.value = page.isolate_total
+}
+
+async function loadResults() {
+  const page = await api.searchPage({
+    q: query.value.trim(),
+    serotype: serotype.value.trim(),
+    mlst_st: mlst.value.trim(),
+    amr_gene: gene.value.trim(),
+    offset: offset.value,
+    limit: limit.value,
+  })
+  results.value = page.items
+  totalResults.value = page.total
+}
+
+function changeSpecimenPage(value: number) {
+  specimenOffset.value = value
+  void loadIdentity().catch((err) => {
+    error.value = err instanceof Error ? err.message : '检索失败'
+  })
+}
+
+function changeSpecimenLimit(value: number) {
+  specimenLimit.value = value
+  specimenOffset.value = 0
+  void loadIdentity().catch((err) => {
+    error.value = err instanceof Error ? err.message : '检索失败'
+  })
+}
+
+function changeIsolatePage(value: number) {
+  isolateOffset.value = value
+  void loadIdentity().catch((err) => {
+    error.value = err instanceof Error ? err.message : '检索失败'
+  })
+}
+
+function changeIsolateLimit(value: number) {
+  isolateLimit.value = value
+  isolateOffset.value = 0
+  void loadIdentity().catch((err) => {
+    error.value = err instanceof Error ? err.message : '检索失败'
+  })
+}
+
+function changePage(value: number) {
+  offset.value = value
+  void loadResults().catch((err) => {
+    error.value = err instanceof Error ? err.message : '检索失败'
+  })
+}
+
+function changeLimit(value: number) {
+  limit.value = value
+  offset.value = 0
+  void loadResults().catch((err) => {
+    error.value = err instanceof Error ? err.message : '检索失败'
+  })
+}
 
 async function runSearch() {
   loading.value = true
   error.value = ''
   searched.value = true
   try {
-    const [libs, identity] = await Promise.all([
-      api.search({
-        q: query.value.trim(),
-        serotype: serotype.value.trim(),
-        mlst_st: mlst.value.trim(),
-        amr_gene: gene.value.trim(),
-      }),
-      api.searchIdentity(query.value.trim()),
-    ])
-    results.value = libs
-    specimens.value = identity.specimens
-    isolates.value = identity.isolates
+    offset.value = 0
+    specimenOffset.value = 0
+    isolateOffset.value = 0
+    await Promise.all([loadResults(), loadIdentity()])
     const next: Record<string, string> = {}
     if (query.value.trim()) next.q = query.value.trim()
     if (serotype.value.trim()) next.serotype = serotype.value.trim()
@@ -74,6 +148,12 @@ function reset() {
   results.value = []
   specimens.value = []
   isolates.value = []
+  offset.value = 0
+  totalResults.value = 0
+  specimenOffset.value = 0
+  specimenTotal.value = 0
+  isolateOffset.value = 0
+  isolateTotal.value = 0
   searched.value = false
   error.value = ''
   void router.replace({ query: {} })
@@ -145,7 +225,7 @@ function reset() {
       <section v-if="specimens.length" class="card" style="margin-bottom: 16px">
         <div class="card__head">
           <h2 class="card__title">样本</h2>
-          <span class="card__hint">{{ specimens.length }} 份</span>
+          <span class="card__hint">{{ specimenTotal }} 份</span>
         </div>
         <div class="table-wrap">
           <table class="table">
@@ -172,12 +252,20 @@ function reset() {
             </tbody>
           </table>
         </div>
+        <Pager
+          :offset="specimenOffset"
+          :limit="specimenLimit"
+          :total="specimenTotal"
+          :disabled="loading"
+          @update:offset="changeSpecimenPage"
+          @update:limit="changeSpecimenLimit"
+        />
       </section>
 
       <section v-if="isolates.length" class="card" style="margin-bottom: 16px">
         <div class="card__head">
           <h2 class="card__title">菌株</h2>
-          <span class="card__hint">{{ isolates.length }} 株</span>
+          <span class="card__hint">{{ isolateTotal }} 株</span>
         </div>
         <div class="table-wrap">
           <table class="table">
@@ -215,12 +303,20 @@ function reset() {
             </tbody>
           </table>
         </div>
+        <Pager
+          :offset="isolateOffset"
+          :limit="isolateLimit"
+          :total="isolateTotal"
+          :disabled="loading"
+          @update:offset="changeIsolatePage"
+          @update:limit="changeIsolateLimit"
+        />
       </section>
 
       <section v-if="results.length" class="card">
         <div class="card__head">
           <h2 class="card__title">测序数据（分析结果）</h2>
-          <span class="card__hint">{{ results.length }} 份</span>
+          <span class="card__hint">{{ totalResults }} 份</span>
         </div>
         <div class="table-wrap">
           <table class="table">
@@ -253,6 +349,14 @@ function reset() {
             </tbody>
           </table>
         </div>
+        <Pager
+          :offset="offset"
+          :limit="limit"
+          :total="totalResults"
+          :disabled="loading"
+          @update:offset="changePage"
+          @update:limit="changeLimit"
+        />
       </section>
 
       <EmptyState

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import EmptyState from '../components/EmptyState.vue'
+import Pager from '../components/Pager.vue'
 import { api } from '../api'
 import type { IsolateRow, SpecimenRow } from '../types'
 
@@ -12,6 +13,9 @@ const isolates = ref<IsolateRow[]>([])
 const loading = ref(true)
 const error = ref('')
 const query = ref('')
+const offset = ref(0)
+const limit = ref(50)
+const total = ref(0)
 const assignSpecimenId = ref('')
 const selectedIsolates = ref<string[]>([])
 const assignDatasets = ref('')
@@ -41,16 +45,28 @@ async function load() {
   error.value = ''
   try {
     const [specimens, isolatesRows] = await Promise.all([
-      api.listSpecimens(500),
+      api.specimensPage(offset.value, limit.value),
       api.listIsolates(2000),
     ])
-    rows.value = specimens
+    rows.value = specimens.items
+    total.value = specimens.total
     isolates.value = isolatesRows
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载样本失败'
   } finally {
     loading.value = false
   }
+}
+
+function changePage(value: number) {
+  offset.value = value
+  void load()
+}
+
+function changeLimit(value: number) {
+  limit.value = value
+  offset.value = 0
+  void load()
 }
 
 async function assign() {
@@ -172,7 +188,7 @@ onMounted(() => void load())
           <input v-model="query" type="search" placeholder="搜索样本编号…" />
         </label>
         <span class="filter-spacer" />
-        <span class="card__hint">{{ filtered.length }} / {{ rows.length }} 份</span>
+        <span class="card__hint">{{ filtered.length }} / {{ total }} 份</span>
       </div>
 
       <div v-if="loading" class="card__body"><div class="skeleton" style="height: 220px" /></div>
@@ -213,6 +229,14 @@ onMounted(() => void load())
         hint="登记分析数据后，样本会自动出现在这里（旧数据迁移为影子样本）。"
       />
       <EmptyState v-else title="没有匹配的样本" hint="换个关键词试试。" />
+      <Pager
+        :offset="offset"
+        :limit="limit"
+        :total="total"
+        :disabled="loading"
+        @update:offset="changePage"
+        @update:limit="changeLimit"
+      />
     </section>
   </div>
 </template>

@@ -221,10 +221,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 6px 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface-soft);
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
   color: var(--text-3);
   font-family: var(--font-mono);
   font-size: 11px;

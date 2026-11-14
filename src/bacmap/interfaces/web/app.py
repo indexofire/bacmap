@@ -75,7 +75,7 @@ _TEMPLATES = _Templates(directory=str(Path(__file__).parent / "templates"))
 logger = logging.getLogger(__name__)
 
 # 报告模板版本标记：旧模板生成的 HTML 在首次访问时原地重渲染。
-_REPORT_MARKER = b'name="bacmap-report" content="10"'
+_REPORT_MARKER = b'name="bacmap-report" content="12"'
 _REPORT_LOCK = threading.Lock()
 
 
@@ -228,9 +228,8 @@ def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
             raise HTTPException(404, "该样本尚未生成 HTML 报告")
         if path == final_path:
             _ensure_current_report(engine, sample_id, path)
-        # 直接打开旧 URL 不再单独成页：跳到 SPA 的“完整报告”页签。
-        if not download and not embed:
-            return RedirectResponse(f"/console/samples/{sample_id}?tab=report", status_code=307)
+        # v1.10.29：完整报告是独立页面（自带目录/返回控制台），不再 iframe 嵌入。
+        # 直接访问即内联展示；?download=1 仍为附件。
         # 报告是自包含 HTML，用 sandbox CSP 隔离：禁脚本、禁外联、禁同源读取；
         # 只允许同源页面把它嵌入（样本详情的报告页签）。
         csp = (
@@ -346,6 +345,10 @@ def create_app(
     agent_embeds = load_agent_embeds(_active_config_path(engine.home))
     app.state.agent_embeds = agent_embeds
     app.state.web_auth = cfg
+    # v1.10.30：周期进度 + 智能体回调投递（Web 进程通常承载长任务）。
+    from bacmap.tasks.notifier import start as start_task_notifier
+
+    start_task_notifier(engine.home)
     if cfg.enabled:
         # ADR-14/v1.4.15：bearer（API）与 cookie（浏览器）双通道；cookie 模式配 CSRF。
         app.add_middleware(WebAuthMiddleware, cfg=cfg)

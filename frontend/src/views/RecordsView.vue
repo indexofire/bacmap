@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import EmptyState from '../components/EmptyState.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import Pager from '../components/Pager.vue'
 import { api } from '../api'
 import type { TaskRow } from '../types'
 import { fmtTime, shortId } from '../lib/format'
@@ -22,23 +23,37 @@ const tasks = ref<TaskRow[]>([])
 const loading = ref(true)
 const busy = ref(false)
 const error = ref('')
+const offset = ref(0)
+const limit = ref(25)
+const total = ref(0)
 
 const metadata = ref({ strain_id: '', sample_id: '', fields: '' })
 const lab = ref({ strain_id: '', category: '', test_name: '', result: '', unit: '' })
 const knowledge = ref({ title: '', identifier: '', content: '' })
 const approve = ref({ entry_id: '' })
 
-const recent = computed(() => tasks.value.filter((t) => t.task_type === 'record').slice(0, 10))
-
 async function load() {
   loading.value = true
   try {
-    tasks.value = await api.listTasks(200)
+    const page = await api.recordPage(offset.value, limit.value)
+    tasks.value = page.items
+    total.value = page.total
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载记录任务失败'
   } finally {
     loading.value = false
   }
+}
+
+function changePage(value: number) {
+  offset.value = value
+  void load()
+}
+
+function changeLimit(value: number) {
+  limit.value = value
+  offset.value = 0
+  void load()
 }
 
 async function submit() {
@@ -64,6 +79,7 @@ async function submit() {
       approve.value = { entry_id: '' }
     }
     toast.ok(`记录任务已提交：${task.task_id.slice(0, 12)}…`)
+    offset.value = 0
     await load()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '提交记录失败'
@@ -198,10 +214,10 @@ onMounted(() => void load())
       <section class="card">
         <div class="card__head">
           <h2 class="card__title">最近记录任务</h2>
-          <span class="card__hint">{{ recent.length }} 条</span>
+          <span class="card__hint">{{ total }} 条</span>
         </div>
         <div v-if="loading" class="card__body"><div class="skeleton" style="height: 160px" /></div>
-        <div v-else-if="recent.length" class="table-wrap">
+        <div v-else-if="tasks.length" class="table-wrap">
           <table class="table">
             <thead>
               <tr>
@@ -211,7 +227,7 @@ onMounted(() => void load())
               </tr>
             </thead>
             <tbody>
-              <tr v-for="task in recent" :key="task.task_id">
+              <tr v-for="task in tasks" :key="task.task_id">
                 <td data-label="任务">
                   <RouterLink class="link-cell" :to="`/tasks/${task.task_id}`">
                     {{ shortId(task.task_id) }}
@@ -230,6 +246,14 @@ onMounted(() => void load())
           title="还没有记录任务"
           hint="提交一条元数据或化验结果，任务会经过同一套证据链。"
           icon="records"
+        />
+        <Pager
+          :offset="offset"
+          :limit="limit"
+          :total="total"
+          :disabled="loading"
+          @update:offset="changePage"
+          @update:limit="changeLimit"
         />
       </section>
     </div>

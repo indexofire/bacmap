@@ -425,9 +425,13 @@ See [Operations](../operations/index.md).
 
 ```text
 bacmap results migrate [--dry-run]
+bacmap results reindex [--dry-run] [--force] [--json]
 ```
 
-Moves legacy flat result directories into `runs/legacy-<name>/` and replaces them with links.
+`migrate` moves legacy flat result directories into `runs/legacy-<name>/` and replaces them
+with links. `reindex` backfills `strain_genotype_index` from existing final summaries (for results
+created outside the current analyze task/ingest path); existing strains are skipped unless
+`--force`. It does not create GOM objects or change results.
 
 ## `bacmap events`
 

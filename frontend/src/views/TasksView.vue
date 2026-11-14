@@ -5,6 +5,7 @@ import Icon from '../components/Icon.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
 import TaskDrawer from '../components/TaskDrawer.vue'
+import Pager from '../components/Pager.vue'
 import { api } from '../api'
 import type { TaskRow, TaskState } from '../types'
 import { fmtTime, shortId } from '../lib/format'
@@ -20,6 +21,8 @@ const drawerOpen = ref(false)
 const stateFilter = ref<'all' | TaskState>('all')
 const typeFilter = ref('all')
 const query = ref('')
+const offset = ref(0)
+const limit = ref(25)
 
 const stateChips: Array<{ value: 'all' | TaskState; label: string }> = [
   { value: 'all', label: '全部' },
@@ -46,6 +49,21 @@ const filtered = computed(() => {
     )
   })
 })
+
+const paged = computed(() => filtered.value.slice(offset.value, offset.value + limit.value))
+
+watch([stateFilter, typeFilter, query], () => {
+  offset.value = 0
+})
+
+function changePage(value: number) {
+  offset.value = value
+}
+
+function changeLimit(value: number) {
+  limit.value = value
+  offset.value = 0
+}
 
 async function load(initial = false) {
   if (initial) loading.value = true
@@ -157,7 +175,7 @@ onMounted(() => {
           </thead>
           <tbody>
             <tr
-              v-for="task in filtered"
+              v-for="task in paged"
               :key="task.task_id"
               class="row-click"
               @click="goRow($event, `/tasks/${task.task_id}`)"
@@ -197,6 +215,14 @@ onMounted(() => {
         title="没有匹配的任务"
         hint="调整状态、类型或关键词筛选。"
         icon="search"
+      />
+      <Pager
+        :offset="offset"
+        :limit="limit"
+        :total="filtered.length"
+        :disabled="loading"
+        @update:offset="changePage"
+        @update:limit="changeLimit"
       />
     </section>
 

@@ -1,33 +1,29 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import AssemblyQcPanel from '../components/AssemblyQcPanel.vue'
 import CopyButton from '../components/CopyButton.vue'
 import { api } from '../api'
 import type { AssemblyContigStats, GvixbLink, RunRow, SampleDetail } from '../types'
 import { appUrl, fmtTime, jsonText, shortId } from '../lib/format'
-import { useTheme } from '../composables/useTheme'
 
 const MAX_GENE_CHIPS = 24
 
 const route = useRoute()
-const router = useRouter()
-const { resolved: resolvedTheme } = useTheme()
 const id = String(route.params.id)
 const data = ref<SampleDetail | null>(null)
 const latestRun = ref<RunRow | null>(null)
 const runsLoaded = ref(false)
 const loading = ref(true)
 const error = ref('')
-const activeTab = ref<'detail' | 'report'>(route.query.tab === 'report' ? 'report' : 'detail')
 const expandedGeneGroups = ref<Record<string, boolean>>({})
 
-const reportSrc = computed(
-  () => appUrl(`/samples/${encodeURIComponent(id)}/report?embed=1&theme=${resolvedTheme.value}`),
+const reportUrl = computed(
+  () => appUrl(`/samples/${encodeURIComponent(id)}/report`),
 )
 const reportDownload = computed(
-  () => appUrl(`/samples/${encodeURIComponent(id)}/report?download=1&theme=${resolvedTheme.value}`),
+  () => appUrl(`/samples/${encodeURIComponent(id)}/report?download=1`),
 )
 
 const digest = computed(() => data.value?.digest)
@@ -42,11 +38,6 @@ const hasAnyReport = computed(() =>
     Object.keys(data.value?.steps ?? {}).length > 0,
   ),
 )
-const isPrelim = computed(() =>
-  !digest.value?.has_report &&
-  Boolean(digest.value?.has_prelim_report || digest.value?.prelim),
-)
-const showReport = computed(() => activeTab.value === 'report' && hasAnyReport.value)
 const gvixbLinks = computed<GvixbLink[]>(() => {
   const items = data.value?.gvixb
   return Array.isArray(items) ? items : []
@@ -153,7 +144,10 @@ async function load() {
     data.value = sample
     latestRun.value = runs.find((run) => runStrainIds(run).includes(id)) ?? null
     runsLoaded.value = true
-    if (activeTab.value === 'report' && !data.value.digest.has_report && !data.value.digest.has_prelim_report) activeTab.value = 'detail'
+    if (route.query.tab === 'report' && hasAnyReport.value) {
+      // 旧深链（?tab=report）→ 独立报告页，不再用 iframe 预览。
+      window.location.assign(reportUrl.value)
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载样本详情失败'
   } finally {
@@ -163,15 +157,8 @@ async function load() {
 
 function openReport() {
   if (!hasAnyReport.value) return
-  activeTab.value = 'report'
-  void router.replace({ query: { ...route.query, tab: 'report' } })
-}
-
-function openDetail() {
-  activeTab.value = 'detail'
-  const query = { ...route.query }
-  delete query.tab
-  void router.replace({ query })
+  // 完整报告自带目录与返回链接，作为独立页面打开（不再 iframe 嵌入）。
+  window.open(reportUrl.value, '_blank', 'noopener')
 }
 
 onMounted(() => void load())
@@ -213,36 +200,7 @@ onMounted(() => void load())
     <div v-if="loading" class="card card--pad"><div class="skeleton" style="height: 220px" /></div>
 
     <template v-else-if="digest">
-      <div class="filters" style="margin-bottom: 14px">
-        <button
-          type="button"
-          class="chip"
-          :class="{ 'is-active': activeTab === 'detail' }"
-          @click="openDetail"
-        >
-          概览
-        </button>
-        <button
-          v-if="hasAnyReport"
-          type="button"
-          class="chip"
-          :class="{ 'is-active': showReport }"
-          @click="openReport"
-        >
-          完整报告
-        </button>
-      </div>
-
-      <section v-if="showReport" class="card report-embed">
-        <div class="card__head">
-          <h2 class="card__title">完整分析报告 <span v-if="isPrelim" class="badge badge--running">初步 · 注释进行中</span></h2>
-          <span class="card__hint">{{ resolvedTheme === 'light' ? '浅色主题' : resolvedTheme === 'gray' ? '灰色主题' : '暗色主题' }} · 自包含 HTML</span>
-          <a class="btn btn--ghost btn--sm" :href="reportDownload">下载 HTML</a>
-        </div>
-        <iframe class="report-frame" :src="reportSrc" title="样本完整分析报告" />
-      </section>
-
-      <div v-else class="stack">
+      <div class="stack">
         <div class="stack">
           <section class="card card--pad">
             <h2 class="card__title" style="margin-bottom: 14px">结果概要</h2>
@@ -383,19 +341,6 @@ onMounted(() => void load())
 </template>
 
 <style scoped>
-.report-embed {
-  overflow: hidden;
-}
-
-.report-frame {
-  display: block;
-  width: 100%;
-  height: max(760px, calc(100vh - 250px));
-  border: 0;
-  background: var(--bg);
-  color-scheme: dark;
-}
-
 .summary-list :deep(.statuslist__row) {
   grid-template-columns: 148px minmax(0, 1fr);
 }
@@ -450,10 +395,6 @@ onMounted(() => void load())
 }
 
 @media (max-width: 720px) {
-  .report-frame {
-    height: max(640px, calc(100vh - 220px));
-  }
-
   .summary-list :deep(.statuslist__row) {
     grid-template-columns: 120px minmax(0, 1fr);
   }

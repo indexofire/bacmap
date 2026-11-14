@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import math
 import os
 import re
 import shutil
@@ -695,14 +696,159 @@ def _render_assembly_qc_section(summary: dict, sample_id: str = "") -> str:
     steps = summary.get("steps", {})
     quast = steps.get("assembly_quast", "")
     contig_stats = steps.get("assembly_contig_stats", {})
-    if not contig_stats and sample_id:
-        # 旧 summary 无逐 contig 统计：只读回退（seqkit TSV 或 assembly FASTA）。
-        from bacmap.core.analysis.assembly_qc import load as load_assembly_qc
+    from bacmap.core.analysis.assembly_qc import is_usable as _assembly_stats_usable
+    from bacmap.core.analysis.assembly_qc import load as load_assembly_qc
 
+    if not _assembly_stats_usable(contig_stats) and sample_id:
+        # 旧 summary 无逐 contig 统计，或 GC 被误乘 100：只读回退到磁盘重算。
         contig_stats = load_assembly_qc(RESULTS_DIR / sample_id)
     if not quast and not contig_stats:
         return ""
     return _render_quast_section(str(quast), contig_stats)
+
+
+
+
+def _polar(cx: float, cy: float, radius: float, angle_deg: float) -> tuple[float, float]:
+    rad = math.radians(angle_deg)
+    return cx + radius * math.cos(rad), cy + radius * math.sin(rad)
+
+
+def _arc_path(cx: float, cy: float, radius: float, a0: float, a1: float) -> str:
+    x0, y0 = _polar(cx, cy, radius, a0)
+    x1, y1 = _polar(cx, cy, radius, a1)
+    large = 1 if (a1 - a0) > 180 else 0
+    return f"M {x0:.2f} {y0:.2f} A {radius} {radius} 0 {large} 1 {x1:.2f} {y1:.2f}"
+
+
+def _render_pai_section(sample_id: str, summary: dict) -> str:
+    """VPAI 结构环（纯内联 SVG）：locus 弧 + 基因存在性刻度 + 位点表。
+
+    数据来自 gspec ``vpa_pai_screen.json``（位点/基因坐标位于 PAI 参考序列，
+    不是基因组坐标，因此这里表现的是 PAI 内容结构而非染色体位置）。
+    """
+    path = RESULTS_DIR / sample_id / "gspec" / "vpa_pai_screen.json"
+    loci: list[dict] = []
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        files = document.get("files")
+        entry = files[0] if isinstance(files, list) and files else {}
+        if isinstance(entry, dict) and isinstance(entry.get("loci"), list):
+            loci = [locus for locus in entry["loci"] if isinstance(locus, dict)]
+    except (OSError, ValueError):
+        loci = []
+    if not loci:
+        return ""
+
+    size = 520
+    cx = cy = size / 2
+    r_outer = 198
+    r_gene = 150
+    gap = 3.0
+    weights = [max(1, len(locus.get("genes") or [])) for locus in loci]
+    total_weight = max(1, sum(weights))
+    available = 360.0 - gap * len(loci)
+    angle = -90.0
+    arcs: list[str] = []
+    ticks: list[str] = []
+    labels: list[str] = []
+    table_rows: list[str] = []
+    total_genes = 0
+    for locus, weight in zip(loci, weights, strict=True):
+        span = available * weight / total_weight
+        a0, a1 = angle, angle + span
+        angle = a1 + gap
+        mid = (a0 + a1) / 2
+        coverage = float(locus.get("coverage_pct") or 0)
+        identity = float(locus.get("identity_pct") or 0)
+        color = "var(--ok)" if coverage >= 95 else "var(--warn)" if coverage >= 80 else "var(--fail)"
+        name = str(locus.get("label") or locus.get("locus") or "PAI")
+        arcs.append(
+            f'<path d="{_arc_path(cx, cy, r_outer, a0, a1)}" fill="none"'
+            f' stroke="{color}" stroke-width="12" stroke-linecap="butt">'
+            f"<title>{html.escape(name)} · coverage {coverage:.1f}%</title></path>"
+        )
+        genes = [g for g in (locus.get("genes") or []) if isinstance(g, dict)]
+        total_genes += len(genes)
+        for index, gene in enumerate(genes):
+            ga = a0 + ((index + 0.5) / max(1, len(genes))) * span
+            x1, y1 = _polar(cx, cy, r_gene, ga)
+            x2, y2 = _polar(cx, cy, r_gene - 17, ga)
+            verdict = str(gene.get("verdict") or "absent")
+            tick_color = {
+                "present": "var(--ok)",
+                "partial": "var(--warn)",
+            }.get(verdict, "var(--fail)")
+            ticks.append(
+                f'<line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}"'
+                f' stroke="{tick_color}" stroke-width="2.2" stroke-linecap="round">'
+                f"<title>{html.escape(str(gene.get('gene_id', '')))} · {verdict}</title></line>"
+            )
+        lx, ly = _polar(cx, cy, r_outer + 26, mid)
+        labels.append(
+            f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="middle"'
+            ' font-size="11" fill="var(--text-2)">'
+            f"{html.escape(name)}</text>"
+        )
+        present = sum(1 for gene in genes if gene.get("verdict") == "present")
+        partial = sum(1 for gene in genes if gene.get("verdict") == "partial")
+        missing = max(0, len(genes) - present - partial)
+        table_rows.append(
+            "<tr>"
+            f"<td><strong>{html.escape(name)}</strong></td>"
+            f'<td class="mono">{coverage:.1f}%</td>'
+            f'<td class="mono">{identity:.1f}%</td>'
+            f'<td class="mono">{len(genes)}</td>'
+            f'<td class="mono">{present}</td>'
+            f'<td class="mono">{partial}</td>'
+            f'<td class="mono">{missing}</td>'
+            "</tr>"
+        )
+
+    svg = (
+        f'<svg class="pai-circos" viewBox="0 0 {size} {size}" role="img"'
+        f' aria-label="VPAI 位点结构环（{len(loci)} 个位点，{total_genes} 个基因）"'
+        ' style="width:100%;max-width:560px;height:auto;display:block;margin:0 auto">'
+        f'{"".join(arcs)}{"".join(ticks)}{"".join(labels)}'
+        f'<text x="{cx}" y="{cy - 4}" text-anchor="middle" font-size="20"'
+        ' font-weight="600" fill="var(--text-1)">VPAI</text>'
+        f'<text x="{cx}" y="{cy + 18}" text-anchor="middle" font-size="11"'
+        f' fill="var(--text-3)">{len(loci)} 个位点 · {total_genes} 个基因</text>'
+        "</svg>"
+    )
+    return (
+        "<h2>PAI 结构（VPAI）</h2>"
+        '<p class="muted" style="margin:0 0 10px;font-size:11px;">'
+        "外环为 PAI 位点（颜色=覆盖率），内圈刻度为基因存在性；弧长按基因数，"
+        "不代表染色体坐标。</p>"
+        + svg
+        + '<div class="pai-legend">'
+        '<span><i style="background:var(--ok)"></i>present</span>'
+        '<span><i style="background:var(--warn)"></i>partial</span>'
+        '<span><i style="background:var(--fail)"></i>absent</span>'
+        "</div>"
+        + "<h3>PAI 位点</h3>"
+        + "<table><tr><th>Locus</th><th>Coverage</th><th>Identity</th>"
+        "<th>Genes</th><th>Present</th><th>Partial</th><th>Missing</th></tr>"
+        + "".join(table_rows)
+        + "</table>"
+    )
+
+
+def _render_report_nav(sample_id: str, items: list[tuple[str, str]]) -> str:
+    links = "".join(
+        f'<a href="#{html.escape(anchor)}">{html.escape(label)}</a>'
+        for anchor, label in items
+    )
+    return (
+        '<aside class="report-nav" aria-label="报告目录">'
+        '<div class="report-nav__brand">bacmap <span>report</span></div>'
+        f'<div class="report-nav__sample mono">{html.escape(sample_id)}</div>'
+        f'<nav class="report-nav__links">{links}</nav>'
+        f'<a class="report-nav__back" href="/console/samples/{html.escape(sample_id)}">'
+        "← 返回控制台</a>"
+        "</aside>"
+    )
 
 
 def _render_annotation_section(summary: dict) -> str:
@@ -888,6 +1034,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     amr_section = _render_amr_section(card_genes)
     vf_section = _render_vf_section(vfdb_genes)
     plasmid_section = _render_plasmid_section(plasmid_genes)
+    pai_section = _render_pai_section(sample_id, summary)
     ann_meta = steps.get("annotation") if isinstance(steps.get("annotation"), dict) else {}
     ann_status = str(ann_meta.get("status") or "未运行") if ann_meta else "未运行"
     summary_strip = _stat_strip(
@@ -900,19 +1047,53 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     )
 
     assembly_block = (
-        f'<section class="card">{assembly_section}</section>'
+        f'<section class="card" id="assembly">{assembly_section}</section>'
         if assembly_section
         else ""
     )
     annotation_block = (
-        f'<section class="card">{annotation_section}</section>'
+        f'<section class="card" id="annotation">{annotation_section}</section>'
         if annotation_section
         else ""
     )
     nli_section = _render_nli_section(sample_id)
-    nli_block = f'<section class="card">{nli_section}</section>' if nli_section else ""
+    nli_block = (
+        f'<section class="card" id="interpretation">{nli_section}</section>'
+        if nli_section
+        else ""
+    )
     cgmlst_block = (
-        f'<section class="card">{cgmlst_section}</section>' if cgmlst_section else ""
+        f'<section class="card" id="cgmlst">{cgmlst_section}</section>'
+        if cgmlst_section
+        else ""
+    )
+    pai_block = (
+        f'<section class="card" id="pai">{pai_section}</section>' if pai_section else ""
+    )
+    toc_items: list[tuple[str, str]] = [
+        ("basic", "基本信息"),
+        ("verifier", "Verifier 校验"),
+    ]
+    if assembly_section:
+        toc_items.append(("assembly", "组装质控"))
+    if annotation_section:
+        toc_items.append(("annotation", "基因组注释"))
+    if amr_section:
+        toc_items.append(("amr", "耐药基因"))
+    if vf_section:
+        toc_items.append(("virulence", "毒力基因"))
+    if plasmid_section:
+        toc_items.append(("plasmid", "质粒"))
+    if pai_section:
+        toc_items.append(("pai", "PAI 结构"))
+    if cgmlst_section:
+        toc_items.append(("cgmlst", "cgMLST"))
+    if nli_section:
+        toc_items.append(("interpretation", "AI 解读"))
+    toc_items.append(("evidence", "证据链"))
+    report_nav = _render_report_nav(sample_id, toc_items)
+    toc_links = "".join(
+        f'<a href="#{anchor}">{label}</a>' for anchor, label in toc_items
     )
     status_label = (
         "ALL PASSED"
@@ -926,7 +1107,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="bacmap-report" content="10">
+<meta name="bacmap-report" content="12">
 <title>{sample_id} · 分析报告 · bacmap</title>
 <style>
   :root {{
@@ -1014,7 +1195,22 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
   }}
   code {{ padding: 1px 5px; }}
   pre {{ padding: 12px; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }}
-  .page {{ width: 100%; max-width: 1180px; margin: 0 auto; padding: 40px 24px 64px; }}
+  .page {{ width: 100%; max-width: none; margin: 0; padding: 0 0 48px; }}
+  .report-layout {{ display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; max-width: 1440px; margin: 0 auto; padding: 24px; }}
+  .report-nav {{ position: sticky; top: 24px; align-self: start; max-height: calc(100vh - 48px); overflow: auto; padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }}
+  .report-nav__brand {{ color: var(--text-1); font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }}
+  .report-nav__brand span {{ color: var(--text-3); font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; }}
+  .report-nav__sample {{ margin: 4px 0 12px; color: var(--text-3); font-size: 11px; overflow-wrap: anywhere; }}
+  .report-nav__links a {{ display: block; padding: 5px 8px; border-left: 2px solid transparent; color: var(--text-3); font-size: 12px; }}
+  .report-nav__links a:hover {{ background: var(--code-bg); color: var(--text-1); text-decoration: none; }}
+  .report-nav__back {{ display: block; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle); color: var(--link); font-size: 12px; }}
+  .report-toc {{ display: none; }}
+  section[id] {{ scroll-margin-top: 18px; }}
+  .pagehead__actions {{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }}
+  .pagehead__actions a {{ display: inline-flex; align-items: center; height: 28px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-2); font-size: 11.5px; }}
+  .pagehead__actions a:hover {{ border-color: var(--text-3); color: var(--text-1); text-decoration: none; }}
+  .pai-legend {{ display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 4px; color: var(--text-3); font-size: 11px; }}
+  .pai-legend i {{ display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 2px; vertical-align: middle; }}
   .pagehead {{ margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }}
   .eyebrow {{ color: var(--link); font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; }}
   h1 {{ margin: 8px 0 6px; color: var(--text-1); font-size: 28px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.2; }}
@@ -1138,8 +1334,17 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
   html[data-report-theme="gray"] .chart-card {{ border-color: rgba(10,10,10,.22); }}
   html[data-report-theme="gray"] .bar-track {{ border-radius: 0; background: #c9c9c2; }}
   html[data-report-theme="gray"] .bar-fill {{ border-radius: 0; background: #111; }}
+  @media (max-width: 1000px) {{
+    .report-layout {{ display: block; padding: 12px; }}
+    .report-nav {{ display: none; }}
+    .report-toc {{ display: block; position: sticky; top: 0; z-index: 5; margin-bottom: 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }}
+    .report-toc summary {{ cursor: pointer; color: var(--text-2); font-size: 12px; }}
+    .report-toc .report-nav__links {{ margin-top: 6px; }}
+  }}
   @media print {{
     body {{ background: #fff; color: #222; }}
+    .report-layout {{ display: block; padding: 0; }}
+    .report-nav, .report-toc {{ display: none; }}
     .card {{ background: #fff; border-color: #ddd; box-shadow: none; break-inside: avoid; }}
     .card h2, h1, h3 {{ color: #111; }}
     th {{ color: #555; }}
@@ -1149,7 +1354,13 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
 </style>
 </head>
 <body>
-<main class="page">
+<div class="report-layout">
+{report_nav}
+<main class="page" id="top">
+  <details class="report-toc">
+    <summary>目录 / TOC</summary>
+    <nav class="report-nav__links">{toc_links}</nav>
+  </details>
   <header class="pagehead">
     <div class="eyebrow">bacmap · 全基因组分析报告</div>
     <h1>{sample_id}</h1>
@@ -1160,11 +1371,15 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     </div>
     <span class="badge {status_class}">Verifier: {status_label}</span>
     {v_review}
+    <div class="pagehead__actions">
+      <a href="?download=1">下载 HTML</a>
+      <a href="/console/samples/{sample_id}">返回控制台</a>
+    </div>
   </header>
 
   {summary_strip}
 
-  <section class="card">
+  <section class="card" id="basic">
     <h2>基本信息</h2>
     <table>
       {_row("样本编号", sample_id)}
@@ -1179,7 +1394,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     </table>
   </section>
 
-  <section class="card">
+  <section class="card" id="verifier">
     <h2>Deterministic Verifier 校验</h2>
     <table>
       <tr><th>检查项</th><th>结果</th></tr>
@@ -1191,21 +1406,22 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
   {annotation_block}
   {nli_block}
 
-  <section class="card">
+  <section class="card" id="amr">
     {amr_section}
   </section>
 
-  <section class="card">
+  <section class="card" id="virulence">
     {vf_section}
   </section>
 
-  <section class="card">
+  <section class="card" id="plasmid">
     {plasmid_section}
   </section>
 
+  {pai_block}
   {cgmlst_block}
 
-  <section class="card evidence">
+  <section class="card evidence" id="evidence">
     <h2>三元证据链</h2>
     <p><strong>strain_id:</strong> <span class="mono">{sample_id}</span></p>
     <p><strong>pipeline_version:</strong> <span class="mono">{summary.get("pipeline_version", "salmonella-workflow-v0.1")}</span></p>
@@ -1213,6 +1429,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     <p><strong>database_versions:</strong> CARD, VFDB, PlasmidFinder, PubMLST salmonella_2</p>
   </section>
 </main>
+</div>
 </body></html>"""
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

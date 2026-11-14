@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import EmptyState from '../components/EmptyState.vue'
+import Pager from '../components/Pager.vue'
 import { api } from '../api'
 import type { RunRow } from '../types'
 import { fmtTime, shortId } from '../lib/format'
@@ -12,6 +13,9 @@ const runs = ref<RunRow[]>([])
 const loading = ref(true)
 const refreshing = ref(false)
 const error = ref('')
+const offset = ref(0)
+const limit = ref(50)
+const total = ref(0)
 
 function fmtDuration(started?: string | null, finished?: string | null): string {
   if (!started) return '—'
@@ -50,13 +54,26 @@ async function load(initial = false) {
   else refreshing.value = true
   error.value = ''
   try {
-    runs.value = await api.listRuns(100)
+    const page = await api.runsPage(offset.value, limit.value)
+    runs.value = page.items
+    total.value = page.total
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载运行记录失败'
   } finally {
     loading.value = false
     refreshing.value = false
   }
+}
+
+function changePage(value: number) {
+  offset.value = value
+  void load()
+}
+
+function changeLimit(value: number) {
+  limit.value = value
+  offset.value = 0
+  void load()
 }
 
 onMounted(() => void load(true))
@@ -140,6 +157,14 @@ onMounted(() => void load(true))
         title="还没有运行记录"
         hint="分析任务成功结束后，证据链记录会出现在这里。"
         icon="runs"
+      />
+      <Pager
+        :offset="offset"
+        :limit="limit"
+        :total="total"
+        :disabled="loading"
+        @update:offset="changePage"
+        @update:limit="changeLimit"
       />
     </section>
   </div>

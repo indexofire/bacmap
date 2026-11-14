@@ -1,8 +1,14 @@
 # bacmap 分析流程配置
 # 路径可通过环境变量覆盖: BACMAP_RESULTS_DIR, BACMAP_DATA_DIR
 
-# 分析线程数：12 核给管线，留 4 核给 Web/DSH/MCP（避免分析时 Web 卡死）
+# 分析线程数（= 每条规则的线程数）：12 核给管线，留 4 核给 Web/DSH/MCP。
 threads: 12
+# 并发总线程数（v1.10.27，可选）：缺省等于 threads（单任务串行）。
+# Bakta 的线程扩展性很差（12 线程→4 线程只慢 38%），批处理时把 cores 设为
+# threads 的 2–3 倍可"少线程、多并发"，实测吞吐提升约 1.5x，注释结果不变：
+#   threads: 4
+#   cores: 12
+# cores: 12
 iqtree_seed: 42
 # 运行记录（ADR-18）：seeds 覆盖/扩展固定种子；nondeterministic_steps 列出
 # 无法固定随机性、需在运行记录中标记的步骤名。留空即取默认。

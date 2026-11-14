@@ -15,6 +15,7 @@ import sqlite3
 import tempfile
 import zipfile
 from contextlib import closing
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -342,6 +343,105 @@ def results_migrate(args: argparse.Namespace) -> None:
     )
 
 
+def results_reindex(args: argparse.Namespace) -> None:
+    """从现有 final summary 回填菌株特征索引（v1.10.32，历史结果兼容）。
+
+    GOM 正常路径在 analyze 的 ingest 步骤写 ``strain_genotype_index``；旧版本/
+    未经过任务层的 summary 不会进入索引，Dashboard 因此少算。此命令按 summary
+    重建索引行（``object_id`` 留空、pipeline_version=summary 或 legacy），不创建
+    GOM 对象、不改原始结果。已存在的菌株默认跳过，``--force`` 覆盖。
+    """
+    from bacmap.store.strain_index import StrainGenotypeIndex, _extract_genotype
+
+    home = Path(args.home)
+    results = home / "results"
+    files = sorted(results.glob("*/report/*_summary.json"))
+    seen: set[str] = set()
+    candidates: list[tuple[str, Path, dict[str, Any]]] = []
+    for path in files:
+        sample = path.parent.parent.name
+        if path.name != f"{sample}_summary.json" or sample in seen:
+            continue
+        seen.add(sample)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict):
+            candidates.append((sample, path, data))
+
+    idx = StrainGenotypeIndex(home / "gom.sqlite")
+    inserted = skipped = failed = 0
+    try:
+        for sample, path, summary in candidates:
+            if not args.force and idx.get_profile(sample) is not None:
+                skipped += 1
+                continue
+            steps = summary.get("steps") if isinstance(summary.get("steps"), dict) else {}
+            species_block = steps.get("species") if isinstance(steps, dict) else {}
+            if isinstance(species_block, dict):
+                species = str(species_block.get("verdict") or species_block.get("species") or "")
+            else:
+                species = str(species_block or "")
+            payload = {
+                "species_verdict": species,
+                "serotype": steps.get("serotype", {}) if isinstance(steps, dict) else {},
+                "mlst": steps.get("mlst", "") if isinstance(steps, dict) else "",
+                "amr": steps.get("amr", {}) if isinstance(steps, dict) else {},
+                "plasmid": steps.get("plasmid", {}) if isinstance(steps, dict) else {},
+            }
+            try:
+                genotype = _extract_genotype(payload)
+                if args.dry_run:
+                    inserted += 1
+                    continue
+                idx.upsert(
+                    strain_id=sample,
+                    organism=species,
+                    species=genotype["species"],
+                    serotype=genotype["serotype"],
+                    serotype_method=genotype["serotype_method"],
+                    mlst_scheme=genotype["mlst_scheme"],
+                    mlst_st=genotype["mlst_st"],
+                    plasmid_types=genotype["plasmid_types"],
+                    amr_genes=genotype["amr_genes"],
+                    object_id="",
+                    analysis_date=(
+                        str(summary.get("created_at") or "")
+                        or datetime.fromtimestamp(
+                            path.stat().st_mtime, UTC
+                        ).isoformat()
+                    ),
+                    pipeline_version=str(summary.get("pipeline_version") or "legacy"),
+                )
+                inserted += 1
+            except (OSError, ValueError, sqlite3.Error):
+                failed += 1
+    finally:
+        idx.close()
+
+    result = {
+        "scanned": len(candidates),
+        "indexed": inserted,
+        "skipped_existing": skipped,
+        "failed": failed,
+        "dry_run": bool(args.dry_run),
+    }
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+    print(
+        T(
+            f"reindex: scanned {len(candidates)}, indexed {inserted}, "
+            f"skipped {skipped}, failed {failed}"
+            + (" (dry-run)" if args.dry_run else ""),
+            f"索引回填：扫描 {len(candidates)}，写入 {inserted}，"
+            f"跳过 {skipped}，失败 {failed}"
+            + ("（dry-run）" if args.dry_run else ""),
+        )
+    )
+
+
 def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     """运维命令：顶层平铺（兼容）+ ops 二级命令组（0.1.4，PLAN #17）。"""
     # ---- ops 二级命令组（统一入口）----
@@ -463,6 +563,23 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
         help=T("only list directories pending migration", "只列出待迁移目录"),
     )
     rm.set_defaults(func=results_migrate)
+
+    rr = rs.add_parser(
+        "reindex",
+        help=T(
+            "backfill strain_genotype_index from existing final summaries",
+            "从现有 final summary 回填菌株特征索引",
+        ),
+    )
+    add_home(rr)
+    add_json(rr)
+    rr.add_argument("--dry-run", action="store_true")
+    rr.add_argument(
+        "--force",
+        action="store_true",
+        help=T("overwrite existing index rows", "覆盖已存在的索引行"),
+    )
+    rr.set_defaults(func=results_reindex)
 
     e = sub.add_parser("events", help=T("domain events maintenance", "领域事件维护"))
     es = e.add_subparsers(dest="events_command", required=True)

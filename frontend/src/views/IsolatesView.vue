@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import EmptyState from '../components/EmptyState.vue'
+import Pager from '../components/Pager.vue'
 import { api } from '../api'
 import type { IsolateRow } from '../types'
 
@@ -10,6 +11,9 @@ const rows = ref<IsolateRow[]>([])
 const loading = ref(true)
 const error = ref('')
 const query = ref('')
+const offset = ref(0)
+const limit = ref(50)
+const total = ref(0)
 
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()
@@ -23,12 +27,25 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    rows.value = await api.listIsolates(2000)
+    const page = await api.isolatesPage(offset.value, limit.value)
+    rows.value = page.items
+    total.value = page.total
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载菌株失败'
   } finally {
     loading.value = false
   }
+}
+
+function changePage(value: number) {
+  offset.value = value
+  void load()
+}
+
+function changeLimit(value: number) {
+  limit.value = value
+  offset.value = 0
+  void load()
 }
 
 onMounted(() => void load())
@@ -105,6 +122,14 @@ onMounted(() => void load())
         hint="登记分析数据或导入样本关联后，菌株会出现在这里。"
       />
       <EmptyState v-else title="没有匹配的菌株" hint="换个关键词试试。" />
+      <Pager
+        :offset="offset"
+        :limit="limit"
+        :total="total"
+        :disabled="loading"
+        @update:offset="changePage"
+        @update:limit="changeLimit"
+      />
     </section>
   </div>
 </template>

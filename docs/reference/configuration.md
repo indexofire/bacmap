@@ -44,6 +44,9 @@ export BACMAP_CONFIG="$PWD/config.toml"
 | `BACMAP_REFS_DIR` | `$BACMAP_HOME/refs` | external DBs + manifest |
 | `BACMAP_ENV_LOCK` | `$BACMAP_HOME/pixi.lock` | env lock hashed into run records |
 | `BACMAP_WEB_URL` | `http://127.0.0.1:8800` | base for plan `confirm_url` |
+| `BACMAP_TASK_NOTIFIER` | `1` | `0` disables periodic task notifications |
+| `BACMAP_TASK_PROGRESS_INTERVAL_S` | `600` | periodic progress interval |
+| `BACMAP_NOTIFY_ALLOWED_HOSTS` | — | extra callback hosts (loopback always allowed) |
 | `BACMAP_MCP_TOKEN` | — | bearer token for MCP HTTP |
 | `BACMAP_WEB_TOKEN` | — | bearer token for Web/API |
 | `BACMAP_WEB_AUTH` | `bearer` | `bearer` or `cookie` |
@@ -297,6 +300,10 @@ bacmap start web --host 127.0.0.1 --port 8800
   CSRF on POST; after login the top bar shows the operator fingerprint and a logout button. The
   legacy `/login` page remains as a fallback/explanation page.
 - `BACMAP_WEB_URL` controls the plan `confirm_url` (default loopback).
+- `$BACMAP_HOME/web.env` (0600) can persist `BACMAP_WEB_TOKEN` and
+  `BACMAP_WEB_AUTH=cookie` across `bacmap restart`; existing environment variables win.
+
+Task notifications: the Web/MCP process runs a notifier that delivers `callback_url` POSTs and writes periodic progress every `BACMAP_TASK_PROGRESS_INTERVAL_S`. Callbacks are loopback-only unless `BACMAP_NOTIFY_ALLOWED_HOSTS` lists the agent host; disable the background notifier with `BACMAP_TASK_NOTIFIER=0`.
 
 ## 10. Sandbox
 

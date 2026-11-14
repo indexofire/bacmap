@@ -121,12 +121,16 @@ class SpecimenService:
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def list(self, limit: int = 200) -> list[dict[str, Any]]:
+    def list(self, limit: int = 200, offset: int = 0) -> list[dict[str, Any]]:
         rows = self._conn.execute(
             "SELECT s.*,"
             " (SELECT COUNT(*) FROM isolates i WHERE i.specimen_id = s.specimen_id)"
             " AS n_isolates"
-            " FROM specimens s ORDER BY s.specimen_id LIMIT ?",
-            (max(1, limit),),
+            " FROM specimens s ORDER BY s.specimen_id LIMIT ? OFFSET ?",
+            (max(1, limit), max(0, offset)),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def count(self) -> int:
+        row = self._conn.execute("SELECT COUNT(*) FROM specimens").fetchone()
+        return int(row[0]) if row else 0

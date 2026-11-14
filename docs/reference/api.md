@@ -33,6 +33,8 @@ Origin: http://127.0.0.1:8800
 
 | Method | Path | Purpose |
 |---|---|---|
+List endpoints accept `offset`/`limit` and return `{items, total, offset, limit}`; `/samples` keeps cursor mode for compatibility while the console uses offset.
+
 | GET | `/api/v1/capabilities` | API version, bacmap version, plannable types, features |
 | GET | `/api/v1/auth/status` | auth mode, login state and operator fingerprint (public) |
 | POST | `/api/v1/auth/login` | exchange the deployment token for a signed session cookie (public; cookie mode only) |
@@ -61,7 +63,7 @@ Origin: http://127.0.0.1:8800
 | GET | `/api/v1/plans/{id}?version=` | plan detail |
 | POST | `/api/v1/plans/{id}/confirm` | confirm + submit |
 | POST | `/api/v1/plans/{id}/reject` | reject |
-| GET | `/api/v1/events?after=&limit=&task_id=&plan_id=` | event poll |
+| GET | `/api/v1/events?after=&limit=&task_id=&plan_id=` | event poll (`last_seq` page cursor + `max_seq` for SSE start) |
 | GET | `/api/v1/events/stream?after=&timeout=` | SSE stream (resumes from `Last-Event-ID`) |
 | GET | `/api/v1/runs?limit=` | run records |
 | GET | `/api/v1/runs/{id}` | run detail + gvixb views |

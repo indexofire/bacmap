@@ -359,15 +359,40 @@ def _daemonize(log_path: Path, pid_path: Path) -> int:
     return write_fd
 
 
+def _load_web_env(home: Path) -> None:
+    """加载 ``$BACMAP_HOME/web.env``（简单 KEY=VALUE）到环境，供 start/restart 复用。
+
+    部署侧把 ``BACMAP_WEB_TOKEN`` / ``BACMAP_WEB_AUTH=cookie`` 写在这里（0600），
+    避免每次重启都要手工 export；已存在的环境变量优先（不覆盖）。
+    """
+    path = home / "web.env"
+    if not path.is_file():
+        return
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for line in lines:
+        text = line.strip()
+        if not text or text.startswith("#") or "=" not in text:
+            continue
+        key, _, value = text.partition("=")
+        key = key.strip()
+        if key.startswith("BACMAP_WEB_") and value:
+            os.environ.setdefault(key, value.strip().strip('"').strip("'"))
+
+
 def _run_web(args: argparse.Namespace) -> None:
     import uvicorn
 
     from bacmap.interfaces.web.app import create_app
     from bacmap.interfaces.web.auth import require_auth_when_exposed
 
+    home = Path(args.home or BACMAP_HOME)
+    _load_web_env(home)
+
     ready_fd: int | None = None
     if getattr(args, "daemon", False):
-        home = Path(args.home or BACMAP_HOME)
         pid_path = home / "web.pid"
         log_path = home / "web.log"
         old_pid = _read_pidfile(pid_path) if pid_path.exists() else None

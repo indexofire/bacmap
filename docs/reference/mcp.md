@@ -56,7 +56,7 @@ plannable types.
   "max_data_class": "D1",
   "plannable_task_types": ["analyze", "curate", "mine", "write", "research"],
   "recommended_write_path": "bacmap_create_plan -> user confirms in bacmap CLI/Web -> bacmap_get_plan -> bacmap_task_status",
-  "long_running": "explicit task handles (bacmap_task_status polling)",
+  "long_running": "explicit task handles; callback_url or bacmap_task_notifications long-poll",
   "tasks_extension": "unsupported_by_sdk"
 }
 ```
@@ -94,10 +94,12 @@ Rules:
 
 | Tool | Arguments | Notes |
 |---|---|---|
-| `bacmap_submit_task` | `task_type` (`analyze`/`curate`), `samples?`, `scope?` | compatibility direct submission; no `submitted_by` (server decides) |
+| `bacmap_submit_task` | `task_type` (`analyze`/`curate`), `samples?`, `scope?`, `callback_url?` | compatibility direct submission; optional loopback callback for step/progress/finished POSTs |
 | `bacmap_task_status` | `task_id` | state, step, message (redacted under cloud), failure block |
 | `bacmap_task_result` | `task_id` | `finished`, `run_id`, gates/counts |
 | `bacmap_task_cancel` | `task_id` | only tasks this client submitted or its own plan |
+| `bacmap_task_watch` | `task_id`, `callback_url` | register a callback for an existing task (same ownership rule) |
+| `bacmap_task_notifications` | `after?`, `task_id?`, `plan_id?`, `wait_seconds?` | durable outbox poll; `wait_seconds` 0–30 long-polls for the next event |
 
 ```json
 // bacmap_task_status → (cloud, failed)
@@ -114,6 +116,18 @@ Rules:
   }
 }
 ```
+
+`bacmap_create_plan` also accepts `callback_url`; the watch follows the plan and covers every
+task it submits. Callbacks receive JSON with D1 metadata only — `task_id`, `kind`
+(`submitted|step|progress|finished`), `state`, `step`, `progress_pct`, `seq`, `plan_id`; the
+task message is deliberately omitted (it may contain sample IDs/paths, D2). Use
+`bacmap_task_status`/`bacmap_task_result` for details.
+
+Callback hosts are restricted to loopback by default; set `BACMAP_NOTIFY_ALLOWED_HOSTS` for a
+local-network agent endpoint. Periodic progress is emitted every
+`BACMAP_TASK_PROGRESS_INTERVAL_S` (default 600 s) and is an estimate from the stage plus the
+median duration of previous tasks of the same type; `estimated=false` means only the stage floor
+is known.
 
 ### 3.4 Records (`local-trusted` only)
 

@@ -5,6 +5,67 @@
 
 ## [Unreleased]
 
+### 历史结果索引回填（v1.10.32）
+
+- 新增 `bacmap results reindex [--dry-run] [--force] [--json]`：扫描现有 final summary，
+  回填 `strain_genotype_index`（Dashboard 物种/型别面板的数据源）。
+- 适用于旧版本或未经过 analyze `ingest_and_gates` 的历史结果；不创建 GOM 对象、不改原始
+  结果，已存在菌株默认跳过。
+- 实测本机：扫描 152 个 final summary，写入 131 行；VPA 从 2 条恢复到 132 条。
+- 测试：新增回填/跳过/force/dry-run 测试。
+
+
+### 数据列表统一分页（v1.10.31）
+
+- **API**：`/tasks`、`/samples`（新增 offset 模式）、`/runs`、`/gom/objects`、`/specimens`、
+  `/isolates`、`/search`、`/search/identity`（样本/菌株各自分页）、`/records` 统一接受 `offset`/`limit`，返回
+  `{items, total, offset, limit}`；`/tasks` 增加 `task_type` 过滤。
+- **Web**：新增共用 `Pager`（每页条数、第 x/y 页、总数、首/末页）；任务、测序数据、运行记录、
+  GOM、样本、菌株、数据记录、检索结果全部接入。
+- **数据记录页**：从“最近 10 条 record 任务”改为分页列出全部 record 任务（新增
+  `GET /api/v1/records`）。
+- **兼容**：`/samples` 保留原 cursor 模式；CLI 现有 `--limit/--offset` 不变。
+- 测试：新增任务/样本/检索分页契约与各列表页响应形状测试。
+
+
+### 智能体任务反馈：终态/失败/周期进度（v1.10.30）
+
+- **持久 outbox**：`tasks.sqlite` 迁移 4 新增 `task_notifications` / `task_watches`；任务提交、
+  每个 step、周期进度与终态都写入通知（D1 元数据，不含可能含样本 ID/路径的 message）。
+- **MCP 回调**：`bacmap_submit_task` / `bacmap_create_plan` 接受 `callback_url`，另有
+  `bacmap_task_watch`；回调在 step/终态/周期进度时 POST。默认仅 loopback，局域网端点用
+  `BACMAP_NOTIFY_ALLOWED_HOSTS` 放行。
+- **MCP 轮询/长轮询**：`bacmap_task_notifications(after, task_id|plan_id, wait_seconds≤30)`，
+  返回持久 outbox 事件与游标，适配不支持回调的 Harness。
+- **进度**：`TaskStatus` 增加 `stage/progress_pct/elapsed_seconds/eta_seconds/estimated`；
+  按阶段下限 + 同类型历史成功任务中位耗时估算，无历史只报阶段，不伪造百分比。
+- **周期通知器**：Web/MCP 进程内后台线程每 5 秒投递回调，每 600 秒（可配置）生成一次
+  进度通知；`BACMAP_TASK_NOTIFIER=0` 关闭。
+- **Web**：控制台通过 SSE 监听终态，任务完成/失败/取消时弹 toast（此前无任何提示）。
+- 测试：新增 outbox/回调投递/进度估算/回调白名单与 MCP 工具测试。
+
+
+### 修复：组装质控 GC 百分比被重复乘 100（v1.10.29）
+
+- `seqkit fx2tab -g` 输出已是百分数（如 `45.38`），`assembly_qc.from_seqkit_tsv`
+  又乘了 100，导致概览/报告显示 `4500%+`、GC 分箱全部落入 `≥60%`。
+- 已改为直接使用百分数；`views`/`report` 对旧 summary 中越界的 `gc_mean` 自动回退
+  到 assembly TSV/FASTA 重算（28 个历史 summary 无需重跑分析）。
+- 报告模板标记 `11 → 12`，已生成的报告首次访问自动重渲染。
+- 测试：新增 seqkit 百分数回归与 `is_usable` 校验。
+
+
+### 完整报告：独立页 + 目录导航 + VPAI 环图（v1.10.29）
+
+- **独立页面**：完整报告不再以 iframe 嵌入控制台；样本页“查看报告”在新标签页打开，
+  报告自带固定目录导航（窄屏折叠）、锚点书签、下载与“返回控制台”入口。
+- **模板标记 10 → 11**：旧报告首次访问自动重渲染，应用新导航与新图表。
+- **VPAI 环状图**：副溶血弧菌报告新增内联 SVG 环图——位点弧按覆盖率着色、内圈基因为
+  present/partial/absent 刻度，附位点表；数据来自 `gspec/vpa_pai_screen.json`，
+  不依赖脚本，符合报告 sandbox CSP。
+- 测试：新增报告导航锚点与 PAI 环图测试；报告直链改为 200（独立页）。
+
+
 ### Dashboard 细节 + 参考基因组供给（v1.10.28）
 
 - **物种与型别分布**：圆角物种胶囊改为**单一面板 + 物种 tab**（直角、tab 下划线选中态），

@@ -85,6 +85,34 @@ CREATE TABLE events (
 )
 """
 
+
+# 版本 4（v1.10.30）：任务通知 outbox + 回调 watch（智能体完成/失败/进度反馈）。
+TASK_NOTIFICATIONS_DDL = """
+CREATE TABLE task_notifications (
+    seq          INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id      TEXT NOT NULL,
+    kind         TEXT NOT NULL,
+    state        TEXT NOT NULL DEFAULT '',
+    step         TEXT NOT NULL DEFAULT '',
+    progress_pct INTEGER,
+    created_at   TEXT NOT NULL,
+    payload_json TEXT NOT NULL DEFAULT '{}'
+)
+"""
+
+TASK_WATCHES_DDL = """
+CREATE TABLE task_watches (
+    watch_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope        TEXT NOT NULL,
+    target_id    TEXT NOT NULL,
+    callback_url TEXT NOT NULL,
+    created_at   TEXT NOT NULL,
+    last_seq     INTEGER NOT NULL DEFAULT 0,
+    last_error   TEXT NOT NULL DEFAULT '',
+    updated_at   TEXT NOT NULL
+)
+"""
+
 TASKS_MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "baseline: tasks + approvals", (TASKS_DDL, APPROVALS_DDL)),
     Migration(
@@ -99,6 +127,18 @@ TASKS_MIGRATIONS: tuple[Migration, ...] = (
             EVENTS_DDL,
             "CREATE INDEX idx_events_task ON events (task_id, seq)",
             "CREATE INDEX idx_events_plan ON events (plan_id, seq)",
+        ),
+    ),
+    Migration(
+        4,
+        "task notifications + callback watches",
+        (
+            TASK_NOTIFICATIONS_DDL,
+            TASK_WATCHES_DDL,
+            "CREATE INDEX idx_task_notifications_task"
+            " ON task_notifications (task_id, seq)",
+            "CREATE INDEX idx_task_watches_target"
+            " ON task_watches (scope, target_id)",
         ),
     ),
 )
@@ -128,6 +168,12 @@ class TaskStatus(BaseModel):
     state: TaskState
     current_step: str | None = None
     message: str | None = None
+    # v1.10.30：阶段/进度/ETA（estimated=True 表示按同类型历史中位耗时估算）
+    stage: str | None = None
+    progress_pct: int | None = None
+    elapsed_seconds: int | None = None
+    eta_seconds: int | None = None
+    estimated: bool = False
 
 
 class Approval(BaseModel):

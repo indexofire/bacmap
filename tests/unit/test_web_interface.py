@@ -128,13 +128,14 @@ class TestResultsPages:
         assert r.status_code == 307
         assert r.headers["location"] == "/console/samples/SAM-001"
 
-    def test_report_deep_link_redirects_to_console_tab(self, client):
+    def test_report_is_a_standalone_page(self, client):
+        """v1.10.29：报告独立成页（自带目录/返回控制台），不再 307 回控制台 iframe。"""
         c, home = client
         rep = home / "results" / "SAM-001" / "report" / "SAM-001_report.html"
         rep.write_text("<html><body>ok</body></html>", encoding="utf-8")
         r = c.get("/samples/SAM-001/report", follow_redirects=False)
-        assert r.status_code == 307
-        assert r.headers["location"] == "/console/samples/SAM-001?tab=report"
+        assert r.status_code == 200
+        assert "inline" in r.headers.get("content-disposition", "").lower()
 
     def test_report_light_theme_injected(self, client):
         c, home = client
@@ -450,7 +451,7 @@ class TestSampleReportDelivery:
         def fake_generate(args: dict[str, object]) -> str:
             calls.append(args)
             html.write_text(
-                '<html><head><meta name="bacmap-report" content="10"></head>'
+                '<html><head><meta name="bacmap-report" content="12"></head>'
                 "<body>new theme</body></html>",
                 encoding="utf-8",
             )

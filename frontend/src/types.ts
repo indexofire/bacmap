@@ -7,6 +7,13 @@ export type TaskState =
   | 'failed'
   | 'cancelled'
 
+export interface Page<T> {
+  items: T[]
+  total: number
+  offset: number
+  limit: number
+}
+
 export interface AuthStatus {
   enabled: boolean
   mode: 'cookie' | 'bearer' | 'disabled'

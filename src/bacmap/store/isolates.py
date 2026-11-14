@@ -107,8 +107,13 @@ class IsolateService:
         ).fetchone()
         return dict(row) if row else None
 
-    def list(self) -> list[dict[str, Any]]:
+    def list(self, limit: int = 500, offset: int = 0) -> list[dict[str, Any]]:
         rows = self._conn.execute(
-            "SELECT * FROM isolates ORDER BY isolate_id"
+            "SELECT * FROM isolates ORDER BY isolate_id LIMIT ? OFFSET ?",
+            (max(1, limit), max(0, offset)),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def count(self) -> int:
+        row = self._conn.execute("SELECT COUNT(*) FROM isolates").fetchone()
+        return int(row[0]) if row else 0

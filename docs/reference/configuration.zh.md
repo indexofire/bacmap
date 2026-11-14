@@ -45,6 +45,9 @@ export BACMAP_CONFIG="$PWD/config.toml"
 | `BACMAP_REFS_DIR` | `$BACMAP_HOME/refs` | 外部数据库 + manifest |
 | `BACMAP_ENV_LOCK` | `$BACMAP_HOME/pixi.lock` | 计入运行记录的环境锁 |
 | `BACMAP_WEB_URL` | `http://127.0.0.1:8800` | 计划 `confirm_url` 的基地址 |
+| `BACMAP_TASK_NOTIFIER` | `1` | `0` 关闭周期任务通知 |
+| `BACMAP_TASK_PROGRESS_INTERVAL_S` | `600` | 周期进度间隔（秒） |
+| `BACMAP_NOTIFY_ALLOWED_HOSTS` | — | 额外允许的回调主机（loopback 始终允许） |
 | `BACMAP_MCP_TOKEN` | — | MCP HTTP 的 bearer token |
 | `BACMAP_WEB_TOKEN` | — | Web/API 的 bearer token |
 | `BACMAP_WEB_AUTH` | `bearer` | `bearer` 或 `cookie` |
@@ -294,6 +297,10 @@ bacmap start web --host 127.0.0.1 --port 8800
 - Cookie 模式增加控制台登录页 `/console/login`（Vue）、签名的 `HttpOnly` 会话，以及 POST 的 CSRF；
   登录后顶栏显示操作员令牌指纹与登出按钮。旧 `/login` 页面保留为兼容/说明页。
 - `BACMAP_WEB_URL` 控制计划的 `confirm_url`（默认回环）。
+- `$BACMAP_HOME/web.env`（0600）可持久化 `BACMAP_WEB_TOKEN` 与
+  `BACMAP_WEB_AUTH=cookie`，`bacmap restart` 自动加载；已存在的环境变量优先。
+
+任务通知：Web/MCP 进程内的通知器负责投递 `callback_url` POST，并按 `BACMAP_TASK_PROGRESS_INTERVAL_S` 写入周期进度。回调默认只允许 loopback；局域网智能体需在 `BACMAP_NOTIFY_ALLOWED_HOSTS` 列出主机。`BACMAP_TASK_NOTIFIER=0` 可关闭后台通知器。
 
 ## 10. 沙箱
 

@@ -33,8 +33,12 @@ from bacmap.interfaces.gvixb import (
 from bacmap.interfaces.stats_summary import gather_stats
 from bacmap.interfaces.views import (
     compare_run_records,
+    count_gom_objects,
+    count_isolates,
+    count_runs,
+    count_samples,
+    count_specimens,
     gom_object,
-    identity_search,
     isolate_detail,
     isolate_rows,
     list_gom_objects,
@@ -44,7 +48,7 @@ from bacmap.interfaces.views import (
     sample_detail,
     sample_page,
     sample_rows,
-    search_rows,
+    search_page,
     specimen_detail,
     specimen_rows,
 )
@@ -290,9 +294,27 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         }
 
     @router.get("/samples")
-    def list_samples(cursor: str | None = None, limit: int = 50) -> dict[str, Any]:
+    def list_samples(
+        cursor: str | None = None, limit: int = 50, offset: int | None = None
+    ) -> dict[str, Any]:
+        total = count_samples(engine.home)
+        if offset is not None:
+            rows = sample_rows(engine)
+            start = max(0, offset)
+            return {
+                "items": rows[start : start + _limit(limit, 500)],
+                "next_cursor": None,
+                "total": total,
+                "offset": start,
+                "limit": _limit(limit, 500),
+            }
         items, next_cursor = sample_page(engine.home, cursor, _limit(limit))
-        return {"items": items, "next_cursor": next_cursor}
+        return {
+            "items": items,
+            "next_cursor": next_cursor,
+            "total": total,
+            "limit": _limit(limit),
+        }
 
     @router.get("/samples/{sample_id}")
     def get_sample(sample_id: str) -> dict[str, Any]:
@@ -316,15 +338,39 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         serotype: str = "",
         mlst_st: str = "",
         amr_gene: str = "",
+        offset: int = 0,
+        limit: int = 50,
     ) -> dict[str, Any]:
-        rows = search_rows(sample_rows(engine), q, serotype, mlst_st, amr_gene)
-        return {"items": rows}
+        items, total = search_page(
+            sample_rows(engine),
+            query=q,
+            serotype=serotype,
+            mlst_st=mlst_st,
+            amr_gene=amr_gene,
+            offset=offset,
+            limit=_limit(limit, 500),
+        )
+        return {
+            "items": items,
+            "total": total,
+            "offset": max(0, offset),
+            "limit": _limit(limit, 500),
+        }
 
 
 def _task_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa: C901 — 路由族内聚；拆分收益低于可读性损失
     @router.get("/tasks")
-    def list_tasks(limit: int = 50) -> dict[str, Any]:
-        return {"items": engine.list_tasks(_limit(limit))}
+    def list_tasks(
+        limit: int = 50, offset: int = 0, task_type: str = ""
+    ) -> dict[str, Any]:
+        return {
+            "items": engine.list_tasks(
+                _limit(limit, 500), offset=offset, task_type=task_type
+            ),
+            "total": engine.count_tasks(task_type=task_type),
+            "offset": max(0, offset),
+            "limit": _limit(limit, 500),
+        }
 
     @router.post("/tasks")
     def create_task(request: Request, body: TaskSubmitBody) -> dict[str, Any]:
@@ -395,6 +441,18 @@ def _task_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa: C9
 
 def _record_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
     """记录类任务（metadata/lab/knowledge）的 JSON 入口。"""
+
+    @router.get("/records")
+    def list_records(limit: int = 50, offset: int = 0) -> dict[str, Any]:
+        """记录任务列表（数据记录页分页；任务层只读视图）。"""
+        return {
+            "items": engine.list_tasks(
+                _limit(limit, 500), offset=offset, task_type="record"
+            ),
+            "total": engine.count_tasks(task_type="record"),
+            "offset": max(0, offset),
+            "limit": _limit(limit, 500),
+        }
 
     @router.post("/records/{kind}")
     def create_record(request: Request, kind: str, body: RecordBody) -> dict[str, Any]:
@@ -470,6 +528,8 @@ def _event_routes(router: APIRouter, engine: DbosTaskEngine, events: EventLog) -
         return {
             "events": [e.model_dump(mode="json") for e in items],
             "last_seq": items[-1].seq if items else after,
+            # v1.10.30：SSE 起点必须是最新 seq，否则会重放全部历史事件。
+            "max_seq": events.last_seq(),
         }
 
     @router.get("/events/stream")
@@ -507,8 +567,13 @@ def _identity_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
     """
 
     @router.get("/specimens")
-    def specimens(limit: int = 200) -> dict[str, Any]:
-        return {"items": specimen_rows(engine.home, _limit(limit, 500))}
+    def specimens(limit: int = 200, offset: int = 0) -> dict[str, Any]:
+        return {
+            "items": specimen_rows(engine.home, _limit(limit, 500), offset),
+            "total": count_specimens(engine.home),
+            "offset": max(0, offset),
+            "limit": _limit(limit, 500),
+        }
 
     @router.get("/specimens/{specimen_id}")
     def specimen(specimen_id: str) -> dict[str, Any]:
@@ -518,8 +583,13 @@ def _identity_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         return data
 
     @router.get("/isolates")
-    def isolates(limit: int = 500) -> dict[str, Any]:
-        return {"items": isolate_rows(engine.home, _limit(limit, 2000))}
+    def isolates(limit: int = 500, offset: int = 0) -> dict[str, Any]:
+        return {
+            "items": isolate_rows(engine.home, _limit(limit, 2000), offset),
+            "total": count_isolates(engine.home),
+            "offset": max(0, offset),
+            "limit": _limit(limit, 2000),
+        }
 
     @router.get("/isolates/{isolate_id}")
     def isolate(isolate_id: str) -> dict[str, Any]:
@@ -584,17 +654,37 @@ def _identity_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         }
 
     @router.get("/search/identity")
-    def identity_search_route(q: str = "", limit: int = 200) -> dict[str, Any]:
-        """统一检索：样本与菌株（测序数据仍用 /search 的结构化过滤）。"""
-        return identity_search(engine.home, q, _limit(limit, 500))
+    def identity_search_route(
+        q: str = "",
+        specimen_offset: int = 0,
+        specimen_limit: int = 50,
+        isolate_offset: int = 0,
+        isolate_limit: int = 50,
+    ) -> dict[str, Any]:
+        """统一检索：样本与菌株分页（测序数据仍用 /search 的结构化过滤）。"""
+        from bacmap.interfaces.views import identity_page
+
+        return identity_page(
+            engine.home,
+            q,
+            specimen_offset=specimen_offset,
+            specimen_limit=_limit(specimen_limit, 500),
+            isolate_offset=isolate_offset,
+            isolate_limit=_limit(isolate_limit, 500),
+        )
 
 
 def _evidence_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
     """运行记录与 GOM 的只读接口（v1.7.1，ADR-18/13）。"""
 
     @router.get("/runs")
-    def runs(limit: int = 20) -> dict[str, Any]:
-        return {"items": list_runs(engine.home, _limit(limit))}
+    def runs(limit: int = 20, offset: int = 0) -> dict[str, Any]:
+        return {
+            "items": list_runs(engine.home, _limit(limit), offset),
+            "total": count_runs(engine.home),
+            "offset": max(0, offset),
+            "limit": _limit(limit),
+        }
 
     @router.get("/runs/{run_id}")
     def run(run_id: str) -> dict[str, Any]:
@@ -613,8 +703,17 @@ def _evidence_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         return data
 
     @router.get("/gom/objects")
-    def gom_objects(type: str | None = None, limit: int = 100) -> dict[str, Any]:
-        return {"items": list_gom_objects(engine.home, type, _limit(limit, 500))}
+    def gom_objects(
+        type: str | None = None, limit: int = 100, offset: int = 0
+    ) -> dict[str, Any]:
+        return {
+            "items": list_gom_objects(
+                engine.home, type, _limit(limit, 500), offset
+            ),
+            "total": count_gom_objects(engine.home, type),
+            "offset": max(0, offset),
+            "limit": _limit(limit, 500),
+        }
 
     @router.get("/gom/objects/{object_id}")
     def gom_one(object_id: str, version: int | None = None) -> dict[str, Any]:

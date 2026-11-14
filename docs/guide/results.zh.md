@@ -65,7 +65,12 @@ ls "$BACMAP_HOME/results/runs/<task_id>/SAM-TYP-001/report/"
 /samples/SAM-TYP-001/report?download=1 # attachment
 ```
 
-报告是自包含的（内联样式，无外部请求），因此可以归档并离线查看。PDF 生成是可选项，需要本地转换器。
+报告是自包含的（内联样式，无外部请求），因此可以归档并离线查看。报告以**独立页面**打开，
+自带固定目录导航、锚点书签（窄屏为可折叠目录）与“返回控制台”入口，不再嵌入 iframe。
+PDF 生成是可选项，需要本地转换器。
+
+除组装质控图外，副溶血弧菌报告还包含 **VPAI 环状结构图**（位点弧按覆盖率着色、内圈为
+基因 present/partial/absent 刻度，并附位点表），由 `gspec/vpa_pai_screen.json` 生成内联 SVG。
 
 抗原式按物种渲染：沙门菌为 O:H1:H2，副溶血弧菌为 O:K 并使用 OL/KL 位点
 （如 `OL10:KL4`），大肠埃希菌为 O:H；没有抗原分型方案的物种（如李斯特菌只有血清群、
@@ -79,6 +84,9 @@ contig 数与长度占比），原始 QUAST 表折叠保留供溯源。另有逐
 Nx 曲线**（数据来自 `seqkit fx2tab -n -l -g` 写入 `assembly/contig_stats.tsv`；报告以纯 SVG/CSS
 渲染，控制台概览用交互图表）。旧运行没有 `contig_stats.tsv` 时，报告/概览只读回退到 assembly
 FASTA，重新分析则写入完整统计。模板升级后报告会在首次访问时自动重渲染（`bacmap-report` 版本标记）。
+
+Dashboard 的物种/型别面板读取 `strain_genotype_index`，只在 analyze 任务完成
+`ingest_and_gates` 时更新；未经过该路径的历史结果可用 `bacmap results reindex` 回填。
 
 summary JSON 现在包含 `steps.assembly_quast`（QUAST 转置报告）、`steps.assembly_contig_stats`（seqkit 派生的 Nx 曲线与长度/GC 分箱）与 `steps.annotation`
 （`status`、`total_CDS`、`annotated_CDS`、`annotation_rate`、`bakta` 计数、
