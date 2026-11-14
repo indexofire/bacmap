@@ -74,8 +74,8 @@ function displayOrDash(value: string): string {
   <div>
     <div class="pagehead">
       <div>
-        <h1 class="pagehead__title">样本结果</h1>
-        <p class="pagehead__sub">已完成分析的样本；点击样本号查看结果详情与 HTML 报告。</p>
+        <h1 class="pagehead__title">测序数据结果</h1>
+        <p class="pagehead__sub">已完成分析的测序数据（library）；点击编号查看结果详情与 HTML 报告。</p>
       </div>
       <div class="pagehead__actions">
         <button class="btn btn--ghost" type="button" :disabled="loading" @click="load">
@@ -91,7 +91,7 @@ function displayOrDash(value: string): string {
       <div class="filters">
         <label class="search-mini">
           <Icon name="search" />
-          <input v-model="query" type="search" placeholder="搜索样本 / 物种 / ST / 基因…" />
+          <input v-model="query" type="search" placeholder="搜索测序数据 / 物种 / ST / 基因…" />
         </label>
         <span class="filter-spacer" />
         <span class="card__hint">{{ filtered.length }} / {{ rows.length }} 株</span>
@@ -103,7 +103,7 @@ function displayOrDash(value: string): string {
         <table class="table">
           <thead>
             <tr>
-              <th scope="col">样本</th>
+              <th scope="col">测序数据</th>
               <th scope="col">物种</th>
               <th scope="col">MLST</th>
               <th scope="col">血清型</th>
@@ -119,7 +119,7 @@ function displayOrDash(value: string): string {
               class="row-click"
               @click="goRow($event, `/samples/${row.sample_id}`)"
             >
-              <td data-label="样本">
+              <td data-label="测序数据">
                 <RouterLink class="link-cell" :to="`/samples/${row.sample_id}`">
                   {{ row.sample_id }}
                 </RouterLink>

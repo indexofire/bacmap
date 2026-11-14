@@ -64,6 +64,7 @@ def report_inputs(
     files: dict[str, str] = {
         "assembly_stats": f"{base}/assembly/assembly_stats.tsv",
         "quast": f"{base}/assembly/quast/transposed_report.tsv",
+        "contig_stats": f"{base}/assembly/contig_stats.tsv",
         "species_id": f"{base}/species/species_id.json",
         "mlst": f"{base}/typing/mlst.json",
         # v1.10.19：gspec screen 以 JSON 为主输出（保留 provenance），

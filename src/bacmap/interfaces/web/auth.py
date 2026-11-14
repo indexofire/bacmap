@@ -33,6 +33,13 @@ CSRF_COOKIE = "bacmap_csrf"
 SESSION_TTL_S = 12 * 3600
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
+# 控制台登录页（Vue SPA 路由）：未登录的浏览器导航 303 到这里；登录/状态接口
+# 必须免鉴权，否则登录页自身拿不到状态（v1.10.28）。
+LOGIN_PATH = "/console/login"
+PUBLIC_PATHS = frozenset(
+    {"/login", LOGIN_PATH, "/api/v1/auth/status", "/api/v1/auth/login"}
+)
+
 # 回环绑定（文档化的免鉴权单机形态；ADR-16 默认只绑本机）
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"})
 _WILDCARD_BINDS = frozenset({"", "0.0.0.0", "::"})  # noqa: S104 — 仅用于识别通配绑定
@@ -173,6 +180,23 @@ class WebAuthConfig:
         }
 
 
+def request_authenticated(request: Request, cfg: WebAuthConfig) -> bool:
+    """请求是否已通过鉴权（Bearer 头或 cookie 会话）。供 API 状态接口复用。"""
+    header = request.headers.get("authorization", "")
+    if header and cfg.bearer_ok(header):
+        return True
+    if cfg.mode == "cookie":
+        return cfg.cookie_ok(request.cookies.get(SESSION_COOKIE, ""))
+    return False
+
+
+def operator_label(cfg: WebAuthConfig) -> str:
+    """单令牌部署的操作员标识：令牌指纹（不泄露令牌本体）。"""
+    if not cfg.token:
+        return ""
+    return "operator-" + sha256(cfg.token.encode()).hexdigest()[:8]
+
+
 def _headers(scope: dict[str, Any]) -> dict[str, str]:
     out: dict[str, str] = {}
     for key, value in scope.get("headers", []):
@@ -233,7 +257,11 @@ class WebAuthMiddleware:
             await self._app(scope, receive, send)
             return
         path = scope.get("path", "")
-        if path == "/login" or path.startswith("/static/"):
+        if (
+            path in PUBLIC_PATHS
+            or path.startswith("/static/")
+            or path.startswith("/console/assets/")
+        ):
             await self._app(scope, receive, send)
             return
         if self._authenticated(scope):
@@ -248,7 +276,7 @@ class WebAuthMiddleware:
             and self._accepts_html(scope)
             and self._cfg.mode == "cookie"
         ):
-            location = "/login?next=" + quote(path, safe="/")
+            location = LOGIN_PATH + "?next=" + quote(path, safe="/")
             await send(
                 {
                     "type": "http.response.start",

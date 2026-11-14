@@ -166,6 +166,28 @@ bacmap record knowledge-approve <entry_id>
 
 示例见[数据与身份](../guide/data.zh.md#5)。
 
+## `bacmap specimen`
+
+```text
+bacmap specimen list|ls [--limit N] [--home H] [--json]
+bacmap specimen show <specimen_id> [--home H] [--json]
+bacmap specimen import <map.tsv> [--by {dataset,isolate}] [--dry-run]
+bacmap specimen assign --specimen ID [--dataset D ...] [--isolate I ...]
+bacmap specimen delete <specimen_id> [--force]
+```
+
+样本（specimen）是唯一送检编号，下辖 0..N 个菌株，每个菌株可有多次测序数据。
+编号可为空（外部未提供时先留白），后续用 `import`/`assign` 补录。
+
+```bash
+bacmap specimen assign --specimen A03-SN-001 --dataset 26SAL0501 --dataset 26SAL0501__ont
+bacmap specimen delete A03-SN-001            # 仅空样本；有关联菌株时报错
+bacmap specimen delete A03-SN-001 --force    # 先解除菌株关联（不删菌株/测序数据）再删
+```
+
+`delete` 只删除样本本身（编号/来源/备注）并清空 `samples.tsv` 的 `specimen` 单元格；
+菌株、测序数据与分析结果一律保留。
+
 ## `bacmap research`
 
 ```text

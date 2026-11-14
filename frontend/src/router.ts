@@ -37,16 +37,40 @@ const router = createRouter({
       meta: { title: '计划详情' },
     },
     {
+      path: '/specimens',
+      name: 'specimens',
+      component: () => import('./views/SpecimensView.vue'),
+      meta: { title: '样本' },
+    },
+    {
+      path: '/specimens/:id',
+      name: 'specimen-detail',
+      component: () => import('./views/SpecimenDetailView.vue'),
+      meta: { title: '样本详情' },
+    },
+    {
+      path: '/isolates',
+      name: 'isolates',
+      component: () => import('./views/IsolatesView.vue'),
+      meta: { title: '菌株' },
+    },
+    {
+      path: '/isolates/:id',
+      name: 'isolate-detail',
+      component: () => import('./views/IsolateDetailView.vue'),
+      meta: { title: '菌株详情' },
+    },
+    {
       path: '/samples',
       name: 'samples',
       component: () => import('./views/SamplesView.vue'),
-      meta: { title: '样本' },
+      meta: { title: '测序数据' },
     },
     {
       path: '/samples/:id',
       name: 'sample-detail',
       component: () => import('./views/SampleDetailView.vue'),
-      meta: { title: '样本详情' },
+      meta: { title: '测序数据详情' },
     },
     {
       path: '/gom',
@@ -157,13 +181,19 @@ const router = createRouter({
       path: '/search',
       name: 'search',
       component: () => import('./views/SearchView.vue'),
-      meta: { title: '样本检索' },
+      meta: { title: '检索' },
     },
     {
       path: '/agent/:idx',
       name: 'agent-embed',
       component: () => import('./views/AgentEmbedView.vue'),
       meta: { title: '智能体对话' },
+    },
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('./views/LoginView.vue'),
+      meta: { title: '登录', bare: true },
     },
     {
       path: '/:pathMatch(.*)*',

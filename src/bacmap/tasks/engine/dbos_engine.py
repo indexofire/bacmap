@@ -1308,6 +1308,7 @@ def _step_record(params: dict[str, Any]) -> dict[str, Any]:
         KnowledgeImport,
         LabResultRecord,
         MetadataRecord,
+        SpecimenAssign,
         parse_record,
     )
 
@@ -1361,6 +1362,35 @@ def _step_record(params: dict[str, Any]) -> dict[str, Any]:
             "entry_id": entry_id,
             "staged": True,
             "message": f"staged knowledge entry {entry_id} (awaiting approval)",
+        }
+
+    if isinstance(record, SpecimenAssign):
+        from bacmap.workflow.samples_registry import assign_specimens
+
+        results: list[dict[str, Any]] = []
+        if record.datasets:
+            results.append(
+                assign_specimens(
+                    home,
+                    {dataset: record.specimen_id for dataset in record.datasets},
+                    by="dataset",
+                )
+            )
+        if record.isolates:
+            results.append(
+                assign_specimens(
+                    home,
+                    {isolate: record.specimen_id for isolate in record.isolates},
+                    by="isolate",
+                )
+            )
+        return {
+            "status": "SUCCEEDED",
+            "kind": record.kind,
+            "specimen_id": record.specimen_id,
+            "updated": sum(int(r["updated"]) for r in results),
+            "missing": sorted({m for r in results for m in r["missing"]}),
+            "message": f"assigned data to specimen {record.specimen_id}",
         }
 
     # KNOWLEDGE_APPROVE：人审后才成为引用门认可来源

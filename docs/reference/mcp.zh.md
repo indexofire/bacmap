@@ -128,6 +128,9 @@ bacmap start mcp --profile local-trusted  # 要求 [mcp] allow_local_trusted = t
 {"kind":"knowledge_import","title":"Paper","identifier":"PMID:12345678","entry_kind":"literature"}
 
 {"kind":"knowledge_approve","entry_id":7}
+
+{"kind":"specimen_assign","specimen_id":"A03-SN-001",
+ "isolates":["A03-ISO-01"],"datasets":["A03-ISO-01__ilm__20261012"]}
 ```
 
 调用返回 `{"task_id": "...", "kind": "...", "state": "running"}`。随后用

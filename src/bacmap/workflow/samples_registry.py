@@ -196,6 +196,16 @@ def _save_table(tsv: Path, header: list[str], rows: list[list[str]]) -> None:
     tsv.write_text("\t".join(header) + "\n" + (body + "\n" if body else ""), encoding="utf-8")
 
 
+def list_libraries(home: Path) -> list[dict[str, str]]:
+    """samples.tsv → 测序数据（library）行（列名→值）；缺失/损坏返回 []。
+
+    v1.10.27 身份模型：``sample`` 列是 library ID，``isolate``/``specimen``
+    指向上层实体。Web/API 的测序数据列表与样本详情都复用本函数。
+    """
+    _, header, rows = _load_table(Path(home))
+    return [dict(zip(header, row, strict=False)) for row in rows]
+
+
 def _existing(rows: list[list[str]], header: list[str], dataset_id: str) -> list[str] | None:
     idx = header.index("sample")
     for row in rows:
@@ -276,6 +286,36 @@ def _ensure_isolates(home: Path, rows: list[list[str]], header: list[str]) -> No
                     specimens.ensure(specimen)
     except (OSError, ValueError):  # 注册表不可写不应让数据登记失败（登记本身已完成）
         pass
+
+
+def delete_specimen(
+    home: Path, specimen_id: str, *, force: bool = False
+) -> dict[str, Any]:
+    """删除样本（v1.10.27）：默认仅空样本；force 先解除关联再删。
+
+    同步清理 ``samples.tsv`` 中该样本的 ``specimen`` 单元格（关联菌株的测序
+    数据行），不删除任何菌株/测序数据/分析结果。
+    """
+    from bacmap.store.specimens import SpecimenService, validate_specimen_id
+
+    if not validate_specimen_id(specimen_id):
+        raise ValueError(f"invalid specimen id: {specimen_id!r}")
+
+    tsv, header, rows = _load_table(home)
+    db = home / "data" / "bacmap.sqlite"
+    with SpecimenService(db) as specimens:
+        result = specimens.delete(specimen_id, force=force)
+
+    updated_rows = 0
+    if result["deleted"] and "specimen" in header:
+        spec_idx = header.index("specimen")
+        for row in rows:
+            if len(row) > spec_idx and row[spec_idx] == specimen_id:
+                row[spec_idx] = ""
+                updated_rows += 1
+        if updated_rows:
+            _save_table(tsv, header, rows)
+    return {**result, "specimen_id": specimen_id, "updated_tsv_rows": updated_rows}
 
 
 def assign_specimens(

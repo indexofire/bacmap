@@ -60,7 +60,7 @@ mappy = ">=2.24"
 pyhmmer = ">=0.10"
 pyyaml = ">=6.0"
 sourmash = ">=4.8"
-gspec = { path = "../gspec" }
+gspec = "==0.10.5"
 # gside 0.2+ 与 gspec 0.10 的可选 gseek 引擎共同使用 gseek 0.10.5；
 # 显式钉住，避免 extras 缺失时落回旧适配器。
 gseek = "==0.10.5"

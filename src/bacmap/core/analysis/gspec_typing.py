@@ -34,12 +34,14 @@ def _db_entry(raw: Any) -> dict[str, Any]:
         "genes": [str(g) for g in genes] if isinstance(genes, list) else [],
         "error": str(raw.get("error", "")) if raw.get("error") else "",
     }
-    # cluster 库（gspec.cluster/1|2）：保留表型与最佳位点，供报告/API 消费。
+    # cluster 库（gspec.cluster/1|2）：保留表型、最佳位点与**全部位点**
+    # （PAI 等集合型库一个基因组可携带多个位点），供报告/API 消费。
     for key in (
         "kind",
         "phenotype",
         "best_locus",
         "type",
+        "loci",
         "loci_count",
         "raw_schema",
     ):

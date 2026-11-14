@@ -46,8 +46,8 @@ genomes:
   vvu:
     out: vvu_cmcp6.fasta
     organism: Vibrio vulnificus CMCP6 (chromosome I + II)
-    accessions: [NC_004459.3, NC_004460.3]
-    version: NC_004459.3+NC_004460.3
+    accessions: [NC_004459.3, NC_004460.2]
+    version: NC_004459.3+NC_004460.2
   lmo:
     out: lmo_egde.fasta
     organism: Listeria monocytogenes EGD-e

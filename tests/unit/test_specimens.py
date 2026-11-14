@@ -147,6 +147,111 @@ class TestAssignSpecimens:
             assert isolates.get("ISO-2")["specimen_id"] == "A03-SN-002"
 
 
+class TestDeleteSpecimen:
+    """删除样本（v1.10.27）：默认仅空样本；force 先解除关联，不删菌株/数据。"""
+
+    def test_delete_empty_specimen(self, tmp_path):
+        db = _db(tmp_path)
+        with SpecimenService(db) as specimens:
+            specimens.ensure("A03-SN-001")
+            result = specimens.delete("A03-SN-001")
+            assert result == {"deleted": True, "unlinked_isolates": 0}
+            assert specimens.get("A03-SN-001") is None
+
+    def test_linked_specimen_requires_force(self, tmp_path):
+        db = _db(tmp_path)
+        with SpecimenService(db) as specimens, IsolateService(db) as isolates:
+            specimens.ensure("A03-SN-001")
+            isolates.ensure("ISO-1", specimen_id="A03-SN-001")
+            with pytest.raises(ValueError, match="linked isolate"):
+                specimens.delete("A03-SN-001")
+            # 拒绝时不动任何数据
+            assert specimens.get("A03-SN-001") is not None
+            assert isolates.get("ISO-1")["specimen_id"] == "A03-SN-001"
+
+    def test_force_unlinks_isolates_and_keeps_them(self, tmp_path):
+        db = _db(tmp_path)
+        with SpecimenService(db) as specimens, IsolateService(db) as isolates:
+            specimens.ensure("A03-SN-001")
+            isolates.ensure("ISO-1", specimen_id="A03-SN-001")
+            isolates.ensure("ISO-2", specimen_id="A03-SN-001")
+            result = specimens.delete("A03-SN-001", force=True)
+            assert result == {"deleted": True, "unlinked_isolates": 2}
+            assert specimens.get("A03-SN-001") is None
+            # 菌株仍在，只是失去样本归属
+            assert isolates.get("ISO-1")["specimen_id"] is None
+            assert isolates.get("ISO-2")["specimen_id"] is None
+
+    def test_missing_specimen_reports_not_deleted(self, tmp_path):
+        db = _db(tmp_path)
+        with SpecimenService(db) as specimens:
+            assert specimens.delete("NOPE") == {"deleted": False, "unlinked_isolates": 0}
+
+    def test_registry_delete_clears_tsv_specimen_cells(self, tmp_path):
+        from bacmap.workflow.samples_registry import assign_specimens, delete_specimen
+
+        home = TestAssignSpecimens()._home(tmp_path)
+        assign_specimens(home, {"DS-1": "A03-SN-001"}, by="dataset")
+        result = delete_specimen(home, "A03-SN-001", force=True)
+        assert result["deleted"] is True
+        assert result["unlinked_isolates"] == 1
+        assert result["updated_tsv_rows"] == 1
+        tsv = home / "workflows" / "bacmap" / "config" / "samples.tsv"
+        text = tsv.read_text()
+        assert "A03-SN-001" not in text
+        # 测序数据行本身仍在
+        assert "DS-1" in text
+        with IsolateService(home / "data" / "bacmap.sqlite") as isolates:
+            assert isolates.get("ISO-1")["specimen_id"] is None
+
+    def test_registry_delete_rejects_linked_without_force(self, tmp_path):
+        from bacmap.workflow.samples_registry import assign_specimens, delete_specimen
+
+        home = TestAssignSpecimens()._home(tmp_path)
+        assign_specimens(home, {"DS-1": "A03-SN-001"}, by="dataset")
+        with pytest.raises(ValueError):
+            delete_specimen(home, "A03-SN-001")
+
+
+class TestDeleteCli:
+    """``bacmap specimen delete``：解析与端到端（--home 指向临时根）。"""
+
+    def _run(self, capsys, *argv: str) -> str:
+        import bacmap.interfaces.cli.main as cli
+
+        cli.main(list(argv))
+        return capsys.readouterr().out
+
+    def test_delete_empty_specimen(self, tmp_path, capsys):
+        db = tmp_path / "data" / "bacmap.sqlite"
+        with SpecimenService(db) as specimens:
+            specimens.ensure("A03-SN-001")
+        out = self._run(
+            capsys, "specimen", "delete", "A03-SN-001", "--home", str(tmp_path)
+        )
+        assert "A03-SN-001" in out
+        with SpecimenService(db) as specimens:
+            assert specimens.get("A03-SN-001") is None
+
+    def test_linked_without_force_exits(self, tmp_path):
+        import bacmap.interfaces.cli.main as cli
+
+        db = tmp_path / "data" / "bacmap.sqlite"
+        with SpecimenService(db) as specimens, IsolateService(db) as isolates:
+            specimens.ensure("A03-SN-001")
+            isolates.ensure("ISO-1", specimen_id="A03-SN-001")
+        with pytest.raises(SystemExit):
+            cli.main(["specimen", "delete", "A03-SN-001", "--home", str(tmp_path)])
+        with SpecimenService(db) as specimens:
+            assert specimens.get("A03-SN-001") is not None
+
+    def test_missing_specimen_exits(self, tmp_path):
+        import bacmap.interfaces.cli.main as cli
+
+        with pytest.raises(SystemExit):
+            cli.main(["specimen", "delete", "NOPE", "--home", str(tmp_path)])
+
+
 class TestImportTsv:
     def test_dataset_mapping(self, tmp_path):
         from bacmap.interfaces.cli.specimens import _read_assignments

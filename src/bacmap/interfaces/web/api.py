@@ -17,7 +17,7 @@ from importlib.metadata import version as pkg_version
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -34,6 +34,9 @@ from bacmap.interfaces.stats_summary import gather_stats
 from bacmap.interfaces.views import (
     compare_run_records,
     gom_object,
+    identity_search,
+    isolate_detail,
+    isolate_rows,
     list_gom_objects,
     list_runs,
     overview_data,
@@ -42,6 +45,8 @@ from bacmap.interfaces.views import (
     sample_page,
     sample_rows,
     search_rows,
+    specimen_detail,
+    specimen_rows,
 )
 from bacmap.interfaces.web.auth import verify_csrf
 from bacmap.interfaces.web.payloads import (
@@ -115,6 +120,21 @@ class RecordBody(BaseModel):
     entry_id: str = ""
 
 
+class SpecimenDeleteBody(BaseModel):
+    force: bool = False
+
+
+class SpecimenAssignBody(BaseModel):
+    specimen_id: str = Field(min_length=1, max_length=128)
+    isolates: list[str] = Field(default_factory=list)
+    datasets: list[str] = Field(default_factory=list)
+
+
+class LoginBody(BaseModel):
+    token: str = ""
+    next: str = "/console/"
+
+
 def _require_csrf(request: Request) -> None:
     if not verify_csrf(request, request.headers.get("x-csrf-token", "")):
         raise HTTPException(403, "CSRF check failed")
@@ -149,13 +169,93 @@ def build_api_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
         return JSONResponse(exc.to_dict(), status_code=_STATUS.get(exc.code.value, 400))
 
     _meta_routes(router, engine)
+    _auth_routes(router)
     _task_routes(router, engine)
     _record_routes(router, engine)
     _plan_routes(router, PlanService(engine, engine.db))
     _event_routes(router, engine, EventLog(engine.db))
     _evidence_routes(router, engine)
+    _identity_routes(router, engine)
     _research_routes(router, engine)
     app.include_router(router)
+
+
+def _auth_routes(router: APIRouter) -> None:
+    """控制台登录体验（v1.10.28）：单令牌登录/状态/登出，不引入账号体系。
+
+    登录仍沿用 ADR-14 的签名会话 cookie + CSRF；``/auth/status`` 与
+    ``/auth/login`` 在鉴权中间件中免鉴权（登录页自身需要它们）。
+    """
+
+    @router.get("/auth/status")
+    def auth_status(request: Request) -> dict[str, Any]:
+        from bacmap.interfaces.web.auth import LOGIN_PATH
+        from bacmap.interfaces.web.auth import operator_label as _operator_label
+        from bacmap.interfaces.web.auth import (
+            request_authenticated as _request_authenticated,
+        )
+
+        cfg = request.app.state.web_auth
+        if not cfg.enabled:
+            return {
+                "enabled": False,
+                "mode": "disabled",
+                "authenticated": True,
+                "operator": "",
+                "login_url": "",
+            }
+        authenticated = _request_authenticated(request, cfg)
+        return {
+            "enabled": True,
+            "mode": cfg.mode,
+            "authenticated": authenticated,
+            "operator": _operator_label(cfg) if authenticated else "",
+            "login_url": LOGIN_PATH if cfg.mode == "cookie" else "",
+        }
+
+    @router.post("/auth/login")
+    def auth_login(request: Request, body: LoginBody) -> Response:
+        import secrets
+        from urllib.parse import urlparse
+
+        from bacmap.interfaces._security import consteq
+        from bacmap.interfaces.web.auth import (
+            CSRF_COOKIE,
+            SESSION_COOKIE,
+            issue_session,
+            safe_next,
+        )
+
+        cfg = request.app.state.web_auth
+        if not (cfg.enabled and cfg.mode == "cookie"):
+            raise HTTPException(409, "browser login is not enabled")
+        host = request.headers.get("host", "")
+        origin = request.headers.get("origin", "")
+        if origin and urlparse(origin).netloc != host:
+            raise HTTPException(403, "cross-origin login rejected")
+        if not consteq(body.token, cfg.token):
+            raise HTTPException(401, "invalid token")
+        target = safe_next(body.next, default="/console/")
+        response = JSONResponse({"ok": True, "next": target})
+        response.set_cookie(
+            SESSION_COOKIE,
+            issue_session(cfg.secret, cfg.ttl_s),
+            **cfg.session_cookie_kwargs(),
+        )
+        response.set_cookie(
+            CSRF_COOKIE, secrets.token_urlsafe(24), **cfg.csrf_cookie_kwargs()
+        )
+        return response
+
+    @router.post("/auth/logout")
+    def auth_logout(request: Request) -> Response:
+        from bacmap.interfaces.web.auth import CSRF_COOKIE, SESSION_COOKIE
+
+        _require_csrf(request)
+        response = JSONResponse({"ok": True})
+        response.delete_cookie(SESSION_COOKIE, path="/")
+        response.delete_cookie(CSRF_COOKIE, path="/")
+        return response
 
 
 def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
@@ -397,6 +497,96 @@ def _event_routes(router: APIRouter, engine: DbosTaskEngine, events: EventLog) -
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+
+def _identity_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
+    """样本/菌株身份模型只读接口（v1.10.27，P2）。
+
+    现有 ``/samples`` 仍是"测序数据（library）"的分析结果视图（历史路径）；
+    本组新接口提供 specimen → isolate → library 的上层实体浏览。
+    """
+
+    @router.get("/specimens")
+    def specimens(limit: int = 200) -> dict[str, Any]:
+        return {"items": specimen_rows(engine.home, _limit(limit, 500))}
+
+    @router.get("/specimens/{specimen_id}")
+    def specimen(specimen_id: str) -> dict[str, Any]:
+        data = specimen_detail(engine.home, specimen_id)
+        if data is None:
+            raise NotFound(f"no such specimen: {specimen_id}")
+        return data
+
+    @router.get("/isolates")
+    def isolates(limit: int = 500) -> dict[str, Any]:
+        return {"items": isolate_rows(engine.home, _limit(limit, 2000))}
+
+    @router.get("/isolates/{isolate_id}")
+    def isolate(isolate_id: str) -> dict[str, Any]:
+        data = isolate_detail(engine.home, isolate_id)
+        if data is None:
+            raise NotFound(f"no such isolate: {isolate_id}")
+        return data
+
+    @router.post("/specimens/{specimen_id}/delete")
+    def delete_specimen_route(
+        request: Request,
+        specimen_id: str,
+        body: SpecimenDeleteBody | None = None,
+    ) -> dict[str, Any]:
+        """删除样本（可信界面写操作，需 CSRF）。
+
+        默认只允许空样本；``force=true`` 先解除菌株关联（不删菌株/数据）再删除。
+        权限点（specimen.delete）预留给后续多用户 RBAC。
+        """
+        _require_csrf(request)
+        from bacmap.workflow.samples_registry import delete_specimen
+
+        try:
+            result = delete_specimen(
+                engine.home, specimen_id, force=bool(body and body.force)
+            )
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        if not result["deleted"]:
+            raise NotFound(f"no such specimen: {specimen_id}")
+        return result
+
+    @router.post("/specimens/assign")
+    def assign_specimen(request: Request, body: SpecimenAssignBody) -> dict[str, Any]:
+        """把菌株/测序数据关联到样本（可信界面写操作，需 CSRF）。"""
+        _require_csrf(request)
+        from bacmap.workflow.samples_registry import assign_specimens
+
+        results: list[dict[str, Any]] = []
+        if body.datasets:
+            results.append(
+                assign_specimens(
+                    engine.home,
+                    {dataset: body.specimen_id for dataset in body.datasets},
+                    by="dataset",
+                )
+            )
+        if body.isolates:
+            results.append(
+                assign_specimens(
+                    engine.home,
+                    {isolate: body.specimen_id for isolate in body.isolates},
+                    by="isolate",
+                )
+            )
+        if not results:
+            raise HTTPException(400, "give at least one isolate or dataset")
+        return {
+            "specimen_id": body.specimen_id,
+            "updated": sum(int(r["updated"]) for r in results),
+            "missing": sorted({m for r in results for m in r["missing"]}),
+        }
+
+    @router.get("/search/identity")
+    def identity_search_route(q: str = "", limit: int = 200) -> dict[str, Any]:
+        """统一检索：样本与菌株（测序数据仍用 /search 的结构化过滤）。"""
+        return identity_search(engine.home, q, _limit(limit, 500))
 
 
 def _evidence_routes(router: APIRouter, engine: DbosTaskEngine) -> None:

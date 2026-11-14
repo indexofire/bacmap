@@ -5,7 +5,7 @@ you can start a task in one and approve it in another.
 
 ## 1. Web console
 
-The default UI is the **Vue 3 console** at `/console/` (Vite build, dark instrument-style
+The dashboard leads with the database overview, then tasks, then a **species-first** typing section (choose a species to see its MLST/serotype/AMR/virulence distributions; whole-database mixes are not shown). The default UI is the **Vue 3 console** at `/console/` (Vite build, dark instrument-style
 dashboard); `/` redirects there. The old Jinja task console has been removed: legacy paths
 (`/tasks`, `/plans`, `/samples`, `/gom`, …) return 307 redirects to their `/console/...`
 equivalents. The SPA is served as prebuilt static assets: no Node/Bun is needed at runtime
@@ -16,6 +16,14 @@ instantly and persists the choice in `localStorage` (`bacmap-theme`). INK is the
 console, PAPER is a TailAdmin-like light document surface, and CONCRETE is a Swiss/brutalist
 gray template (grid paper, hard rules, Helvetica display, monospaced data, split-screen dashboard
 poster). Charts and sample HTML reports follow the theme (`?theme=light|gray`).
+
+**Console login** (single deployment token, no accounts): with `BACMAP_WEB_TOKEN` set and
+`BACMAP_WEB_AUTH=cookie`, unauthenticated browser navigation is redirected to `/console/login`
+(a Vue login page). After login the top bar shows the operator's token fingerprint and a logout
+button. Without a token, auth stays disabled on loopback; in `bearer` mode the login page explains
+that browsers must switch to cookie mode. The legacy server-rendered `/login` page is kept as a
+fallback/explanation page. Multi-user accounts and role-based permissions are still a design
+proposal (`docs/concepts/accounts.md`), not implemented.
 
 ```bash
 bacmap start web                            # 127.0.0.1:8800 by default
@@ -30,11 +38,13 @@ Console routes:
 
 | Route | Purpose |
 |---|---|
-| `/console/` | dashboard: KPIs, 7-day trend, status distribution, pending approvals |
+| `/console/` | dashboard: database overview first, then tasks (KPIs, 7-day trend, status, approvals), then species-first typing stats |
 | `/console/tasks` | task list, filters and submit drawer (analyze/curate) |
 | `/console/tasks/{id}` | task detail, event timeline, approval card, cancel |
 | `/console/plans`, `/console/plans/{id}` | agent-proposed plans, full parameters, confirm/reject |
-| `/console/samples`, `/console/samples/{id}` | completed samples, per-sample results/annotation and an embedded “full report” tab |
+| `/console/specimens`, `/console/specimens/{id}` | specimens, their isolates and libraries; an inline form links unassigned isolates/datasets to a specimen; the detail page can delete a specimen (empty by default, or unlink its isolates first — isolates/data are kept) |
+| `/console/isolates`, `/console/isolates/{id}` | isolate entities, specimen link and libraries |
+| `/console/samples`, `/console/samples/{id}` | libraries (sequencing data): per-library results/annotation, a visual assembly-QC panel (QUAST KPIs, contig length/GC distributions, Nx curve) and an embedded “full report” tab |
 | `/console/runs`, `/console/runs/{id}` | immutable run records and source comparison |
 | `/console/records` | metadata, lab result, knowledge import/approval forms |
 | `/console/gom`, `/console/gom/{id}` | GOM objects, immutable versions and payload |
@@ -42,7 +52,7 @@ Console routes:
 | `/console/research/sessions/{id}` | research statistics, figure, artifacts and ledger |
 | `/console/research/studies/{id}` | Study, cohorts, plans and claims (read-only) |
 | `/console/overview` | system overview (versions, paths, policy, sandbox) |
-| `/console/search` | sample search by keyword/serotype/ST/gene |
+| `/console/search` | unified search: specimens (background), isolates (wet-lab metadata) and libraries (analysis results) |
 | `/research` | advanced research tooling (phylogenetics, logistic, object writes; Jinja) |
 | `/samples/{id}/report` | report HTML source (`?embed=1` for the inline frame); direct visits 307 to `/console/samples/{id}?tab=report`, `?download=1` for attachment, `?theme=light|gray` for the light/gray report |
 | `/api/v1/*` | JSON API (see [HTTP API reference](../reference/api.md)) |

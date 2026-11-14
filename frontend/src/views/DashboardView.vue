@@ -173,13 +173,6 @@ const dbKpis = computed(() => {
       to: '/gom',
     },
     {
-      label: 'AMR 基因命中',
-      value: s ? s.gom.amr_genes : '—',
-      icon: 'alert-triangle',
-      foot: 'CARD/VFDB/NCBI 命中行',
-      to: '/gom',
-    },
-    {
       label: '样本报告',
       value: s ? s.results.sample_reports : '—',
       icon: 'file-text',
@@ -224,7 +217,7 @@ const dbKpis = computed(() => {
   ]
 })
 
-type DistributionKey = 'species' | 'serotypes' | 'mlst' | 'amr'
+type DistributionKey = 'serotypes' | 'mlst' | 'amr' | 'virulence'
 
 interface DistributionRow extends CountItem {
   displayName: string
@@ -241,18 +234,34 @@ interface DistributionGroup {
 const DISTRIBUTION_LIMIT = 10
 const HIDDEN_DISTRIBUTION_NAMES = new Set(['', 'n/a', 'na', 'unknown', '未知'])
 
+// 物种优先：全库混合的 ST/血清型/耐药没有生物学意义，必须按物种分层。
+const speciesList = computed(() => stats.value?.strains.by_species ?? [])
+const selectedSpecies = ref('')
+
+watch(
+  speciesList,
+  (list) => {
+    if (!list.some((entry) => entry.name === selectedSpecies.value)) {
+      selectedSpecies.value = list[0]?.name ?? ''
+    }
+  },
+  { immediate: true },
+)
+
 const distributionGroups = computed<DistributionGroup[]>(() => {
-  const s = stats.value
+  const current = speciesList.value.find(
+    (entry) => entry.name === selectedSpecies.value,
+  )
   const groups: Array<{
     key: DistributionKey
     title: string
     label: string
     rows: CountItem[]
   }> = [
-    { key: 'species', title: '物种分布', rows: s?.strains.species ?? [], label: '物种' },
-    { key: 'serotypes', title: '血清型分布', rows: s?.strains.serotypes ?? [], label: '血清型' },
-    { key: 'mlst', title: 'MLST ST 分布', rows: s?.strains.mlst ?? [], label: 'ST' },
-    { key: 'amr', title: 'AMR 基因 Top 10', rows: s?.strains.amr_top ?? [], label: '基因' },
+    { key: 'mlst', title: 'MLST ST 分布', rows: current?.mlst ?? [], label: 'ST' },
+    { key: 'serotypes', title: '血清型分布', rows: current?.serotypes ?? [], label: '血清型' },
+    { key: 'amr', title: '耐药基因 Top 10', rows: current?.amr_top ?? [], label: '基因' },
+    { key: 'virulence', title: '毒力基因 Top 10', rows: current?.virulence_top ?? [], label: '基因' },
   ]
 
   return groups.map((group) => {
@@ -262,13 +271,10 @@ const distributionGroups = computed<DistributionGroup[]>(() => {
     })
     return {
       ...group,
-      rows: meaningful.slice(0, DISTRIBUTION_LIMIT).map((row) => {
-        const name = row.name.trim()
-        return {
-          ...row,
-          displayName: group.key === 'species' ? name.replace(/_/g, ' ') : name,
-        }
-      }),
+      rows: meaningful.slice(0, DISTRIBUTION_LIMIT).map((row) => ({
+        ...row,
+        displayName: row.name.trim(),
+      })),
       total: meaningful.length,
     }
   })
@@ -474,6 +480,23 @@ watch([statusItems, trend, resolvedTheme], () => {
     <template v-else>
       <section class="section">
         <div class="section__head">
+          <h2 class="section__title">数据库概览</h2>
+          <span class="section__hint">点击卡片进入对应页面 · GOM · 菌株索引 · 研究 · 知识库</span>
+        </div>
+        <div class="kpi-grid kpi-grid--db">
+          <RouterLink v-for="item in dbKpis" :key="item.label" :to="item.to" class="kpi kpi--link">
+            <div class="kpi__label"><Icon :name="item.icon" /> {{ item.label }}</div>
+            <div class="kpi__value">{{ item.value }}</div>
+            <div class="kpi__foot">
+              {{ item.foot }}
+              <Icon name="arrow-right" class="kpi__go" />
+            </div>
+          </RouterLink>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section__head">
           <h2 class="section__title">任务</h2>
           <span class="section__hint">{{ statsAvailable ? '全部任务（统计库）' : '最近 200 条' }}</span>
         </div>
@@ -557,23 +580,6 @@ watch([statusItems, trend, resolvedTheme], () => {
           hint="curate 发布、mine 产物签字等门会在这里提醒你。"
           icon="check-circle"
         />
-      </section>
-
-      <section class="section">
-        <div class="section__head">
-          <h2 class="section__title">数据库概览</h2>
-          <span class="section__hint">点击卡片进入对应页面 · GOM · 菌株索引 · 研究 · 知识库</span>
-        </div>
-        <div class="kpi-grid kpi-grid--db">
-          <RouterLink v-for="item in dbKpis" :key="item.label" :to="item.to" class="kpi kpi--link">
-            <div class="kpi__label"><Icon :name="item.icon" /> {{ item.label }}</div>
-            <div class="kpi__value">{{ item.value }}</div>
-            <div class="kpi__foot">
-              {{ item.foot }}
-              <Icon name="arrow-right" class="kpi__go" />
-            </div>
-          </RouterLink>
-        </div>
       </section>
 
       <div class="dash-row">
@@ -664,37 +670,49 @@ watch([statusItems, trend, resolvedTheme], () => {
 
       <section class="section">
         <div class="section__head">
-          <h2 class="section__title">菌株与型别分布</h2>
-          <span class="section__hint">GOM 菌株索引</span>
+          <h2 id="species-panel-title" class="section__title">物种与型别分布</h2>
+          <span class="section__hint">按物种分层；全库混合的 ST/血清型/耐药无意义</span>
         </div>
-        <div v-if="stats?.strains.total" class="distribution-grid">
-          <section v-for="group in distributionGroups" :key="group.key" class="card">
-            <div class="card__head">
-              <h2 class="card__title">{{ group.title }}</h2>
-              <span class="card__hint">
-                <template v-if="group.total > group.rows.length">
-                  Top {{ group.rows.length }} · 共 {{ group.total }} 类
-                </template>
-                <template v-else>{{ group.total }} 类</template>
-              </span>
-            </div>
-            <div v-if="group.rows.length" class="card__body">
-              <div class="distribution">
+        <section v-if="speciesList.length" class="species-panel" aria-labelledby="species-panel-title">
+          <div class="species-tabs" role="tablist" aria-label="按物种查看型别分布">
+            <button
+              v-for="entry in speciesList"
+              :key="entry.name"
+              type="button"
+              class="species-tab"
+              :class="{ 'is-active': entry.name === selectedSpecies }"
+              role="tab"
+              :aria-selected="entry.name === selectedSpecies"
+              @click="selectedSpecies = entry.name"
+            >
+              <span>{{ entry.name.replace(/_/g, ' ') }}</span>
+              <span class="species-tab__count mono">{{ entry.count }}</span>
+            </button>
+          </div>
+          <div class="species-metrics" role="tabpanel">
+            <section v-for="group in distributionGroups" :key="group.key" class="species-metric">
+              <div class="species-metric__head">
+                <h3 class="species-metric__title">{{ group.title }}</h3>
+                <span class="species-metric__hint">
+                  <template v-if="group.total > group.rows.length">
+                    Top {{ group.rows.length }} · 共 {{ group.total }} 类
+                  </template>
+                  <template v-else>{{ group.total }} 类</template>
+                </span>
+              </div>
+              <div v-if="group.rows.length" class="distribution">
                 <div v-for="row in group.rows" :key="`${group.key}-${row.name}`" class="distribution__row">
-                  <span class="distribution__name" :title="row.displayName">
-                    <i v-if="group.key === 'species'">{{ row.displayName }}</i>
-                    <template v-else>{{ row.displayName }}</template>
-                  </span>
+                  <span class="distribution__name" :title="row.displayName">{{ row.displayName }}</span>
                   <span class="distribution__track">
                     <span class="distribution__bar" :style="{ width: `${(row.count / maxCount(group.rows)) * 100}%` }" />
                   </span>
                   <span class="distribution__count mono">{{ row.count }}</span>
                 </div>
               </div>
-            </div>
-            <EmptyState v-else title="暂无数据" hint="完成分析后，型别与表型信息会汇总到这里。" icon="chart" />
-          </section>
-        </div>
+              <EmptyState v-else title="该物种暂无数据" hint="完成该物种的分析后，型别与耐药统计会出现在这里。" icon="chart" />
+            </section>
+          </div>
+        </section>
         <section v-else class="card">
           <EmptyState
             v-if="!stats"
@@ -705,7 +723,7 @@ watch([statusItems, trend, resolvedTheme], () => {
           <EmptyState
             v-else
             title="暂无菌株统计"
-            hint="完成一次分析并写入 GOM 后，物种、血清型、MLST 与 AMR 分布会出现在这里。"
+            hint="完成一次分析并写入 GOM 后，物种及其 MLST、血清型与 AMR 分布会出现在这里。"
             icon="chart"
           />
         </section>
@@ -728,6 +746,108 @@ watch([statusItems, trend, resolvedTheme], () => {
 </template>
 
 <style scoped>
+.species-panel {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface);
+}
+
+.species-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-soft);
+}
+
+.species-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background-color var(--t-micro, 0.15s) ease,
+    color var(--t-micro, 0.15s) ease;
+}
+
+.species-tab:hover {
+  background: var(--surface-hover);
+  color: var(--text-1);
+}
+
+.species-tab.is-active {
+  background: var(--surface);
+  color: var(--text-1);
+  box-shadow: inset 0 -2px 0 var(--link);
+}
+
+.species-tab__count {
+  color: var(--text-4);
+  font-size: 11px;
+}
+
+.species-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.species-metric {
+  min-width: 0;
+  padding: var(--sp-4);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.species-metric:nth-child(2n) {
+  border-right: 0;
+}
+
+.species-metric:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.species-metric__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.species-metric__title {
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.species-metric__hint {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+@media (max-width: 900px) {
+  .species-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .species-metric,
+  .species-metric:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .species-metric:nth-last-child(2) {
+    border-bottom: 1px solid var(--border);
+  }
+}
+
 .section {
   margin-bottom: 20px;
 }

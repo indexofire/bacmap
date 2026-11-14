@@ -1,8 +1,11 @@
 import { appUrl } from './lib/format'
 import type {
+  AuthStatus,
   Capabilities,
   DatabaseStats,
   GomObject,
+  IsolateDetail,
+  IsolateRow,
   Overview,
   PlanRecord,
   ResearchClaim,
@@ -15,6 +18,8 @@ import type {
   RunRow,
   SampleDetail,
   SampleRow,
+  SpecimenDetail,
+  SpecimenRow,
   TaskEvent,
   TaskRow,
 } from './types'
@@ -52,7 +57,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   })
   if (response.status === 401) {
     const next = encodeURIComponent(window.location.pathname + window.location.search)
-    window.location.assign(appUrl(`/login?next=${next}`))
+    window.location.assign(appUrl(`/console/login?next=${next}`))
     throw new ApiError(401, 'unauthorized', '需要登录')
   }
   const text = await response.text()
@@ -78,6 +83,10 @@ function json(body: unknown): RequestInit {
 }
 
 export const api = {
+  authStatus: () => request<AuthStatus>('/auth/status'),
+  login: (token: string, next = '/console/') =>
+    request<{ ok: boolean; next: string }>('/auth/login', json({ token, next })),
+  logout: () => request<{ ok: boolean }>('/auth/logout', json({})),
   capabilities: () => request<Capabilities>('/capabilities'),
   overview: () => request<Overview>('/overview'),
   stats: () => request<DatabaseStats>('/stats'),
@@ -159,6 +168,34 @@ export const api = {
     )
   },
   getSample: (id: string) => request<SampleDetail>(`/samples/${encodeURIComponent(id)}`),
+
+  listSpecimens: (limit = 200) =>
+    request<{ items: SpecimenRow[] }>(`/specimens?limit=${limit}`).then((r) => r.items),
+  getSpecimen: (id: string) =>
+    request<SpecimenDetail>(`/specimens/${encodeURIComponent(id)}`),
+  searchIdentity: (q: string) =>
+    request<{ specimens: SpecimenRow[]; isolates: IsolateRow[] }>(
+      `/search/identity?${new URLSearchParams({ q }).toString()}`,
+    ),
+  assignSpecimen: (body: {
+    specimen_id: string
+    isolates?: string[]
+    datasets?: string[]
+  }) =>
+    request<{ specimen_id: string; updated: number; missing: string[] }>(
+      '/specimens/assign',
+      json(body),
+    ),
+  deleteSpecimen: (id: string, force = false) =>
+    request<{
+      specimen_id: string
+      deleted: boolean
+      unlinked_isolates: number
+      updated_tsv_rows: number
+    }>(`/specimens/${encodeURIComponent(id)}/delete`, json({ force })),
+  listIsolates: (limit = 500) =>
+    request<{ items: IsolateRow[] }>(`/isolates?limit=${limit}`).then((r) => r.items),
+  getIsolate: (id: string) => request<IsolateDetail>(`/isolates/${encodeURIComponent(id)}`),
 
   listGom: (type?: string, limit = 100) => {
     const q = new URLSearchParams({ limit: String(limit) })

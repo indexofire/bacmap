@@ -51,6 +51,33 @@ def _row(label: str, value: str, ok: bool = True) -> str:
     )
 
 
+def _antigen_locus(value: str) -> str:
+    """VPA 抗原位点：``OL10V1`` → ``OL10``；``KL4`` 保持；未知位点原样。"""
+    text = str(value or "").strip()
+    return re.sub(r"V\d+$", "", text) if text else ""
+
+
+def _vpa_formula_from_screen(sample_dir: Path) -> str:
+    """从 gspec ``vpa_ok_screen.json`` 取 O/K 位点（旧 summary 无位点 ID 时）。"""
+    path = sample_dir / "gspec" / "vpa_ok_screen.json"
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    files = document.get("files")
+    entry = files[0] if isinstance(files, list) and files and isinstance(files[0], dict) else {}
+    phenotypes = entry.get("phenotypes")
+    if not isinstance(phenotypes, dict):
+        return ""
+
+    def winner(name: str) -> str:
+        call = phenotypes.get(name)
+        return _antigen_locus(call.get("winner_locus", "")) if isinstance(call, dict) else ""
+
+    o_locus, k_locus = winner("o_group"), winner("k_group")
+    return f"{o_locus}:{k_locus}" if o_locus and k_locus else ""
+
+
 def _bar_chart(rows: Sequence[tuple[str, float | int]], unit: str = "", limit: int = 10) -> str:
     """Pure-CSS horizontal bars (no scripts; works under the sandbox CSP)."""
     rows = [(str(name), float(value or 0)) for name, value in rows[:limit] if name]
@@ -458,7 +485,65 @@ def _render_plasmid_section(genes: list[dict]) -> str:
 """
 
 
-def _render_quast_section(text: str) -> str:
+def _nx_svg(points: list[dict], *, width: int = 560, height: int = 180) -> str:
+    """Nx 曲线（纯内联 SVG；报告 CSP 禁脚本，SVG 不进图片外链）。"""
+    values: list[tuple[float, float]] = []
+    for point in points:
+        try:
+            values.append((float(point.get("x", 0)), float(point.get("length", 0))))
+        except (TypeError, ValueError):
+            continue
+    if not values:
+        return ""
+    max_len = max(value for _x, value in values) or 1
+    pad_l, pad_r, pad_t, pad_b = 48, 14, 14, 28
+    plot_w = width - pad_l - pad_r
+    plot_h = height - pad_t - pad_b
+
+    def px(x: float) -> float:
+        return pad_l + plot_w * x / 100
+
+    def py(y: float) -> float:
+        return pad_t + plot_h * (1 - y / max_len)
+
+    line = " ".join(f"{px(x):.1f},{py(y):.1f}" for x, y in values)
+    area = f"{px(0):.1f},{py(0):.1f} " + line + f" {px(100):.1f},{py(0):.1f}"
+    n50 = next((y for x, y in values if x == 50), 0)
+    marker = ""
+    if n50:
+        marker = (
+            f'<circle cx="{px(50):.1f}" cy="{py(n50):.1f}" r="3.5"'
+            ' fill="var(--accent)" stroke="var(--panel)" stroke-width="1.5"/>'
+            f'<text x="{px(50) + 6:.1f}" y="{py(n50) - 6:.1f}"'
+            ' font-size="10" fill="var(--text-2)">N50 '
+            f"{html.escape(_fmt_bp(n50))}</text>"
+        )
+    return (
+        f'<svg class="nx-curve" viewBox="0 0 {width} {height}" role="img"'
+        ' aria-label="Nx 曲线（累计长度百分比与 contig 长度）"'
+        ' style="width:100%;height:auto;display:block">'
+        f'<line x1="{pad_l}" y1="{pad_t}" x2="{pad_l}" y2="{pad_t + plot_h}"'
+        ' stroke="var(--border)" stroke-width="1"/>'
+        f'<line x1="{pad_l}" y1="{pad_t + plot_h}" x2="{pad_l + plot_w}"'
+        f' y2="{pad_t + plot_h}" stroke="var(--border)" stroke-width="1"/>'
+        f'<polygon points="{area}" fill="var(--accent)" opacity="0.10"/>'
+        f'<polyline points="{line}" fill="none" stroke="var(--accent)"'
+        ' stroke-width="2" stroke-linejoin="round"/>'
+        f'<text x="{pad_l - 6}" y="{pad_t + 8}" text-anchor="end" font-size="10"'
+        f' fill="var(--text-3)">{html.escape(_fmt_bp(max_len))}</text>'
+        f'<text x="{pad_l - 6}" y="{pad_t + plot_h}" text-anchor="end" font-size="10"'
+        ' fill="var(--text-3)">0</text>'
+        f'<text x="{pad_l}" y="{height - 8}" text-anchor="middle" font-size="10"'
+        ' fill="var(--text-3)">0%</text>'
+        f'<text x="{px(50):.1f}" y="{height - 8}" text-anchor="middle" font-size="10"'
+        ' fill="var(--text-3)">50%</text>'
+        f'<text x="{px(100):.1f}" y="{height - 8}" text-anchor="middle" font-size="10"'
+        ' fill="var(--text-3)">100%</text>'
+        f"{marker}</svg>"
+    )
+
+
+def _render_quast_section(text: str, contig_stats: dict | None = None) -> str:
     """QUAST 组装质控的可视化渲染（v1.10.25：替代原始 TSV 文本块）。
 
     数据源是 ``steps.assembly_quast`` 内嵌的 QUAST 汇总指标（pipeline 固定
@@ -466,7 +551,7 @@ def _render_quast_section(text: str) -> str:
     纯 CSS 条形图 + 指标卡），原始文本保留在折叠块供溯源。
     """
     metrics = _quast_metrics(text)
-    if not metrics:
+    if not metrics and not (isinstance(contig_stats, dict) and contig_stats):
         return ""
     total = _num(metrics.get("Total length"))
     contigs = _num(metrics.get("# contigs"))
@@ -514,8 +599,78 @@ def _render_quast_section(text: str) -> str:
         profile_rows.append((label, count, shown))
     profile = _quast_bars(profile_rows, max_count)
 
+    # v1.10.28：逐 contig 分布（seqkit）——长度直方图、Nx 曲线、GC 分布。
+    stats = contig_stats if isinstance(contig_stats, dict) else {}
+    extra = ""
+    length_bins = stats.get("length_bins")
+    if isinstance(length_bins, list):
+        rows = [
+            (
+                str(bucket.get("label", "")),
+                float(bucket.get("count", 0) or 0),
+                f"{int(bucket.get('count', 0) or 0)} 条 · {_fmt_bp(bucket.get('bp'))}",
+            )
+            for bucket in length_bins
+            if isinstance(bucket, dict) and int(bucket.get("count", 0) or 0) > 0
+        ]
+        if rows:
+            extra += (
+                '<div class="chart-card"><h3>Contig 长度分布</h3>'
+                '<p class="muted" style="margin:0 0 10px;font-size:11px;">'
+                "按 contig 长度分箱（seqkit 含 &lt;500 bp，故与 QUAST 的 ≥500 bp 计数略有差异）；数量集中在短箱说明组装碎片化。</p>"
+                + _quast_bars(rows, max(row[1] for row in rows))
+                + "</div>"
+            )
+    gc_bins = stats.get("gc_bins")
+    if isinstance(gc_bins, list):
+        rows = [
+            (
+                str(bucket.get("label", "")),
+                float(bucket.get("count", 0) or 0),
+                f"{int(bucket.get('count', 0) or 0)} 条 · {_fmt_bp(bucket.get('bp'))}",
+            )
+            for bucket in gc_bins
+            if isinstance(bucket, dict) and int(bucket.get("count", 0) or 0) > 0
+        ]
+        if rows:
+            extra += (
+                '<div class="chart-card"><h3>GC 分布（按 contig）</h3>'
+                '<p class="muted" style="margin:0 0 10px;font-size:11px;">'
+                "单 contig GC 偏离整体（污染/拼装异常）会在尾部分箱显现。</p>"
+                + _quast_bars(rows, max(row[1] for row in rows))
+                + "</div>"
+            )
+    nx = stats.get("nx")
+    if isinstance(nx, list) and nx:
+        extra += (
+            '<div class="chart-card"><h3>Nx 曲线（累计长度）</h3>'
+            '<p class="muted" style="margin:0 0 10px;font-size:11px;">'
+            "横轴为累计长度百分比，纵轴为该比例下的 contig 长度；曲线越陡、N50 越高越好。</p>"
+            + _nx_svg(nx)
+            + "</div>"
+        )
+    top = stats.get("top_contigs")
+    if isinstance(top, list) and top:
+        top_rows = "".join(
+            "<tr><td><code>"
+            + html.escape(str(item.get("name", "")))
+            + "</code></td><td>"
+            + html.escape(_fmt_bp(item.get("length")))
+            + "</td><td>"
+            + (f"{item.get('gc')}%" if item.get("gc") is not None else "—")
+            + "</td></tr>"
+            for item in top
+            if isinstance(item, dict)
+        )
+        extra += (
+            "<h3>最长 contig</h3>"
+            "<table><tr><th>Contig</th><th>长度</th><th>GC</th></tr>"
+            + top_rows
+            + "</table>"
+        )
+
     return (
-        "<h3>QUAST 组装质控</h3>"
+        "<h2>组装质控</h2>"
         + _stat_strip(items)
         + '<div class="chart-grid">'
         + '<div class="chart-card"><h3>组装连续性（相对总长度）</h3>'
@@ -527,87 +682,99 @@ def _render_quast_section(text: str) -> str:
         + profile
         + "</div>"
         + "</div>"
+        + '<div class="chart-grid">'
+        + extra
+        + "</div>"
         + '<details class="gene-details"><summary>原始 QUAST 汇总数据</summary>'
         + f'<pre class="quast">{html.escape(text)}</pre></details>'
     )
 
 
-def _render_annotation_section(summary: dict) -> str:
-    """QUAST 组装质控 + Bakta/eggNOG 注释摘要（无数据时返回空串）。"""
+def _render_assembly_qc_section(summary: dict, sample_id: str = "") -> str:
+    """组装质控（QUAST 汇总 + seqkit 逐 contig）。独立板块，不与注释合并。"""
     steps = summary.get("steps", {})
     quast = steps.get("assembly_quast", "")
+    contig_stats = steps.get("assembly_contig_stats", {})
+    if not contig_stats and sample_id:
+        # 旧 summary 无逐 contig 统计：只读回退（seqkit TSV 或 assembly FASTA）。
+        from bacmap.core.analysis.assembly_qc import load as load_assembly_qc
+
+        contig_stats = load_assembly_qc(RESULTS_DIR / sample_id)
+    if not quast and not contig_stats:
+        return ""
+    return _render_quast_section(str(quast), contig_stats)
+
+
+def _render_annotation_section(summary: dict) -> str:
+    """基因组注释（Bakta / eggNOG-mapper）。独立板块。"""
+    steps = summary.get("steps", {})
     ann = steps.get("annotation", {})
-    if not quast and not (isinstance(ann, dict) and ann):
+    if not (isinstance(ann, dict) and ann):
         return ""
 
-    parts: list[str] = ['<h2>组装质控与基因组注释</h2>']
-    if quast:
-        parts.append(_render_quast_section(str(quast)))
-
-    if isinstance(ann, dict) and ann:
-        status = ann.get("status", "ok")
-        rate_raw = float(ann.get("annotation_rate", 0) or 0)
-        rate_pct = rate_raw * 100 if rate_raw <= 1 else rate_raw
-        parts.append("<h3>Bakta / eggNOG-mapper</h3>")
+    status = ann.get("status", "ok")
+    rate_raw = float(ann.get("annotation_rate", 0) or 0)
+    rate_pct = rate_raw * 100 if rate_raw <= 1 else rate_raw
+    parts: list[str] = ["<h2>基因组注释</h2>"]
+    parts.append(
+        "<table>"
+        + _row("注释状态", status)
+        + _row("CDS 总数", ann.get("total_CDS", "—"))
+        + _row("已注释 CDS", ann.get("annotated_CDS", "—"))
+        + _row("注释率", f"{rate_pct:.1f}%")
+        + "</table>"
+    )
+    bakta = ann.get("bakta", {})
+    if isinstance(bakta, dict) and bakta:
+        rows = "".join(
+            f"<tr><td>{html.escape(str(k))}</td><td>{html.escape(str(v))}</td></tr>"
+            for k, v in bakta.items()
+        )
+        parts.append(f"<h3>Bakta 特征计数</h3><table><tr><th>类型</th><th>数量</th></tr>{rows}</table>")
+        parts.append(
+            '<div class="chart-card"><h3>Bakta 特征分布</h3>'
+            + _bar_chart([(str(k), _num(v)) for k, v in bakta.items()])
+            + "</div>"
+        )
+    egg = ann.get("eggnog", {})
+    if isinstance(egg, dict) and egg:
+        cog = egg.get("cog_category_counts", {})
+        cog_text = ", ".join(f"{k}:{v}" for k, v in cog.items()) if isinstance(cog, dict) else "—"
+        cog_bars = (
+            _bar_chart([(str(k), _num(v)) for k, v in cog.items()])
+            if isinstance(cog, dict)
+            else ""
+        )
         parts.append(
             "<table>"
-            + _row("注释状态", status)
-            + _row("CDS 总数", ann.get("total_CDS", "—"))
-            + _row("已注释 CDS", ann.get("annotated_CDS", "—"))
-            + _row("注释率", f"{rate_pct:.1f}%")
+            + _row("eggNOG 查询", egg.get("queries", "—"))
+            + _row("eggNOG 已注释", egg.get("annotated", "—"))
+            + _row("COG 分类", cog_text or "—")
+            + _row("GO terms", egg.get("go_term_count", "—"))
+            + _row("KEGG KO", egg.get("kegg_ko_count", "—"))
+            + _row("KEGG Pathway", egg.get("kegg_pathway_count", "—"))
+            + _row("CAZy", egg.get("cazy_count", "—"))
+            + _row("Pfam", egg.get("pfam_count", "—"))
             + "</table>"
         )
-        bakta = ann.get("bakta", {})
-        if isinstance(bakta, dict) and bakta:
-            rows = "".join(
-                f"<tr><td>{html.escape(str(k))}</td><td>{html.escape(str(v))}</td></tr>"
-                for k, v in bakta.items()
-            )
-            parts.append(f"<h3>Bakta 特征计数</h3><table><tr><th>类型</th><th>数量</th></tr>{rows}</table>")
-            parts.append(
-                '<div class="chart-card"><h3>Bakta 特征分布</h3>'
-                + _bar_chart([(str(k), _num(v)) for k, v in bakta.items()])
-                + "</div>"
-            )
-        egg = ann.get("eggnog", {})
-        if isinstance(egg, dict) and egg:
-            cog = egg.get("cog_category_counts", {})
-            cog_text = ", ".join(f"{k}:{v}" for k, v in cog.items()) if isinstance(cog, dict) else "—"
-            cog_bars = (
-                _bar_chart([(str(k), _num(v)) for k, v in cog.items()])
-                if isinstance(cog, dict)
-                else ""
-            )
-            parts.append(
-                "<table>"
-                + _row("eggNOG 查询", egg.get("queries", "—"))
-                + _row("eggNOG 已注释", egg.get("annotated", "—"))
-                + _row("COG 分类", cog_text or "—")
-                + _row("GO terms", egg.get("go_term_count", "—"))
-                + _row("KEGG KO", egg.get("kegg_ko_count", "—"))
-                + _row("KEGG Pathway", egg.get("kegg_pathway_count", "—"))
-                + _row("CAZy", egg.get("cazy_count", "—"))
-                + _row("Pfam", egg.get("pfam_count", "—"))
-                + "</table>"
-            )
-            if cog_bars:
-                parts.append('<div class="chart-card"><h3>COG 功能分类</h3>' + cog_bars + "</div>")
-        top = ann.get("top_genes", [])
-        if isinstance(top, list) and top:
-            rows = "".join(
-                "<tr>"
-                f"<td>{html.escape(str(g.get('gene', '')))}</td>"
-                f"<td>{html.escape(str(g.get('product', '')))}</td>"
-                f"<td>{html.escape(str(g.get('source', '')))}</td>"
-                "</tr>"
-                for g in top
-                if isinstance(g, dict)
-            )
-            parts.append(
-                "<h3>重点基因（前 20）</h3>"
-                "<table><tr><th>基因</th><th>产物</th><th>来源</th></tr>"
-                f"{rows}</table>"
-            )
+        if cog_bars:
+            parts.append('<div class="chart-card"><h3>COG 功能分类</h3>' + cog_bars + "</div>")
+    top = ann.get("top_genes", [])
+    if isinstance(top, list) and top:
+        rows = "".join(
+            "<tr>"
+            f"<td>{html.escape(str(g.get('gene', '')))}</td>"
+            f"<td>{html.escape(str(g.get('product', '')))}</td>"
+            f"<td>{html.escape(str(g.get('source', '')))}</td>"
+            "</tr>"
+            for g in top
+            if isinstance(g, dict)
+        )
+        parts.append(
+            "<h3>重点基因（前 20）</h3>"
+            "<table><tr><th>基因</th><th>产物</th><th>来源</th></tr>"
+            f"{rows}</table>"
+        )
     return "\n".join(parts)
 
 
@@ -633,11 +800,64 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     h1 = sero.get("h1", "") if isinstance(sero, dict) else ""
     h2 = sero.get("h2", "") if isinstance(sero, dict) else ""
 
+    # 抗原式按物种：沙门菌 O:H1:H2、副溶血弧菌 O:K（OL/KL 位点）、大肠 O:H；
+    # 无抗原分型的物种（李斯特血清群、志贺血清型等）不展示这一行。
+    sample_dir = RESULTS_DIR / sample_id
+
+    def _meaningful(value: str) -> bool:
+        return str(value or "").strip() not in {"", "N/A", "n/a", "-", "None", "none"}
+
+    def _phase(value: str) -> str:
+        # H 相里的 "-" 是合法的单相标记（如 1,4,[5],12:i:-）
+        text = str(value or "").strip()
+        return "" if text in {"", "N/A", "n/a", "None", "none"} else text
+
+    antigen_label = "抗原式"
+    antigen_value = str(sero.get("antigen_formula") or "") if isinstance(sero, dict) else ""
+    antigen_kind = str(sero.get("antigen_kind") or "") if isinstance(sero, dict) else ""
+    if _meaningful(antigen_value):
+        antigen_label = {
+            "O:K": "抗原式（O:K）",
+            "O:H1:H2": "抗原式（O:H1:H2）",
+            "O:H": "抗原式（O:H）",
+        }.get(antigen_kind, "抗原式")
+    else:
+        antigen_value = ""
+        vpa_sero = steps.get("vpa_serotype")
+        if isinstance(vpa_sero, dict) and _meaningful(
+            str(vpa_sero.get("predicted_serotype") or "")
+        ):
+            # 旧 summary（v1.10.28 前）没有位点 ID：先从原始 gspec screen 取
+            # OL/KL 位点，取不到再退回 O10:K4 表型。
+            antigen_label = "抗原式（O:K）"
+            antigen_value = (
+                _vpa_formula_from_screen(sample_dir)
+                or str(vpa_sero["predicted_serotype"])
+            )
+            if not _meaningful(serovar):
+                # 更旧的 summary 连 steps.serotype.value 都还是 N/A。
+                serovar = str(vpa_sero["predicted_serotype"])
+        elif "Salmonella" in verdict:
+            parts = [str(p) for p in (o_antigen, h1, h2) if _meaningful(str(p))]
+            if len(parts) == 3:
+                antigen_label = "抗原式（O:H1:H2）"
+                antigen_value = ":".join(parts)
+        else:
+            dec = steps.get("dec") if isinstance(steps.get("dec"), dict) else {}
+            ecoh_raw = dec.get("ecoh_serotype") if isinstance(dec, dict) else None
+            ecoh = ecoh_raw if isinstance(ecoh_raw, dict) else {}
+            o_type = str(ecoh.get("o_type") or "")
+            h_type = str(ecoh.get("h_type") or "")
+            if _meaningful(o_type) and _meaningful(h_type):
+                antigen_label = "抗原式（O:H）"
+                antigen_value = f"{o_type}:{h_type}"
+    antigen_row = _row(antigen_label, antigen_value) if antigen_value else ""
+    serogroup_row = _row("血清群", serogroup) if _meaningful(str(serogroup or "")) else ""
+
     # v1.10.19：gspec screen 结果 JSON 优先（gspec/<kind>.json），
     # 旧运行目录回退 TSV 布局（amr/abricate_<kind>.tsv）。
     from bacmap.core.utils import load_screen_hits
 
-    sample_dir = RESULTS_DIR / sample_id
     card_genes = load_screen_hits(sample_dir, "card")
     vfdb_genes = load_screen_hits(sample_dir, "vfdb")
     plasmid_genes = load_screen_hits(sample_dir, "plasmidfinder")
@@ -663,6 +883,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     )
 
     cgmlst_section = _render_cgmlst_section(sample_id, summary)
+    assembly_section = _render_assembly_qc_section(summary, sample_id)
     annotation_section = _render_annotation_section(summary)
     amr_section = _render_amr_section(card_genes)
     vf_section = _render_vf_section(vfdb_genes)
@@ -678,6 +899,11 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
         ]
     )
 
+    assembly_block = (
+        f'<section class="card">{assembly_section}</section>'
+        if assembly_section
+        else ""
+    )
     annotation_block = (
         f'<section class="card">{annotation_section}</section>'
         if annotation_section
@@ -700,7 +926,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="bacmap-report" content="8">
+<meta name="bacmap-report" content="10">
 <title>{sample_id} · 分析报告 · bacmap</title>
 <style>
   :root {{
@@ -862,7 +1088,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
   .chart-card h3 {{ margin: 0 0 10px; }}
   .bars {{ display: grid; gap: 7px; }}
   .bar-row {{ display: grid; grid-template-columns: minmax(86px, 150px) minmax(0, 1fr) 52px; align-items: center; gap: 9px; font-size: 11px; }}
-  .quast-bars .bar-row {{ grid-template-columns: minmax(64px, 110px) minmax(0, 1fr) auto; }}
+  .quast-bars .bar-row {{ grid-template-columns: 104px minmax(0, 1fr) 118px; }}
   .quast-bar-value {{ white-space: nowrap; }}
   .bar-label {{ overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }}
   .bar-track {{ height: 7px; overflow: hidden; border-radius: 999px; background: var(--code-bg); }}
@@ -946,8 +1172,8 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
       {_row("MLST ST", st)}
       {_row("MLST Alleles", allele_str)}
       {_row("血清型", serovar)}
-      {_row("血清群", serogroup)}
-      {_row("抗原式", f"{o_antigen}:{h1}:{h2}")}
+      {serogroup_row}
+      {antigen_row}
       {_row("Contigs 数", num_contigs)}
       {_row("组装总长度", f"{total_len} bp")}
     </table>
@@ -961,6 +1187,7 @@ def generate_html(sample_id: str, summary: dict, verification, output_path: Path
     </table>
   </section>
 
+  {assembly_block}
   {annotation_block}
   {nli_block}
 

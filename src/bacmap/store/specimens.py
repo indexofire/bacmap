@@ -83,6 +83,36 @@ class SpecimenService:
         ).fetchone()
         return dict(row) if row else None
 
+    def delete(self, specimen_id: str, *, force: bool = False) -> dict[str, Any]:
+        """删除样本。
+
+        默认只允许删除**空样本**（无关联菌株）；``force=True`` 先把关联菌株的
+        ``specimen_id`` 置空（不删菌株/测序数据）再删除。返回
+        ``{"deleted": bool, "unlinked_isolates": n}``。
+        """
+        row = self.get(specimen_id)
+        if row is None:
+            return {"deleted": False, "unlinked_isolates": 0}
+        linked = self._conn.execute(
+            "SELECT COUNT(*) FROM isolates WHERE specimen_id = ?", (specimen_id,)
+        ).fetchone()[0]
+        if linked and not force:
+            raise ValueError(
+                f"specimen {specimen_id!r} has {linked} linked isolate(s); "
+                "reassign them first or use force to unlink"
+            )
+        unlinked = 0
+        if linked:
+            now = datetime.now(UTC).isoformat()
+            self._conn.execute(
+                "UPDATE isolates SET specimen_id = NULL, updated_at = ?"
+                " WHERE specimen_id = ?",
+                (now, specimen_id),
+            )
+            unlinked = int(linked)
+        self._conn.execute("DELETE FROM specimens WHERE specimen_id = ?", (specimen_id,))
+        return {"deleted": True, "unlinked_isolates": unlinked}
+
     def isolates(self, specimen_id: str) -> list[dict[str, Any]]:
         """该样本下的菌株（隔离/传代信息原样返回）。"""
         rows = self._conn.execute(

@@ -239,6 +239,18 @@ gmlst scheme download ecoli_2
 The cache is lost when the pixi environment is rebuilt; rerun the download after rebuilding.
 EnteroBase rate-limits anonymous downloads, so retry patiently.
 
+SNP/phylogeny reference genomes (NCBI) are fetched once into
+`$BACMAP_HOME/data/reference/genomes/` and registered in `refs/manifest.json`:
+
+```bash
+pixi run python scripts/fetch_reference_genomes.py            # all SNP groups
+pixi run python scripts/fetch_reference_genomes.py --verify   # check accessions first
+pixi run python scripts/fetch_reference_genomes.py --only salmonella,vpara
+```
+
+The accession table is `src/bacmap/workflow/config/reference_accessions.yaml`; existing files are
+skipped unless `--force` is given, and failures are non-fatal unless `--strict`.
+
 Large optional databases (CheckM2, GTDB-Tk) are located through environment variables:
 
 ```bash

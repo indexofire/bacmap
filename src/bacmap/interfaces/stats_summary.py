@@ -21,9 +21,9 @@ def _count(conn: sqlite3.Connection, sql: str, params: tuple = ()) -> Any:
         return None
 
 
-def _rows(conn: sqlite3.Connection, sql: str) -> list[tuple]:
+def _rows(conn: sqlite3.Connection, sql: str, params: tuple = ()) -> list[tuple]:
     try:
-        return conn.execute(sql).fetchall()
+        return conn.execute(sql, params).fetchall()
     except sqlite3.Error:
         return []
 
@@ -135,6 +135,65 @@ def gather_stats(home: str | Path) -> dict[str, Any]:
                     )
                 ],
             }
+            # v1.10.27：物种优先的分层统计——全库混合的 ST/血清型/耐药
+            # 无生物学意义；每个物种下再给 MLST / 血清型 / AMR Top。
+            by_species: list[dict[str, Any]] = []
+            for entry in out["strains"]["species"]:
+                species = str(entry["name"])
+                count = int(entry["count"])
+                by_species.append(
+                    {
+                        "name": species,
+                        "count": count,
+                        "mlst": [
+                            {"name": r[0], "count": r[1]}
+                            for r in _rows(
+                                conn,
+                                "SELECT mlst_st, COUNT(*) AS n FROM strain_genotype_index"
+                                " WHERE species = ? AND mlst_st != ''"
+                                " GROUP BY mlst_st ORDER BY n DESC LIMIT 8",
+                                (species,),
+                            )
+                        ],
+                        "serotypes": [
+                            {"name": r[0], "count": r[1]}
+                            for r in _rows(
+                                conn,
+                                "SELECT serotype, COUNT(*) AS n FROM strain_genotype_index"
+                                " WHERE species = ? AND serotype != ''"
+                                " GROUP BY serotype ORDER BY n DESC LIMIT 8",
+                                (species,),
+                            )
+                        ],
+                        "amr_top": [
+                            {"name": r[0], "count": r[1]}
+                            for r in _rows(
+                                conn,
+                                "SELECT g.gene_name, COUNT(*) AS n"
+                                " FROM strain_amr_genes g"
+                                " JOIN strain_genotype_index s"
+                                "   ON s.strain_id = g.strain_id"
+                                " WHERE s.species = ? AND g.database != 'vfdb'"
+                                " GROUP BY g.gene_name ORDER BY n DESC LIMIT 10",
+                                (species,),
+                            )
+                        ],
+                        "virulence_top": [
+                            {"name": r[0], "count": r[1]}
+                            for r in _rows(
+                                conn,
+                                "SELECT g.gene_name, COUNT(*) AS n"
+                                " FROM strain_amr_genes g"
+                                " JOIN strain_genotype_index s"
+                                "   ON s.strain_id = g.strain_id"
+                                " WHERE s.species = ? AND g.database = 'vfdb'"
+                                " GROUP BY g.gene_name ORDER BY n DESC LIMIT 10",
+                                (species,),
+                            )
+                        ],
+                    }
+                )
+            out["strains"]["by_species"] = by_species
         finally:
             conn.close()
     else:
@@ -145,6 +204,7 @@ def gather_stats(home: str | Path) -> dict[str, Any]:
             "serotypes": [],
             "mlst": [],
             "amr_top": [],
+            "by_species": [],
         }
 
     data_db = root / "data" / "bacmap.sqlite"

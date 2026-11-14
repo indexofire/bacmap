@@ -209,7 +209,19 @@ class TestSpeciesRouting:
                         "k_group": {"phenotype": "K6", "confidence": "high"},
                         "serotype": {"phenotype": "O3:K6", "confidence": "high"},
                     },
-                    "loci": [{"locus": "OL3"}],
+                    "loci": [
+                        {
+                            "locus": "OL3",
+                            "label": "OL3",
+                            "type": "O3",
+                            "coverage_pct": 100.0,
+                            "identity_pct": 99.8,
+                            "genes": [
+                                {"gene_id": "g1", "verdict": "present"},
+                                {"gene_id": "g2", "verdict": "partial"},
+                            ],
+                        }
+                    ],
                 }
             ],
         }
@@ -243,6 +255,21 @@ class TestSpeciesRouting:
         assert data["databases"]["vpa_ok"]["status"] == "ran"
         assert data["databases"]["vpa_ok"]["phenotype"] == "O3:K6"
         assert data["databases"]["vpa_pai"]["status"] == "ran"
+        # 全部位点保留（不只 best），基因存在性计数随行
+        loci = data["databases"]["vpa_pai"]["loci"]
+        assert loci == [
+            {
+                "locus": "OL3",
+                "label": "OL3",
+                "type": "O3",
+                "coverage_pct": 100.0,
+                "identity_pct": 99.8,
+                "genes_present": 1,
+                "genes_partial": 1,
+                "genes_absent": 0,
+            }
+        ]
+        assert data["databases"]["vpa_pai"]["loci_count"] == 1
         # cluster 库绝不走 gspec typing
         assert all("typing" not in call for call in calls)
 

@@ -14,6 +14,7 @@ $BACMAP_HOME/results/
 │       ├── <dataset>/               # per-sample files
 │       │   ├── qc/
 │       │   ├── assembly/
+│       │   │   ├── contig_stats.tsv # seqkit 逐 contig 长度/GC（Nx、直方图）
 │       │   │   └── quast/           # QUAST report.tsv / transposed_report.tsv
 │       │   ├── annotation/          # Bakta + eggNOG + annotation.json
 │       │   ├── species/
@@ -66,12 +67,20 @@ ls "$BACMAP_HOME/results/runs/<task_id>/SAM-TYP-001/report/"
 
 报告是自包含的（内联样式，无外部请求），因此可以归档并离线查看。PDF 生成是可选项，需要本地转换器。
 
+抗原式按物种渲染：沙门菌为 O:H1:H2，副溶血弧菌为 O:K 并使用 OL/KL 位点
+（如 `OL10:KL4`），大肠埃希菌为 O:H；没有抗原分型方案的物种（如李斯特菌只有血清群、
+志贺菌只有血清型名）直接不显示该行。新运行从 `gspec/typing.json` 归一
+（`steps.serotype.antigen_formula`）；旧报告首次访问时按新模板重渲染，缺位点 ID 时
+回退读取原始 `gspec/vpa_ok_screen.json`。
+
 组装质控一节将 QUAST 汇总指标可视化为关键指标卡（总长度、contig 数、最大 contig、N50/N90/auN、
 L50/L90、GC、N's per 100 kbp）、组装连续性图（各长度占总长度的比例）与片段化剖面（各长度阈值下的
-contig 数与长度占比），原始 QUAST 表折叠保留供溯源。模板升级后报告会在首次访问时自动重渲染
-（`bacmap-report` 版本标记）。
+contig 数与长度占比），原始 QUAST 表折叠保留供溯源。另有逐 contig 的**长度分布、GC 分布与
+Nx 曲线**（数据来自 `seqkit fx2tab -n -l -g` 写入 `assembly/contig_stats.tsv`；报告以纯 SVG/CSS
+渲染，控制台概览用交互图表）。旧运行没有 `contig_stats.tsv` 时，报告/概览只读回退到 assembly
+FASTA，重新分析则写入完整统计。模板升级后报告会在首次访问时自动重渲染（`bacmap-report` 版本标记）。
 
-summary JSON 现在包含 `steps.assembly_quast`（QUAST 转置报告）与 `steps.annotation`
+summary JSON 现在包含 `steps.assembly_quast`（QUAST 转置报告）、`steps.assembly_contig_stats`（seqkit 派生的 Nx 曲线与长度/GC 分箱）与 `steps.annotation`
 （`status`、`total_CDS`、`annotated_CDS`、`annotation_rate`、`bakta` 计数、
 `eggnog` 的 COG/GO/KEGG 计数，以及 `top_genes`）。
 

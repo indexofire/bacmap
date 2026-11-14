@@ -16,6 +16,7 @@ from bacmap.tasks.records import (
     LabResultRecord,
     MetadataRecord,
     RecordKind,
+    SpecimenAssign,
     parse_record,
 )
 from bacmap.tasks.spec import TaskState, TaskType
@@ -59,6 +60,14 @@ class TestRecordModels:
         with pytest.raises(ValueError):
             KnowledgeImport(kind=RecordKind.KNOWLEDGE_IMPORT, title="")
 
+    def test_specimen_assign_requires_target(self):
+        with pytest.raises(ValueError):
+            SpecimenAssign(specimen_id="A03-SN-001")
+        model = parse_record(
+            {"kind": "specimen_assign", "specimen_id": "A03-SN-001", "isolates": ["ISO-1"]}
+        )
+        assert isinstance(model, SpecimenAssign)
+
     def test_discriminated_parsing(self):
         model = parse_record(
             {"kind": "knowledge_import", "title": "T", "content": "c", "identifier": "PMID:1"}
@@ -87,6 +96,33 @@ class TestRecordWorkflow:
 
         meta = StrainMetadataService(engine.home / "data" / "bacmap.sqlite").get("S1")
         assert meta is not None and meta.province == "Guangdong"
+
+    def test_specimen_assign_written(self, engine):
+        cfg = engine.home / "workflows" / "bacmap" / "config"
+        cfg.mkdir(parents=True, exist_ok=True)
+        (cfg / "samples.tsv").write_text(
+            "sample\tspecies\tR1\tR2\tlongread\tassembly\tisolate\tplatform\tchecksum\n"
+            "DS-1\tSAL\t\t\t\ta.fasta\tISO-1\tunknown\t\n",
+            encoding="utf-8",
+        )
+        tid = engine.submit(
+            TaskType.RECORD,
+            {
+                "kind": "specimen_assign",
+                "specimen_id": "A03-SN-001",
+                "datasets": ["DS-1"],
+            },
+            "mcp:agent",
+        )
+        assert _wait(engine, tid).state is TaskState.SUCCEEDED
+        from bacmap.store.isolates import IsolateService
+        from bacmap.store.specimens import SpecimenService
+
+        db = engine.home / "data" / "bacmap.sqlite"
+        with IsolateService(db) as isolates:
+            assert isolates.get("ISO-1")["specimen_id"] == "A03-SN-001"
+        with SpecimenService(db) as specimens:
+            assert specimens.get("A03-SN-001") is not None
 
     def test_lab_result_written(self, engine):
         tid = engine.submit(

@@ -2,9 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
+import AssemblyQcPanel from '../components/AssemblyQcPanel.vue'
 import CopyButton from '../components/CopyButton.vue'
 import { api } from '../api'
-import type { GvixbLink, RunRow, SampleDetail } from '../types'
+import type { AssemblyContigStats, GvixbLink, RunRow, SampleDetail } from '../types'
 import { appUrl, fmtTime, jsonText, shortId } from '../lib/format'
 import { useTheme } from '../composables/useTheme'
 
@@ -58,6 +59,10 @@ const annotation = computed(() => {
 const quast = computed(() => {
   const value = data.value?.steps?.assembly_quast
   return typeof value === 'string' ? value : ''
+})
+const contigStats = computed<AssemblyContigStats | null>(() => {
+  const value = data.value?.steps?.assembly_contig_stats
+  return value && typeof value === 'object' ? (value as AssemblyContigStats) : null
 })
 const topGenes = computed(() => {
   const list = annotation.value?.top_genes
@@ -357,10 +362,7 @@ onMounted(() => void load())
         </div>
 
         <div class="stack">
-          <section v-if="quast" class="card">
-            <div class="card__head"><h2 class="card__title">QUAST 组装质控</h2></div>
-            <div class="card__body"><pre class="code-block">{{ quast }}</pre></div>
-          </section>
+          <AssemblyQcPanel :stats="contigStats" :quast-text="quast" />
         </div>
       </div>
 

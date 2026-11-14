@@ -26,6 +26,7 @@ class RecordKind(StrEnum):
     LAB_RESULT = "lab_result"
     KNOWLEDGE_IMPORT = "knowledge_import"
     KNOWLEDGE_APPROVE = "knowledge_approve"
+    SPECIMEN_ASSIGN = "specimen_assign"
 
 
 class MetadataRecord(BaseModel):
@@ -75,6 +76,21 @@ class KnowledgeImport(BaseModel):
     entry_kind: Literal["literature", "method", "report"] = "literature"
 
 
+class SpecimenAssign(BaseModel):
+    """把测序数据/菌株关联到样本（v1.10.27 身份模型，经任务层审计写入）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["specimen_assign"] = "specimen_assign"
+    specimen_id: str = Field(min_length=1, max_length=128)
+    isolates: list[str] = Field(default_factory=list)
+    datasets: list[str] = Field(default_factory=list)
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.isolates and not self.datasets:
+            raise ValueError("give at least one isolate or dataset to assign")
+
+
 class KnowledgeApprove(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -83,10 +99,12 @@ class KnowledgeApprove(BaseModel):
 
 
 RecordTask = Annotated[
-    MetadataRecord | LabResultRecord | KnowledgeImport | KnowledgeApprove,
+    MetadataRecord | LabResultRecord | KnowledgeImport | KnowledgeApprove | SpecimenAssign,
     Field(discriminator="kind"),
 ]
-RecordModel = MetadataRecord | LabResultRecord | KnowledgeImport | KnowledgeApprove
+RecordModel = (
+    MetadataRecord | LabResultRecord | KnowledgeImport | KnowledgeApprove | SpecimenAssign
+)
 _ADAPTER: TypeAdapter[RecordModel] = TypeAdapter(RecordTask)
 
 

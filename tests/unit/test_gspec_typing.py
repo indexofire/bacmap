@@ -82,3 +82,34 @@ class TestClusterPreservation:
         assert entry["phenotypes"]["o_group"]["phenotype"] == "O3"
         assert entry["best_locus"] == "OL3"
         assert entry["loci_count"] == 2
+
+    def test_cluster_loci_list_pass_through(self):
+        """PAI 集合型库：全部位点都要保留，不能只剩 best_locus。"""
+        loci = [
+            {"locus": f"VPaI-{n}", "coverage_pct": 100.0, "genes_present": 9}
+            for n in (4, 5, 2, 3)
+        ]
+        out = summarize(
+            _payload(
+                "ran",
+                {
+                    "vpa_pai": {
+                        "kind": "cluster",
+                        "status": "ran",
+                        "best_locus": "VPaI-4",
+                        "type": "PAI",
+                        "loci_count": 4,
+                        "loci": loci,
+                        "raw_schema": "gspec.cluster/1",
+                    }
+                },
+            )
+        )
+        entry = out["databases"]["vpa_pai"]
+        assert [row["locus"] for row in entry["loci"]] == [
+            "VPaI-4",
+            "VPaI-5",
+            "VPaI-2",
+            "VPaI-3",
+        ]
+        assert entry["loci_count"] == 4

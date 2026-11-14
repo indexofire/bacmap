@@ -5,7 +5,7 @@
 
 ## 1. Web 控制台
 
-默认界面是 **Vue 3 控制台**（`/console/`，Vite 构建，暗色仪器式仪表盘）；`/` 会重定向到
+仪表盘顺序为：数据库概览 → 任务 → **物种优先**的型别统计（先选物种，再看该物种的 MLST/血清型/耐药与毒力基因分布，不展示全库混合统计）。默认界面是 **Vue 3 控制台**（`/console/`，Vite 构建，暗色仪器式仪表盘）；`/` 会重定向到
 这里。旧 Jinja 任务台已移除：旧路径（`/tasks`、`/plans`、`/samples`、`/gom` 等）会 307
 重定向到对应的 `/console/...`。SPA 以预构建静态资源提供：运行期不需要 Node/Bun
 （ADR-01）；Node 只在重新构建前端时使用。
@@ -14,6 +14,12 @@
 `localStorage`（`bacmap-theme`），刷新后保持。INK 为暗色仪器台，PAPER 为 TailAdmin
 风格浅色文档，CONCRETE 为 Swiss/brutalist 灰色模板（网格纸、硬边框、Helvetica 大标题、
 等宽数据与分屏海报式首页）。图表与样本 HTML 报告同步主题（`?theme=light|gray`）。
+
+**控制台登录**（单部署令牌，无账号体系）：设置 `BACMAP_WEB_TOKEN` 且
+`BACMAP_WEB_AUTH=cookie` 时，未登录的浏览器导航会跳转到 `/console/login`（Vue 登录页）；
+登录后顶栏显示操作员令牌指纹与登出按钮。未设置令牌时回环访问免鉴权；`bearer` 模式下
+登录页会说明浏览器需改用 cookie 模式。服务端渲染的 `/login` 保留为兼容/说明页。
+多用户账号与角色权限仍是设计稿（`docs/concepts/accounts.md`），尚未实现。
 
 ```bash
 bacmap start web                            # 默认 127.0.0.1:8800
@@ -28,11 +34,13 @@ pixi run -e web web-build
 
 | 路由 | 用途 |
 |---|---|
-| `/console/` | 仪表盘：KPI、7 天趋势、状态分布、待审批 |
+| `/console/` | 仪表盘：先数据库概览，再任务（KPI/7 天趋势/状态/待审批），最后物种优先的型别统计 |
 | `/console/tasks` | 任务列表、筛选与提交抽屉（analyze/curate） |
 | `/console/tasks/{id}` | 任务详情、事件时间线、审批卡、取消 |
 | `/console/plans`、`/console/plans/{id}` | 智能体提出的计划、完整参数、确认/拒绝 |
-| `/console/samples`、`/console/samples/{id}` | 已完成样本、单样本结果/注释与内嵌“完整报告”页签 |
+| `/console/specimens`, `/console/specimens/{id}` | 样本、其菌株与测序数据；页面内可直接把未关联菌株/测序数据关联到样本；详情页可删除样本（默认仅空样本，或先解除菌株关联再删——菌株/数据保留） |
+| `/console/isolates`, `/console/isolates/{id}` | 菌株实体、所属样本与测序数据 |
+| `/console/samples`、`/console/samples/{id}` | 测序数据（library）：单库结果/注释、可视化组装质控（QUAST 指标、contig 长度/GC 分布、Nx 曲线）与内嵌“完整报告”页签 |
 | `/console/runs`、`/console/runs/{id}` | 不可变运行记录与来源比较 |
 | `/console/records` | 元数据、化验结果、知识导入/审核表单 |
 | `/console/gom`、`/console/gom/{id}` | GOM 对象、不可变版本与载荷 |
@@ -40,7 +48,7 @@ pixi run -e web web-build
 | `/console/research/sessions/{id}` | 研究统计、图、产物与证据链 |
 | `/console/research/studies/{id}` | Study、Cohort、Plan、Claim（只读） |
 | `/console/overview` | 系统概览（版本、路径、数据策略、沙箱） |
-| `/console/search` | 按关键词/血清型/ST/基因检索样本 |
+| `/console/search` | 统一检索：样本（背景信息）、菌株（湿实验元数据）与测序数据（分析结果） |
 | `/research` | 高级研究工具（系统发育、logistic、对象写操作；Jinja） |
 | `/samples/{id}/report` | 报告 HTML 源（`?embed=1` 内嵌）；直接访问 307 到 `/console/samples/{id}?tab=report`，`?download=1` 改为附件，`?theme=light|gray` 浅色/灰色渲染 |
 | `/api/v1/*` | JSON API（见 [HTTP API 参考](../reference/api.zh.md)） |

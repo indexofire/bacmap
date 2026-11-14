@@ -293,7 +293,9 @@ bacmap start web --host 127.0.0.1 --port 8800
 
 - A non-loopback host without a token refuses to start.
 - Bearer mode is for API clients; browsers cannot set the header.
-- Cookie mode adds `/login`, signed `HttpOnly` sessions and CSRF on POST.
+- Cookie mode adds the console login page `/console/login` (Vue), signed `HttpOnly` sessions and
+  CSRF on POST; after login the top bar shows the operator fingerprint and a logout button. The
+  legacy `/login` page remains as a fallback/explanation page.
 - `BACMAP_WEB_URL` controls the plan `confirm_url` (default loopback).
 
 ## 10. Sandbox

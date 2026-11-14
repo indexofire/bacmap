@@ -14,6 +14,7 @@ $BACMAP_HOME/results/
 │       ├── <dataset>/               # per-sample files
 │       │   ├── qc/
 │       │   ├── assembly/
+│       │   │   ├── contig_stats.tsv # seqkit per-contig length/GC (Nx, histograms)
 │       │   │   └── quast/           # QUAST report.tsv / transposed_report.tsv
 │       │   ├── annotation/          # Bakta + eggNOG + annotation.json
 │       │   ├── species/
@@ -68,13 +69,24 @@ Open it from the Web:
 The report is self-contained (inline style, no external requests), so it can be archived and viewed
 offline. PDF generation is optional and needs a local converter.
 
+Antigen rows are species-aware: *Salmonella* shows O:H1:H2, *V. parahaemolyticus* shows O:K using
+the OL/KL locus IDs (e.g. `OL10:KL4`), *E. coli* shows O:H, while species without an antigen scheme
+(e.g. Listeria has only a serogroup, Shigella only a serotype name) omit the row entirely. New runs
+take this from `gspec/typing.json` (`steps.serotype.antigen_formula`); older reports are re-rendered
+on first view and fall back to the raw `gspec/vpa_ok_screen.json` when locus IDs are missing.
+
 The assembly QC section renders QUAST summary metrics visually — key-metric cards (total length,
 contig count, largest contig, N50/N90/auN, L50/L90, GC, N's per 100 kbp), a continuity chart
 (contig lengths as a share of the total) and a fragmentation profile (contig counts and length
-share per length threshold), with the raw QUAST table collapsed below for traceability. Reports
-regenerate on first view after template upgrades (the `bacmap-report` marker version).
+share per length threshold), with the raw QUAST table collapsed below for traceability. It also
+plots per-contig **length and GC distributions plus an Nx curve** (data from
+`seqkit fx2tab -n -l -g` written to `assembly/contig_stats.tsv`; the report renders it as pure
+SVG/CSS, while the console overview uses interactive charts). Older runs without
+`contig_stats.tsv` fall back read-only to the assembly FASTA; re-analysis writes the full
+statistics. Reports regenerate on first view after template upgrades (the `bacmap-report` marker
+version).
 
-The summary JSON now includes `steps.assembly_quast` (QUAST transposed report) and
+The summary JSON now includes `steps.assembly_quast` (QUAST transposed report), `steps.assembly_contig_stats` (seqkit-derived Nx curve, length/GC bins) and
 `steps.annotation` (`status`, `total_CDS`, `annotated_CDS`, `annotation_rate`,
 `bakta` counts, `eggnog` COG/GO/KEGG counts, and `top_genes`).
 

@@ -460,7 +460,8 @@ def _register_record_tool(server: MCPServer, engine: Any, profile: ProfileSpec) 
             "(strain_id, sample_id, fields), lab_result (strain_id, category, test_name, result, "
             "optional unit/method/interpretation/standard/tested_date/tested_by/lab/notes), "
             "knowledge_import (title, authors, year, source, identifier, content, entry_kind), "
-            "knowledge_approve (entry_id). Knowledge entries are staged until approved."
+            "knowledge_approve (entry_id), specimen_assign (specimen_id, isolates[], "
+            "datasets[]). Knowledge entries are staged until approved."
         ),
     )
     def record_data(record: dict[str, Any]) -> str:

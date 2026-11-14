@@ -5,6 +5,116 @@
 
 ## [Unreleased]
 
+### Dashboard 细节 + 参考基因组供给（v1.10.28）
+
+- **物种与型别分布**：圆角物种胶囊改为**单一面板 + 物种 tab**（直角、tab 下划线选中态），
+  切换后在同一面板内展示 MLST/血清型/耐药/毒力四个分区。
+- **数据库概览**：移除「AMR 基因命中」面板，保留 8 项，按 2 行 × 4 列显示。
+- **报告条形图**：报告模板标记 `9 → 10`，强制重渲染此前生成的 QUAST 报告（旧报告的
+  值列仍是 `auto`，看起来条长不一致）；新模板轨道等宽。
+- **参考基因组下载**：新增运维入口 `scripts/fetch_reference_genomes.py`（包装既有
+  `workflow/scripts/fetch_reference_genomes.py`），默认写入
+  `$BACMAP_HOME/data/reference/genomes/` 并登记 `refs/manifest.json`，支持
+  `--only/--verify/--force/--strict`；安装文档与 `scripts/README.md` 补用法。
+
+
+### 组装质控可视化（QUAST + seqkit，v1.10.28）
+
+- **概览页**：样本详情原先把 QUAST 汇总当纯文本 `<pre>` 展示；现升级为可视化面板——总长 /
+  contig 数 / 最长 contig / N50 / N75 / N90 / GC 指标卡，contig **长度分布**、**GC 分布**、
+  **Nx 曲线**（ECharts）与最长 contig 表；原始 QUAST 文本折叠保留供溯源。
+- **数据管线**：新增 `assembly_contig_stats` 规则（`seqkit fx2tab -n -l -g`）→
+  `assembly/contig_stats.tsv`；`collect_summary` 聚合为 `steps.assembly_contig_stats`
+  （长度/GC 分箱、0–100% Nx 点、top contigs），由 core/analysis/assembly_qc.py 统一实现。
+- **报告**：组装质控新增长度/GC 分布条图与 Nx 曲线（纯内联 SVG，CSP 禁脚本），并保留既有
+  QUAST 指标卡、连续性图与片段化剖面。组装质控与基因组注释拆成两个独立板块；QUAST
+  条形图的值列改为固定宽度，修复同一图内条长不一致的问题。
+- **旧运行兼容**：没有 `contig_stats.tsv` 时，报告/概览只读回退到 assembly FASTA；不改写
+  任何历史结果；重新分析后使用完整 seqkit 统计。
+- 测试：新增 assembly_qc 聚合/回退测试、报告 QUAST 可视化测试与 collect_summary 分布测试。
+
+### 报告抗原式按物种渲染（v1.10.28）
+
+- **问题**：报告“抗原式”固定输出 `o_antigen:h1:h2`（沙门菌格式），副溶血弧菌显示
+  `O10::`/`O10:N/A:N/A`，且所有物种都带这一行。
+- **修复**：报告按物种渲染——沙门菌 `O:H1:H2`；副溶血弧菌 `O:K` 且使用 OL/KL 位点
+  （如 `OL10:KL4`）；大肠埃希菌 `O:H`；无抗原分型方案的物种（如李斯特菌只有血清群、
+  志贺菌只有血清型名）不显示该行；`N/A` 血清群不再占位。
+- **数据**：`steps.serotype` 新增 `antigen_formula` / `antigen_kind`；VPA
+  `steps.vpa_serotype` 新增 `o_locus_id` / `k_locus_id` / `antigen_formula`
+  （`OL10V1` → `OL10`）。`typing.json` 的 cluster 表型保留 `winner_locus` 等证据字段。
+- **旧报告**：报告模板标记 `8 → 9`，首次访问自动重渲染；summary 缺位点 ID 时回退读取
+  原始 `gspec/vpa_ok_screen.json`，本次的真实 VPA 运行已验证输出 `OL10:KL4`。
+- 测试：新增报告抗原式 6 个用例 + SISTR 抗原式校验。
+
+### 控制台登录体验（单令牌，v1.10.28）
+
+- **登录页**：未登录的浏览器导航 303 到 `/console/login`（Vue 登录页，裸页面不加载导航
+  外壳）；登录表单调用 `POST /api/v1/auth/login`，沿用 ADR-14 的签名会话 cookie + CSRF。
+  旧服务端渲染 `/login` 保留为兼容/说明页（bearer/未启用模式仍给出说明）。
+- **操作员标识与登出**：控制台顶栏显示令牌指纹（`operator-xxxxxxxx`，不泄露令牌本体）
+  与登出按钮；`POST /api/v1/auth/logout` 清会话与 CSRF cookie（需 CSRF）。
+- **公开路径**：`/api/v1/auth/status`、`/api/v1/auth/login`、`/console/login` 与
+  `/console/assets/*` 免鉴权（登录页自身需要）；其余路径行为不变。API 401 跳转目标
+  同步改为控制台登录页。
+- **范围**：仍是单一部署令牌，不引入 users 表/角色；`docs/concepts/accounts.md`
+  的多用户 RBAC 仍为设计稿。`/login` 既有测试保留，新增登录页/状态/登录/登出测试。
+
+### 检索页布局修复 + Dashboard 物种优先重排
+
+- **检索页**：血清型 / MLST ST / AMR 毒力基因输入框改为自适应宽度
+  （200–240px）+ 显式行/列间距，避免 hover/focus 阴影与相邻控件贴边重叠。
+- **Dashboard**：数据库概览移到「任务」之前；新增「物种与型别分布」——先列物种
+  （含菌株数），选择后展示该物种的 MLST / 血清型 / 耐药 / 毒力基因 Top；移除全库
+  混合的 ST/血清型/耐药统计（无生物学意义）。`strain_amr_genes` 已同时索引 CARD
+  与 VFDB，统计按 `database` 拆分（耐药 Top 与毒力 Top 分开）。`/api/v1/stats`
+  新增 `strains.by_species`（全库旧字段保留兼容）。
+- **样本关联（Web / 智能体）**：控制台「样本」页内嵌「关联数据到样本」表单
+  （新编号 + 未关联菌株多选 / 测序数据手动输入），`POST /api/v1/specimens/assign`
+  （CSRF）；智能体经 `bacmap_record_data` 提交 `record.kind=specimen_assign`
+  （D4/local-trusted，任务层审计写入）。
+- **样本删除（安全语义）**：`SpecimenService.delete(force=)` +
+  `POST /api/v1/specimens/{id}/delete`（CSRF）+ `bacmap specimen delete <id> [--force]`
+  + 控制台样本详情页按钮。默认只删空样本（有关联菌株返回 409）；`--force` 先解除
+  菌株关联（`specimen_id=NULL`，**不删菌株/测序数据/分析结果**）并清空
+  `samples.tsv` 的 `specimen` 单元格，再删样本。权限点 `specimen.delete`
+  预留给后续多用户 RBAC（当前仓库尚无 users/角色实现，`docs/concepts/accounts.md`
+  仍为设计稿）。
+- **VPAI 全位点保留（修正“只剩一个 PAI”的观感）**：`gspec/typing.json` 的 cluster
+  库条目此前只保留 `best_locus` + `loci_count`，PAI 这类一个基因组可携带多个位点的
+  集合型库看起来像“只剩 VPaI-4”。现在 `run_gspec_typing` 把 `vpa_pai_screen.json`
+  的全部位点（locus/label/type/coverage/identity + present/partial/absent 基因数）
+  归一进 `databases.<db>.loci`，`core.analysis.gspec_typing` 原样透传到 summary。
+  注意：这**不是 gspec 缺陷**——gspec 的 cluster JSON 本来就给出全部 `loci`，是
+  bacmap 适配层此前只取 best。
+- 测试：新增物种分层统计测试、记录任务 specimen_assign 测试、Web 关联/删除接口
+  测试、删除 store/registry/CLI 测试、cluster 全位点保留测试。
+
+### 身份模型 P2：Web/API 样本与菌株读取界面
+
+- **API**：`GET /api/v1/specimens`（列表，含菌株数）、`GET /api/v1/specimens/{id}`
+  （样本 + 菌株 + 各菌株测序数据）、`GET /api/v1/isolates`（列表）、
+  `GET /api/v1/isolates/{id}`（菌株 + 样本 + 测序数据 + 湿实验元数据/化验）。全部只读，复用
+  views 层；`/api/v1/samples` 语义不变（测序数据分析结果）。
+- **控制台**：新增「样本」「菌株」页；样本详情列出菌株与测序数据入口，菌株详情显示
+  所属样本与测序数据；原「样本」页更名为「测序数据」（library），导航与页面文案同步。
+- **统一检索**：「样本检索」更名为「检索」，一次查询样本（背景信息）、菌株（湿实验
+  元数据）与测序数据（分析结果）；新增 `GET /api/v1/search/identity?q=`。
+- **菌株湿实验信息**：菌株详情展示 `strain_metadata`（元数据，如省份/病人年龄等）与
+  `lab_results`（化验结果）；语义分工——测序数据=分析结果，菌株=湿实验元数据，
+  样本=背景信息。
+- 测试：新增 specimens/isolates API 测试（列表/详情/归属/404、统一检索、湿实验）。
+
+### gspec 依赖升级 0.10.5（PyPI 发布版，移除本地路径依赖）
+
+- `pixi.toml`：`gspec = { path = "../gspec" }` → `gspec = "==0.10.5"`。此前本地
+  路径依赖会让 `pixi.lock` 绑死本机 checkout，CI 需克隆同级仓库且随上游漂移
+  （v1.10.25 的 CI 即因此失败）；改为发布版后 CI 恢复可复现。
+- **复核（ADR-20 升级清单）**：`gspec screen`（`--db`/`-f json`/`-o`/`-D`）与
+  `gspec typing`（`-f json`/`-o`/`-D`）签名不变；bacmap 侧 JSON 解析（screen
+  `files[].hits`、typing `schemes`/`serotype`）契约未变；全量测试通过。
+- CI：移除 `ci.yml`（3 处）与 `docs-pages.yml`（1 处）的 `../gspec` 同级克隆步骤。
+
 ### 身份模型 P1：样本（specimen）与菌株分离
 
 - **新层级**：`specimen（样本）→ isolate（菌株）→ library（测序数据）→ run（分析执行）`；

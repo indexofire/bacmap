@@ -220,6 +220,18 @@ gmlst scheme download ecoli_2
 
 重建 pixi 环境会丢失缓存；重建后请重新下载。EnteroBase 对匿名下载有限速，请耐心重试。
 
+SNP / 进化分析参考基因组（NCBI）一次性取回到 `$BACMAP_HOME/data/reference/genomes/`，
+并登记到 `refs/manifest.json`：
+
+```bash
+pixi run python scripts/fetch_reference_genomes.py            # 全部 SNP 组
+pixi run python scripts/fetch_reference_genomes.py --verify   # 先核验 accession
+pixi run python scripts/fetch_reference_genomes.py --only salmonella,vpara
+```
+
+accession 清单在 `src/bacmap/workflow/config/reference_accessions.yaml`；已存在的文件默认跳过，
+`--force` 重取；失败默认不中断，`--strict` 时非零退出。
+
 大型可选数据库（CheckM2、GTDB-Tk）通过环境变量定位：
 
 ```bash

@@ -34,11 +34,21 @@ Origin: http://127.0.0.1:8800
 | 方法 | 路径 | 用途 |
 |---|---|---|
 | GET | `/api/v1/capabilities` | API 版本、bacmap 版本、可计划类型、特性 |
+| GET | `/api/v1/auth/status` | 鉴权模式、登录状态与操作员指纹（公开） |
+| POST | `/api/v1/auth/login` | 用部署令牌换取签名会话 cookie（公开；仅 cookie 模式） |
+| POST | `/api/v1/auth/logout` | 清除会话与 CSRF cookie（需 CSRF） |
 | GET | `/api/v1/overview` | 系统概览（版本、路径、数据策略、沙箱、任务计数） |
 | GET | `/api/v1/stats` | 数据库统计（任务/运行/GOM/菌株/血清型/MLST/AMR/研究/知识库） |
 | GET | `/api/v1/samples?cursor=&limit=` | 已完成样本分页（仅解析当前页） |
 | GET | `/api/v1/samples/{id}` | 样本 digest + 完整 steps + 报告就绪标记 + gvixb 最新结果入口 |
+| GET | `/api/v1/specimens?limit=` | 样本列表（含菌株数） |
+| GET | `/api/v1/specimens/{id}` | 样本 + 菌株 + 各菌株的测序数据 |
+| GET | `/api/v1/isolates?limit=` | 菌株列表（样本归属、测序数据数） |
+| GET | `/api/v1/isolates/{id}` | 菌株 + 所属样本 + 测序数据 |
+| POST | `/api/v1/specimens/assign` | 把菌株/测序数据关联到样本（CSRF；样本不存在则创建） |
+| POST | `/api/v1/specimens/{id}/delete` | 删除样本（`force: true` 先解除菌株关联；菌株/数据保留） |
 | GET | `/api/v1/search?q=&serotype=&mlst_st=&amr_gene=` | 按关键词/血清型/ST/基因检索样本 |
+| GET | `/api/v1/search/identity?q=` | 统一检索：样本与菌株 |
 | GET | `/api/v1/tasks?limit=` | 最近的任务 |
 | POST | `/api/v1/tasks` | 提交 analyze/curate（`task_type`、`samples`、`scope`） |
 | GET | `/api/v1/tasks/{id}` | 任务状态与元数据 |

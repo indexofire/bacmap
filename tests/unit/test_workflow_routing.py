@@ -12,6 +12,7 @@ _COMMON = {
     "qc_json",
     "assembly_stats",
     "quast",
+    "contig_stats",
     "species_id",
     "mlst",
     "vfdb",

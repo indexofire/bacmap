@@ -216,6 +216,37 @@
   display: none;
 }
 
+/* 单令牌操作员标识（v1.10.28 控制台登录体验） */
+.operator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.operator__name {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.operator__logout {
+  width: 24px;
+  height: 24px;
+  color: var(--text-3);
+}
+
+.operator__logout:hover {
+  color: var(--text-1);
+}
+
 .crumbs {
   display: flex;
   align-items: center;
@@ -1381,6 +1412,10 @@ code {
 
 @media (max-width: 640px) {
   .topbar__search {
+    display: none;
+  }
+
+  .operator__name {
     display: none;
   }
 

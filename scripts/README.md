@@ -19,3 +19,4 @@ directories before ingestion.
 | `extract_genes.sh` | Extract gene CDS intervals from GFF file(s) |
 | `json2tsv.py` | Flatten NCBI datasets JSON into a TSV table |
 | `setup_annotation_dbs.py` | Download Bakta and eggNOG-mapper databases into `$BACMAP_HOME/refs/` (Bakta light ≈4 GB; eggNOG ≈tens of GB) |
+| `fetch_reference_genomes.py` | Download the SNP/recombination reference genomes from NCBI into `$BACMAP_HOME/data/reference/genomes/` and register them in `refs/manifest.json` (`--verify` cross-checks accessions first) |

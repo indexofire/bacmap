@@ -34,11 +34,21 @@ Origin: http://127.0.0.1:8800
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/v1/capabilities` | API version, bacmap version, plannable types, features |
+| GET | `/api/v1/auth/status` | auth mode, login state and operator fingerprint (public) |
+| POST | `/api/v1/auth/login` | exchange the deployment token for a signed session cookie (public; cookie mode only) |
+| POST | `/api/v1/auth/logout` | clear session + CSRF cookies (CSRF-protected) |
 | GET | `/api/v1/overview` | system overview (versions, paths, policy, sandbox, counts) |
 | GET | `/api/v1/stats` | database statistics (tasks/runs/GOM/strains/serotypes/MLST/AMR/research/knowledge) |
 | GET | `/api/v1/samples?cursor=&limit=` | completed-sample page (only the page is parsed) |
 | GET | `/api/v1/samples/{id}` | sample digest + full steps + report-ready flag + gvixb latest-result links |
+| GET | `/api/v1/specimens?limit=` | specimen list (with isolate counts) |
+| GET | `/api/v1/specimens/{id}` | specimen + isolates + each isolate's libraries |
+| GET | `/api/v1/isolates?limit=` | isolate list (specimen link, library counts) |
+| GET | `/api/v1/isolates/{id}` | isolate + specimen + libraries |
+| POST | `/api/v1/specimens/assign` | link isolates/datasets to a specimen (CSRF; creates the specimen) |
+| POST | `/api/v1/specimens/{id}/delete` | delete a specimen (`force: true` unlinks isolates first; isolates/data are kept) |
 | GET | `/api/v1/search?q=&serotype=&mlst_st=&amr_gene=` | sample search by keyword/serotype/ST/gene |
+| GET | `/api/v1/search/identity?q=` | unified search: specimens and isolates |
 | GET | `/api/v1/tasks?limit=` | recent tasks |
 | POST | `/api/v1/tasks` | submit analyze/curate (`task_type`, `samples`, `scope`) |
 | GET | `/api/v1/tasks/{id}` | task status and metadata |

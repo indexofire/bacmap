@@ -4,7 +4,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Icon from './Icon.vue'
 import ToastHost from './ToastHost.vue'
 import { api } from '../api'
-import type { AgentEmbedLink } from '../types'
+import type { AgentEmbedLink, AuthStatus } from '../types'
 import { useTheme } from '../composables/useTheme'
 
 const route = useRoute()
@@ -25,6 +25,7 @@ let pendingTimer: ReturnType<typeof setInterval> | undefined
 const title = computed(() => (route.meta.title as string | undefined) ?? '控制台')
 
 const agentEmbeds = ref<AgentEmbedLink[]>([])
+const auth = ref<AuthStatus | null>(null)
 
 const groups = computed(() => {
   const base = [
@@ -40,7 +41,9 @@ const groups = computed(() => {
     {
       label: '证据链',
       items: [
-        { to: '/samples', label: '样本', icon: 'records' },
+        { to: '/specimens', label: '样本', icon: 'records' },
+        { to: '/isolates', label: '菌株', icon: 'grid' },
+        { to: '/samples', label: '测序数据', icon: 'activity' },
         { to: '/runs', label: '运行记录', icon: 'runs' },
         { to: '/records', label: '数据记录', icon: 'file-text' },
         { to: '/gom', label: 'GOM', icon: 'server' },
@@ -50,7 +53,7 @@ const groups = computed(() => {
       label: '系统',
       items: [
         { to: '/overview', label: '系统概览', icon: 'overview' },
-        { to: '/search', label: '样本检索', icon: 'search' },
+        { to: '/search', label: '检索', icon: 'search' },
       ],
     },
   ]
@@ -78,6 +81,7 @@ onMounted(async () => {
   window.addEventListener('click', onDocumentClick)
   window.addEventListener('keydown', onDocumentKey)
   void loadPending()
+  void loadAuth()
   pendingTimer = setInterval(() => void loadPending(), 60_000)
   try {
     const cap = await api.capabilities()
@@ -117,6 +121,23 @@ async function loadPending() {
   } catch {
     // 统计接口不可用时保持上次计数，不打断导航。
   }
+}
+
+async function loadAuth() {
+  try {
+    auth.value = await api.authStatus()
+  } catch {
+    // 旧服务端没有 /auth/status：不显示操作员信息，控制台照常使用。
+  }
+}
+
+async function logout() {
+  try {
+    await api.logout()
+  } catch {
+    // 会话已过期时登出也会失败；无论如何回到登录页。
+  }
+  window.location.assign('/console/login')
 }
 
 function submitSearch() {
@@ -205,6 +226,24 @@ function submitSearch() {
         >
           <Icon name="search" />
         </RouterLink>
+
+        <div
+          v-if="auth?.enabled && auth.authenticated"
+          class="operator"
+          :title="`鉴权模式：${auth.mode}`"
+        >
+          <Icon name="shield" :size="13" />
+          <span class="operator__name">{{ auth.operator || '已登录' }}</span>
+          <button
+            class="icon-btn operator__logout"
+            type="button"
+            title="登出"
+            aria-label="登出"
+            @click="logout"
+          >
+            <Icon name="log-out" :size="15" />
+          </button>
+        </div>
 
         <div class="theme-control">
           <button

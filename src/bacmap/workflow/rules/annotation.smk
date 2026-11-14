@@ -71,6 +71,21 @@ rule assembly_qc_quast:
         "--min-contig {params.min_contig} {input.contigs}"
 
 
+rule assembly_contig_stats:
+    """逐 contig 长度/GC（seqkit）：Nx 曲线、长度分布与 GC 分布的数据源。
+
+    QUAST 只给汇总指标（N50/GC 等），无法画分布；这里用外部工具 seqkit 产出
+    每 contig 的 ``length`` / ``GC``，由 collect_summary 聚合成直方图与 Nx 点。
+    """
+    input:
+        contigs = str(WORKDIR) + "/{sample}/assembly/{sample}.fasta"
+    output:
+        stats = str(WORKDIR) + "/{sample}/assembly/contig_stats.tsv"
+    threads: 1
+    shell:
+        "seqkit fx2tab -n -l -g -H {input.contigs} > {output.stats}"
+
+
 if _ANN_ENABLED:
 
     rule bakta_annotate:

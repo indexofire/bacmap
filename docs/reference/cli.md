@@ -168,6 +168,28 @@ bacmap record knowledge-approve <entry_id>
 
 Examples in [Data & identity](../guide/data.md#5-records-metadata-lab-results-and-knowledge).
 
+## `bacmap specimen`
+
+```text
+bacmap specimen list|ls [--limit N] [--home H] [--json]
+bacmap specimen show <specimen_id> [--home H] [--json]
+bacmap specimen import <map.tsv> [--by {dataset,isolate}] [--dry-run]
+bacmap specimen assign --specimen ID [--dataset D ...] [--isolate I ...]
+bacmap specimen delete <specimen_id> [--force]
+```
+
+A specimen is the unique submission ID; it owns 0..N isolates, and each isolate may have several
+libraries. The ID may be empty (lab has not supplied it yet) and backfilled with `import`/`assign`.
+
+```bash
+bacmap specimen assign --specimen A03-SN-001 --dataset 26SAL0501 --dataset 26SAL0501__ont
+bacmap specimen delete A03-SN-001            # empty specimens only; fails when isolates are linked
+bacmap specimen delete A03-SN-001 --force    # unlink isolates first (isolates/data are kept), then delete
+```
+
+`delete` removes the specimen row (ID/origin/note) and clears the `specimen` cells in
+`samples.tsv`; isolates, sequencing data and analysis results are always kept.
+
 ## `bacmap research`
 
 ```text

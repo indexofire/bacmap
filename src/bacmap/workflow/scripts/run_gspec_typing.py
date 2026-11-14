@@ -16,7 +16,8 @@
                         "best_locus": "OL3", "type": "O3",
                         "phenotype": "O3:K6",
                         "phenotypes": {"o_group": {...}, "k_group": {...}}},
-        "vpa_pai":    {"kind": "cluster", "status": "ran", "loci_count": 10}
+        "vpa_pai":    {"kind": "cluster", "status": "ran", "best_locus": "VPaI-5",
+                        "loci_count": 8, "loci": [{"locus": "VPaI-5", ...}]}
       }
     }
 
@@ -224,14 +225,25 @@ def _cluster_result(document: dict[str, Any]) -> dict[str, Any]:
     entry = files[0] if isinstance(files, list) and files and isinstance(files[0], dict) else {}
     best = entry.get("best") if isinstance(entry.get("best"), dict) else {}
     raw_phenotypes = entry.get("phenotypes")
-    phenotypes: dict[str, dict[str, str]] = {}
+    phenotypes: dict[str, dict[str, Any]] = {}
     if isinstance(raw_phenotypes, dict):
         for name, call in raw_phenotypes.items():
             if isinstance(call, dict):
-                phenotypes[str(name)] = {
+                detail: dict[str, Any] = {
                     "phenotype": str(call.get("phenotype") or ""),
                     "confidence": str(call.get("confidence") or ""),
                 }
+                # v1.10.28：保留位点证据（如 VPA 的 OL10/KL4），供报告给出
+                # 物种特异的抗原式（旧实现只有 O/H1/H2，副溶血显示为空 H）。
+                if call.get("winner_locus"):
+                    detail["winner_locus"] = str(call.get("winner_locus"))
+                if call.get("winner_coverage_pct") is not None:
+                    detail["winner_coverage_pct"] = call.get("winner_coverage_pct")
+                if call.get("winner_identity_pct") is not None:
+                    detail["winner_identity_pct"] = call.get("winner_identity_pct")
+                if isinstance(call.get("notes"), list):
+                    detail["notes"] = [str(note) for note in call["notes"]]
+                phenotypes[str(name)] = detail
     phenotype = str(best.get("phenotype") or "")
     if not phenotype and phenotypes:
         serotype = phenotypes.get("serotype", {}).get("phenotype", "")
@@ -244,6 +256,28 @@ def _cluster_result(document: dict[str, Any]) -> dict[str, Any]:
             ]
             phenotype = ":".join(part for part in parts if part)
     loci = entry.get("loci")
+    # 保留 gspec 给出的**全部**位点：PAI 等集合型库一个基因组可携带多个位点，
+    # 只留 best 会把其余命中丢掉（v1.10.28，用户报告 VPaI 只剩一个）。
+    loci_rows: list[dict[str, Any]] = []
+    for item in loci if isinstance(loci, list) else []:
+        if not isinstance(item, dict):
+            continue
+        genes = item.get("genes")
+        calls = [g for g in genes if isinstance(g, dict)] if isinstance(genes, list) else []
+        present = sum(1 for g in calls if g.get("verdict") == "present")
+        partial = sum(1 for g in calls if g.get("verdict") == "partial")
+        loci_rows.append(
+            {
+                "locus": str(item.get("locus") or ""),
+                "label": str(item.get("label") or ""),
+                "type": str(item.get("type") or ""),
+                "coverage_pct": float(item.get("coverage_pct") or 0.0),
+                "identity_pct": float(item.get("identity_pct") or 0.0),
+                "genes_present": present,
+                "genes_partial": partial,
+                "genes_absent": max(0, len(calls) - present - partial),
+            }
+        )
     return {
         "kind": "cluster",
         "status": "ran",
@@ -251,7 +285,8 @@ def _cluster_result(document: dict[str, Any]) -> dict[str, Any]:
         "type": str(best.get("type") or ""),
         "phenotype": phenotype,
         "phenotypes": phenotypes,
-        "loci_count": len(loci) if isinstance(loci, list) else 0,
+        "loci_count": len(loci_rows) if isinstance(loci, list) else 0,
+        "loci": loci_rows,
         "raw_schema": str(document.get("schema") or ""),
     }
 

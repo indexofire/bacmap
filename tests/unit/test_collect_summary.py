@@ -19,6 +19,8 @@ def _run(
     gspec_typing: dict | None = None,
     annotation: dict | None = None,
     vfdb_genes: list[str] | None = None,
+    sistr: dict | None = None,
+    contig_stats: list[tuple[str, int, float]] | None = None,
 ) -> dict:
     rep = tmp_path / "results" / "S1" / "report"
     rep.mkdir(parents=True, exist_ok=True)
@@ -57,12 +59,24 @@ def _run(
             ),
             encoding="utf-8",
         )
+    contig_path = missing
+    if contig_stats is not None:
+        contig_path = str(tmp_path / "contig_stats.tsv")
+        lines = ["#name\tlength\tGC"] + [
+            f"{name}\t{length}\t{gc}" for name, length, gc in contig_stats
+        ]
+        Path(contig_path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    sistr_path = missing
+    if sistr is not None:
+        sistr_path = str(tmp_path / "sistr.json")
+        Path(sistr_path).write_text(json.dumps(sistr), encoding="utf-8")
     attrs = {
         "qc_json": missing,
         "assembly_stats": missing,
         "quast": missing,
         "mlst": missing,
-        "sistr": missing,
+        "sistr": sistr_path,
+        "contig_stats": contig_path,
         "vfdb": vfdb_path,
         "card": missing,
         "amrfinderplus": missing,
@@ -103,6 +117,23 @@ def test_string_markers_do_not_crash(tmp_path):
     assert summary["steps"]["dec"]["ipaH"] == "ipaH_positive"
 
 
+def test_salmonella_sistr_sets_antigen_formula(tmp_path):
+    summary = _run(
+        tmp_path,
+        {"species": "Salmonella"},
+        sistr={
+            "serovar": "Typhimurium",
+            "serogroup": "O4",
+            "o_antigen": "O4",
+            "h1": "i",
+            "h2": "1,2",
+        },
+    )
+    sero = summary["steps"]["serotype"]
+    assert sero["antigen_formula"] == "O4:i:1,2"
+    assert sero["antigen_kind"] == "O:H1:H2"
+
+
 def test_non_salmonella_marks_sistr_not_applicable(tmp_path):
     """SISTR 只属沙门菌：ECO 的 report 依赖里没有 sistr 输入。"""
     summary = _run(
@@ -130,6 +161,31 @@ def test_non_salmonella_marks_sistr_not_applicable(tmp_path):
     assert summary["steps"]["dec"]["pathotype_status"] == "not_applicable"
 
 
+
+def test_contig_stats_builds_nx_curve_and_bins(tmp_path):
+    summary = _run(
+        tmp_path,
+        {"species": "Salmonella"},
+        contig_stats=[
+            ("c1", 100_000, 0.50),
+            ("c2", 50_000, 0.50),
+            ("c3", 10_000, 0.40),
+        ],
+    )
+    stats = summary["steps"]["assembly_contig_stats"]
+    assert stats["count"] == 3
+    assert stats["total_length"] == 160_000
+    assert (stats["n50"], stats["l50"]) == (100_000, 1)
+    assert (stats["n75"], stats["l75"]) == (50_000, 2)
+    assert (stats["n90"], stats["l90"]) == (50_000, 2)
+    assert stats["gc_mean"] == 49.38
+    assert stats["length_bins"][-1] == {"label": "≥ 1 Mb", "count": 0, "bp": 0}
+    ten_k = next(b for b in stats["length_bins"] if b["label"] == "10–25 kb")
+    assert ten_k == {"label": "10–25 kb", "count": 1, "bp": 10_000}
+    assert stats["nx"][0] == {"x": 0, "length": 100_000}
+    assert stats["nx"][10] == {"x": 50, "length": 100_000}
+    assert stats["top_contigs"][0]["name"] == "c1"
+
 def test_vpa_ok_populates_serotype_from_gspec(tmp_path):
     summary = _run(
         tmp_path,
@@ -142,8 +198,16 @@ def test_vpa_ok_populates_serotype_from_gspec(tmp_path):
                     "status": "ran",
                     "phenotype": "O3:K6",
                     "phenotypes": {
-                        "o_group": {"phenotype": "O3", "confidence": "high"},
-                        "k_group": {"phenotype": "K6", "confidence": "high"},
+                        "o_group": {
+                            "phenotype": "O3",
+                            "confidence": "high",
+                            "winner_locus": "OL3V1",
+                        },
+                        "k_group": {
+                            "phenotype": "K6",
+                            "confidence": "high",
+                            "winner_locus": "KL6",
+                        },
                     },
                 }
             },
@@ -152,9 +216,15 @@ def test_vpa_ok_populates_serotype_from_gspec(tmp_path):
     assert summary["steps"]["vpa_serotype"]["predicted_serotype"] == "O3:K6"
     assert summary["steps"]["vpa_serotype"]["o_locus"] == "O3"
     assert summary["steps"]["vpa_serotype"]["k_locus"] == "K6"
+    # 位点 ID 去掉变体后缀（OL3V1 → OL3）；抗原式是物种特异的 O:K
+    assert summary["steps"]["vpa_serotype"]["o_locus_id"] == "OL3"
+    assert summary["steps"]["vpa_serotype"]["k_locus_id"] == "KL6"
+    assert summary["steps"]["vpa_serotype"]["antigen_formula"] == "OL3:KL6"
     assert summary["steps"]["vpa_serotype"]["source"] == "gspec:vpa_ok"
     # v1.10.26：O:K 必须同时进入统一入口 steps.serotype（Web/报告/检索读它）
     assert summary["steps"]["serotype"]["value"] == "O3:K6"
+    assert summary["steps"]["serotype"]["antigen_formula"] == "OL3:KL6"
+    assert summary["steps"]["serotype"]["antigen_kind"] == "O:K"
     assert summary["steps"]["serotype"]["method"] == "gspec vpa_ok"
     assert summary["steps"]["serotype"]["o_antigen"] == "O3"
     assert summary["steps"]["serotype"]["k_antigen"] == "K6"

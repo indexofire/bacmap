@@ -1,11 +1,32 @@
 """Snakemake script: collect all analysis results into a summary JSON."""
 import json
+import re
 from pathlib import Path
 
 from bacmap.core.utils import parse_mlst
 
 sample = snakemake.wildcards.sample
 summary = {"sample": sample, "steps": {}}
+
+# “无结果”占位符：报告按物种决定是否展示抗原式，这些值一律视为缺失。
+_NA_VALUES = {"", "N/A", "n/a", "-", "None", "none"}
+
+
+def _meaningful(value):
+    return str(value or "").strip() not in _NA_VALUES
+
+
+def _phase(value):
+    """H 相：``-`` 是合法的单相标记，只有空/N/A 视为缺失。"""
+    text = str(value or "").strip()
+    return "" if text in {"", "N/A", "n/a", "None", "none"} else text
+
+
+def _locus_id(value):
+    """位点名 → 抗原位点 ID：``OL10V1`` → ``OL10``；``KL4`` 保持 ``KL4``。"""
+    text = str(value or "").strip()
+    return re.sub(r"V\d+$", "", text) if text else ""
+
 
 
 def opt_input(name):
@@ -68,6 +89,15 @@ quast_text = read_file(snakemake.input.quast, "")
 if quast_text:
     summary["steps"]["assembly_quast"] = quast_text
 
+# v1.10.28：逐 contig 长度/GC（seqkit）→ Nx 曲线、长度与 GC 分布。
+_contig_stats_path = opt_input("contig_stats")
+if _contig_stats_path:
+    from bacmap.core.analysis.assembly_qc import from_seqkit_tsv
+
+    contig_metrics = from_seqkit_tsv(_contig_stats_path)
+    if contig_metrics:
+        summary["steps"]["assembly_contig_stats"] = contig_metrics
+
 species_id = read_json(snakemake.input.species_id, {})
 if not isinstance(species_id, dict):
     species_id = {}
@@ -102,6 +132,13 @@ summary["steps"]["serotype"] = {
     "h1": sistr.get("h1", "N/A"),
     "h2": sistr.get("h2", "N/A"),
 }
+# 沙门菌抗原式 O:H1:H2（O 必须有；H 相 ``-`` 是合法的单相标记）。
+_st = summary["steps"]["serotype"]
+_h1 = _phase(_st["h1"])
+_h2 = _phase(_st["h2"])
+if _meaningful(_st["o_antigen"]) and (_h1 or _h2):
+    _st["antigen_formula"] = f"{_st['o_antigen']}:{_h1 or '-'}:{_h2 or '-'}"
+    _st["antigen_kind"] = "O:H1:H2"
 if sistr_path is None:
     # v1.10.24：沙门菌已迁移到 gspec sen_sero_sistr——不再因无 SISTR 报
     # not_applicable；血清型从 gspec typing 的 schemes 取（下方统一入口）。
@@ -223,6 +260,12 @@ if _dec_applicable:
 
     summary["steps"]["dec"]["primary_serotype"] = primary_serotype
     summary["steps"]["dec"]["serotype_method"] = serotype_method
+    # E. coli 抗原式是 O:H（无 H1/H2 分相），与沙门菌格式不同。
+    _o_type = str(dec_serotype.get("o_type") or "")
+    _h_type = str(dec_serotype.get("h_type") or "")
+    if _meaningful(_o_type) and _meaningful(_h_type):
+        summary["steps"]["serotype"]["antigen_formula"] = f"{_o_type}:{_h_type}"
+        summary["steps"]["serotype"]["antigen_kind"] = "O:H"
     # 统一入口：前端/报告优先读 steps.serotype.value；沙门菌仍保留 sistr 字段。
     summary["steps"]["serotype"]["value"] = primary_serotype
     summary["steps"]["serotype"]["method"] = serotype_method
@@ -271,10 +314,17 @@ if isinstance(_vpa_ok, dict) and _vpa_ok.get("status") == "ran":
             part for part in (str(_o.get("phenotype") or ""), str(_k.get("phenotype") or "")) if part
         )
     if _serotype:
+        _o_id = _locus_id(_o.get("winner_locus"))
+        _k_id = _locus_id(_k.get("winner_locus"))
+        # 抗原式按物种：VPA 用 O/K 位点（OL10:KL4），而不是沙门菌的 O:H1:H2。
+        _formula = f"{_o_id}:{_k_id}" if _o_id and _k_id else _serotype
         summary["steps"]["vpa_serotype"] = {
             "predicted_serotype": _serotype,
             "o_locus": str(_o.get("phenotype") or "None"),
             "k_locus": str(_k.get("phenotype") or "None"),
+            "o_locus_id": _o_id or "None",
+            "k_locus_id": _k_id or "None",
+            "antigen_formula": _formula,
             "o_confidence": str(_o.get("confidence") or "Unknown"),
             "k_confidence": str(_k.get("confidence") or "Unknown"),
             "source": "gspec:vpa_ok",
@@ -286,6 +336,8 @@ if isinstance(_vpa_ok, dict) and _vpa_ok.get("status") == "ran":
         summary["steps"]["serotype"]["method"] = "gspec vpa_ok"
         summary["steps"]["serotype"]["o_antigen"] = str(_o.get("phenotype") or "")
         summary["steps"]["serotype"]["k_antigen"] = str(_k.get("phenotype") or "")
+        summary["steps"]["serotype"]["antigen_formula"] = _formula
+        summary["steps"]["serotype"]["antigen_kind"] = "O:K"
 # VPA 毒力标记（tdh/trh/tlh）按基因名扫 gspec 各库（官方 vpa_vf 或用户
 # 显式选择的库；v1.4.41 前的私有 vpara_virulence 库同样命中）；
 # O/K 血清型的 unavailable 语义按样本物种（registry 解析）判定。

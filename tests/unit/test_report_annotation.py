@@ -20,7 +20,7 @@ def test_report_template_is_dark_and_versioned(tmp_path):
     out = tmp_path / "S1_report.html"
     gr.generate_html("S1", summary, DeterministicVerifier().verify_all(summary), out)
     text = out.read_text(encoding="utf-8")
-    assert 'name="bacmap-report" content="8"' in text
+    assert 'name="bacmap-report" content="10"' in text
     assert "--bg: #08090a" in text
     assert "max-width: 900px" not in text  # 旧浅色模板已淘汰
 
@@ -51,12 +51,17 @@ def test_annotation_section_renders_quast_and_top_genes():
             },
         }
     }
+    qc_text = gr._render_assembly_qc_section(summary)
+    assert "组装质控" in qc_text
+    assert "QUAST" in qc_text
     html_text = gr._render_annotation_section(summary)
-    assert "QUAST" in html_text
+    assert "基因组注释" in html_text
     assert "Bakta" in html_text
     assert "80.0%" in html_text
     assert "J:10" in html_text
     assert "gyrA" in html_text
+    # 两个板块不再合并
+    assert "QUAST" not in html_text
 
 
 def test_nli_section_renders_persisted_ai_text(monkeypatch):
@@ -79,11 +84,11 @@ def test_nli_section_renders_persisted_ai_text(monkeypatch):
     assert "blaTEM-1" in html_text
 
 
-def test_annotation_section_quast_only_when_annotation_disabled():
-    html_text = gr._render_annotation_section(
+def test_assembly_qc_section_works_without_annotation():
+    html_text = gr._render_assembly_qc_section(
         {"steps": {"assembly_quast": "Assembly\tcontigs\ncontigs.fasta\t12"}}
     )
-    assert "QUAST" in html_text
+    assert "组装质控" in html_text
     assert "Bakta" not in html_text
 
 
@@ -107,8 +112,8 @@ def test_quast_section_renders_visualization_from_report_tsv():
             "# N's per 100 kbp\t0.00",
         ]
     )
-    html_text = gr._render_annotation_section({"steps": {"assembly_quast": quast}})
-    assert "QUAST 组装质控" in html_text
+    html_text = gr._render_assembly_qc_section({"steps": {"assembly_quast": quast}})
+    assert "组装质控" in html_text
     assert "组装连续性" in html_text and "片段化剖面" in html_text
     assert "4.70 Mb" in html_text and "170.1 kb" in html_text
     assert "9 条 contig 覆盖 50%" in html_text
@@ -121,10 +126,11 @@ def test_quast_section_handles_transposed_layout():
         "Assembly\t# contigs\tTotal length\tN50\tGC (%)\n"
         "contigs.fasta\t12\t4700000\t170133\t52.14"
     )
-    html_text = gr._render_annotation_section({"steps": {"assembly_quast": quast}})
+    html_text = gr._render_assembly_qc_section({"steps": {"assembly_quast": quast}})
     assert "4.70 Mb" in html_text and "170.1 kb" in html_text
     assert "52.14%" in html_text
 
 
-def test_annotation_section_empty_when_no_data():
+def test_sections_empty_when_no_data():
     assert gr._render_annotation_section({"steps": {}}) == ""
+    assert gr._render_assembly_qc_section({"steps": {}}) == ""

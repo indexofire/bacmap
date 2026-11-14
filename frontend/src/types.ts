@@ -7,6 +7,49 @@ export type TaskState =
   | 'failed'
   | 'cancelled'
 
+export interface AuthStatus {
+  enabled: boolean
+  mode: 'cookie' | 'bearer' | 'disabled'
+  authenticated: boolean
+  operator: string
+  login_url: string
+}
+
+export interface ContigBin {
+  label: string
+  count: number
+  bp: number
+}
+
+export interface NxPoint {
+  x: number
+  length: number
+}
+
+export interface TopContig {
+  name: string
+  length: number
+  gc: number | null
+}
+
+export interface AssemblyContigStats {
+  source: string
+  count: number
+  total_length: number
+  largest: number
+  n50: number
+  l50: number
+  n75: number
+  l75: number
+  n90: number
+  l90: number
+  gc_mean: number | null
+  length_bins: ContigBin[]
+  gc_bins: ContigBin[]
+  nx: NxPoint[]
+  top_contigs: TopContig[]
+}
+
 export type PlanState =
   | 'awaiting_confirmation'
   | 'confirmed'
@@ -117,6 +160,62 @@ export interface SampleDetail {
   steps: Record<string, unknown>
   summary: Record<string, unknown>
   gvixb?: GvixbLink[]
+}
+
+export interface LibraryRow {
+  library_id: string
+  sample?: string
+  isolate?: string
+  specimen?: string
+  species?: string
+  platform?: string
+  [key: string]: unknown
+}
+
+export interface IsolateRow {
+  isolate_id: string
+  specimen_id?: string | null
+  lineage_id?: string | null
+  passage?: number | null
+  n_libraries?: number
+  libraries?: LibraryRow[]
+  [key: string]: unknown
+}
+
+export interface SpecimenRow {
+  specimen_id: string
+  origin?: string
+  note?: string
+  n_isolates?: number
+  [key: string]: unknown
+}
+
+export interface SpecimenDetail {
+  specimen: SpecimenRow
+  isolates: IsolateRow[]
+}
+
+export interface LabResultRow {
+  id: string
+  strain_id: string
+  category: string
+  test_name: string
+  result: string
+  unit?: string
+  method?: string
+  interpretation?: string
+  tested_date?: string
+  lab?: string
+  notes?: string
+  [key: string]: unknown
+}
+
+export interface IsolateDetail {
+  isolate: IsolateRow
+  specimen: SpecimenRow | null
+  libraries: LibraryRow[]
+  metadata: Record<string, unknown> | null
+  lab_results: LabResultRow[]
 }
 
 export interface GomObject {
@@ -242,6 +341,15 @@ export interface CountItem {
   count: number
 }
 
+export interface SpeciesBreakdown {
+  name: string
+  count: number
+  mlst: CountItem[]
+  serotypes: CountItem[]
+  amr_top: CountItem[]
+  virulence_top: CountItem[]
+}
+
 export interface DatabaseStats {
   schema: string
   home: string
@@ -259,6 +367,7 @@ export interface DatabaseStats {
     serotypes: CountItem[]
     mlst: CountItem[]
     amr_top: CountItem[]
+    by_species?: SpeciesBreakdown[]
   }
   lab_results: { total: number; strains: number; [key: string]: unknown }
   knowledge: { entries: number; [key: string]: unknown }

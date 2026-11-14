@@ -200,11 +200,64 @@ class TestWebCookieAuth:
         monkeypatch.setenv("BACMAP_WEB_SECRET", "s3cr3t-sign")
         return TestClient(create_app(engine, auth_token="tok"))
 
-    def test_unauthenticated_html_redirects_to_login(self, engine, monkeypatch):
+    def test_unauthenticated_html_redirects_to_console_login(self, engine, monkeypatch):
         c = self._client(engine, monkeypatch)
         r = c.get("/", headers={"accept": "text/html"}, follow_redirects=False)
         assert r.status_code == 303
-        assert r.headers["location"].startswith("/login")
+        assert r.headers["location"].startswith("/console/login")
+
+    def test_console_login_page_and_assets_are_public(self, engine, monkeypatch):
+        c = self._client(engine, monkeypatch)
+        page = c.get("/console/login", headers={"accept": "text/html"})
+        assert page.status_code == 200
+        assert "text/html" in page.headers["content-type"]
+        # 登录页自身的 JS 资源不能被鉴权拦住（否则 Vue 永远起不来）
+        asset = c.get("/console/assets/")
+        assert asset.status_code != 401
+
+    def test_auth_status_and_json_login(self, engine, monkeypatch):
+        c = self._client(engine, monkeypatch)
+        before = c.get("/api/v1/auth/status").json()
+        assert before == {
+            "enabled": True,
+            "mode": "cookie",
+            "authenticated": False,
+            "operator": "",
+            "login_url": "/console/login",
+        }
+        assert c.post("/api/v1/auth/login", json={"token": "nope"}).status_code == 401
+        ok = c.post(
+            "/api/v1/auth/login",
+            json={"token": "tok", "next": "/console/tasks"},
+        )
+        assert ok.status_code == 200
+        assert ok.json()["next"] == "/console/tasks"
+        assert "bacmap_session=" in ok.headers.get("set-cookie", "")
+        after = c.get("/api/v1/auth/status").json()
+        assert after["authenticated"] is True
+        assert after["operator"].startswith("operator-")
+
+        csrf = c.cookies.get("bacmap_csrf")
+        out = c.post("/api/v1/auth/logout", headers={"x-csrf-token": csrf})
+        assert out.status_code == 200
+        assert c.get("/api/v1/auth/status").json()["authenticated"] is False
+
+    def test_auth_login_open_redirect_blocked(self, engine, monkeypatch):
+        c = self._client(engine, monkeypatch)
+        ok = c.post(
+            "/api/v1/auth/login",
+            json={"token": "tok", "next": "https://evil.example/x"},
+        )
+        assert ok.json()["next"] == "/console/"
+
+    def test_auth_login_disabled_without_token(self, engine, monkeypatch):
+        monkeypatch.delenv("BACMAP_WEB_AUTH", raising=False)
+        c = TestClient(create_app(engine))
+        status = c.get("/api/v1/auth/status").json()
+        assert status["enabled"] is False
+        assert status["mode"] == "disabled"
+        assert c.post("/api/v1/auth/login", json={"token": "x"}).status_code == 409
+        assert c.get("/console/login").status_code == 200
 
     def test_unauthenticated_xhr_gets_401(self, engine, monkeypatch):
         c = self._client(engine, monkeypatch)
@@ -397,7 +450,7 @@ class TestSampleReportDelivery:
         def fake_generate(args: dict[str, object]) -> str:
             calls.append(args)
             html.write_text(
-                '<html><head><meta name="bacmap-report" content="8"></head>'
+                '<html><head><meta name="bacmap-report" content="10"></head>'
                 "<body>new theme</body></html>",
                 encoding="utf-8",
             )

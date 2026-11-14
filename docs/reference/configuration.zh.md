@@ -291,7 +291,8 @@ bacmap start web --host 127.0.0.1 --port 8800
 
 - 非回环主机且无 token 时拒绝启动。
 - Bearer 模式用于 API 客户端；浏览器无法设置该请求头。
-- Cookie 模式增加 `/login`、签名的 `HttpOnly` 会话，以及 POST 的 CSRF。
+- Cookie 模式增加控制台登录页 `/console/login`（Vue）、签名的 `HttpOnly` 会话，以及 POST 的 CSRF；
+  登录后顶栏显示操作员令牌指纹与登出按钮。旧 `/login` 页面保留为兼容/说明页。
 - `BACMAP_WEB_URL` 控制计划的 `confirm_url`（默认回环）。
 
 ## 10. 沙箱

@@ -160,12 +160,46 @@ def run_assign(args: argparse.Namespace) -> None:
         )
 
 
+def run_delete(args: argparse.Namespace) -> None:
+    from bacmap.workflow.samples_registry import delete_specimen
+
+    try:
+        result = delete_specimen(Path(args.home), args.specimen_id, force=args.force)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    if not result["deleted"]:
+        raise SystemExit(
+            T(f"specimen not found: {args.specimen_id}", f"样本不存在：{args.specimen_id}")
+        )
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+    print(
+        T(
+            f"deleted specimen {result['specimen_id']}"
+            + (
+                f" ({result['unlinked_isolates']} isolate(s) unlinked,"
+                f" {result['updated_tsv_rows']} tsv row(s) cleared)"
+                if result["unlinked_isolates"] or result["updated_tsv_rows"]
+                else ""
+            ),
+            f"已删除样本 {result['specimen_id']}"
+            + (
+                f"（解除 {result['unlinked_isolates']} 个菌株关联，清理 "
+                f"{result['updated_tsv_rows']} 行 samples.tsv）"
+                if result["unlinked_isolates"] or result["updated_tsv_rows"]
+                else ""
+            ),
+        )
+    )
+
+
 def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     p = sub.add_parser(
         "specimen",
         help=T(
-            "sample (specimen) entities: list/show/import/assign",
-            "样本实体：列表/详情/导入/关联",
+            "sample (specimen) entities: list/show/import/assign/delete",
+            "样本实体：列表/详情/导入/关联/删除",
         ),
     )
     s = p.add_subparsers(dest="specimen_command", required=True)
@@ -213,3 +247,19 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(assign)
     add_json(assign)
     assign.set_defaults(func=run_assign)
+
+    delete = s.add_parser(
+        "delete", help=T("delete a specimen (empty by default)", "删除样本（默认仅空样本）")
+    )
+    delete.add_argument("specimen_id")
+    delete.add_argument(
+        "--force",
+        action="store_true",
+        help=T(
+            "unlink its isolates (does not delete isolates/data) and delete",
+            "先解除菌株关联（不删菌株/数据）再删除",
+        ),
+    )
+    add_home(delete)
+    add_json(delete)
+    delete.set_defaults(func=run_delete)

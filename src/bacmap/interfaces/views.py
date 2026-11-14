@@ -357,9 +357,18 @@ def sample_detail(home: Path | str, sample_id: str) -> dict[str, Any] | None:
     digest["has_prelim_report"] = (
         base / "report" / f"{sample_id}_report.prelim.html"
     ).is_file()
+    steps = data.get("steps", {})
+    if isinstance(steps, dict) and not steps.get("assembly_contig_stats"):
+        # 旧运行（v1.10.28 前）没有逐 contig 统计：只读回退到 assembly FASTA，
+        # 让概览立刻有 Nx/长度/GC 图；新运行直接用 summary 内的 seqkit 结果。
+        from bacmap.core.analysis.assembly_qc import load as load_assembly_qc
+
+        contig_stats = load_assembly_qc(base)
+        if contig_stats:
+            steps["assembly_contig_stats"] = contig_stats
     return {
         "digest": digest,
-        "steps": data.get("steps", {}),
+        "steps": steps,
         "summary": data,
     }
 
@@ -409,3 +418,144 @@ def search_rows(
             continue
         hits.append(r)
     return hits
+
+
+# ---------------------------------------------------------------------------
+# 身份模型（v1.10.27）：样本 → 菌株 → 测序数据（只读视图，Web/API 共用）
+# ---------------------------------------------------------------------------
+
+
+def _identity_db(home: Path | str) -> Path:
+    return Path(home) / "data" / "bacmap.sqlite"
+
+
+def _libraries_by_isolate(home: Path | str) -> dict[str, list[dict[str, str]]]:
+    from bacmap.workflow.samples_registry import list_libraries
+
+    grouped: dict[str, list[dict[str, str]]] = {}
+    for row in list_libraries(Path(home)):
+        aside = dict(row)
+        # samples.tsv 的 sample 列 = library ID；API 用 library_id 明示语义。
+        aside["library_id"] = aside.get("sample", "")
+        isolate = str(aside.get("isolate") or "")
+        if isolate:
+            grouped.setdefault(isolate, []).append(aside)
+    return grouped
+
+
+def specimen_rows(home: Path | str, limit: int = 200) -> list[dict[str, Any]]:
+    """样本列表（含菌株数）；库缺失返回 []（全新数据根）。"""
+    db = _identity_db(home)
+    if not db.is_file():
+        return []
+    from bacmap.store.specimens import SpecimenService
+
+    with SpecimenService(db) as svc:
+        return svc.list(limit)
+
+
+def isolate_rows(home: Path | str, limit: int = 500) -> list[dict[str, Any]]:
+    """菌株列表（含其测序数据数量）。"""
+    db = _identity_db(home)
+    if not db.is_file():
+        return []
+    from bacmap.store.isolates import IsolateService
+
+    libraries = _libraries_by_isolate(home)
+    with IsolateService(db) as svc:
+        rows = svc.list()
+    for row in rows:
+        row["n_libraries"] = len(libraries.get(str(row.get("isolate_id")), []))
+    return rows[:limit]
+
+
+def specimen_detail(home: Path | str, specimen_id: str) -> dict[str, Any] | None:
+    """样本详情：实体 + 其菌株（每株附测序数据行）；不存在返回 None。"""
+    db = _identity_db(home)
+    if not db.is_file():
+        return None
+    from bacmap.store.specimens import SpecimenService
+
+    with SpecimenService(db) as svc:
+        specimen = svc.get(specimen_id)
+        if specimen is None:
+            return None
+        isolates = svc.isolates(specimen_id)
+    libraries = _libraries_by_isolate(home)
+    for isolate in isolates:
+        isolate["libraries"] = libraries.get(str(isolate.get("isolate_id")), [])
+    return {"specimen": specimen, "isolates": isolates}
+
+
+def isolate_detail(home: Path | str, isolate_id: str) -> dict[str, Any] | None:
+    """菌株详情：实体 + 所属样本 + 测序数据 + 湿实验元数据/化验结果。
+
+    v1.10.27 语义：样本承载背景信息，菌株承载湿实验元数据（strain_metadata /
+    lab_results 均以 isolate_id 为键），分析结果只在测序数据（library）上。
+    """
+    db = _identity_db(home)
+    if not db.is_file():
+        return None
+    from bacmap.store.isolates import IsolateService
+    from bacmap.store.lab_results import LabResultService
+    from bacmap.store.specimens import SpecimenService
+    from bacmap.store.strain_metadata import StrainMetadataService
+
+    with IsolateService(db) as svc:
+        isolate = svc.get(isolate_id)
+    if isolate is None:
+        return None
+    specimen = None
+    if isolate.get("specimen_id"):
+        with SpecimenService(db) as specimens:
+            specimen = specimens.get(str(isolate["specimen_id"]))
+    metadata: dict[str, Any] | None = None
+    lab_results: list[dict[str, Any]] = []
+    try:
+        with StrainMetadataService(db) as meta_svc:
+            meta = meta_svc.get(isolate_id)
+            metadata = meta.to_dict() if meta is not None else None
+        with LabResultService(db) as lab_svc:
+            lab_results = [r.to_dict() for r in lab_svc.get_by_strain(isolate_id)]
+    except (OSError, ValueError):
+        # 元数据/化验表可缺（旧数据根）：详情仍可用，只是没有湿实验段。
+        metadata, lab_results = None, []
+    libraries = _libraries_by_isolate(home).get(isolate_id, [])
+    return {
+        "isolate": isolate,
+        "specimen": specimen,
+        "libraries": libraries,
+        "metadata": metadata,
+        "lab_results": lab_results,
+    }
+
+
+def identity_search(
+    home: Path | str, query: str = "", limit: int = 200
+) -> dict[str, Any]:
+    """统一检索的样本/菌株部分（测序数据仍走原有的结构化 search）。"""
+    q = query.strip().lower()
+    if not q:
+        return {"specimens": [], "isolates": []}
+
+    def _match(fields: list[Any]) -> bool:
+        return q in " ".join(str(f) for f in fields if f).lower()
+
+    specimens = [
+        row
+        for row in specimen_rows(home, 2000)
+        if _match([row.get("specimen_id"), row.get("origin"), row.get("note")])
+    ][:limit]
+    isolates = [
+        row
+        for row in isolate_rows(home, 5000)
+        if _match(
+            [
+                row.get("isolate_id"),
+                row.get("specimen_id"),
+                row.get("lineage_id"),
+                row.get("passage"),
+            ]
+        )
+    ][:limit]
+    return {"specimens": specimens, "isolates": isolates}
