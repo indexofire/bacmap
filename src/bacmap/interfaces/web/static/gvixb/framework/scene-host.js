@@ -114,9 +114,14 @@ export class SceneHost {
     const objects = this.pickables.filter(object => object.parent && this._visible(object));
     const hits = this.raycaster.intersectObjects(objects, false);
     if (!hits.length) return null;
-    const hit = hits[0];
+    // objects may claim priority (e.g. network dots drawn over hairlines);
+    // among equal priority the nearest hit wins
+    const priority = h => h.object.userData.pickPriority || 0;
+    const hit = hits.reduce((best, h) => (priority(h) > priority(best) ? h : best), hits[0]);
     const resolver = hit.object.userData.pickFor;
-    return resolver ? resolver(hit.instanceId) : hit.object.userData.pick || null;
+    // resolvers get the raw hit too: Points / LineSegments report `index`
+    // (vertex / segment-start) rather than `instanceId`
+    return resolver ? resolver(hit.instanceId, hit) : hit.object.userData.pick || null;
   }
 
   registerPickable(object, payload) {

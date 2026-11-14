@@ -205,6 +205,321 @@ export function layoutPhylogenyRadial3D(root) {
   return { root: nodes[0], nodes, links, leaves, maxDepth, leafCount: leaves.length };
 }
 
+/**
+ * Classic 2D radial phylogram (FigTree "radial"): leaves are spread evenly by
+ * leaf order around the circle, an internal node sits at the mean angle of its
+ * children, and the distance from the centre (the root) is cumulative branch
+ * length scaled so the deepest leaf reaches `radius`. Only the radius carries
+ * data; angular placement follows leaf order exactly as in a 2D radial tree.
+ */
+export function layoutPhylogenyRadial2D(root, { radius = 10, gap = 0.06 } = {}) {
+  const tree = layoutPhylogeny(root);
+  const leafCount = Math.max(1, tree.leafCount);
+  const sweep = Math.PI * 2 * (1 - gap);
+  const start = Math.PI / 2 + (Math.PI * 2 * gap) / 2;
+  // without any branch length the tree is a cladogram: fall back to
+  // topological generation for the radius and flag it for the caller
+  const cladogram = !(tree.maxDepth > 0);
+  for (const node of tree.nodes) node.gen = node.parent ? node.parent.gen + 1 : 0;
+  const maxGen = Math.max(1, ...tree.nodes.map(node => node.gen));
+  const scale = cladogram ? radius / maxGen : radius / tree.maxDepth;
+  function place(node) {
+    if (node.children.length) {
+      for (const child of node.children) place(child);
+      node.angle = node.children.reduce((sum, child) => sum + child.angle, 0) / node.children.length;
+    } else {
+      node.angle = start + (leafCount === 1 ? 0 : (node.leafIndex / leafCount) * sweep);
+    }
+    node.radius = (cladogram ? node.gen : node.depth) * scale;
+    node.x = Math.cos(node.angle) * node.radius;
+    node.y = Math.sin(node.angle) * node.radius;
+  }
+  place(tree.root);
+  return { ...tree, radius, cladogram };
+}
+
+/**
+ * Unrooted equal-angle layout (Felsenstein): every subtree receives an angular
+ * wedge proportional to its leaf count and each branch is drawn along the
+ * middle of its wedge with length equal to its branch length. Branches never
+ * cross and the tree spreads over the whole plane instead of a ring. Without
+ * branch lengths every branch gets unit length (`cladogram: true`).
+ */
+export function layoutPhylogenyEqualAngle(root, { radius = 10 } = {}) {
+  const tree = layoutPhylogeny(root);
+  const cladogram = !(tree.maxDepth > 0);
+  const length = node => (cladogram ? 1 : node.branchLength);
+  tree.root.x = 0;
+  tree.root.y = 0;
+  (function place(node, start, wedge) {
+    let cursor = start;
+    for (const child of node.children) {
+      const share = wedge * child.leafCount / node.leafCount;
+      const angle = cursor + share / 2;
+      child.angle = angle;
+      child.x = node.x + Math.cos(angle) * length(child);
+      child.y = node.y + Math.sin(angle) * length(child);
+      place(child, cursor, share);
+      cursor += share;
+    }
+  })(tree.root, 0, Math.PI * 2);
+  const extent = Math.max(1e-9, ...tree.nodes.map(node => Math.hypot(node.x, node.y)));
+  for (const node of tree.nodes) {
+    node.x *= radius / extent;
+    node.y *= radius / extent;
+  }
+  return { ...tree, radius, cladogram, unitScale: radius / extent };
+}
+
+/**
+ * Centre of a weighted tree: the node whose largest path distance to any other
+ * node is smallest (ties → higher degree → lower index). Also returns the
+ * cumulative path distance and hop count from that centre to every node.
+ */
+export function treeCentre(count, edges) {
+  const adjacency = Array.from({ length: count }, () => []);
+  for (const edge of edges) {
+    const w = Math.max(0, Number(edge.distance) || 0);
+    adjacency[edge.source].push([edge.target, w]);
+    adjacency[edge.target].push([edge.source, w]);
+  }
+  const walk = start => {
+    const dist = new Array(count).fill(Infinity), hops = new Array(count).fill(Infinity);
+    const parent = new Array(count).fill(-1), order = [start];
+    dist[start] = 0; hops[start] = 0;
+    for (let k = 0; k < order.length; k++) {
+      const u = order[k];
+      for (const [v, w] of adjacency[u]) {
+        if (dist[v] !== Infinity) continue;
+        dist[v] = dist[u] + w; hops[v] = hops[u] + 1; parent[v] = u;
+        order.push(v);
+      }
+    }
+    return { dist, hops, parent, order };
+  };
+  let best = 0, bestEcc = Infinity;
+  for (let i = 0; i < count; i++) {
+    const { dist } = walk(i);
+    const reachable = dist.filter(Number.isFinite);
+    const ecc = Math.max(...reachable) + (count - reachable.length) * 1e9;
+    const better = ecc < bestEcc - 1e-9 ||
+      (Math.abs(ecc - bestEcc) <= 1e-9 && adjacency[i].length > adjacency[best].length);
+    if (better) { best = i; bestEcc = ecc; }
+  }
+  return { centre: best, ...walk(best), adjacency };
+}
+
+/**
+ * GrapeTree-style radial layout of a spanning tree around its centre: each
+ * subtree receives a wedge proportional to its node count; a node sits
+ * `base + distance` away from its parent along the middle of its wedge, where
+ * `base = minLength × median positive distance` keeps zero-distance (identical
+ * profile) neighbours apart. Disconnected nodes are placed on an outer ring.
+ */
+export function layoutTreeRadial(count, edges, { radius = 10, minLength = 0.35, edgeScale = 'linear' } = {}) {
+  const { centre, dist, hops, parent, order } = treeCentre(count, edges);
+  const children = Array.from({ length: count }, () => []);
+  for (const v of order) if (parent[v] >= 0) children[parent[v]].push(v);
+  const size = new Array(count).fill(1);
+  for (let k = order.length - 1; k >= 0; k--) {
+    const v = order[k];
+    if (parent[v] >= 0) size[parent[v]] += size[v];
+  }
+  const weightOf = new Map();
+  for (const edge of edges) {
+    const w = Math.max(0, Number(edge.distance) || 0);
+    weightOf.set(`${edge.source}:${edge.target}`, w);
+    weightOf.set(`${edge.target}:${edge.source}`, w);
+  }
+  const positive = edges.map(edge => Number(edge.distance)).filter(w => w > 0).sort((a, b) => a - b);
+  const base = minLength * (positive[Math.floor(positive.length / 2)] || 1);
+  // display length of an edge grows with its allele distance; `edgeScale`
+  // compresses large weights so long branches stay readable (cgMLST).
+  // The mapping is normalized so the median positive weight keeps its
+  // linear length — shorter branches get room, longer ones shrink.
+  const squash = w => (edgeScale === 'log' ? Math.log2(1 + w) : edgeScale === 'sqrt' ? Math.sqrt(w) : w);
+  const med = positive[Math.floor(positive.length / 2)] || 1;
+  const squashUnit = squash(med) > 0 ? med / squash(med) : 1;
+  const points = Array.from({ length: count }, () => ({ x: 0, y: 0 }));
+  (function place(u, start, wedge) {
+    let cursor = start;
+    const total = children[u].reduce((s, v) => s + size[v], 0) || 1;
+    for (const v of children[u]) {
+      const share = wedge * size[v] / total;
+      const angle = cursor + share / 2;
+      const len = base + squash(weightOf.get(`${u}:${v}`)) * squashUnit;
+      points[v] = { x: points[u].x + Math.cos(angle) * len, y: points[u].y + Math.sin(angle) * len };
+      place(v, cursor, share);
+      cursor += share;
+    }
+  })(centre, 0, Math.PI * 2);
+  const extent = Math.max(1e-9, ...order.map(v => Math.hypot(points[v].x, points[v].y)));
+  const scale = radius / extent;
+  const orphans = [];
+  for (let i = 0; i < count; i++) if (!Number.isFinite(dist[i])) orphans.push(i);
+  orphans.forEach((v, k) => {
+    const a = (k / orphans.length) * Math.PI * 2;
+    points[v] = { x: Math.cos(a) * extent * 1.15, y: Math.sin(a) * extent * 1.15 };
+  });
+  return {
+    centre, dist, hops,
+    points: points.map(p => ({ x: p.x * scale, y: p.y * scale })),
+  };
+}
+
+/**
+ * GrapeTree-style force layout: start from the radial static layout (so every
+ * branch already points outward in its own wedge) and relax it with springs
+ * whose rest length follows the allele distance, short-range repulsion that
+ * only untangles local crowding, and a weak anchor to the starting point.
+ * Branches keep their overall direction instead of folding back on
+ * themselves, while clusters gain an organic, less schematic shape.
+ * After every step a node that drifted behind its parent branch is projected
+ * back in front of it (parents first), so branches never fold back.
+ */
+export function layoutTreeForce(count, edges, { radius = 10, iterations = 220, anchor = 0.012, edgeScale = 'linear' } = {}) {
+  const start = layoutTreeRadial(count, edges, { radius, edgeScale });
+  const { parent, order } = treeCentre(count, edges);
+  const points = start.points.map(p => ({ x: p.x, y: p.y }));
+  const init = start.points;
+  // rest lengths in world units: the radial layout's own edge lengths
+  const rest = edges.map(edge => Math.max(1e-3, Math.hypot(
+    init[edge.source].x - init[edge.target].x, init[edge.source].y - init[edge.target].y)));
+  const sorted = rest.slice().sort((a, b) => a - b);
+  const typical = sorted[Math.floor(sorted.length / 2)] || radius / 10;
+  const cutoff = typical * 2.2, cutoff2 = cutoff * cutoff;
+  const strength = typical * typical * 0.35;
+  for (let iter = 0; iter < iterations; iter++) {
+    const force = points.map(() => ({ x: 0, y: 0 }));
+    for (let i = 0; i < count; i++) {
+      for (let j = i + 1; j < count; j++) {
+        let dx = points[i].x - points[j].x, dy = points[i].y - points[j].y;
+        let d2 = dx * dx + dy * dy;
+        if (d2 > cutoff2) continue;
+        if (d2 < 1e-6) { dx = 1e-3 * (i - j); dy = 1e-3 * (i + j + 1); d2 = dx * dx + dy * dy; }
+        const d = Math.sqrt(d2);
+        const repel = Math.min(typical, strength / d2) * (1 - d / cutoff);
+        force[i].x += (dx / d) * repel; force[i].y += (dy / d) * repel;
+        force[j].x -= (dx / d) * repel; force[j].y -= (dy / d) * repel;
+      }
+    }
+    edges.forEach((edge, e) => {
+      const a = points[edge.source], b = points[edge.target];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.max(1e-6, Math.hypot(dx, dy));
+      const f = (d - rest[e]) * 0.25;
+      force[edge.source].x += (dx / d) * f; force[edge.source].y += (dy / d) * f;
+      force[edge.target].x -= (dx / d) * f; force[edge.target].y -= (dy / d) * f;
+    });
+    const cooling = 0.5 * (1 - iter / iterations) + 0.05;
+    const cap = typical * 0.5;
+    for (let i = 0; i < count; i++) {
+      force[i].x += (init[i].x - points[i].x) * anchor;
+      force[i].y += (init[i].y - points[i].y) * anchor;
+      points[i].x += clamp(force[i].x, -cap, cap) * cooling;
+      points[i].y += clamp(force[i].y, -cap, cap) * cooling;
+    }
+    // directional persistence (hard): keep each node ahead of its parent branch
+    for (const v of order) {
+      const p = parent[v];
+      const g = p >= 0 ? parent[p] : -1;
+      if (g < 0) continue;
+      const ux = points[p].x - points[g].x, uy = points[p].y - points[g].y;
+      const lu = Math.hypot(ux, uy);
+      if (lu < 1e-9) continue;
+      const along = ((points[v].x - points[p].x) * ux + (points[v].y - points[p].y) * uy) / lu;
+      const want = typical * 0.12;
+      if (along < want) {
+        points[v].x += (ux / lu) * (want - along);
+        points[v].y += (uy / lu) * (want - along);
+      }
+    }
+  }
+  const c = points[start.centre];
+  const shifted = points.map(p => ({ x: p.x - c.x, y: p.y - c.y }));
+  const extent = Math.max(1e-9, ...shifted.map(p => Math.hypot(p.x, p.y)));
+  return { ...start, points: shifted.map(p => ({ x: p.x * radius / extent, y: p.y * radius / extent })) };
+}
+
+/**
+ * Classify metadata fields for the colour / height pickers. A field is
+ * `numeric` when every present value is a finite number and it has more than
+ * two distinct values; `categorical` when it has 2..maxCategories distinct
+ * values. Fields that are unique per record (IDs) are neither.
+ */
+export function classifyMetadataFields(records, { maxCategories = 24 } = {}) {
+  const fields = new Map();
+  for (const record of records) {
+    for (const [key, raw] of Object.entries(record || {})) {
+      if (raw === null || raw === undefined || raw === '' || typeof raw === 'object') continue;
+      if (!fields.has(key)) fields.set(key, []);
+      fields.get(key).push(raw);
+    }
+  }
+  const result = [];
+  for (const [key, values] of fields) {
+    const distinct = new Set(values.map(String));
+    const numeric = values.every(v => typeof v === 'number' ? Number.isFinite(v) : /^-?\d+(\.\d+)?$/.test(String(v).trim()));
+    const idLike = distinct.size === records.length && records.length > maxCategories;
+    result.push({
+      key,
+      present: values.length,
+      distinct: distinct.size,
+      numeric: numeric && distinct.size > 2,
+      categorical: !idLike && distinct.size >= 2 && distinct.size <= maxCategories,
+    });
+  }
+  return result.sort((a, b) => a.key.localeCompare(b.key));
+}
+
+/**
+ * Deterministic deck height per category: the largest group takes the centre
+ * deck and the rest alternate above / below it (+1, −1, +2, …), ties broken by
+ * name. With a single category every node lands on height 0 (a flat disc).
+ * Height encodes category membership only — never a quantity.
+ */
+export function groupLayers(groups, { gap = 2.4, maxSpan = 8 } = {}) {
+  const counts = new Map();
+  for (const group of groups) counts.set(group, (counts.get(group) || 0) + 1);
+  const ordered = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
+    .map(([group]) => group);
+  const step = ordered.length > 1 ? Math.min(gap, maxSpan / (ordered.length - 1)) : 0;
+  const layers = new Map();
+  ordered.forEach((group, i) => {
+    const slot = i === 0 ? 0 : (i % 2 ? 1 : -1) * Math.ceil(i / 2);
+    layers.set(group, { group, height: slot * step, count: counts.get(group), order: i });
+  });
+  return layers;
+}
+
+/**
+ * Deck heights for tree nodes: leaves take their group's deck; an internal node
+ * takes the mean height of its descendant leaves, so a pure clade sits on its
+ * own deck and mixed ancestral branches climb between decks.
+ */
+export function treeLayerHeights(tree, leafHeight) {
+  const heights = new Map(), sums = new Map();
+  function visit(node) {
+    if (!node.children.length) {
+      const h = Number(leafHeight(node)) || 0;
+      sums.set(node.id, { sum: h, count: 1 });
+      heights.set(node.id, h);
+      return;
+    }
+    let sum = 0, count = 0;
+    for (const child of node.children) {
+      visit(child);
+      const s = sums.get(child.id);
+      sum += s.sum; count += s.count;
+    }
+    sums.set(node.id, { sum, count });
+    heights.set(node.id, count ? sum / count : 0);
+  }
+  visit(tree.root);
+  return heights;
+}
+
 /** Hamming distance between two categorical allele profiles. */
 export function profileDistance(a, b) {
   if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {

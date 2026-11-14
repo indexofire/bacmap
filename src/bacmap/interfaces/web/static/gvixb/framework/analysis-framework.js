@@ -50,10 +50,17 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
     $('analysis-panel').classList.add('empty');
   }
 
+  function renderDescription(definition) {
+    const el = $('analysis-description');
+    if (!el) return;
+    el.innerHTML = `<button type="button" class="desc-icon" aria-label="视图说明">i</button>
+      <div class="desc-pop">${escapeHtml(definition.description)}</div>`;
+  }
+
   function renderLoading(definition) {
     $('analysis-kicker').textContent = definition.subtitle;
     $('analysis-title').textContent = definition.title;
-    $('analysis-description').textContent = definition.description;
+    renderDescription(definition);
     $('analysis-stats').innerHTML = '<div class="loading-line">正在加载本地数据…</div>';
     if ($('analysis-lists')) $('analysis-lists').innerHTML = '';
     $('analysis-controls').innerHTML = '';
@@ -65,11 +72,17 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
   function renderSidebar(definition, data) {
     $('analysis-kicker').textContent = definition.subtitle;
     $('analysis-title').textContent = definition.title;
-    $('analysis-description').textContent = definition.description;
+    renderDescription(definition);
     $('analysis-stats').innerHTML = (host.view?.stats?.() || []).map(stat => `
       <div class="analysis-stat"><span>${escapeHtml(stat.label)}</span><b>${escapeHtml(stat.value)}</b></div>`).join('');
     const controls = typeof definition.controls === 'function' ? definition.controls(data) : (definition.controls || []);
+    let groupIndex = -1;
     $('analysis-controls').innerHTML = controls.map(control => {
+      if (control.type === 'section') {
+        groupIndex += 1;
+        return `${groupIndex > 0 ? '</details>' : ''}<details class="ctl-group"${groupIndex === 0 ? ' open' : ''}>
+          <summary class="ctl-sec">${escapeHtml(control.label)}</summary>`;
+      }
       if (control.type === 'toggle') {
         return `<label class="view-toggle"><span>${escapeHtml(control.label)}</span>
           <input type="checkbox" data-key="${escapeHtml(control.key)}" ${control.value ? 'checked' : ''}><i></i></label>`;
@@ -86,7 +99,7 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
           <select data-key="${escapeHtml(control.key)}">${options}</select></label>`;
       }
       return '';
-    }).join('');
+    }).join('') + (groupIndex >= 0 ? '</details>' : '');
     $('analysis-source').textContent = data.source || '本地数据';
     $('crumb-sub').textContent = `ANALYSIS // ${definition.subtitle} · ${data.demo ? 'DEMO DATA' : 'LOCAL DATA'}`;
     $('analysis-head').textContent = `${definition.title} · Selection`;

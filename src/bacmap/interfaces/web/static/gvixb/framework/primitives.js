@@ -11,9 +11,9 @@ export function escapeHtml(value) {
 export const fmt = (value) => Number(value || 0).toLocaleString('en-US');
 export const formatBp = (value) => value >= 1e6 ? `${(value / 1e6).toFixed(2)} Mb` : `${(value / 1e3).toFixed(1)} kb`;
 
-export function groupColors(groups) {
+export function groupColors(groups, palette = PALETTE) {
   const map = new Map();
-  [...new Set(groups.filter(Boolean))].sort().forEach((group, i) => map.set(group, PALETTE[i % PALETTE.length]));
+  [...new Set(groups.filter(Boolean))].sort().forEach((group, i) => map.set(group, palette[i % palette.length]));
   return map;
 }
 
@@ -158,26 +158,40 @@ function softParticleTexture() {
  * Texture for the flat "video-style" sample dots: a crisp solid core with a
  * tight soft rim, drawn once per view and shared by every dot sprite.
  */
-export function makeDotTexture() {
+export function makeDotTexture({ halo: haloAlpha = 0.35, spread = 1, crisp = false, rim = false } = {}) {
   const size = 128;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d');
   const mid = size / 2;
+  // the solid core always spans 62 % of the sprite so the dot's visible size
+  // stays constant; the halo grows from the core edge by `spread` × the rest
   const core = ctx.createRadialGradient(mid, mid, 0, mid, mid, mid * 0.62);
   core.addColorStop(0, 'rgba(255,255,255,1)');
-  core.addColorStop(0.72, 'rgba(255,255,255,1)');
+  core.addColorStop(crisp ? 0.92 : 0.72, 'rgba(255,255,255,1)');
   core.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = core;
   ctx.beginPath();
   ctx.arc(mid, mid, mid * 0.62, 0, Math.PI * 2);
   ctx.fill();
-  const halo = ctx.createRadialGradient(mid, mid, mid * 0.55, mid, mid, mid);
-  halo.addColorStop(0, 'rgba(255,255,255,0.35)');
-  halo.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = halo;
-  ctx.fillRect(0, 0, size, size);
+  // a dark rim at the core edge keeps same-colour dots that overlap from
+  // merging into one blob — important for flat sprite dots
+  if (rim) {
+    ctx.strokeStyle = 'rgba(5,9,17,0.42)';
+    ctx.lineWidth = size * 0.045;
+    ctx.beginPath();
+    ctx.arc(mid, mid, mid * 0.59, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  if (haloAlpha > 0 && spread > 0) {
+    const outer = mid * (0.62 + 0.38 * Math.min(1, spread));
+    const halo = ctx.createRadialGradient(mid, mid, mid * 0.55, mid, mid, outer);
+    halo.addColorStop(0, `rgba(255,255,255,${haloAlpha})`);
+    halo.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(0, 0, size, size);
+  }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
@@ -188,16 +202,124 @@ export function makeDotTexture() {
  * marker floating in 3D space rather than a shaded sphere. `size` is the world
  * diameter; the shared `texture` comes from makeDotTexture() per view.
  */
-export function makeDotSprite({ color, size, texture }) {
+export function makeDotSprite({ color, size, texture, blending = THREE.AdditiveBlending }) {
   const material = new THREE.SpriteMaterial({
     map: texture, color, transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending, fog: true,
+    blending, fog: true,
   });
   const sprite = new THREE.Sprite(material);
   sprite.scale.set(size, size, 1);
   sprite.userData.dotSize = size;
   sprite.renderOrder = 10;
   return sprite;
+}
+
+/** Rounded rectangle path on a 2D canvas context. */
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+function canvasSprite(canvas, worldHeight, center = [0.5, 0.5]) {
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: texture, transparent: true, depthWrite: false, depthTest: false,
+  }));
+  const worldWidth = worldHeight * canvas.width / canvas.height;
+  sprite.scale.set(worldWidth, worldHeight, 1);
+  sprite.center.set(center[0], center[1]);
+  sprite.renderOrder = 22;
+  sprite.userData.worldWidth = worldWidth;
+  sprite.userData.worldHeight = worldHeight;
+  return sprite;
+}
+
+/**
+ * Pill-shaped tag (dark fill, thin outline) used for cluster / deck names,
+ * the floating tag style of the reference network video.
+ */
+export function makePillLabel(text, { color = '#c3cdf0', border = 'rgba(195,205,240,0.55)', height = 0.42, fontSize = 26 } = {}) {
+  const font = `500 ${fontSize}px ui-monospace, "Cascadia Code", Menlo, monospace`;
+  const canvas = document.createElement('canvas');
+  let ctx = canvas.getContext('2d');
+  ctx.font = font;
+  const padX = Math.round(fontSize * 0.7), h = Math.ceil(fontSize * 1.75);
+  canvas.width = Math.max(h, Math.ceil(ctx.measureText(String(text)).width) + padX * 2);
+  canvas.height = h;
+  ctx = canvas.getContext('2d');
+  roundRect(ctx, 1.5, 1.5, canvas.width - 3, h - 3, (h - 3) / 2);
+  ctx.fillStyle = 'rgba(8,11,20,0.82)';
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = border;
+  ctx.stroke();
+  ctx.font = font;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(text), canvas.width / 2, h / 2 + 1);
+  return canvasSprite(canvas, height);
+}
+
+/**
+ * Selection callout: a dark box with an accent border, a title line and a
+ * dimmer accent subtitle. Anchored at its bottom-left corner by default.
+ */
+export function makeCallout(title, subtitle = '', { accent = '#ff8a3d', height = 1.0, center = [0, 0] } = {}) {
+  const titleFont = '500 30px ui-monospace, "Cascadia Code", Menlo, monospace';
+  const subFont = '500 21px ui-monospace, "Cascadia Code", Menlo, monospace';
+  const canvas = document.createElement('canvas');
+  let ctx = canvas.getContext('2d');
+  ctx.font = titleFont;
+  const tw = ctx.measureText(String(title)).width;
+  ctx.font = subFont;
+  const sw = ctx.measureText(String(subtitle)).width;
+  canvas.width = Math.ceil(Math.max(tw, sw) + 44);
+  canvas.height = subtitle ? 100 : 66;
+  ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(8,10,16,0.92)';
+  ctx.fillRect(2, 2, canvas.width - 4, canvas.height - 4);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = accent;
+  ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+  ctx.textBaseline = 'middle';
+  ctx.font = titleFont;
+  ctx.fillStyle = '#eef2ff';
+  ctx.fillText(String(title), 22, subtitle ? 36 : canvas.height / 2);
+  if (subtitle) {
+    ctx.font = subFont;
+    ctx.fillStyle = accent;
+    ctx.fillText(String(subtitle), 22, 72);
+  }
+  return canvasSprite(canvas, height * canvas.height / 100, center);
+}
+
+/** Thin ring texture (selection halo around a dot). */
+export function makeRingTexture() {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = 'rgba(255,255,255,1)';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2 - 5, 0, Math.PI * 2);
+  ctx.stroke();
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
 /**
