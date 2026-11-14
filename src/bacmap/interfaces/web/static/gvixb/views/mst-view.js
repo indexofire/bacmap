@@ -71,7 +71,8 @@ export const mstView = {
           { value: 'free3d', label: '立体力导向（3D 全展开）' },
         ],
       },
-      { key: 'height', label: '高度模式', type: 'select', value: 'cone', options: heightModeOptions(fields, STRUCTURE_LABEL, { treeModes: true }) },
+      { key: 'height', label: '高度模式', type: 'select', value: 'flat', options: heightModeOptions(fields, STRUCTURE_LABEL, { treeModes: true }).filter(o => o.value !== 'cone') },
+      { key: 'elevate', label: '分支仰角展开（叠加）', type: 'toggle', value: true },
       { key: 'amp', label: '纵向展开', type: 'range', min: 0.3, max: 3, step: 0.1, value: 1.5 },
       {
         key: 'color', label: '颜色字段', type: 'select', value: defaultColorField(fields),
@@ -122,7 +123,7 @@ export const mstView = {
     const many = isolates.length > 60;
 
     const state = {
-      layout: 'free3d', height: 'cone', color: defaultColorField(fields),
+      layout: 'free3d', height: 'flat', elevate: true, color: defaultColorField(fields),
       edgeColor: 'group', labels: !many, distances: !many, pulses: true, glow: 0.2, edgeAlpha: 0.6, nodeSize: 1,
       edgeMax: Math.max(1, ...edges.map(edge => edge.distance)), edgeScale: 'linear', palette: 'auto', amp: 1.5,
     };
@@ -159,6 +160,17 @@ export const mstView = {
         tree: { parent: centre.parent, order: centre.order, dist: centre.dist },
         amp: state.amp,
       });
+      // 仰角展开是叠加量而非高度模式：可与任意高度编码共存
+      if (state.elevate) {
+        const coneH = encodeHeights({
+          count: isolates.length, mode: 'cone', valueOf,
+          structure: centre.dist, structureLabel: STRUCTURE_LABEL,
+          tree: { parent: centre.parent, order: centre.order, dist: centre.dist },
+          amp: state.amp, weights: isolates.map(isolate => isolate.count),
+        });
+        for (let i = 0; i < isolates.length; i++) encoded.heights[i] += coneH.heights[i];
+        encoded = { ...encoded, axis: encoded.axis || coneH.axis, note: `${encoded.note} 叠加分支仰角展开。` };
+      }
       const colour = nodeColoring(isolates.map((_, i) => (state.color ? valueOf(i, state.color) : '')), NETWORK_NEUTRAL, { scheme: state.palette });
       const sameField = encoded.decks && encoded.decks.field === state.color;
       if (sameField) for (const [key, layer] of encoded.decks.layers) layer.color = colour.layers.get(key)?.color || NETWORK_NEUTRAL;
@@ -269,6 +281,7 @@ export const mstView = {
         if (key === 'edgeColor') { state.edgeColor = value; applyEdgeColor(); }
         if (key === 'layout' || key === 'height' || key === 'color' || key === 'edgeScale' || key === 'palette') { state[key] = String(value); build(); }
         if (key === 'amp') { state.amp = Number(value); build(); }
+        if (key === 'elevate') { state.elevate = !!value; build(); }
         if (key === 'edgeMax') { state.edgeMax = Number(value); constellation.setEdgeFilter(edge => edge.distance <= state.edgeMax); }
       },
       update: dt => {

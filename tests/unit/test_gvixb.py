@@ -106,10 +106,24 @@ def _seed_result(home: Path, task_id: str = "t1", run_id: str | None = None):
         {
             "schema_version": "gmlst-visual-mst-v1",
             "data": {
-                "nodes": [{"id": 0, "label": "S1"}, {"id": 1, "label": "S2"}],
-                "edges": [{"source": 0, "target": 1, "weight": 7}],
+                "nodes": [
+                    {
+                        "id": 0, "label": "S1 (+1)",
+                        "member_count": 2, "members": ["S1", "S2"],
+                        "meta": {"country": "CN"},
+                        "profile_key": "1|2|3",
+                    },
+                    {"id": 1, "label": "S2"},
+                ],
+                "edges": [
+                    {"source": 0, "target": 1, "weight": 7, "mismatch_loci": ["adk"]},
+                ],
             },
         },
+    )
+    (root / "cgmlst" / "vpara" / "cgmlst_profiles.tsv").write_text(
+        "File\tScheme\tST\tadk\tatpA\nS1\tvpa\t3\t1\t4\nS2\tvpa\t8\t2\t4\n",
+        encoding="utf-8",
     )
     return engine, run, root
 
@@ -172,8 +186,24 @@ class TestGvixbPayloads:
         assert tree.json()["n_snp_sites"] == 42
         mst = client.get(f"/api/v1/gvixb/runs/{run.run_id}/mst/vpara")
         assert mst.status_code == 200
-        assert mst.json()["nodes"] == [{"id": "0", "label": "S1"}, {"id": "1", "label": "S2"}]
-        assert mst.json()["edges"] == [{"source": "0", "target": "1", "weight": 7.0}]
+        nodes = mst.json()["nodes"]
+        assert [(n["id"], n["label"]) for n in nodes] == [("0", "S1 (+1)"), ("1", "S2")]
+        # rich gvixb.mst/v1 fields must survive the adapter boundary
+        first = nodes[0]
+        assert first["member_count"] == 2
+        assert [m["id"] for m in first["members"]] == ["S1", "S2"]
+        assert first["members"][0]["meta"] == {"scheme": "vpa", "ST": "3"}
+        # aggregated node meta uses the representative sample ("S1 (+1)" -> "S1")
+        assert first["meta"]["country"] == "CN" and first["meta"]["ST"] == "3"
+        # breakdown is derived from member metas when gmlst omits it
+        assert first["meta_breakdown"]["ST"] == {"3": 1, "8": 1}
+        assert first["meta_breakdown"]["scheme"] == {"vpa": 2}
+        assert first["profile"] == ["1", "2", "3"]
+        assert nodes[1]["meta"]["ST"] == "8"
+        edges = mst.json()["edges"]
+        assert [(e["source"], e["target"], e["weight"]) for e in edges] == [("0", "1", 7.0)]
+        assert edges[0]["mismatch_loci"] == ["adk"]
+        assert mst.json()["loci"] == ["adk", "atpA"]
         assert mst.json()["n_loci"] == 3002
 
     def test_manifest_lists_only_actual_artifacts(self, seeded):

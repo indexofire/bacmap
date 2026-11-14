@@ -76,7 +76,7 @@ Origin: http://127.0.0.1:8800
 | GET | `/api/v1/gvixb/runs/{run_id}/annotated-genome/{dataset}` | 历史运行 Bakta/eggNOG 圈图数据 |
 | GET | `/api/v1/gvixb/samples/{dataset}/annotated-genome` | 最新结果圈图数据 |
 | GET | `/api/v1/gvixb/runs/{run_id}/tree/{snp\|cgmlst}/{group}` | 进化树数据 |
-| GET | `/api/v1/gvixb/runs/{run_id}/mst/{group}` | gmlst 原始 MST 数据 |
+| GET | `/api/v1/gvixb/runs/{run_id}/mst/{group}` | gmlst MST 数据（由 `cgmlst_profiles.tsv` 补充位点名与样本 ST/scheme 元数据） |
 
 ## 3. 示例
 

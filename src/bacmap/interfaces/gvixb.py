@@ -117,15 +117,26 @@ class TreePayload(GvixbModel):
     missing_rate: float | None = None
 
 
+class MstMember(GvixbModel):
+    id: str
+    meta: dict[str, Any] = {}
+
+
 class MstNode(GvixbModel):
     id: str
     label: str
+    member_count: int = 1
+    members: list[MstMember] | None = None
+    meta: dict[str, Any] = {}
+    meta_breakdown: dict[str, Any] | None = None
+    profile: list[str] | None = None
 
 
 class MstEdge(GvixbModel):
     source: str
     target: str
     weight: float = Field(ge=0)
+    mismatch_loci: list[str] | None = None
 
 
 class MstPayload(GvixbModel):
@@ -138,6 +149,7 @@ class MstPayload(GvixbModel):
     scheme: str = ""
     n_loci: int = 0
     samples: list[str]
+    loci: list[str] | None = None
     nodes: list[MstNode]
     edges: list[MstEdge]
 
@@ -520,6 +532,7 @@ def tree_payload(engine: Any, run_id: str, cohort: str, group: str) -> TreePaylo
     if not isinstance(newick, str) or not newick.strip():
         raise ValueError("队列结果不含 Newick 树")
     samples = [str(value) for value in summary.get("samples", []) if value is not None]
+    metadata = dict(_profiles_meta(scope, group)[1]) if cohort_kind == "cgmlst" else {}
     return TreePayload(
         source=f"bacmap 运行 {run_id} · {cohort} 队列结果",
         run_id=run_id,
@@ -528,6 +541,7 @@ def tree_payload(engine: Any, run_id: str, cohort: str, group: str) -> TreePaylo
         organism=str(summary.get("organism") or ""),
         newick=newick,
         distanceLabel="SNP 分支长度" if cohort == "snp" else "MST 转换树的分支长度",
+        metadata=metadata,
         samples=samples,
         n_snp_sites=_optional_int(summary.get("n_snp_sites")),
         n_loci=_optional_int(summary.get("n_loci")),
@@ -949,6 +963,80 @@ def _optional_float_value(value: Any) -> float | None:
     return float(value) if isinstance(value, (int, float)) else None
 
 
+def _profiles_meta(scope: Any, group: str) -> tuple[list[str], dict[str, dict[str, str]]]:
+    # cgmlst_profiles.tsv -> (loci, per-sample {scheme, ST}). The TSV header
+    # carries the locus names the gmlst MST payload omits; File/ST columns
+    # supply per-sample metadata for node meta and member tables.
+    path = _artifact(scope, Path("cgmlst") / group / "cgmlst_profiles.tsv", required=False)
+    if path is None:
+        return [], {}
+    lines = _read_text(path, _MAX_TABLE_BYTES, "cgMLST 谱型表").splitlines()
+    if not lines:
+        return [], {}
+    header = lines[0].split("\t")
+    loci = [c for c in header[3:] if c]
+    meta: dict[str, dict[str, str]] = {}
+    for line in lines[1:]:
+        cells = line.split("\t")
+        if len(cells) < 3 or not cells[0]:
+            continue
+        meta[cells[0]] = {"scheme": cells[1], "ST": cells[2]}
+    return loci, meta
+
+
+def _mst_member(entry: Any, sample_meta: dict[str, dict[str, str]]) -> MstMember:
+    mid = str(entry.get("id") if isinstance(entry, dict) else entry)
+    m = entry.get("meta") if isinstance(entry, dict) else None
+    meta = dict(m) if isinstance(m, dict) else dict(sample_meta.get(mid, {}))
+    return MstMember(id=mid, meta=meta)
+
+
+def _mst_node(node: dict[str, Any], sample_meta: dict[str, dict[str, str]]) -> MstNode:
+    label = str(node.get("label") or node["id"])
+    meta = dict(node.get("meta") or {})
+    members_raw = node.get("members")
+    members = (
+        [_mst_member(m, sample_meta) for m in members_raw]
+        if isinstance(members_raw, list)
+        else None
+    )
+    # Fill ST/scheme when gmlst ran without --metadata. Aggregated labels look
+    # like "S1 (+3)" so the TSV lookup needs the representative sample name;
+    # member metas then give a real per-field breakdown for the aggregated node.
+    representative = label.split(" (")[0]
+    for key, value in sample_meta.get(representative, {}).items():
+        meta.setdefault(key, value)
+    breakdown = node.get("meta_breakdown")
+    if members and breakdown is None:
+        counts: dict[str, dict[str, int]] = {}
+        for member in members:
+            for key, value in member.meta.items():
+                bucket = counts.setdefault(key, {})
+                bucket[str(value)] = bucket.get(str(value), 0) + 1
+        if counts:
+            breakdown = counts
+    profile = node.get("profile")
+    profile_key = node.get("profile_key")
+    member_count = node.get("member_count")
+    if not member_count:
+        member_count = len(members_raw) if isinstance(members_raw, list) else 1
+    if isinstance(profile, list):
+        alleles = [str(a) for a in profile]
+    elif profile_key:
+        alleles = [str(a) for a in str(profile_key).split("|")]
+    else:
+        alleles = None
+    return MstNode(
+        id=str(node["id"]),
+        label=label,
+        member_count=int(member_count) or 1,
+        members=members,
+        meta=meta,
+        meta_breakdown=dict(breakdown) if isinstance(breakdown, dict) else None,
+        profile=alleles,
+    )
+
+
 def mst_payload(engine: Any, run_id: str, group: str) -> MstPayload:
     scope, _ = _run_scope(engine, run_id)
     if not _GROUP_RE.fullmatch(group):
@@ -962,8 +1050,9 @@ def mst_payload(engine: Any, run_id: str, group: str) -> MstPayload:
     nodes_raw, edges_raw = graph.get("nodes"), graph.get("edges")
     if not isinstance(nodes_raw, list) or not isinstance(edges_raw, list):
         raise ValueError("gmlst MST 载荷缺少 nodes/edges")
+    loci, sample_meta = _profiles_meta(scope, group)
     nodes = [
-        MstNode(id=str(node["id"]), label=str(node.get("label") or node["id"]))
+        _mst_node(node, sample_meta)
         for node in nodes_raw
         if isinstance(node, dict) and "id" in node
     ]
@@ -977,7 +1066,17 @@ def mst_payload(engine: Any, run_id: str, group: str) -> MstPayload:
         source, target = str(edge.get("source")), str(edge.get("target"))
         if source not in known or target not in known:
             raise ValueError("gmlst MST 边引用未知节点")
-        edges.append(MstEdge(source=source, target=target, weight=float(edge["weight"])))
+        mismatch = edge.get("mismatch_loci")
+        edges.append(
+            MstEdge(
+                source=source,
+                target=target,
+                weight=float(edge["weight"]),
+                mismatch_loci=(
+                    [str(x) for x in mismatch] if isinstance(mismatch, list) else None
+                ),
+            )
+        )
     summary_path = Path("cgmlst") / group / "cgmlst_summary.json"
     summary = _read_json(scope, summary_path, required=False) or {}
     return MstPayload(
@@ -988,6 +1087,7 @@ def mst_payload(engine: Any, run_id: str, group: str) -> MstPayload:
         scheme=str(summary.get("scheme") or ""),
         n_loci=_optional_int(summary.get("n_loci")) or 0,
         samples=[str(value) for value in summary.get("samples", [])],
+        loci=loci or None,
         nodes=nodes,
         edges=edges,
     )

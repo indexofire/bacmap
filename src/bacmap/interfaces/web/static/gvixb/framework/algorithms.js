@@ -212,14 +212,14 @@ export function layoutPhylogenyRadial3D(root) {
  * length scaled so the deepest leaf reaches `radius`. Only the radius carries
  * data; angular placement follows leaf order exactly as in a 2D radial tree.
  */
-export function layoutPhylogenyRadial2D(root, { radius = 10, gap = 0.06 } = {}) {
+export function layoutPhylogenyRadial2D(root, { radius = 10, gap = 0.06, forceCladogram = false } = {}) {
   const tree = layoutPhylogeny(root);
   const leafCount = Math.max(1, tree.leafCount);
   const sweep = Math.PI * 2 * (1 - gap);
   const start = Math.PI / 2 + (Math.PI * 2 * gap) / 2;
   // without any branch length the tree is a cladogram: fall back to
   // topological generation for the radius and flag it for the caller
-  const cladogram = !(tree.maxDepth > 0);
+  const cladogram = forceCladogram || !(tree.maxDepth > 0);
   for (const node of tree.nodes) node.gen = node.parent ? node.parent.gen + 1 : 0;
   const maxGen = Math.max(1, ...tree.nodes.map(node => node.gen));
   const scale = cladogram ? radius / maxGen : radius / tree.maxDepth;

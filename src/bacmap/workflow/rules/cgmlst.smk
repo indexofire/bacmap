@@ -336,6 +336,7 @@ if _RUN_CGMLST_COHORT:
         shell:
             "mkdir -p $(dirname {output.tree}) && "
             "gmlst visual mst --input {input.profiles} "
+            "--aggregate-profiles "
             "--output {output.payload} --format json && "
             "{params.python} {params.newick_script} {output.payload} {output.tree}"
 

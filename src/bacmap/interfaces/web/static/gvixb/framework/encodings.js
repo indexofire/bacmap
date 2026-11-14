@@ -173,7 +173,7 @@ export function nodeColoring(values, neutral, { scheme = 'auto' } = {}) {
  * `valueOf(i, field)` reads metadata; `structure[i]` is the structural
  * distance (≥ 0). Returns per-item heights plus an axis / deck description.
  */
-export function encodeHeights({ count, mode, valueOf, structure, structureLabel, tree = null, amp = 1 }) {
+export function encodeHeights({ count, mode, valueOf, structure, structureLabel, tree = null, amp = 1, weights = null }) {
   const heights = new Array(count).fill(0);
   const half = HEIGHT_SPAN / 2;
   if (mode === 'flat' || !count) return { heights, axis: null, decks: null, note: '高度未编码：全部节点位于同一平面。' };
@@ -226,35 +226,34 @@ export function encodeHeights({ count, mode, valueOf, structure, structureLabel,
       };
     }
 
-    // cone: each subtree keeps its parent's elevation direction; siblings
-    // only get a small ranked offset on top of it — so branches grow away in
-    // their own 3D direction (cone-tree behaviour) instead of random-walking
-    // back toward the mid-plane. Raw = Σ edge_increment × sin(tilt).
-    const SPREAD = 0.55, TILT_CAP = 1.35;
-    const tilt = new Array(count).fill(0);
-    const raw = new Array(count).fill(0);
-    for (const v of order) {
-      const kids = children[v].slice().sort((a, b) => size[b] - size[a] || a - b);
-      kids.forEach((u, k) => {
-        // alternate ± so subtree size never maps to a direction — otherwise
-        // every level's biggest branch dives and the canopy skews to one side
-        const rank = Math.ceil(k / 2), half1 = Math.max(1, Math.ceil(kids.length / 2));
-        const off = kids.length > 1 ? (k % 2 === 0 ? 1 : -1) * SPREAD * rank / half1 : 0;
-        tilt[u] = Math.max(-TILT_CAP, Math.min(TILT_CAP, tilt[v] + off));
-        const incr = Math.max(1e-9, (Number.isFinite(dist[u]) ? dist[u] : 0) - (Number.isFinite(dist[v]) ? dist[v] : 0));
-        raw[u] = raw[v] + incr * Math.sin(tilt[u]);
-      });
+    // cone: every subtree owns a contiguous vertical band proportional to its
+    // weight, recursively subdivided — each node gets its own elevation slice,
+    // so crowded planes spread into real volume (deterministic, no jitter).
+    // weights[i] defaults to 1; hosts may pass e.g. member_count so large
+    // aggregates claim wider bands.
+    const w = i => Math.max(1e-9, Number(weights?.[i]) || 1);
+    const wsum = new Array(count).fill(0);
+    for (let k = order.length - 1; k >= 0; k--) {
+      const v = order[k];
+      wsum[v] = w(v);
+      for (const u of children[v]) wsum[v] += wsum[u];
     }
-    const maxAbs = Math.max(1e-12, ...raw.map(Math.abs));
     const coneHalf = half * amp;
-    for (let i = 0; i < count; i++) heights[i] = (raw[i] / maxAbs) * coneHalf;
+    const place = (v, z0, z1) => {
+      const span = z1 - z0;
+      const selfShare = wsum[v] > 0 ? w(v) / wsum[v] : 0;
+      heights[v] = z0 + (selfShare / 2) * span;
+      let cursor = z0 + selfShare * span;
+      for (const u of children[v].slice().sort((a, b) => wsum[b] - wsum[a] || a - b)) {
+        const share = wsum[u] / wsum[v] * span;
+        place(u, cursor, cursor + share);
+        cursor += share;
+      }
+    };
+    for (const v of order) if (parent[v] < 0) place(v, -coneHalf, coneHalf);
     return {
-      heights, decks: null,
-      axis: {
-        y0: coneHalf, y1: -coneHalf, label: '分支仰角位移',
-        ticks: [0, 0.5, 1].map(t => ({ y: coneHalf - t * 2 * coneHalf, text: fmt((0.5 - t) * 2 * maxAbs) })),
-      },
-      note: '高度 = 分支仰角累计位移：每个子树保持自己的仰角方向，整棵树展开成三维树冠。为显示导出量，非数据统计。',
+      heights, decks: null, axis: null,
+      note: '高度 = 每个子树分得的纵向区带（节点各占一层，区带宽度 ∝ 权重）；纯显示展开，避免同面遮挡，不表示数值。',
     };
   }
 
