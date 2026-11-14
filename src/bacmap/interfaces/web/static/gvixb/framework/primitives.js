@@ -65,6 +65,77 @@ export function lineFromPoints(points, color = 0x6d8bff, opacity = 0.5) {
   );
 }
 
+/**
+ * Vertex / instance colour buffers are interpreted as LINEAR-space by three.js.
+ * Writing raw sRGB fractions there makes every colour render washed-out, so
+ * convert explicitly.
+ */
+export function srgbToLinear(c) {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+export function hexRgb(hex) {
+  return [
+    srgbToLinear(((hex >> 16) & 255) / 255),
+    srgbToLinear(((hex >> 8) & 255) / 255),
+    srgbToLinear((hex & 255) / 255),
+  ];
+}
+
+export function pushTri(pos, col, a, b, c, rgb) {
+  for (const v of [a, b, c]) { pos.push(v[0], v[1], v[2]); col.push(rgb[0], rgb[1], rgb[2]); }
+}
+
+/** Append a flat annular sector (ring segment) to vertex-colour buffers. */
+export function addAnnularSector(pos, col, r0, r1, a0, a1, z, rgb, cx = 0, cy = 0) {
+  const steps = Math.max(2, Math.ceil((a1 - a0) / 0.015));
+  for (let i = 0; i < steps; i++) {
+    const t0 = a0 + (a1 - a0) * i / steps;
+    const t1 = a0 + (a1 - a0) * (i + 1) / steps;
+    const i0 = [cx + Math.cos(t0) * r0, cy - Math.sin(t0) * r0, z];
+    const o0 = [cx + Math.cos(t0) * r1, cy - Math.sin(t0) * r1, z];
+    const i1 = [cx + Math.cos(t1) * r0, cy - Math.sin(t1) * r0, z];
+    const o1 = [cx + Math.cos(t1) * r1, cy - Math.sin(t1) * r1, z];
+    pushTri(pos, col, i0, o0, i1, rgb);
+    pushTri(pos, col, i1, o0, o1, rgb);
+  }
+}
+
+/** Pack accumulated position/colour arrays into a flat double-sided mesh. */
+export function sectorMeshFromArrays(pos, col, { transparent = false, opacity = 1 } = {}) {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+    vertexColors: true, side: THREE.DoubleSide, transparent, opacity,
+  }));
+}
+
+export function circlePoints(r, z, seg = 320, cx = 0, cy = 0) {
+  const pts = [];
+  for (let i = 0; i < seg; i++) {
+    const a = (i / seg) * Math.PI * 2;
+    pts.push(new THREE.Vector3(cx + Math.cos(a) * r, cy - Math.sin(a) * r, z));
+  }
+  return pts;
+}
+
+/** Radial-gradient sprite used for glow lenses and halos. */
+export function makeRadialSprite(size, stops, blending = THREE.AdditiveBlending) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+  for (const [pos, col] of stops) gradient.addColorStop(pos, col);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 256, 256);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(canvas), transparent: true, depthWrite: false, blending,
+  }));
+  sprite.scale.set(size, size, 1);
+  return sprite;
+}
+
 /** Soft round sprite texture for particles; shared per-material and disposed with it. */
 function softParticleTexture() {
   const size = 64;

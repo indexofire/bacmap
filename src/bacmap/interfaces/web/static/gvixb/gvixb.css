@@ -393,6 +393,15 @@
   .analysis-stat span { display: block; color: var(--text-4); font-size: 8px; letter-spacing: .08em; }
   .analysis-stat b { display: block; margin-top: 3px; color: var(--text-1); font: 600 12px var(--font-mono); overflow: hidden; text-overflow: ellipsis; }
   .view-controls { border-top: 1px solid var(--border-subtle); padding-top: 10px; }
+  /* view-owned list blocks inside the analysis sidebar (objects / sites / legend) */
+  #analysis-lists { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 0; }
+  #analysis-lists:empty { display: none; }
+  #analysis-lists .blk.grow { flex: 0 1 auto; }
+  #analysis-lists .blk.grow #gene-list { max-height: 240px; }
+  #analysis-lists [data-role="objects"] { max-height: 170px; overflow-y: auto; }
+  #analysis-lists [data-role="objects"]::-webkit-scrollbar { width: 6px; }
+  #analysis-lists [data-role="objects"]::-webkit-scrollbar-thumb { background: rgba(120,160,255,0.2); border-radius: 3px; }
+  #analysis-lists #legend .lg-grid { max-height: 140px; }
   .view-toggle { display: flex; align-items: center; min-height: 31px; color: var(--text-2); font-size: 10.5px; cursor: pointer; }
   .view-toggle input { position: absolute; opacity: 0; pointer-events: none; }
   .view-toggle i { margin-left: auto; width: 27px; height: 14px; border: 1px solid var(--border-strong); border-radius: 10px; position: relative; transition: .16s ease; }

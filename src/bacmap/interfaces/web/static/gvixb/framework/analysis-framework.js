@@ -19,6 +19,7 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
     renderer, canvas,
     onHover: (payload, event) => {
       tooltip.style.display = 'none';
+      host.view?.hover?.(payload);
       if (!payload || !event || !host.view) return;
       const html = host.view.tooltip?.(payload);
       if (!html) return;
@@ -54,6 +55,7 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
     $('analysis-title').textContent = definition.title;
     $('analysis-description').textContent = definition.description;
     $('analysis-stats').innerHTML = '<div class="loading-line">正在加载本地数据…</div>';
+    if ($('analysis-lists')) $('analysis-lists').innerHTML = '';
     $('analysis-controls').innerHTML = '';
     $('analysis-source').textContent = '';
     $('analysis-head').textContent = `${definition.title} · Selection`;
@@ -103,6 +105,15 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
         host.view?.setOption?.(input.dataset.key, value);
       });
     });
+
+    // Optional view-owned list blocks (object list, searchable site list,
+    // interactive legend). The view manages this container; it is cleared on
+    // every mount/unmount. Shells without #analysis-lists simply skip this.
+    const listHost = $('analysis-lists');
+    if (listHost) {
+      listHost.innerHTML = '';
+      host.view?.mountSidebar?.(listHost);
+    }
   }
 
   async function activate(id) {
@@ -134,6 +145,7 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
       if (currentToken !== token) return;
       console.error(error);
       $('analysis-stats').innerHTML = `<div class="error-box">视图加载失败<br>${escapeHtml(error.message)}</div>`;
+      if ($('analysis-lists')) $('analysis-lists').innerHTML = '';
       $('analysis-controls').innerHTML = '';
     }
   }
