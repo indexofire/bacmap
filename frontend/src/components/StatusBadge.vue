@@ -7,6 +7,7 @@ const props = defineProps<{ state: TaskState | string }>()
 const labels: Record<string, string> = {
   pending: '排队中',
   running: '运行中',
+  paused: '已暂停',
   awaiting_approval: '待审批',
   succeeded: '已完成',
   failed: '已失败',

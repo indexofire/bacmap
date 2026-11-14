@@ -165,6 +165,9 @@ class WorkflowRunner:
             text=True,
             capture_output=True,
             env=_env_with_src(),
+            # 独立进程组：取消任务时可对整个组定向发信号（task_engine 按
+            # runs/<task_id> 定位组后 killpg），不波及同机同名生信进程。
+            start_new_session=True,
         )
 
     def dry_run(self, targets: list[str] | None = None) -> subprocess.CompletedProcess[str]:

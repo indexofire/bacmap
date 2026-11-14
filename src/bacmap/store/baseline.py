@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -285,11 +287,17 @@ BASELINE_MIGRATIONS: tuple[Migration, ...] = (
 )
 
 
-def _conn(db_path: Path) -> sqlite3.Connection:
+@contextmanager
+def _conn(db_path: Path) -> Iterator[sqlite3.Connection]:
+    """sqlite3 的 with 块只提交事务不关闭连接——必须显式 close。"""
     migrate(Path(db_path), BASELINE_MIGRATIONS)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def save_candidate(db_path: Path, task_id: str, manifest: dict, gate: dict) -> None:

@@ -54,12 +54,16 @@ class _FakeAgent:
         return _FakeResult(self._output)
 
 
-def _make_config(location: str = "local", cloud_max: int = 1) -> LlmConfig:
+def _make_config(
+    location: str = "local",
+    cloud_max: int = 1,
+    routing: dict[str, str] | None = None,
+) -> LlmConfig:
     return LlmConfig(
         endpoints={
             "e": LlmEndpoint(name="e", base_url="http://x/v1", model="m", location=location)
         },
-        routing={"p": "e"},
+        routing={"p": "e"} if routing is None else routing,
         policy=DataPolicy(cloud_max_data_class=DataClass(cloud_max)),
     )
 
@@ -121,6 +125,15 @@ cloud_max_data_class = "D1"
         assert ep is not None
         assert "no routing entry" in caplog.text
         assert "unknown_purpose" in caplog.text
+
+    def test_resolve_never_falls_back_to_cloud(self):
+        """漏配路由不得静默落到 cloud 端点——ADR-16：默认 D0 流量外发即事故；
+        云端点必须经 [llm.routing] 显式点名（解析返回 None → 上层
+        LlmUnavailableError 明确报错）。"""
+        cfg = _make_config(location="cloud")
+        assert cfg.resolve("unrouted_purpose") is None
+        # 显式路由仍可用——拒绝的只是"漏配的隐式回退"
+        assert cfg.resolve("p").name == "e"
 
     def test_full_section_45_config_parses(self, tmp_path: Path):
         """§4.5 文档样例的完整字段必须可解析（extra=forbid 曾拒绝能力/管理字段）。"""
@@ -251,6 +264,21 @@ class TestGateway:
         with pytest.raises(LlmUnavailableError, match="no enabled endpoint"):
             gw.structured("p", "prompt", _Out)
 
+    def test_programming_error_fails_fast_without_retry(self):
+        """TypeError/KeyError 等编程错误重试无意义——一次即报而非烧三次配额。"""
+        class _BuggyAgent:
+            calls = 0
+
+            def run_sync(self, prompt: str):
+                self.calls += 1
+                raise TypeError("bug")
+
+        agent = _BuggyAgent()
+        gw = LlmGateway(_make_config(), agent_factory=lambda ep, ot, _i=None: agent)
+        with pytest.raises(LlmUnavailableError, match="non-retryable"):
+            gw.structured("p", "prompt", _Out)
+        assert agent.calls == 1
+
 
 class TestInterpretation:
     def test_generate_returns_output(self):
@@ -277,15 +305,41 @@ class TestInterpretation:
         assert generate_interpretation({}, "SAM-1", gw) is None
 
     def test_cloud_d2_blocked_by_default_policy(self):
+        """显式路由到云端点的 purpose 仍过 DataPolicy：D2 载荷被拒。"""
         from bacmap.agent.interpret import generate_interpretation
         from bacmap.agent.llm.gateway import DataClassViolationError
 
         gw = LlmGateway(
-            _make_config(location="cloud", cloud_max=1),
+            _make_config(
+                location="cloud", cloud_max=1,
+                routing={"interpretation": "e"},
+            ),
             agent_factory=lambda ep, ot, _i=None: _FakeAgent(),
         )
         with pytest.raises(DataClassViolationError):
             generate_interpretation({"steps": {}}, "SAM-1", gw)  # D2 payload → cloud 拒绝
+
+    def test_unrouted_purpose_never_falls_back_to_cloud(self):
+        """漏配路由时云端点不参与隐式回退——宁可降级也不静默外发（ADR-16）。"""
+        from bacmap.agent.interpret import generate_interpretation
+
+        gw = LlmGateway(
+            _make_config(location="cloud", cloud_max=2),  # 无 interpretation 路由
+            agent_factory=lambda ep, ot, _i=None: _FakeAgent(),
+        )
+        assert generate_interpretation({"steps": {}}, "SAM-1", gw) is None
+
+    def test_unrouted_purpose_falls_back_to_local_endpoint(self):
+        """隐式回退仍覆盖本地端点：漏配路由时选首个启用的非 cloud 端点。"""
+        from bacmap.agent.interpret import InterpretationOutput, generate_interpretation
+
+        want = InterpretationOutput(interpretation_text="本地解读", key_findings=[])
+        gw = LlmGateway(
+            _make_config(location="local"),
+            agent_factory=lambda ep, ot, _i=None: _FakeAgent(output=want),
+        )
+        out = generate_interpretation({"steps": {}}, "SAM-1", gw)
+        assert out is not None and out.interpretation_text == "本地解读"
 
 
 class TestArbitration:

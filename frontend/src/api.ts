@@ -101,6 +101,10 @@ export const api = {
   ) => request<TaskRow>(`/tasks/${encodeURIComponent(id)}/approve`, json(body)),
   cancelTask: (id: string) =>
     request<TaskRow>(`/tasks/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  pauseTask: (id: string) =>
+    request<TaskRow>(`/tasks/${encodeURIComponent(id)}/pause`, { method: 'POST' }),
+  resumeTask: (id: string) =>
+    request<TaskRow>(`/tasks/${encodeURIComponent(id)}/resume`, { method: 'POST' }),
 
   listPlans: (limit = 100) =>
     request<{ items: PlanRecord[] }>(`/plans?limit=${limit}`).then((r) => r.items),

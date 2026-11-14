@@ -78,15 +78,18 @@ class LlmConfig(BaseModel):
             ep = self.endpoints.get(name)
             return ep if ep and ep.enabled else None
         for ep in self.endpoints.values():
-            if ep.enabled:
-                # 漏配路由的 purpose 会静默落回首个 enabled 端点——若该端点在
-                # cloud，默认 D0 的流量会被意外外发（ADR-16 面）。留警告便于排查。
-                _logger.warning(
-                    "no routing entry for purpose %r; falling back to first enabled"
-                    " endpoint %r [%s] — add [llm.routing] %s = <name> to pin it",
-                    purpose, ep.name, ep.location, purpose,
-                )
-                return ep
+            if not ep.enabled or ep.location == "cloud":
+                # 漏配路由的 purpose 只回退到非 cloud 端点——云端点必须靠
+                # [llm.routing] 显式点名；否则默认 D0 流量会被静默外发
+                #（ADR-16 面：漏配即数据出境事故，宁缺毋滥返回 None）。
+                continue
+            _logger.warning(
+                "no routing entry for purpose %r; falling back to first enabled"
+                " non-cloud endpoint %r [%s] — add [llm.routing] %s = <name>"
+                " to pin it",
+                purpose, ep.name, ep.location, purpose,
+            )
+            return ep
         return None
 
 

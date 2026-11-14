@@ -39,6 +39,9 @@ def test_standardized_mean_difference():
     assert standardized_mean_difference([10, 11, 12], [1, 2, 3]) > 1.0
     with pytest.raises(ValueError):
         standardized_mean_difference([], [1])
+    # n<2 时 ddof=1 方差除零——必须显式报错而非漏出 NaN
+    with pytest.raises(ValueError, match="two"):
+        standardized_mean_difference([1], [1, 2])
 
 
 def _study_with_objects(home: Path):

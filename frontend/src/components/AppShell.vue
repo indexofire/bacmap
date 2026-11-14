@@ -4,6 +4,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Icon from './Icon.vue'
 import ToastHost from './ToastHost.vue'
 import { api } from '../api'
+import type { AgentEmbedLink } from '../types'
 import { useTheme } from '../composables/useTheme'
 
 const route = useRoute()
@@ -23,10 +24,6 @@ let pendingTimer: ReturnType<typeof setInterval> | undefined
 
 const title = computed(() => (route.meta.title as string | undefined) ?? '控制台')
 
-interface AgentEmbedLink {
-  name: string
-  url: string
-}
 const agentEmbeds = ref<AgentEmbedLink[]>([])
 
 const groups = computed(() => {
@@ -85,7 +82,7 @@ onMounted(async () => {
   try {
     const cap = await api.capabilities()
     version.value = cap.bacmap_version
-    const embeds = (cap as unknown as { agent_embeds?: AgentEmbedLink[] }).agent_embeds
+    const embeds = cap.agent_embeds
     agentEmbeds.value = Array.isArray(embeds) ? embeds : []
   } catch {
     // 版本号是装饰信息，失败不打断控制台。

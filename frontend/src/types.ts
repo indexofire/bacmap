@@ -1,6 +1,7 @@
 export type TaskState =
   | 'pending'
   | 'running'
+  | 'paused'
   | 'awaiting_approval'
   | 'succeeded'
   | 'failed'
@@ -223,11 +224,17 @@ export interface ResearchLedgerEntry {
   [key: string]: unknown
 }
 
+export interface AgentEmbedLink {
+  name: string
+  url: string
+}
+
 export interface Capabilities {
   api_version: string
   bacmap_version: string
   plannable_task_types: string[]
   features: string[]
+  agent_embeds?: AgentEmbedLink[]
 }
 
 export interface CountItem {

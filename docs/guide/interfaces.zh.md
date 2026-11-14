@@ -256,8 +256,11 @@ url = "http://127.0.0.1:49374"      # opencode serve
 ```
 
 重启 `bacmap start web` 后侧边栏出现"智能体对话"分组，每条配置一个页面
-（`/agent/<n>`）。配置的 origin 会自动加入 Web CSP 的 `frame-src` 白名单；
-非回环条目直接跳过。已实测：DSH（需把 browser-trust token 写进 URL）、
+（`/agent/<n>`）。URL 必须是 http/https 回环地址（`127.0.0.1`/`localhost`/`::1`）
+且不得内嵌用户名/密码凭据——非法条目在配置加载期即被拒绝；合法条目的
+`scheme://host[:port]` origin（不含路径与查询串，token 不会泄露进响应头）
+会自动加入 Web CSP 的 `frame-src` 白名单，非回环条目直接跳过。
+已实测：DSH（需把 browser-trust token 写进 URL）、
 Hermes Dashboard、`opencode serve` 三端可嵌；Pi 为纯 TUI（无 web 面可嵌）。
 
 ```bash

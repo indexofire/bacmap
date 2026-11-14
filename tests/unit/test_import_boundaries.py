@@ -55,6 +55,29 @@ def test_workflow_namespace_stays_below_agent_tasks_interfaces():
     assert _violations(SRC / "workflow", forbidden) == []
 
 
+def test_llm_dbos_mcp_imports_confined_globally():
+    """ADR-02 全局白名单：任何模块（含新增）都不许在许可位置之外导入
+    LLM 库、DBOS、MCP——import-linter 契约靠手工枚举 source_modules，
+    新增子包/模块会漏检，本测试以全仓扫描兜底。"""
+    violations: list[str] = []
+    for path in sorted(SRC.rglob("*.py")):
+        rel = str(path.relative_to(SRC))
+        for name in _imports(path):
+            if _matches(name, "pydantic_ai") or _matches(name, "openai"):
+                if not rel.startswith("agent/llm/"):
+                    violations.append(f"{rel} -> {name}")
+            elif _matches(name, "dbos"):
+                if not rel.startswith("tasks/engine/"):
+                    violations.append(f"{rel} -> {name}")
+            elif _matches(name, "mcp") and not (
+                rel.startswith("interfaces/mcp/")
+                or rel.startswith("agent/llm/")
+                or rel == "store/knowledge.py"
+            ):
+                violations.append(f"{rel} -> {name}")
+    assert violations == []
+
+
 def test_scanner_detects_lazy_import(tmp_path: Path):
     """自检：扫描器能识别函数内的延迟导入（防止规则静默失效）。"""
     pkg = tmp_path / "interfaces" / "mcp"

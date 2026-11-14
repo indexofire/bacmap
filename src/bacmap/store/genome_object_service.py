@@ -336,8 +336,12 @@ class GenomeObjectService:
         self._conn.execute("PRAGMA synchronous = NORMAL")
         self._conn.execute("PRAGMA foreign_keys = ON")
         self._conn.execute("PRAGMA temp_store = MEMORY")
-        for ddl in _SCHEMA_SQL:
-            self._conn.execute(ddl)
+        if str(db_path) == ":memory:":
+            # 内存库无文件可版本化（ensure_gom_schema 跳过 migrate）：按迁移清单
+            # 一次性应用全部 DDL。文件库绝不在迁移框架之外重复执行 DDL。
+            for m in GOM_MIGRATIONS:
+                for ddl in m.statements:
+                    self._conn.execute(ddl)
 
     def _begin(self) -> None:
         self._conn.execute("BEGIN IMMEDIATE")

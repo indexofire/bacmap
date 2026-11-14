@@ -102,6 +102,14 @@ class TestResolveTaskId:
         with pytest.raises(KeyError):
             engine.resolve_task_id("deadbeef")
 
+    def test_like_wildcards_rejected(self, engine):
+        # %/_ 未过滤时会被 LIKE 当通配符，把非法输入变成"前缀命中"。
+        self._insert(engine, "a" * 32)
+        with pytest.raises(KeyError):
+            engine.resolve_task_id("a%")
+        with pytest.raises(KeyError):
+            engine.resolve_task_id("________")
+
 
 class TestDbosTaskEngine:
     def test_analyze_roundtrip_succeeded(self, engine):
@@ -605,3 +613,103 @@ class TestRunScopedReads:
         with GenomeObjectService(tmp_path / "gom.sqlite") as gos:
             obj = gos.read("analysis:S1:test-run-1", 1)
         assert obj.payload["species_verdict"] == "Salmonella"
+
+
+class TestPlanTaskKill:
+    """cancel 进程终止的选组策略：只杀携带 runs/<task_id> 标记的 snakemake
+    进程组，同机同名生信进程（其他任务/终端手跑）绝不受波及。"""
+
+    _PS = (
+        "  PID  PPID  PGID CMD\n"
+        "  100     1   100 snakemake -s Snakefile results/runs/aaaa/S1/x --config workdir=results/runs/aaaa\n"
+        "  101   100   100 diamond blastx --threads 8\n"
+        "  200     1   200 snakemake -s Snakefile results/runs/bbbb/S2/x --config workdir=results/runs/bbbb\n"
+        "  201   200   200 bakta --db /db x.fna\n"
+        "  300     1   300 diamond blastx manual-run\n"
+    )
+
+    def test_scoped_to_target_pgroup(self):
+        from bacmap.tasks.engine.task_engine import _plan_task_kill
+
+        pgids, pids = _plan_task_kill(self._PS, "aaaa", own_pid=1, own_pgid=1)
+        assert pgids == {100}
+        # 同组子进程（diamond）随 killpg 一并终止，无需逐 PID 杀
+        assert pids == set()
+
+    def test_other_task_and_manual_procs_untouched(self):
+        from bacmap.tasks.engine.task_engine import _plan_task_kill
+
+        pgids, pids = _plan_task_kill(self._PS, "bbbb", own_pid=1, own_pgid=1)
+        assert pgids == {200}
+        assert pids == set()
+
+    def test_no_match_returns_empty(self):
+        from bacmap.tasks.engine.task_engine import _plan_task_kill
+
+        pgids, pids = _plan_task_kill(self._PS, "zzzz", own_pid=1, own_pgid=1)
+        assert pgids == set() and pids == set()
+
+    def test_same_group_legacy_falls_back_to_descendants(self):
+        # 升级前启动的 snakemake 与引擎同组：不能 killpg（会自杀），
+        # 只能按 PID + 进程后代定点杀；同组的其他无关进程不受影响。
+        from bacmap.tasks.engine.task_engine import _plan_task_kill
+
+        out = (
+            "  500     1   999 snakemake -s S results/runs/cccc/t --config workdir=results/runs/cccc\n"
+            "  501   500   999 diamond blastx\n"
+            "  502   501   999 sleep 1\n"
+            "  600     1   999 diamond blastx other-task\n"
+        )
+        pgids, pids = _plan_task_kill(out, "cccc", own_pid=1, own_pgid=999)
+        assert pgids == set()
+        assert pids == {500, 501, 502}
+
+
+class TestResumeDispatch:
+    """resume 必须按任务类型分发工作流——此前硬编码 analyze_workflow，
+    恢复 curate/research 等任务会拿非分析参数进 analyze 工作流崩溃。"""
+
+    @staticmethod
+    def _seed(e: eng.DbosTaskEngine, tid: str, task_type: str, params: dict) -> None:
+        now = datetime.now(UTC).isoformat()
+        with e._conn() as conn:
+            conn.execute(
+                "INSERT INTO tasks (task_id, task_type, state, params_json,"
+                " submitted_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+                (tid, task_type, "paused", json.dumps(params), "t", now, now),
+            )
+
+    def test_resume_dispatches_research_workflow(self, engine, monkeypatch):
+        from bacmap.tasks.engine.task_engine import DbosTaskEngine
+
+        sentinels = {t: object() for t in TaskType}
+        monkeypatch.setattr(
+            DbosTaskEngine, "_workflows", staticmethod(lambda: sentinels)
+        )
+        started: list = []
+        monkeypatch.setattr(
+            "dbos.DBOS.start_workflow", lambda fn, params: started.append((fn, params))
+        )
+        monkeypatch.setattr("dbos.DBOS.delete_workflow", lambda *a, **k: None)
+        self._seed(engine, "b" * 32, "research", {"goal": "x"})
+        engine.resume("b" * 32)
+        assert started and started[0][0] is sentinels[TaskType.RESEARCH]
+        st = engine.status("b" * 32)
+        assert st.state == TaskState.RUNNING
+        assert st.current_step == "research"
+
+    def test_resume_uses_stored_task_type_not_hardcoded_analyze(self, engine, monkeypatch):
+        from bacmap.tasks.engine.task_engine import DbosTaskEngine
+
+        sentinels = {t: object() for t in TaskType}
+        monkeypatch.setattr(
+            DbosTaskEngine, "_workflows", staticmethod(lambda: sentinels)
+        )
+        started: list = []
+        monkeypatch.setattr(
+            "dbos.DBOS.start_workflow", lambda fn, params: started.append(fn)
+        )
+        monkeypatch.setattr("dbos.DBOS.delete_workflow", lambda *a, **k: None)
+        self._seed(engine, "c" * 32, "curate", {"organism": "Salmonella"})
+        engine.resume("c" * 32)
+        assert started == [sentinels[TaskType.CURATE]]

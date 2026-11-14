@@ -44,6 +44,8 @@ Origin: http://127.0.0.1:8800
 | GET | `/api/v1/tasks/{id}` | task status and metadata |
 | POST | `/api/v1/tasks/{id}/approve` | approval signature (`approver`, `decision`, `signature`, `comment?`) |
 | POST | `/api/v1/tasks/{id}/cancel` | cancel a non-terminal task |
+| POST | `/api/v1/tasks/{id}/pause` | pause a running task (interrupted workflows resumable) |
+| POST | `/api/v1/tasks/{id}/resume` | resume a `paused`/`failed(interrupted)`/`cancelled` task in the same run directory |
 | POST | `/api/v1/records/{kind}` | record task (`metadata`/`lab`/`knowledge-import`/`knowledge-approve`) |
 | GET | `/api/v1/plans?limit=` | latest version of each plan |
 | GET | `/api/v1/plans/{id}?version=` | plan detail |

@@ -11,6 +11,7 @@ parameters.properties 下）生成 pydantic 模型，经单参数 `params` 传�
 import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
@@ -68,6 +69,10 @@ def _default_profile() -> ProfileSpec:
 
 
 DEFAULT_PROFILE = _default_profile()
+# 导入期快照：DEFAULT_PROFILE 保持模块级可替换契约（测试 monkeypatch），
+# 未被替换时 build_server 按调用期环境重算——import 后再切 debug 配置
+# 不应继续吃旧上限（config.toml 的 [debug] 是运行期可读的，ADR-16）。
+_BOOT_PROFILE = DEFAULT_PROFILE
 
 
 def exposed_specs(profile: ProfileSpec) -> list[Any]:
@@ -90,7 +95,11 @@ def build_server(engine: Any = None, profile: ProfileSpec | None = None) -> MCPS
     测试 monkeypatch DEFAULT_PROFILE 不生效——D4/D1 裁剪随环境漂移）。
     """
     if profile is None:
-        profile = DEFAULT_PROFILE
+        profile = (
+            DEFAULT_PROFILE
+            if DEFAULT_PROFILE is not _BOOT_PROFILE
+            else _default_profile()
+        )
     server = MCPServer(
         name="bacmap",
         instructions=external_operating_rules(
@@ -111,7 +120,9 @@ def build_server(engine: Any = None, profile: ProfileSpec | None = None) -> MCPS
 
     _register_capabilities(server, profile)
     _register_role_prompts(server)
-    _register_skill_resources(server)
+    _register_skill_resources(
+        server, Path(engine.home) if engine is not None else None
+    )
 
     return server
 
@@ -475,18 +486,18 @@ def _register_record_tool(server: MCPServer, engine: Any, profile: ProfileSpec) 
         )
 
 
-def _register_skill_resources(server: MCPServer) -> None:
+def _register_skill_resources(server: MCPServer, home: Path | None = None) -> None:
     """角色说明书以 skill:// 资源发布（agentskills.io 原文 + sha256 摘要，ADR-12/21）。
 
-    v1.10.20：同时发布用户安装的领域技能（``$BACMAP_HOME/skills/<name>/SKILL.md``，
+    v1.10.20：同时发布用户安装的领域技能（``<home>/skills/<name>/SKILL.md``，
     如 figures4papers 的 figure-maker 作图技能）——角色技能在包内、领域技能在
     本机数据目录，两者同以 ``skill://bacmap/<name>/…`` 分发；目录缺失时静默跳过。
+    ``home`` 缺省回退导入期 ``BACMAP_HOME``；引擎注入的实例应传入 ``engine.home``，
+    否则 --home/多实例部署下会读到错误的数据目录。
     """
     import hashlib
-    from pathlib import Path
 
     from bacmap.agent import roledef
-    from bacmap.config import BACMAP_HOME
 
     def _publish(uri: str, name: str, description: str, text: str) -> None:
         server.resource(
@@ -506,7 +517,11 @@ def _register_skill_resources(server: MCPServer) -> None:
             text=text,
         )
 
-    skills_dir = Path(BACMAP_HOME) / "skills"
+    if home is None:
+        from bacmap.config import BACMAP_HOME
+
+        home = Path(BACMAP_HOME)
+    skills_dir = home / "skills"
     if not skills_dir.is_dir():
         return
     for skill_md in sorted(skills_dir.glob("*/SKILL.md")):

@@ -35,7 +35,7 @@ class TestSnakemakeLockRetry:
         monkeypatch.setattr("bacmap.workflow.runner.WorkflowRunner", lambda **kw: runner)
         monkeypatch.setattr("bacmap.workflow.runner.deploy", lambda: tmp_path)
         monkeypatch.setattr("time.sleep", lambda s: None)
-        monkeypatch.setattr(eng, "_clear_stale_snakemake_locks", lambda: False)
+        monkeypatch.setattr(eng, "_clear_stale_snakemake_locks", lambda home: False)
         monkeypatch.setattr(
             "bacmap.store.results_layout.link_run_results", lambda *a, **k: None
         )

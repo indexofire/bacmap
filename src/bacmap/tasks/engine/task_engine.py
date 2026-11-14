@@ -12,6 +12,8 @@ import json
 import logging
 import sqlite3
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -36,54 +38,92 @@ from bacmap.tools.spec import DataClass
 logger = logging.getLogger(__name__)
 
 
+def _plan_task_kill(
+    ps_out: str, task_id: str, own_pid: int, own_pgid: int
+) -> tuple[set[int], set[int]]:
+    """解析 ``ps -eo pid,ppid,pgid,cmd`` 输出，返回 ``(进程组, 定点PID)``。
+
+    只匹配命令行同时含 ``runs/<task_id>`` 与 ``snakemake`` 的行。独立进程组
+    （WorkflowRunner ``start_new_session``）→ killpg 整组终止；与调用方同组的
+    老版本遗留进程 → 退化为该 PID + 进程后代的定点杀，绝不按进程名全局匹配
+    （并发 analyze 任务与终端手跑的同名生信进程不能误伤）。
+    """
+    marker = f"runs/{task_id}"
+    procs: dict[int, int] = {}          # pid -> ppid
+    targets: list[tuple[int, int]] = []  # (pid, pgid) of matching snakemake
+    for line in ps_out.splitlines():
+        parts = line.strip().split(None, 3)
+        if len(parts) < 4:
+            continue
+        try:
+            pid, ppid, pgid = int(parts[0]), int(parts[1]), int(parts[2])
+        except ValueError:
+            continue
+        procs[pid] = ppid
+        if marker in parts[3] and "snakemake" in parts[3]:
+            targets.append((pid, pgid))
+    kill_pgids: set[int] = set()
+    kill_pids: set[int] = set()
+    for pid, pgid in targets:
+        if pid == own_pid:
+            continue
+        if pgid != own_pgid:
+            kill_pgids.add(pgid)
+            continue
+        queue, seen = [pid], {pid}
+        while queue:
+            cur = queue.pop()
+            kill_pids.add(cur)
+            for child, ppid in procs.items():
+                if ppid == cur and child not in seen:
+                    seen.add(child)
+                    queue.append(child)
+    return kill_pgids, kill_pids
+
+
 def _kill_task_pipeline_processes(task_id: str) -> int:
     """杀掉该任务关联的生信进程树（v1.10.24：cancel 即时终止 CPU 占用）。
 
     DBOS 的 cancel 是协作式的——只标记工作流状态，不会终止正在执行的
     subprocess。不杀的话 diamond 会持续吃满 CPU 直到自然结束（实测
-    取消后 >10 分钟仍在跑）。按 run 目录路径匹配 snakemake 命令行，
-    杀主进程后扫尾孤儿子进程（bakta/diamond/emapper 等）。
+    取消后 >10 分钟仍在跑）。按 run 目录路径匹配 snakemake 命令行后对
+    **其进程组**发信号：TERM 宽限（让 snakemake 转发终止并解锁）→
+    KILL 兜底；选组与退化策略见 :func:`_plan_task_kill`。
     """
     import os
     import signal
     import subprocess as _sp
     import time
 
-    marker = f"runs/{task_id}"
-    killed = 0
     try:
         out = _sp.run(
-            ["ps", "-eo", "pid,cmd"], capture_output=True, text=True, timeout=10
+            ["ps", "-eo", "pid,ppid,pgid,cmd"],
+            capture_output=True, text=True, timeout=10,
         ).stdout
     except (OSError, _sp.TimeoutExpired):
         return 0
-    for line in out.splitlines():
-        if marker not in line:
-            continue
-        parts = line.strip().split(None, 1)
-        if len(parts) < 2 or "snakemake" not in parts[1]:
-            continue
+    kill_pgids, kill_pids = _plan_task_kill(
+        out, task_id, os.getpid(), os.getpgid(0)
+    )
+    terminated = 0
+    for pgid in sorted(kill_pgids):
         try:
-            os.kill(int(parts[0]), signal.SIGKILL)
-            killed += 1
-        except (ValueError, ProcessLookupError, PermissionError):
+            os.killpg(pgid, signal.SIGTERM)
+            terminated += 1
+        except (ProcessLookupError, PermissionError):
             continue
-    if killed:
+    for pid in sorted(kill_pids):
+        try:
+            os.kill(pid, signal.SIGKILL)
+            terminated += 1
+        except (ProcessLookupError, PermissionError):
+            continue
+    if kill_pgids:
         time.sleep(0.5)
-        for proc in ("bakta", "diamond", "emapper.py", "gmlst"):
-            try:
-                pids = _sp.run(
-                    ["pgrep", "-x", proc], capture_output=True, text=True, timeout=5
-                ).stdout.split()
-                for pid_s in pids:
-                    try:
-                        os.kill(int(pid_s), signal.SIGKILL)
-                        killed += 1
-                    except (ProcessLookupError, PermissionError):
-                        pass
-            except (OSError, _sp.TimeoutExpired):
-                continue
-    return killed
+        for pgid in sorted(kill_pgids):
+            with suppress(ProcessLookupError, PermissionError):
+                os.killpg(pgid, signal.SIGKILL)
+    return terminated
 
 
 class DbosTaskEngine:
@@ -97,10 +137,35 @@ class DbosTaskEngine:
         self.events = EventLog(self.db)
         init_dbos(self.home / "dbos.sqlite")
 
-    def _conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db)
+    @staticmethod
+    def _workflows() -> dict[TaskType, Any]:
+        """任务类型 → DBOS 工作流函数分发表（submit/resume 共用）。
+
+        延迟导入 + 模块属性访问：workflow 函数解析发生在调用期，测试对
+        dbos_engine 模块的 monkeypatch 仍然生效，且无顶层循环导入。
+        """
+        import bacmap.tasks.engine.dbos_engine as _wf
+
+        return {
+            TaskType.ANALYZE: _wf.analyze_workflow,
+            TaskType.CURATE: _wf.curate_workflow,
+            TaskType.MINE: _wf.mine_workflow,
+            TaskType.WRITE: _wf.write_workflow,
+            TaskType.RECORD: _wf.record_workflow,
+            TaskType.RESEARCH: _wf.research_workflow,
+        }
+
+    @contextmanager
+    def _conn(self) -> Iterator[sqlite3.Connection]:
+        """sqlite3 的 with 块只提交事务不关闭连接——必须显式 close，
+        否则 SSE 轮询（count_states 每秒一次）会持续泄漏文件句柄。"""
+        conn = sqlite3.connect(self.db, timeout=30)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def submit(
         self,
@@ -112,18 +177,7 @@ class DbosTaskEngine:
     ) -> TaskId:
         """提交任务。``task_id`` 显式给定时提交是幂等的：同 ID 已存在即直接返回
         （计划确认以确定性 ID 提交，重复确认/崩溃后重试不会产生第二个任务）。"""
-        # 延迟导入 + 模块属性访问：workflow 函数解析发生在调用期，测试对
-        # dbos_engine 模块的 monkeypatch 仍然生效，且无顶层循环导入。
-        import bacmap.tasks.engine.dbos_engine as _wf
-
-        workflows = {
-            TaskType.ANALYZE: _wf.analyze_workflow,
-            TaskType.CURATE: _wf.curate_workflow,
-            TaskType.MINE: _wf.mine_workflow,
-            TaskType.WRITE: _wf.write_workflow,
-            TaskType.RECORD: _wf.record_workflow,
-            TaskType.RESEARCH: _wf.research_workflow,
-        }
+        workflows = self._workflows()
         if task_type not in workflows:
             raise NotImplementedError(f"unsupported task type: {task_type}")
         p = params.model_dump() if isinstance(params, BaseModel) else dict(params)
@@ -299,15 +353,20 @@ class DbosTaskEngine:
         """短前缀 → 完整任务 ID（git 短 SHA 式）：精确命中优先，唯一前缀放行，
         多义报错。``task ls``（12 位）/TUI（10 位）显示的都是截断 ID——直接
         粘贴给 task show/approve/cancel 由本方法兜住。"""
+        # 任务 ID 一律为小写 hex（uuid4().hex / sha256 hex）；未过滤的
+        # % 或 _ 前缀会被 LIKE 当通配符解析，把"非法输入"变成"前缀命中"。
+        norm = prefix.lower()
+        if not norm or any(c not in "0123456789abcdef" for c in norm):
+            raise KeyError(f"no such task: {prefix}")
         with self._conn() as conn:
             exact = conn.execute(
-                "SELECT task_id FROM tasks WHERE task_id = ?", (prefix,)
+                "SELECT task_id FROM tasks WHERE task_id = ?", (norm,)
             ).fetchone()
             if exact is not None:
                 return TaskId(str(exact["task_id"]))
             rows = conn.execute(
                 "SELECT task_id FROM tasks WHERE task_id LIKE ? ORDER BY created_at DESC",
-                (prefix + "%",),
+                (norm + "%",),
             ).fetchall()
         if not rows:
             raise KeyError(f"no such task: {prefix}")
@@ -415,6 +474,10 @@ class DbosTaskEngine:
                 f"task {task_id} state is {row['state']!r}; "
                 "only paused/failed/cancelled tasks can resume"
             )
+        task_type = TaskType(row["task_type"])
+        workflow = self._workflows().get(task_type)
+        if workflow is None:
+            raise ValueError(f"task type {task_type.value!r} cannot be resumed")
         try:
             _DBOS.delete_workflow(str(task_id))  # 旧工作流行（含孤儿 PENDING）
         except Exception:
@@ -423,18 +486,22 @@ class DbosTaskEngine:
         params.setdefault("home", str(self.home))
         params["task_id"] = str(task_id)
         params["resumed"] = True
-        from bacmap.tasks.engine.dbos_engine import analyze_workflow
 
         with self._conn() as conn:
             conn.execute(
-                "UPDATE tasks SET state = ?, message = '', current_step = 'pipeline', "
+                "UPDATE tasks SET state = ?, message = '', current_step = ?, "
                 "updated_at = ? WHERE task_id = ?",
-                (TaskState.RUNNING.value, datetime.now(UTC).isoformat(), str(task_id)),
+                (
+                    TaskState.RUNNING.value,
+                    task_type.value,
+                    datetime.now(UTC).isoformat(),
+                    str(task_id),
+                ),
             )
         from dbos import SetWorkflowID
 
         with SetWorkflowID(str(task_id)):
-            _DBOS.start_workflow(analyze_workflow, params)
+            _DBOS.start_workflow(workflow, params)
         self.events.append(
             EventType.TASK_SUBMITTED,
             task_id=str(task_id),

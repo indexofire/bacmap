@@ -169,7 +169,11 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
             "api_version": API_VERSION,
             "bacmap_version": pkg_version("bacmap"),
             "agent_embeds": embeds_payload(embeds),
-            "plannable_task_types": ["analyze", "curate"],
+            # 与 application/plans.py 的 PlannableTask 全集一致（MCP
+            # bacmap_capabilities 同源）——此前写死两类会让外部编排方低估能力面。
+            "plannable_task_types": [
+                "analyze", "curate", "mine", "write", "research",
+            ],
             "features": [
                 "plans",
                 "tasks",

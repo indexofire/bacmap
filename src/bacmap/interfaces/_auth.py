@@ -27,13 +27,14 @@ class BearerTokenMiddleware:
         if scope.get("type") != "http":
             await self._app(scope, receive, send)
             return
-        provided = ""
+        provided = b""
         for key, value in scope.get("headers", []):
             if key == b"authorization":
-                provided = value.decode("latin-1")
+                provided = value
                 break
-        expected = f"Bearer {self._token}"
-        if not hmac.compare_digest(provided.encode("latin-1"), expected.encode("latin-1")):
+        # 直接比较线字节：token 配置允许含非 latin-1 字符（此前 expected
+        # 走 latin-1 编码，CJK token 会直接 UnicodeEncodeError → 500）。
+        if not hmac.compare_digest(provided, f"Bearer {self._token}".encode()):
             await send(
                 {"type": "http.response.start", "status": 401, "headers": _UNAUTHORIZED_HEADERS}
             )

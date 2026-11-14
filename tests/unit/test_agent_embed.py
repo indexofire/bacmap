@@ -22,7 +22,8 @@ class TestLoadAgentEmbeds:
         )
         embeds = load_agent_embeds(cfg)
         assert [e.name for e in embeds] == ["DSH", "Hermes"]
-        assert embeds[0].origin == "127.0.0.1:3080"
+        # origin 含 scheme——CSP frame-src 需要 scheme://host:port 的干净来源
+        assert embeds[0].origin == "http://127.0.0.1:3080"
 
     def test_no_config_returns_empty(self, tmp_path: Path):
         assert load_agent_embeds(tmp_path / "nope.toml") == []
@@ -43,6 +44,32 @@ class TestLoadAgentEmbeds:
 
         with pytest.raises(ValidationError):
             AgentEmbed(name="x", url="https://evil.example.com")
+
+    def test_validator_rejects_userinfo_and_scheme_bypass(self):
+        """手写 '/'/':' 切分可被 userinfo/伪 scheme 绕过——urlsplit 后必须仍拒绝。"""
+        import pytest
+        from pydantic import ValidationError
+
+        for bad in (
+            "http://127.0.0.1:80@evil.example.com/",   # userinfo 遮蔽真实 host
+            "javascript://127.0.0.1/%0aalert(1)",      # 非 http(s) scheme
+            "http://user:pass@127.0.0.1:8080/",        # 凭据
+            "127.0.0.1:8080",                           # 无 scheme
+            "http://127.0.0.1:notaport/",              # 非法端口（.port 惰性抛错）
+            "http://127.0.0.1:99999/",                 # 越界端口
+        ):
+            with pytest.raises(ValidationError, match="agent_embed"):
+                AgentEmbed(name="x", url=bad)
+
+    def test_ipv6_loopback_accepted(self):
+        embed = AgentEmbed(name="v6", url="http://[::1]:8080/")
+        assert embed.origin == "http://[::1]:8080"
+
+    def test_origin_strips_query_and_credentials(self):
+        """origin 进 CSP 响应头：url 中的 ?token= 查询串不得泄漏。"""
+        embed = AgentEmbed(name="x", url="http://127.0.0.1:3080/?token=abc;evil=1")
+        assert embed.origin == "http://127.0.0.1:3080"
+        assert "token" not in embed.origin
 
 
 class TestCspFrameSources:

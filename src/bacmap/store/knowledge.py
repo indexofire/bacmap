@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -106,10 +108,16 @@ class KnowledgeStore:
         self.db = db_path
         ensure_knowledge_schema(db_path)
 
-    def _conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db)
+    @contextmanager
+    def _conn(self) -> Iterator[sqlite3.Connection]:
+        """sqlite3 的 with 块只提交事务不关闭连接——必须显式 close。"""
+        conn = sqlite3.connect(self.db, timeout=30)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def import_candidate(
         self,

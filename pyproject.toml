@@ -123,6 +123,7 @@ forbidden_modules = [
     "bacmap.tasks",
     "bacmap.interfaces",
     "bacmap.workflow",
+    "bacmap.research",
 ]
 
 # v1.5 应用服务层：不得依赖接口层，也不得依赖智能体层（C3：无 LLM 时计划闭环可用）。
@@ -131,6 +132,19 @@ name = "Application layer stays below interfaces and independent of agent"
 type = "forbidden"
 source_modules = ["bacmap.application"]
 forbidden_modules = ["bacmap.interfaces", "bacmap.agent"]
+
+# research 层（ADR-22 研究框架）：位于 store 之上、tasks/interfaces/agent 之下
+# ——tasks.params / interfaces.* 依赖它，反向不得成立。
+[[tool.importlinter.contracts]]
+name = "Research layer stays below agent, tasks, application and interfaces"
+type = "forbidden"
+source_modules = ["bacmap.research"]
+forbidden_modules = [
+    "bacmap.agent",
+    "bacmap.application",
+    "bacmap.tasks",
+    "bacmap.interfaces",
+]
 
 # ADR-02（v1.5 契约化）：只有 bacmap.agent.llm 可以直接导入 LLM 库。
 # allow_indirect_imports：经 agent.llm 封装的间接依赖是被允许的设计本身。
@@ -147,8 +161,12 @@ source_modules = [
     "bacmap.tools",
     "bacmap.tasks",
     "bacmap.interfaces",
+    "bacmap.research",
+    "bacmap.agent.harnesses",
+    "bacmap.agent.instructions",
     "bacmap.agent.interpret",
     "bacmap.agent.roledef",
+    "bacmap.agent.sandbox",
 ]
 forbidden_modules = ["pydantic_ai", "openai"]
 
@@ -165,8 +183,12 @@ source_modules = [
     "bacmap.tools",
     "bacmap.agent",
     "bacmap.interfaces",
+    "bacmap.research",
     "bacmap.tasks.spec",
     "bacmap.tasks.gates",
+    "bacmap.tasks.params",
+    "bacmap.tasks.records",
+    "bacmap.tasks.events",
 ]
 forbidden_modules = ["dbos"]
 
@@ -184,11 +206,20 @@ source_modules = [
     "bacmap.core",
     "bacmap.tools",
     "bacmap.tasks",
+    "bacmap.research",
     "bacmap.interfaces.views",
     "bacmap.interfaces.cli",
     "bacmap.interfaces.tui",
     "bacmap.interfaces.web",
+    "bacmap.interfaces.gvixb",
+    "bacmap.interfaces.stats_summary",
+    "bacmap.interfaces.i18n",
+    "bacmap.interfaces._auth",
+    "bacmap.interfaces._security",
+    "bacmap.agent.harnesses",
+    "bacmap.agent.instructions",
     "bacmap.agent.interpret",
     "bacmap.agent.roledef",
+    "bacmap.agent.sandbox",
 ]
 forbidden_modules = ["mcp"]

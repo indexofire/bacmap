@@ -176,9 +176,13 @@ class TestRunnerSubprocess:
     def test_run_builds_correct_command(self, tmp_path: Path, monkeypatch):
         recorded: dict = {}
 
-        def fake_run(cmd, cwd=None, timeout=None, text=None, capture_output=None, env=None):
+        def fake_run(
+            cmd, cwd=None, timeout=None, text=None, capture_output=None, env=None,
+            start_new_session=False,
+        ):
             recorded["cmd"] = cmd
             recorded["cwd"] = cwd
+            recorded["start_new_session"] = start_new_session
 
             class P:
                 returncode = 0
@@ -197,6 +201,9 @@ class TestRunnerSubprocess:
         assert cmd.index("results/S/report/s.json") < cmd.index("--config")
         assert cmd[cmd.index("--config") + 1 :] == ["threads=4"]
         assert recorded["cwd"] == str(tmp_path)
+        # 独立进程组：取消时按 runs/<task_id> 定位组后 killpg，
+        # 不波及同机同名生信进程
+        assert recorded["start_new_session"] is True
 
 
 class TestFinalizeRunManifest:

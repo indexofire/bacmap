@@ -38,3 +38,15 @@ def test_fenced_code_is_escaped():
     html = render_markdown("```\n<script>x</script>\n```\n")
     assert "<pre><code>" in html
     assert "&lt;script&gt;" in html
+
+
+def test_protocol_relative_links_are_removed():
+    """“//evil.com”是协议相对外链——站内 "/" 前缀不能放行它（零外联）。"""
+    html = render_markdown("[click](//evil.example.com/x)")
+    assert "evil.example.com" not in html
+    assert "click" in html
+
+
+def test_relative_links_still_allowed():
+    html = render_markdown("[inner](/research/sessions)")
+    assert '<a href="/research/sessions"' in html

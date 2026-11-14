@@ -24,6 +24,7 @@ import hashlib
 import json
 import logging
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -50,7 +51,7 @@ from bacmap.tasks.engine._runtime import (  # noqa: F401,E402
 )
 
 
-def _clear_stale_snakemake_locks() -> bool:
+def _clear_stale_snakemake_locks(home: Path) -> bool:
     """陈旧 snakemake 目录锁清理：本机无 snakemake 进程时锁必为 SIGKILL 残留。
 
     返回 True 表示已清除（调用方应立即重试）。仍有进程在跑（可能是并发
@@ -67,9 +68,8 @@ def _clear_stale_snakemake_locks() -> bool:
         return False
     if alive:
         return False
-    from bacmap.config import BACMAP_HOME
 
-    locks = Path(BACMAP_HOME) / "workflows/bacmap/.snakemake/locks"
+    locks = home / "workflows/bacmap/.snakemake/locks"
     if locks.is_dir():
         shutil.rmtree(locks, ignore_errors=True)
         logger.info("cleared stale snakemake locks (no snakemake process alive)")
@@ -98,7 +98,7 @@ def _run_targets_with_retry(
             return result
         if "LockException" not in (result.stderr or ""):
             return result
-        if _clear_stale_snakemake_locks():
+        if _clear_stale_snakemake_locks(home):
             continue
         wait_s = 45 * (attempt + 1)
         logger.warning(
@@ -352,7 +352,7 @@ def mark_task_terminal(home: Path, task_id: str, result: dict[str, Any]) -> bool
         return False
     state, message = mapped
     db = Path(home) / "tasks.sqlite"
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         changed = (
             conn.execute(
                 "UPDATE tasks SET state = ?, message = ?, updated_at = ?"
@@ -705,7 +705,7 @@ def _task_state_cancelled(task_id: str, home_s: str) -> bool:
     if not db.is_file() or not task_id:
         return False
     try:
-        with sqlite3.connect(f"file:{db}?mode=ro", uri=True) as conn:
+        with closing(sqlite3.connect(f"file:{db}?mode=ro", uri=True)) as conn:
             row = conn.execute(
                 "SELECT state FROM tasks WHERE task_id = ?", (task_id,)
             ).fetchone()

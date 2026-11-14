@@ -17,11 +17,15 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-_STOP_STATUSES = {"SUCCESS", "ERROR", "CANCELLED"}
+# SUCCESS 不算卡死：工作流完成但任务行未来及对账是正常中间态，由
+# DbosTaskEngine._reconcile_running() 按工作流返回载荷映射终态
+#（SUCCEEDED / AWAITING_APPROVAL / FAILED）——误标 failed 会绕过审批门。
+_STOP_STATUSES = {"ERROR", "CANCELLED"}
 
 
 def _current_app_version() -> str:
@@ -40,7 +44,7 @@ def adopt_stale_pending_workflows(dbos_db: Path) -> int:
         return 0
     version = _current_app_version()
     try:
-        with sqlite3.connect(dbos_db) as conn:
+        with closing(sqlite3.connect(dbos_db)) as conn, conn:
             cur = conn.execute(
                 "UPDATE workflow_status SET application_version = ? "
                 "WHERE status = 'PENDING' AND executor_id = 'local' "
@@ -73,7 +77,7 @@ def reconcile_stuck_tasks(home: Path) -> list[str]:
     if not tasks_db.is_file():
         return []
     try:
-        with sqlite3.connect(tasks_db) as conn:
+        with closing(sqlite3.connect(tasks_db)) as conn:
             rows = conn.execute(
                 "SELECT task_id FROM tasks WHERE state = 'running'"
             ).fetchall()
@@ -81,13 +85,22 @@ def reconcile_stuck_tasks(home: Path) -> list[str]:
         return []
     stuck: list[tuple[str, str]] = []
     for (task_id,) in rows:
-        status = _workflow_status(dbos_db, str(task_id))
+        try:
+            status = _workflow_status(dbos_db, str(task_id))
+        except sqlite3.Error:
+            # dbos.sqlite 存在但读失败（锁/损坏）：基础设施故障不能当成
+            # "工作流缺失"——放弃本轮对账，任务行保留 running 待下轮。
+            logger.warning(
+                "reconcile_stuck_tasks: dbos.sqlite 读取失败，本轮跳过",
+                exc_info=True,
+            )
+            return []
         if status is None or status in _STOP_STATUSES:
             stuck.append((str(task_id), status or "absent"))
     if not stuck:
         return []
     try:
-        with sqlite3.connect(tasks_db) as conn:
+        with closing(sqlite3.connect(tasks_db)) as conn, conn:
             for task_id, ws in stuck:
                 conn.execute(
                     "UPDATE tasks SET state = 'failed', message = ?, updated_at = ? "
@@ -105,16 +118,15 @@ def reconcile_stuck_tasks(home: Path) -> list[str]:
 
 
 def _workflow_status(dbos_db: Path, workflow_uuid: str) -> str | None:
+    """None = 工作流行不存在（或 dbos.sqlite 缺失）；sqlite3.Error 向上传播——
+    读取失败与缺失是两件事，调用方不得把前者当成"任务卡死"的证据。"""
     if not dbos_db.is_file():
         return None
-    try:
-        with sqlite3.connect(f"file:{dbos_db}?mode=ro", uri=True) as conn:
-            row = conn.execute(
-                "SELECT status FROM workflow_status WHERE workflow_uuid = ?",
-                (workflow_uuid,),
-            ).fetchone()
-    except sqlite3.Error:
-        return None
+    with closing(sqlite3.connect(f"file:{dbos_db}?mode=ro", uri=True)) as conn:
+        row = conn.execute(
+            "SELECT status FROM workflow_status WHERE workflow_uuid = ?",
+            (workflow_uuid,),
+        ).fetchone()
     return str(row[0]) if row else None
 
 

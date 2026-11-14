@@ -29,6 +29,7 @@ const listCounts = computed(() => {
   const out: Record<string, number> = {
     pending: 0,
     running: 0,
+    paused: 0,
     awaiting_approval: 0,
     succeeded: 0,
     failed: 0,
@@ -129,6 +130,7 @@ const chartPalette = computed(() => {
 
 const statusItems = computed(() => [
   { key: 'running', label: '运行中', value: stateCount('running'), color: chartPalette.value.running },
+  { key: 'paused', label: '已暂停', value: stateCount('paused'), color: chartPalette.value.pending },
   { key: 'awaiting_approval', label: '待审批', value: stateCount('awaiting_approval'), color: chartPalette.value.await },
   { key: 'succeeded', label: '已完成', value: stateCount('succeeded'), color: chartPalette.value.ok },
   { key: 'failed', label: '已失败', value: stateCount('failed'), color: chartPalette.value.fail },

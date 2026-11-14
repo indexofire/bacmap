@@ -58,7 +58,7 @@ class TestEngineTwoPhase:
         monkeypatch.setattr("bacmap.store.results_layout.link_run_results", lambda *a, **k: None)
         monkeypatch.setattr("bacmap.store.results_layout.run_results_dir", lambda home, tid: tmp_path / "runs" / tid)
         monkeypatch.setattr(eng, "_progress", lambda *a, **k: None)
-        monkeypatch.setattr(eng, "_clear_stale_snakemake_locks", lambda: False)
+        monkeypatch.setattr(eng, "_clear_stale_snakemake_locks", lambda home: False)
         monkeypatch.setattr("bacmap.workflow.runner.WorkflowRunner", FakeRunner)
         params = {"home": str(tmp_path), "samples": ["S1"], "task_id": "t1", "timeout": 60}
         result = eng._run_snakemake(params)

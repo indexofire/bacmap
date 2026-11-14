@@ -21,8 +21,11 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, field_validator
+
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 class AgentEmbed(BaseModel):
@@ -31,17 +34,39 @@ class AgentEmbed(BaseModel):
 
     @property
     def origin(self) -> str:
-        return self.url.split("/", 3)[2] if "://" in self.url else ""
+        """scheme://host:port（剥掉路径/查询串/凭据）——写进 CSP frame-src 的
+        必须是干净 origin；url 中的 ?token=… 查询串不得泄漏进响应头。"""
+        parts = urlsplit(self.url)
+        host = parts.hostname or ""
+        if ":" in host:  # IPv6 需要方括号还原
+            host = f"[{host}]"
+        return f"{parts.scheme}://{host}:{parts.port}" if parts.port else (
+            f"{parts.scheme}://{host}"
+        )
 
     @field_validator("url")
     @classmethod
     def _loopback_only(cls, v: str) -> str:
-        head = v.split("/", 3)[2] if "://" in v else ""
-        host = head.split(":")[0] if head else ""
-        if host not in {"127.0.0.1", "localhost", "::1"}:
+        # urlsplit 严格解析：手写 "/" / ":" 切分会被 http://127.0.0.1@evil/
+        # 之类的 userinfo 绕过，也会把合法 IPv6 回环 [::1] 误拒。
+        try:
+            parts = urlsplit(v)
+            # .port 对非法/越界端口惰性抛 ValueError——在校验期触达，
+            # 避免坏端口拖到 CSP 拼装时才炸
+            _port = parts.port
+        except ValueError as exc:
             raise ValueError(
-                f"agent_embed 仅允许回环地址（ADR-16），收到 {v!r}；"
-                "云托管智能体前端不可嵌入"
+                f"agent_embed URL 解析失败（ADR-16），收到 {v!r}"
+            ) from exc
+        if (
+            parts.scheme not in {"http", "https"}
+            or parts.username is not None
+            or parts.password is not None
+            or parts.hostname not in _LOOPBACK_HOSTS
+        ):
+            raise ValueError(
+                f"agent_embed 仅允许回环 http(s) 地址且不得含凭据（ADR-16），"
+                f"收到 {v!r}；云托管智能体前端不可嵌入"
             )
         return v
 

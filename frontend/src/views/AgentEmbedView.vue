@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import { api } from '../api'
+import type { AgentEmbedLink } from '../types'
 
 /**
  * 智能体对话嵌入（v1.10.24）：config.toml 的 [[web.agent_embed]] 配置
@@ -13,17 +14,12 @@ import { api } from '../api'
 const route = useRoute()
 const idx = computed(() => Number(route.params.idx ?? 0))
 
-interface Embed {
-  name: string
-  url: string
-}
-
-const embeds = ref<Embed[]>([])
+const embeds = ref<AgentEmbedLink[]>([])
 
 onMounted(async () => {
   try {
     const caps = await api.capabilities()
-    const list = (caps as unknown as { agent_embeds?: Embed[] }).agent_embeds
+    const list = caps.agent_embeds
     embeds.value = Array.isArray(list) ? list : []
   } catch {
     /* capabilities 失败 → 显示配置提示 */

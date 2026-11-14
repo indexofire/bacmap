@@ -5,6 +5,80 @@
 
 ## [Unreleased]
 
+### 代码质量与边界加固批次（任务恢复/取消、Web 安全、连接生命周期、契约收口）
+
+- **任务引擎正确性（P0）**：
+  - `reconcile_stuck_tasks` 不再把 DBOS `SUCCESS` 工作流误判为中断——`SUCCESS`
+    是"已完成但未对账"的正常中间态，交由 `_reconcile_running` 按工作流载荷落
+    `succeeded`/`awaiting_approval`/`failed`；仅 `ERROR`/`CANCELLED` 记为
+    `interrupted`。修复服务重启时机窗口内已完成任务被篡改为 `failed` 并绕过
+    审批门的问题。
+  - `resume()` 按存储的 `task_type` 分发工作流（与 `submit()` 共用
+    TaskType→workflow 表），不再硬编码 `analyze_workflow`——`curate`/`mine`/
+    `write`/`research` 任务恢复不再串错工作流。
+  - 取消改为进程组定向终止：`WorkflowRunner.run()` 以 `start_new_session=True`
+    起独立进程组，取消时按 `runs/{task_id}` 定位目标 snakemake 的 PID/PGID，
+    `SIGTERM` → 宽限 → 同组 `SIGKILL`；与调用方同组的遗留进程降级为
+    PID+子孙树处理。移除对 `bakta`/`diamond`/`emapper.py`/`gmlst` 的全局
+    `pgrep -x` 按名强杀——并发任务与同机外部生信作业不再被误杀。
+  - `resolve_task_id` 前缀校验小写十六进制，`%`/`_` 不再触发 LIKE 通配。
+- **Web/MCP 安全边界（P1）**：
+  - `[[web.agent_embed]]` URL 改用 `urlsplit` 校验：仅 http/https +
+    回环主机 + 无凭据，非法/越界端口在配置加载期拒绝；CSP `frame-src`
+    收 `scheme://host[:port]` 纯 origin（此前查询串里的 token 会泄露进
+    响应头，且 `;` 可注入 CSP 指令）；合法 IPv6 `[::1]` 不再被误拒。
+  - 样本报告的 prelim/重渲染分支与最终分支统一走同一出口：sandbox CSP +
+    `frame-ancestors 'self'` + `X-Frame-Options: SAMEORIGIN` + 主题注入 +
+    非 embed 重定向，prelim iframe 不再被浏览器默认 DENY 拦截。
+  - `/research` 同源可嵌策略并入纯 ASGI `SecurityHeadersMiddleware`
+    （`sameorigin_prefixes`），移除最外层 `BaseHTTPMiddleware`——SSE 等
+    长连接不再被包两层；`/gvixb` 不在 iframe 使用，移出白名单。
+  - Bearer/CSRF/会话比较统一为共享 `consteq`：线字节对 UTF-8 编码期望
+    常量时间比较，非 ASCII 头部不再 `UnicodeDecodeError`/`TypeError` → 500。
+  - `markdown.py` 拒绝 `//host` 协议相对链接；`http(s)`/`mailto:`/`#`/站内
+    相对路径不变。
+  - MCP `DEFAULT_PROFILE` 惰性求值（运行时读取当前 debug/home 配置，测试
+    monkeypatch 仍生效）；技能资源改用实例 `engine.home` 而非导入期
+    `BACMAP_HOME`。
+- **资源与架构契约（P2）**：
+  - `DbosTaskEngine`/`KnowledgeStore` 的 `_conn` 改为真正关闭连接的
+    contextmanager（`timeout=30`）；`runs.py`/`recovery.py`/`migrations.py`/
+    `cli/ops.py` 统一 `contextlib.closing`——SSE 轮询等长连接不再泄漏
+    SQLite 句柄；`reconcile_stuck_tasks` 读取异常与"工作流缺失"分路径，
+    sqlite 读错不再被记为 interrupted。
+  - `genome_object_service` 文件库只走编号迁移（不再每实例重复执行 DDL），
+    `:memory:` 例外按迁移语句顺序直建；`strain_index` 删除重复 `_DDL`，
+    upsert 主行与 AMR 行纳入同一事务。
+  - import-linter 新增 `bacmap.research` 层契约（不得依赖 agent/tasks/
+    application/interfaces），source 清单补齐既有遗漏子包；新增全仓 AST
+    白名单测试兜底"LLM 仅 agent.llm、DBOS 仅 tasks.engine、MCP 仅
+    interfaces.mcp/store.knowledge/agent.llm"，新模块漏检不再静默放行。
+  - LLM 路由失败关闭：`LlmConfig.resolve` 隐式回退跳过 cloud 端点——
+    `[llm.routing]` 未点名的 purpose 宁可返回 None（上层降级），不再把
+    数据静默发给云端点（ADR-16 面：漏配即数据出境事故）；显式路由的
+    云端点仍正常过 DataPolicy。`structured()` 对 TypeError/AttributeError/
+    KeyError/NameError 等编程错误立即失败（重试无意义），瞬时错误保留
+    MAX_RETRIES 重试。
+- **前端契约对齐（P2）**：
+  - `Capabilities` 类型补 `agent_embeds`，移除 `AppShell`/`AgentEmbedView`
+    的 `as unknown as` 双断言；`TaskState` 增加 `paused`，任务详情页
+    新增暂停/恢复操作，仪表盘状态环图计入 paused。
+  - `/api/v1/capabilities` 的 `plannable_task_types` 由
+    `["analyze","curate"]` 修正为与 `PlannableTask`/MCP 一致的
+    `["analyze","curate","mine","write","research"]`。
+  - `LegacyEmbedView` iframe 路由参数 `encodeURIComponent` 编码，注释
+    与实际 sandbox 声明对齐。
+- **健壮性（P3）**：
+  - `standardized_mean_difference` 要求每组 ≥2 个观测（单样本 `ddof=1`
+    除零不再产 NaN）。
+  - `results_layout` gzip/gunzip 写临时文件后 `os.replace`，别名软链改
+    同目录临时链接原子切换；`expand_run_artifacts` 只解压压缩冷目录与
+    明确的 quast/annotation `.json.gz`，不再递归误解压原生 `.gz`。
+- **测试**：新增 SUCCESS 恢复、进程组定向杀、resume 类型分发、URL 绕过、
+  `//` 链接、AST 边界、云端点不回退、SMD 边界、前缀校验等回归用例，
+  测试基线 2120 → 2138 passed；
+  文档（api/interfaces/mcp 双语）与冻结文档修订记录同步。
+
 ### VPA 毒力标记回退 VFDB 筛查（vpa_vf 库缺失时，过渡措施）
 
 - **背景**：gspec 官方目录当前没有 `vpa_vf` 库；**新版 gspec 将提供该库**，

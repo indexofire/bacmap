@@ -36,12 +36,22 @@ _QUAST_KEEP = {"report.tsv", "transposed_report.tsv"}
 
 
 def _gzip_file(path: Path) -> int:
-    """单文件 → path.gz（原文件删除）；返回释放字节数。已是 .gz 或缺失则 0。"""
+    """单文件 → path.gz（原文件删除）；返回释放字节数。已是 .gz 或缺失则 0。
+
+    先写 .tmp 再 ``os.replace``——进程中断不留下半截 .gz（此前实测到
+    压缩中崩溃后恢复任务读到损坏产物）。
+    """
     if path.suffix == ".gz" or not path.is_file():
         return 0
     gz = path.with_suffix(path.suffix + ".gz")
-    with open(path, "rb") as src, gzip.open(gz, "wb", compresslevel=6) as dst:
-        shutil.copyfileobj(src, dst)
+    tmp = gz.with_name(gz.name + ".tmp")
+    try:
+        with open(path, "rb") as src, gzip.open(tmp, "wb", compresslevel=6) as dst:
+            shutil.copyfileobj(src, dst)
+        os.replace(tmp, gz)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
     size = path.stat().st_size
     path.unlink()
     return size
@@ -51,8 +61,14 @@ def _gunzip_file(path: Path) -> bool:
     if path.suffix != ".gz" or not path.is_file():
         return False
     out = path.with_suffix("")
-    with gzip.open(path, "rb") as src, open(out, "wb") as dst:
-        shutil.copyfileobj(src, dst)
+    tmp = out.with_name(out.name + ".tmp")
+    try:
+        with gzip.open(path, "rb") as src, open(tmp, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        os.replace(tmp, out)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
     path.unlink()
     return True
 
@@ -99,9 +115,9 @@ def repair_flat_aliases(home: Path | str) -> dict:
 
     场景（实测）：被取消的批次在 prelim 阶段成功时抢占了扁平别名，随后
     中断——别名从此指向无报告的残缺 run，控制台"完整报告"按钮消失、
-    报告 iframe 404。规则：别名指向的 run 缺 `<sample>_summary.json` 时，
-    按目录名（任务 ID 无时间序，按 mtime）找**最新含最终 summary** 的 run
-    重指；没有完整 run 时保持原状（至少 prelim 可见）。
+    报告 iframe 404。规则：别名指向的 run 缺 `<sample>_report.html` 时，
+    按 mtime 找**最新含最终报告** 的 run 重指；没有完整 run 时保持
+    原状（至少 prelim 可见）。
     """
     home = Path(home)
     runs_root = results_root(home) / RUNS_DIRNAME
@@ -131,7 +147,12 @@ def repair_flat_aliases(home: Path | str) -> dict:
 
 
 def expand_run_artifacts(run_dir: Path | str, samples: Iterable[str] | None = None) -> int:
-    """展开 compact 压缩的冷产物（幂等；返回展开文件数）。"""
+    """展开 compact 压缩的冷产物（幂等；返回展开文件数）。
+
+    展开范围与压缩范围严格对称（冷目录 + annotation.json.gz + quast）：
+    不能整树扫 ``*.gz``——assembly/ 下可能存在管线原生的 .gz 产物
+    （如 Flye/Unicycler 导出的 .fasta.gz），误解压会破坏产物。
+    """
     run_dir = Path(run_dir)
     names = list(samples) if samples else [p.name for p in run_dir.iterdir() if p.is_dir()]
     count = 0
@@ -139,11 +160,19 @@ def expand_run_artifacts(run_dir: Path | str, samples: Iterable[str] | None = No
         base = run_dir / sample
         if not base.is_dir():
             continue
-        for rel in (*_COLD_DIRS, "annotation", "assembly"):
+        cold: list[Path] = []
+        for rel in _COLD_DIRS:
             sub = base / rel
             if sub.is_dir():
-                for p in sub.rglob("*.gz"):
-                    count += _gunzip_file(p)
+                cold.extend(sub.rglob("*.gz"))
+        ann = base / "annotation" / "annotation.json.gz"
+        if ann.is_file():
+            cold.append(ann)
+        quast = base / "assembly" / "quast"
+        if quast.is_dir():
+            cold.extend(quast.rglob("*.gz"))
+        for p in cold:
+            count += _gunzip_file(p)
     return count
 
 
@@ -160,14 +189,17 @@ def _relative_target(link: Path, target: Path) -> str:
 
 
 def _link(link: Path, target: Path) -> None:
-    if link.is_symlink():
-        link.unlink()
-    elif link.exists():
+    if link.exists() and not link.is_symlink():
         raise RuntimeError(
             f"refusing to replace real directory {link}; run `bacmap results migrate` first"
         )
     link.parent.mkdir(parents=True, exist_ok=True)
-    link.symlink_to(_relative_target(link, target), target_is_directory=True)
+    # 同目录临时链接 + os.replace 原子切换：读者要么命中旧链要么命中新链，
+    # 不存在 unlink→symlink_to 窗口期的 ENOENT（流式两阶段重链时并发读实测触发）。
+    tmp = link.with_name(f".{link.name}.link-tmp")
+    tmp.unlink(missing_ok=True)
+    tmp.symlink_to(_relative_target(link, target), target_is_directory=True)
+    os.replace(tmp, link)
 
 
 def link_run_results(home: Path | str, task_id: str, samples: Iterable[str]) -> None:

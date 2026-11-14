@@ -9,7 +9,6 @@ create_app(engine) 与 build_server(engine) 同构——引擎注入，测试可
 
 from __future__ import annotations
 
-import hmac
 import logging
 import secrets
 import threading
@@ -24,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.background import BackgroundTask
 
-from bacmap.interfaces._security import SecurityHeadersMiddleware
+from bacmap.interfaces._security import SecurityHeadersMiddleware, consteq
 from bacmap.interfaces.views import report_path
 from bacmap.interfaces.web.auth import (
     CSRF_COOKIE,
@@ -147,18 +146,6 @@ def _ensure_prelim_report(engine: DbosTaskEngine, sample_id: str) -> Path | None
         _REPORT_LOCK.release()
 
 
-def _consteq(a: str, b: str) -> bool:
-    """常量时间字符串比较（非 ASCII 输入编码失败按不匹配处理，而非 500）。
-
-    ``hmac.compare_digest`` 对 str 要求 ASCII-only：登录表单提交含非 ASCII
-    token 时会抛 TypeError → 未捕获 500。这里统一走 UTF-8 bytes 比较。
-    """
-    try:
-        return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
-    except UnicodeEncodeError:
-        return False
-
-
 def _build_auth_routes(app: FastAPI, cfg: WebAuthConfig) -> None:
     """登录/登出（cookie 模式登录；bearer/未启用模式给说明页）。"""
 
@@ -186,7 +173,7 @@ def _build_auth_routes(app: FastAPI, cfg: WebAuthConfig) -> None:
         origin = request.headers.get("origin", "")
         if origin and urlparse(origin).netloc != host:
             raise HTTPException(403, "cross-origin login rejected")
-        if not _consteq(token, cfg.token):
+        if not consteq(token, cfg.token):
             return _TEMPLATES.TemplateResponse(
                 request,
                 "login.html",
@@ -218,26 +205,29 @@ def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
 
     @app.get("/samples/{sample_id}/report")
     def sample_report(
-        sample_id: str, download: int = 0, embed: int = 0, theme: str = "", prelim: int = 0
+        sample_id: str, download: int = 0, embed: int = 0, theme: str = ""
     ) -> Response:
         if not _validate_sample_id(sample_id):
             raise HTTPException(400, "非法样本 ID")
-        path = report_path(engine, sample_id)
+        final_path = report_path(engine, sample_id)
         # v1.10.24 流式首屏：最终报告缺失时——有最终 summary 先按需重渲染，
         # 否则 prelim summary 存在则生成/提供初步报告（注释完成前 web 即可
-        # 查看分型与 AMR 结果）。
+        # 查看分型与 AMR 结果）。选定产物后统一走下面的 sandbox CSP /
+        # 主题注入 / 嵌套控制——prelim 分支此前直接 return 裸 FileResponse，
+        # 被外层默认 frame-ancestors 'none' + X-Frame-Options: DENY 拦截，
+        # 控制台“完整报告”页签在流式阶段空白（浏览器 framing 策略单测不可见）。
+        path = final_path
         if not path.is_file() and not download:
             if (path.parent / f"{sample_id}_summary.json").is_file():
                 _ensure_current_report(engine, sample_id, path)
-                if path.is_file():
-                    return FileResponse(path, media_type="text/html")
-            prelim_html = _ensure_prelim_report(engine, sample_id)
-            if prelim_html is not None:
-                return FileResponse(prelim_html, media_type="text/html")
-            raise HTTPException(404, "该样本尚未生成 HTML 报告")
+            if not path.is_file():
+                prelim_html = _ensure_prelim_report(engine, sample_id)
+                if prelim_html is not None:
+                    path = prelim_html
         if not path.is_file():
             raise HTTPException(404, "该样本尚未生成 HTML 报告")
-        _ensure_current_report(engine, sample_id, path)
+        if path == final_path:
+            _ensure_current_report(engine, sample_id, path)
         # 直接打开旧 URL 不再单独成页：跳到 SPA 的“完整报告”页签。
         if not download and not embed:
             return RedirectResponse(f"/console/samples/{sample_id}?tab=report", status_code=307)
@@ -366,9 +356,12 @@ def create_app(
     # 安全响应头（含 CSP）：最后加入 → 位于最外层，鉴权 401/303 也带安全头。
     # v1.10.24：配置了智能体嵌入时，其回环 origin 加入 frame-src（default-src
     # 'self' 会拦跨源 iframe；仅放行配置内显式声明的本机地址）。
+    # /research 工具页被控制台 iframe 嵌入（LegacyEmbedView）→ 同源 framing。
     _frame_sources = [e.origin for e in agent_embeds if e.origin]
     app.add_middleware(
-        SecurityHeadersMiddleware, extra_frame_sources=_frame_sources
+        SecurityHeadersMiddleware,
+        extra_frame_sources=_frame_sources,
+        sameorigin_prefixes=("/research",),
     )
     # 静态资源仅本地（CSS/图标/脚本；零外联，ADR-16）
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

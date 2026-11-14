@@ -33,6 +33,7 @@ const active = computed(() => !!task.value && !terminal.includes(task.value.stat
 const stateLabels: Record<string, string> = {
   pending: '排队中',
   running: '运行中',
+  paused: '已暂停',
   awaiting_approval: '待审批',
   succeeded: '已完成',
   failed: '已失败',
@@ -274,6 +275,36 @@ async function cancelTask() {
   }
 }
 
+async function pauseTask() {
+  if (!task.value) return
+  submitting.value = true
+  actionError.value = ''
+  try {
+    task.value = await api.pauseTask(id)
+    toast.ok('任务已暂停')
+    await load(true)
+  } catch (err) {
+    actionError.value = err instanceof Error ? err.message : '暂停失败'
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function resumeTask() {
+  if (!task.value) return
+  submitting.value = true
+  actionError.value = ''
+  try {
+    task.value = await api.resumeTask(id)
+    toast.ok('任务已恢复')
+    await load(true)
+  } catch (err) {
+    actionError.value = err instanceof Error ? err.message : '恢复失败'
+  } finally {
+    submitting.value = false
+  }
+}
+
 onMounted(() => void load())
 </script>
 
@@ -500,12 +531,36 @@ onMounted(() => void load())
 
           <section v-else-if="active" class="card card--pad">
             <h2 class="card__title">运行操作</h2>
-            <p class="card__hint" style="margin: 4px 0 16px">任务仍在执行，可取消。</p>
+            <p class="card__hint" style="margin: 4px 0 16px">
+              {{ task.state === 'paused' ? '任务已暂停，可恢复续跑或取消。' : '任务仍在执行，可暂停或取消。' }}
+            </p>
             <div v-if="actionError" class="form-error" style="margin-bottom: 12px">{{ actionError }}</div>
-            <button class="btn btn--danger" type="button" :disabled="submitting" @click="cancelTask">
-              <Icon name="ban" />
-              取消任务
-            </button>
+            <div class="inline-actions">
+              <button
+                v-if="task.state === 'paused'"
+                class="btn btn--primary"
+                type="button"
+                :disabled="submitting"
+                @click="resumeTask"
+              >
+                <Icon name="runs" />
+                恢复任务
+              </button>
+              <button
+                v-else
+                class="btn btn--ghost"
+                type="button"
+                :disabled="submitting"
+                @click="pauseTask"
+              >
+                <Icon name="ban" />
+                暂停任务
+              </button>
+              <button class="btn btn--danger" type="button" :disabled="submitting" @click="cancelTask">
+                <Icon name="ban" />
+                取消任务
+              </button>
+            </div>
           </section>
 
           <section v-else class="card card--pad">

@@ -26,51 +26,20 @@ class GenotypeMatch:
     analysis_date: str = ""
 
 
-_DDL = [
-    """CREATE TABLE IF NOT EXISTS strain_genotype_index (
-        strain_id           TEXT PRIMARY KEY,
-        organism            TEXT,
-        species             TEXT,
-        serotype            TEXT,
-        serotype_method     TEXT,
-        mlst_scheme         TEXT,
-        mlst_st             TEXT,
-        plasmid_types       TEXT,
-        object_id           TEXT,
-        analysis_date       TEXT,
-        pipeline_version    TEXT,
-        updated_at          TEXT
-    )""",
-    """CREATE INDEX IF NOT EXISTS idx_gi_serotype ON strain_genotype_index(serotype)""",
-    """CREATE INDEX IF NOT EXISTS idx_gi_mlst_st ON strain_genotype_index(mlst_st)""",
-    """CREATE INDEX IF NOT EXISTS idx_gi_organism ON strain_genotype_index(organism)""",
-    """CREATE INDEX IF NOT EXISTS idx_gi_species ON strain_genotype_index(species)""",
-    """CREATE TABLE IF NOT EXISTS strain_amr_genes (
-        strain_id   TEXT NOT NULL,
-        gene_name   TEXT NOT NULL,
-        database    TEXT NOT NULL DEFAULT '',
-        coverage    REAL,
-        identity    REAL,
-        product     TEXT,
-        PRIMARY KEY (strain_id, gene_name, database)
-    )""",
-    """CREATE INDEX IF NOT EXISTS idx_ag_gene ON strain_amr_genes(gene_name)""",
-    """CREATE INDEX IF NOT EXISTS idx_ag_strain ON strain_amr_genes(strain_id)""",
-]
-
 DDL_STATEMENTS = STRAIN_INDEX_DDL
 
 
 class StrainGenotypeIndex:
     def __init__(self, db_path: str | Path) -> None:
-        self._conn: sqlite3.Connection = sqlite3.connect(str(db_path))
-        self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA journal_mode=WAL")
         from bacmap.store.genome_object_service import ensure_gom_schema
 
-        # 索引与 GOM 同库（gom.sqlite）：按文件清单迁移，索引是 GOM 的迁移 2。
+        # 索引与 GOM 同库（gom.sqlite）：先迁移后开连接——迁移走独立连接并
+        # 推进 user_version/WAL，先开连接会持有迁移前的陈旧视图。
         ensure_gom_schema(db_path)
-        self._conn.commit()
+        self._conn: sqlite3.Connection = sqlite3.connect(str(db_path), timeout=30)
+        self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA foreign_keys=ON")
 
     def upsert(
         self,
@@ -89,41 +58,40 @@ class StrainGenotypeIndex:
         pipeline_version: str = "",
     ) -> None:
         now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()  # noqa: UP017
-        self._conn.execute(
-            """INSERT INTO strain_genotype_index
-               (strain_id, organism, species, serotype, serotype_method,
-                mlst_scheme, mlst_st, plasmid_types, object_id,
-                analysis_date, pipeline_version, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(strain_id) DO UPDATE SET
-                 organism=excluded.organism,
-                 species=excluded.species,
-                 serotype=excluded.serotype,
-                 serotype_method=excluded.serotype_method,
-                 mlst_scheme=excluded.mlst_scheme,
-                 mlst_st=excluded.mlst_st,
-                 plasmid_types=excluded.plasmid_types,
-                 object_id=excluded.object_id,
-                 analysis_date=excluded.analysis_date,
-                 pipeline_version=excluded.pipeline_version,
-                 updated_at=excluded.updated_at""",
-            (
-                strain_id,
-                organism,
-                species,
-                serotype,
-                serotype_method,
-                mlst_scheme,
-                mlst_st,
-                json.dumps(plasmid_types or []),
-                object_id,
-                analysis_date,
-                pipeline_version,
-                now,
-            ),
-        )
-
         try:
+            self._conn.execute(
+                """INSERT INTO strain_genotype_index
+                   (strain_id, organism, species, serotype, serotype_method,
+                    mlst_scheme, mlst_st, plasmid_types, object_id,
+                    analysis_date, pipeline_version, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(strain_id) DO UPDATE SET
+                     organism=excluded.organism,
+                     species=excluded.species,
+                     serotype=excluded.serotype,
+                     serotype_method=excluded.serotype_method,
+                     mlst_scheme=excluded.mlst_scheme,
+                     mlst_st=excluded.mlst_st,
+                     plasmid_types=excluded.plasmid_types,
+                     object_id=excluded.object_id,
+                     analysis_date=excluded.analysis_date,
+                     pipeline_version=excluded.pipeline_version,
+                     updated_at=excluded.updated_at""",
+                (
+                    strain_id,
+                    organism,
+                    species,
+                    serotype,
+                    serotype_method,
+                    mlst_scheme,
+                    mlst_st,
+                    json.dumps(plasmid_types or []),
+                    object_id,
+                    analysis_date,
+                    pipeline_version,
+                    now,
+                ),
+            )
             self._conn.execute(
                 "DELETE FROM strain_amr_genes WHERE strain_id = ?",
                 (strain_id,),

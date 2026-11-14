@@ -14,6 +14,7 @@ import shutil
 import sqlite3
 import tempfile
 import zipfile
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -216,7 +217,7 @@ def _iter_backup_files(home: Path) -> list[Path]:
 
 
 def _snapshot(db: Path, target: Path) -> None:
-    with sqlite3.connect(db) as src, sqlite3.connect(target) as dst:
+    with closing(sqlite3.connect(db)) as src, closing(sqlite3.connect(target)) as dst:
         src.backup(dst)
 
 
@@ -268,7 +269,7 @@ def _verify_dbs(target: Path) -> None:
         db = target / name
         if not db.is_file():
             continue
-        with sqlite3.connect(db) as conn:
+        with closing(sqlite3.connect(db)) as conn:
             row = conn.execute("PRAGMA integrity_check").fetchone()
         if row is None or row[0] != "ok":
             raise SystemExit(

@@ -75,6 +75,18 @@ class TestReconcile:
             states = dict(conn.execute("SELECT task_id, state FROM tasks").fetchall())
         assert states == {"t1": "failed", "t2": "running"}
 
+    def test_success_workflow_is_not_stuck(self, tmp_path):
+        # SUCCESS 工作流对应的 running 任务行是"完成但尚未对账"的正常中间态：
+        # 标成 failed 会绕过审批门并篡改已成功任务的终态。
+        _seed_tasks(tmp_path / "tasks.sqlite", [("t4", "running")])
+        _seed_dbos(tmp_path / "dbos.sqlite", [("t4", "SUCCESS", "v1")])
+        assert reconcile_stuck_tasks(tmp_path) == []
+        with sqlite3.connect(tmp_path / "tasks.sqlite") as conn:
+            state = conn.execute(
+                "SELECT state FROM tasks WHERE task_id = 't4'"
+            ).fetchone()[0]
+        assert state == "running"
+
     def test_absent_workflow_also_stuck(self, tmp_path):
         _seed_tasks(tmp_path / "tasks.sqlite", [("t3", "running")])
         # dbos.sqlite 不存在 → 工作流缺失 → 卡死

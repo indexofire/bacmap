@@ -200,6 +200,13 @@ class LlmGateway:
                 else:
                     result = agent.run_sync(prompt)
                 return result.output
+            # 编程/配置错误（TypeError/AttributeError/KeyError/NameError）重试
+            # 不会自愈——立即按不可用来报（上层降级），只烧一次而不是三次；
+            # 其余（传输超时/HTTP/模型输出不合规）保留重试语义。
+            except (TypeError, AttributeError, KeyError, NameError) as exc:
+                raise LlmUnavailableError(
+                    f"structured call failed on {endpoint.name} (non-retryable)"
+                ) from exc
             except Exception as exc:
                 last_exc = exc
                 logger.warning(

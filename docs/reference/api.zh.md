@@ -44,6 +44,8 @@ Origin: http://127.0.0.1:8800
 | GET | `/api/v1/tasks/{id}` | 任务状态与元数据 |
 | POST | `/api/v1/tasks/{id}/approve` | 审批签名（`approver`、`decision`、`signature`、`comment?`） |
 | POST | `/api/v1/tasks/{id}/cancel` | 取消非终态任务 |
+| POST | `/api/v1/tasks/{id}/pause` | 暂停运行中任务（中断的工作流可续跑） |
+| POST | `/api/v1/tasks/{id}/resume` | 在同一 run 目录恢复 `paused`/`failed(interrupted)`/`cancelled` 任务 |
 | POST | `/api/v1/records/{kind}` | 记录任务（`metadata`/`lab`/`knowledge-import`/`knowledge-approve`） |
 | GET | `/api/v1/plans?limit=` | 每个计划的最新版本 |
 | GET | `/api/v1/plans/{id}?version=` | 计划详情 |

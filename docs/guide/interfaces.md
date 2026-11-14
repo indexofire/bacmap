@@ -271,11 +271,14 @@ url = "http://127.0.0.1:49374"      # opencode serve
 ```
 
 Restart `bacmap start web` — a "智能体对话" sidebar group appears with one
-page per entry (`/agent/<n>`). The configured origins are added to the web
-CSP `frame-src` allowlist automatically; entries pointing at non-loopback
-hosts are skipped. Verified against DSH (needs its browser-trust token in the
-URL), the Hermes dashboard and `opencode serve`. Pi is TUI-only (no web UI to
-embed).
+page per entry (`/agent/<n>`). URLs must be http/https loopback addresses
+(`127.0.0.1`/`localhost`/`::1`) without embedded credentials — invalid
+entries are rejected at config load; a valid entry's
+`scheme://host[:port]` origin (no path or query string, so tokens never
+leak into response headers) is added to the web CSP `frame-src` allowlist
+automatically, while non-loopback entries are skipped. Verified against
+DSH (needs its browser-trust token in the URL), the Hermes dashboard and
+`opencode serve`. Pi is TUI-only (no web UI to embed).
 
 ```bash
 bacmap start web -D            # or --daemon

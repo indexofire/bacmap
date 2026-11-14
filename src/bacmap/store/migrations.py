@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Sequence
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,7 +46,7 @@ def _validate(migrations: Sequence[Migration]) -> int:
 
 
 def schema_version(db_path: Path) -> int:
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn:
         return int(conn.execute("PRAGMA user_version").fetchone()[0])
 
 
@@ -56,7 +57,7 @@ def _has_tables(conn: sqlite3.Connection) -> bool:
 
 def _backup(conn: sqlite3.Connection, db_path: Path, current: int) -> Path:
     target = db_path.with_name(f"{db_path.name}.bak-v{current}")
-    with sqlite3.connect(target) as dst:
+    with closing(sqlite3.connect(target)) as dst:
         conn.backup(dst)
     return target
 

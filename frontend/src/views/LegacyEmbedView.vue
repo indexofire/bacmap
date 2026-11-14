@@ -10,9 +10,10 @@ import { useTheme } from '../composables/useTheme'
  *
  * 研究工作台的表单型工具（系统发育 / Logistic / 打包 / 完整工作台）仍是
  * 服务端渲染页（base.html 无 JS，表单 POST + 303 重定向闭环）。此视图把它们
- * 装进控制台外壳：保留侧边栏与主题，用沙箱 iframe 承载（allow-forms /
- * allow-downloads；页面零脚本故无需 allow-scripts）。route.meta 声明标题与
- * 旧路径；:param 占位符用路由参数插值。
+ * 装进控制台外壳：保留侧边栏与主题，用沙箱 iframe 承载（allow-scripts
+ * 允许页面自身脚本与主题切换、allow-forms / allow-downloads 支撑表单与导出；
+ * allow-same-origin 为同源页面所需）。route.meta 声明标题与
+ * 旧路径；:param 占位符用路由参数插值（URI 编码防路径注入）。
  */
 const route = useRoute()
 const { resolved: resolvedTheme } = useTheme()
@@ -23,7 +24,8 @@ const hint = computed(() => (route.meta.hint as string) ?? '')
 const frameSrc = computed(() => {
   let path = (route.meta.legacyPath as string) ?? ''
   for (const [key, value] of Object.entries(route.params)) {
-    path = path.replaceAll(`:${key}`, Array.isArray(value) ? value[0] : value)
+    const raw = Array.isArray(value) ? value[0] : value
+    path = path.replaceAll(`:${key}`, encodeURIComponent(raw))
   }
   return appUrl(path)
 })

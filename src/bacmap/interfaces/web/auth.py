@@ -24,6 +24,8 @@ from urllib.parse import quote, urlparse
 
 from starlette.requests import Request
 
+from bacmap.interfaces._security import consteq
+
 _logger = logging.getLogger(__name__)
 
 SESSION_COOKIE = "bacmap_session"
@@ -143,8 +145,11 @@ class WebAuthConfig:
         )
 
     def bearer_ok(self, provided: str) -> bool:
-        expected = f"Bearer {self.token}"
-        return hmac.compare_digest(provided.encode("latin-1"), expected.encode("latin-1"))
+        # provided 来自 latin-1 解码的请求头，重新编码即还原线字节；
+        # expected 走 UTF-8——token 含非 latin-1 字符不再编码崩溃 → 500。
+        return hmac.compare_digest(
+            provided.encode("latin-1"), f"Bearer {self.token}".encode()
+        )
 
     def cookie_ok(self, value: str) -> bool:
         return bool(self.secret) and verify_session(self.secret, value)
@@ -384,7 +389,7 @@ def verify_csrf(request: Request, form_csrf: str) -> bool:
     if source and urlparse(source).netloc != host:
         return False
     cookie = request.cookies.get(CSRF_COOKIE, "")
-    return bool(cookie) and hmac.compare_digest(cookie, form_csrf or "")
+    return bool(cookie) and consteq(cookie, form_csrf or "")
 
 
 def safe_next(target: str, default: str = "/") -> str:

@@ -158,8 +158,9 @@ def load_table(
 
 def standardized_mean_difference(treated: list[float], control: list[float]) -> float:
     """Absolute standardized mean difference (pooled SD); 0 means balanced."""
-    if not treated or not control:
-        raise ValueError("both groups need at least one observation")
+    if len(treated) < 2 or len(control) < 2:
+        # ddof=1 的方差在 n<2 时除零产出 NaN——显式前置校验而非漏出 NaN
+        raise ValueError("both groups need at least two observations")
     a = np.asarray(treated, dtype=float)
     b = np.asarray(control, dtype=float)
     pooled = math.sqrt((float(np.var(a, ddof=1)) + float(np.var(b, ddof=1))) / 2.0)

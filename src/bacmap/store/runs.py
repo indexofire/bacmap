@@ -14,6 +14,7 @@ import json
 import os
 import sqlite3
 import subprocess
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -291,8 +292,7 @@ def create_run(
 
     target = Path(db_path or (BACMAP_HOME / "runs.sqlite"))
     migrate(target, RUNS_MIGRATIONS)
-    conn = sqlite3.connect(target)
-    with conn:
+    with closing(sqlite3.connect(target)) as conn, conn:
         conn.execute(
             "INSERT INTO analysis_runs (run_id, task_id, strain_ids, workflow, workflow_commit,"
             " workflow_dirty, started_at, finished_at, resolved_config, config_sha256,"
@@ -312,7 +312,6 @@ def create_run(
                 run.manifest_sha256,
             ),
         )
-    conn.close()
     return run
 
 
@@ -320,25 +319,21 @@ def finish_run(run: AnalysisRun, db_path: Path | None = None) -> None:
     from bacmap.config import BACMAP_HOME
 
     run.finished_at = datetime.now(UTC)
-    conn = sqlite3.connect(db_path or (BACMAP_HOME / "runs.sqlite"))
-    with conn:
+    with closing(sqlite3.connect(db_path or (BACMAP_HOME / "runs.sqlite"))) as conn, conn:
         conn.execute(
             "UPDATE analysis_runs SET finished_at = ? WHERE run_id = ? AND finished_at IS NULL",
             (run.finished_at.isoformat(), run.run_id),
         )
-    conn.close()
 
 
 def mark_ingested(run_id: str, db_path: Path) -> None:
     """标记运行记录已入库 GOM（ADR-18 的 ``ingested_at``）；幂等，不覆盖首次时间。"""
-    conn = sqlite3.connect(db_path)
-    with conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         conn.execute(
             "UPDATE analysis_runs SET ingested_at = ?"
             " WHERE run_id = ? AND ingested_at IS NULL",
             (datetime.now(UTC).isoformat(), run_id),
         )
-    conn.close()
 
 
 def list_runs(db_path: Path, limit: int = 50) -> list[dict[str, Any]]:
@@ -366,10 +361,11 @@ def list_runs(db_path: Path, limit: int = 50) -> list[dict[str, Any]]:
 def read_run(run_id: str, db_path: Path) -> AnalysisRun | None:
     """从 analysis_runs 表读回一条运行记录（用于封存 manifest，ADR-18）。"""
     migrate(Path(db_path), RUNS_MIGRATIONS)
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    row = conn.execute("SELECT * FROM analysis_runs WHERE run_id = ?", (run_id,)).fetchone()
-    conn.close()
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT * FROM analysis_runs WHERE run_id = ?", (run_id,)
+        ).fetchone()
     if row is None:
         return None
     return AnalysisRun(
@@ -408,13 +404,11 @@ def finalize_run(run_id: str, db_path: Path, runs_root: Path) -> AnalysisRun | N
         run.finished_at = datetime.now(UTC)
     run.manifest_sha256 = compute_manifest_sha256(run)
     write_manifest(run, runs_root)
-    conn = sqlite3.connect(db_path)
-    with conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         conn.execute(
             "UPDATE analysis_runs SET finished_at = ?, manifest_sha256 = ? WHERE run_id = ?",
             (run.finished_at.isoformat(), run.manifest_sha256, run.run_id),
         )
-    conn.close()
     return run
 
 

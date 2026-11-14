@@ -22,7 +22,10 @@ _ITALIC = re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)")
 
 def _safe_url(raw: str) -> str | None:
     url = html.unescape(raw.strip())
-    if url.startswith(("http://", "https://", "mailto:", "/", "#")):
+    if url.startswith(("http://", "https://", "mailto:", "#")):
+        return html.escape(url, quote=True)
+    # "/" 允许站内相对链接，但 "//evil.com" 是协议相对外链（违反零外联）
+    if url.startswith("/") and not url.startswith("//"):
         return html.escape(url, quote=True)
     return None
 
