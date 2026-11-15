@@ -175,11 +175,16 @@ bacmap specimen list|ls [--limit N] [--home H] [--json]
 bacmap specimen show <specimen_id> [--home H] [--json]
 bacmap specimen import <map.tsv> [--by {dataset,isolate}] [--dry-run]
 bacmap specimen assign --specimen ID [--dataset D ...] [--isolate I ...]
+bacmap specimen backfill [--dry-run]
 bacmap specimen delete <specimen_id> [--force]
 ```
 
 A specimen is the unique submission ID; it owns 0..N isolates, and each isolate may have several
 libraries. The ID may be empty (lab has not supplied it yet) and backfilled with `import`/`assign`.
+
+`backfill` links every isolate without a specimen to a **same-name** specimen (created on demand,
+`origin=backfill`) and mirrors the ID into the `samples.tsv` `specimen` column. It is idempotent and
+only fills empty links; use `--dry-run` to preview the candidate count.
 
 ```bash
 bacmap specimen assign --specimen A03-SN-001 --dataset 26SAL0501 --dataset 26SAL0501__ont
@@ -361,7 +366,13 @@ bacmap config path [--json]
 bacmap run list|ls [--limit N] [--json]
 bacmap run show <run_id> [--json]
 bacmap run compare <run_a> <run_b> [--json]
+bacmap run purge <run_id> [--dry-run] [--json]
 ```
+
+`purge` deletes only the run's physical artifacts (`results/runs/<task_id>/`) and keeps the
+immutable run record, `run_manifest.json` hash and GOM objects. It refuses while the task is
+active and when the run is still the latest result for any sample; `--dry-run` reports files/bytes.
+
 
 ```bash
 bacmap run compare 4f2c... 9a31...
@@ -381,7 +392,11 @@ Object types: `sample`, `analysis`, `report`, `workflow`, `plugin`, `knowledge`,
 ```text
 bacmap isolate list|ls [--json]
 bacmap isolate show <isolate_id> [--json]
+bacmap isolate delete <isolate_id> [--home H] [--json]
 ```
+
+`delete` only accepts an **empty isolate** (no libraries, metadata, lab results, GOM objects or
+run records); otherwise it refuses and reports the linked counts. It never cascades.
 
 ## `bacmap sample`
 

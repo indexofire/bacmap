@@ -279,3 +279,80 @@ class TestImportTsv:
         path.write_text("specimen\tfoo\nA03-SN-001\tDS-1\n")
         with pytest.raises(SystemExit):
             _read_assignments(path, "dataset")
+
+
+class TestSameNameBackfill:
+    """v1.10.34：未关联菌株 → 同名样本一次性回填。"""
+
+    def _home(self, tmp_path: Path) -> Path:
+        home = tmp_path / "home"
+        cfg = home / "workflows" / "bacmap" / "config"
+        cfg.mkdir(parents=True)
+        (cfg / "samples.tsv").write_text(
+            "sample\tspecies\tR1\tR2\tlongread\tassembly\tisolate\tplatform"
+            "\tchecksum\tspecimen\n"
+            "LIB-A\tSAL\t\t\t\ta.fasta\tISO-A\tilm\t\t\n"
+            "LIB-B\tSAL\t\t\t\tb.fasta\tISO-B\tilm\t\tSPEC-B\n",
+            encoding="utf-8",
+        )
+        with IsolateService(home / "data" / "bacmap.sqlite") as isolates:
+            isolates.ensure("ISO-A")
+            isolates.ensure("ISO-B", specimen_id="SPEC-B")
+        with SpecimenService(home / "data" / "bacmap.sqlite") as specimens:
+            specimens.ensure("SPEC-B", origin="import")
+        return home
+
+    def test_backfill_creates_and_links_same_name(self, tmp_path):
+        from bacmap.workflow.samples_registry import (
+            backfill_same_name_specimens,
+            list_libraries,
+        )
+
+        home = self._home(tmp_path)
+        result = backfill_same_name_specimens(home)
+        assert result == {
+            "created": 1,
+            "linked": 1,
+            "updated_tsv_rows": 1,
+            "skipped_invalid": [],
+        }
+        with SpecimenService(home / "data" / "bacmap.sqlite") as specimens:
+            row = specimens.get("ISO-A")
+            assert row is not None and row["origin"] == "backfill"
+            assert specimens.get("SPEC-B")["origin"] == "import"
+        with IsolateService(home / "data" / "bacmap.sqlite") as isolates:
+            assert isolates.get("ISO-A")["specimen_id"] == "ISO-A"
+            assert isolates.get("ISO-B")["specimen_id"] == "SPEC-B"
+        libraries = {row["sample"]: row for row in list_libraries(home)}
+        assert libraries["LIB-A"]["specimen"] == "ISO-A"
+        assert libraries["LIB-B"]["specimen"] == "SPEC-B"
+
+    def test_backfill_is_idempotent(self, tmp_path):
+        from bacmap.workflow.samples_registry import backfill_same_name_specimens
+
+        home = self._home(tmp_path)
+        backfill_same_name_specimens(home)
+        again = backfill_same_name_specimens(home)
+        assert again["created"] == 0 and again["linked"] == 0
+        assert again["updated_tsv_rows"] == 0
+
+    def test_dry_run_writes_nothing(self, tmp_path):
+        from bacmap.workflow.samples_registry import (
+            backfill_same_name_specimens,
+            list_libraries,
+        )
+
+        home = self._home(tmp_path)
+        result = backfill_same_name_specimens(home, dry_run=True)
+        assert result["candidates"] == 1 and result["linked"] == 0
+        with SpecimenService(home / "data" / "bacmap.sqlite") as specimens:
+            assert specimens.get("ISO-A") is None
+        assert {r["sample"]: r for r in list_libraries(home)}["LIB-A"]["specimen"] == ""
+
+    def test_cli_backfill(self, tmp_path, capsys):
+        from bacmap.interfaces.cli import main as cli
+
+        home = self._home(tmp_path)
+        cli.main(["specimen", "backfill", "--home", str(home), "--json"])
+        out = capsys.readouterr().out
+        assert '"linked": 1' in out

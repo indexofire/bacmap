@@ -160,6 +160,38 @@ def run_assign(args: argparse.Namespace) -> None:
         )
 
 
+def run_backfill(args: argparse.Namespace) -> None:
+    from bacmap.workflow.samples_registry import backfill_same_name_specimens
+
+    result = backfill_same_name_specimens(Path(args.home), dry_run=args.dry_run)
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+    if result.get("dry_run"):
+        print(
+            T(
+                f"{result['candidates']} isolate(s) would be linked to same-name specimens",
+                f"将把 {result['candidates']} 株菌株关联到同名样本（dry-run，未写入）",
+            )
+        )
+    else:
+        print(
+            T(
+                f"linked {result['linked']} isolate(s); created {result['created']}"
+                f" specimen(s); updated {result['updated_tsv_rows']} samples.tsv row(s)",
+                f"已关联 {result['linked']} 株菌株；新建 {result['created']} 个样本；"
+                f"更新 {result['updated_tsv_rows']} 行 samples.tsv",
+            )
+        )
+    if result.get("skipped_invalid"):
+        print(
+            T(
+                f"skipped invalid ids: {', '.join(result['skipped_invalid'])}",
+                f"已跳过非法编号：{', '.join(result['skipped_invalid'])}",
+            )
+        )
+
+
 def run_delete(args: argparse.Namespace) -> None:
     from bacmap.workflow.samples_registry import delete_specimen
 
@@ -198,8 +230,8 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     p = sub.add_parser(
         "specimen",
         help=T(
-            "sample (specimen) entities: list/show/import/assign/delete",
-            "样本实体：列表/详情/导入/关联/删除",
+            "sample (specimen) entities: list/show/import/assign/backfill/delete",
+            "样本实体：列表/详情/导入/关联/同名回填/删除",
         ),
     )
     s = p.add_subparsers(dest="specimen_command", required=True)
@@ -247,6 +279,18 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(assign)
     add_json(assign)
     assign.set_defaults(func=run_assign)
+
+    backfill = s.add_parser(
+        "backfill",
+        help=T(
+            "link unlinked isolates to same-name specimens (creating them)",
+            "把未关联菌株关联到同名样本（不存在则创建）",
+        ),
+    )
+    backfill.add_argument("--dry-run", action="store_true")
+    add_home(backfill)
+    add_json(backfill)
+    backfill.set_defaults(func=run_backfill)
 
     delete = s.add_parser(
         "delete", help=T("delete a specimen (empty by default)", "删除样本（默认仅空样本）")

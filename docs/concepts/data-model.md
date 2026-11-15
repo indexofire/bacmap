@@ -16,7 +16,8 @@ specimen: A03-SN-001                        unique specimen / submission ID
 
 - **specimen** — the unique specimen / submission ID (e.g. `A03-SN-001`). One specimen can
   yield 0..N isolates, and may also be sequenced directly (mNGS/tNGS, next major release).
-  The ID may be empty when the lab has not supplied it; `bacmap specimen import` backfills it.
+  The ID may be empty when the lab has not supplied it; `bacmap specimen import` backfills it,
+  and `bacmap specimen backfill` links unlinked isolates to same-name specimens (creating them).
 - **isolate** — the entity you track epidemiologically; can have lineage/passage
   (`EVO-001-P037` → lineage `EVO-001`, passage 37). An isolate belongs to one specimen.
 - **library** — one input library or assembly. Its ID is the `sample` column in

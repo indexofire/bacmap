@@ -22,12 +22,14 @@ GOLDEN_MLST_SCHEMES = {
     "ECO": "ecoli_1",
     "VPA": "vparahaemolyticus_1",
     "LMO": "lmonocytogenes_1",  # Pasteur 7 位点；此前缺声明导致静默回退 salmonella_2
+    "CPE": "cperfringens_1",  # v1.10.28：CPE 启用 MLST（pubmlst 8 位点）
 }
 GOLDEN_CGMLST_SCHEMES = {
     "SAL": "senterica_2",
     "SHI": "ecoli_2",
     "ECO": "ecoli_2",
     "VPA": "vparahaemolyticus_3",
+    "CPE": "cperfringens_2",  # v1.10.28：CPE 纳入 cgMLST cohort
 }
 GOLDEN_AMRFINDER_ORGANISMS = {
     "SAL": "Salmonella",
@@ -147,7 +149,9 @@ class TestGoldenMigration:
         # 新增常见病原组（分组名 = 小写码），成员由 snp_group 派生
         assert groups["vch"]["species"] == ["VCH"]
         assert groups["lmo"]["species"] == ["LMO"]
-        assert len(groups) == 21
+        # v1.10.28：CPE 组（仅 cgMLST，无 SNP 参考；成员由 snp_group 派生）
+        assert groups["cpe"]["species"] == ["CPE"]
+        assert len(groups) == 22
 
     def test_new_snp_groups_have_accessions(self):
         from bacmap.core.pathogen_registry import load_registry

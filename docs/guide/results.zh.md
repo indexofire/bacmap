@@ -206,7 +206,9 @@ input file ──SHA256──► run record ──run_id──► GOM ANALYSIS
 
 ## 7. 保留与备份
 
-- `results/` 不会被自动删除；请在核对保留策略后有意清理旧运行。
+- `results/` 不会被自动删除；请在核对保留策略后有意清理旧运行。`bacmap run purge <run_id>`
+  删除单次运行的物理产物，保留不可变记录、manifest 哈希与 GOM 对象；运行中的任务和仍是
+  样本最新结果的 run 会被拒绝。清理动作记入 `run_artifact_purges` 审计表。
 - `bacmap backup` 包含数据库与运行清单；加上 `--with-results` 可包含结果文件。
 - `bacmap events prune --days N` 删除旧的协调事件，不删除门审批或运行记录。
 - 恢复较旧的备份也会恢复 `dbos.sqlite`，因此正在执行的任务可以继续。

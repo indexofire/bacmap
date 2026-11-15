@@ -126,4 +126,8 @@ class TestSchemeTypes:
             m = re.search(rf"{scheme}\s+mlst\s+(\d+)", text)
             if m:
                 loci = int(m.group(1))
-                assert loci == 7, f"{code}: {scheme} 位点数 {loci}（经典 MLST 应为 7）"
+                # 经典 MLST 位点数可为 6-8（因物种/方案而异，如 C. perfringens 为 8）；
+                # 断言上界防止把 cgMLST（数百至数千位点）误配成 MLST。
+                assert loci in (6, 7, 8), (
+                    f"{code}: {scheme} 位点数 {loci}（经典 MLST 应为 6-8）"
+                )

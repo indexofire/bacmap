@@ -288,6 +288,79 @@ def _ensure_isolates(home: Path, rows: list[list[str]], header: list[str]) -> No
         pass
 
 
+def isolate_links(home: Path, isolate_id: str) -> dict[str, int]:
+    """菌株的关联计数（安全删除判定）：libraries/metadata/lab_results/gom/runs。"""
+    counts = {"libraries": 0, "metadata": 0, "lab_results": 0, "gom": 0, "runs": 0}
+
+    _tsv, header, rows = _load_table(home)
+    if "isolate" in header:
+        idx = header.index("isolate")
+        counts["libraries"] = sum(
+            1 for row in rows if len(row) > idx and row[idx] == isolate_id
+        )
+
+    data_db = home / "data" / "bacmap.sqlite"
+    if data_db.is_file():
+        from bacmap.store.lab_results import LabResultService
+        from bacmap.store.strain_metadata import StrainMetadataService
+
+        with StrainMetadataService(data_db) as meta:
+            counts["metadata"] = 1 if meta.get(isolate_id) is not None else 0
+        with LabResultService(data_db) as lab:
+            counts["lab_results"] = len(lab.get_by_strain(isolate_id))
+
+    gom_db = home / "gom.sqlite"
+    if gom_db.is_file():
+        import sqlite3
+
+        with sqlite3.connect(f"file:{gom_db}?mode=ro", uri=True) as conn:
+            n_index = conn.execute(
+                "SELECT COUNT(*) FROM strain_genotype_index WHERE strain_id = ?",
+                (isolate_id,),
+            ).fetchone()[0]
+            n_obj = conn.execute(
+                "SELECT COUNT(*) FROM genome_objects WHERE strain_id = ?",
+                (isolate_id,),
+            ).fetchone()[0]
+        counts["gom"] = int(n_index) + int(n_obj)
+
+    runs_db = home / "runs.sqlite"
+    if runs_db.is_file():
+        import json
+        import sqlite3
+
+        with sqlite3.connect(f"file:{runs_db}?mode=ro", uri=True) as conn:
+            rows = conn.execute("SELECT strain_ids FROM analysis_runs").fetchall()
+        counts["runs"] = sum(
+            1 for (raw,) in rows if isolate_id in json.loads(raw or "[]")
+        )
+    return counts
+
+
+def delete_isolate(home: Path, isolate_id: str) -> dict[str, Any]:
+    """安全删除菌株（v1.10.33）：仅允许无任何关联的空菌株。
+
+    关联包括测序数据（samples.tsv isolate 列）、元数据、化验结果、GOM 对象/
+    特征索引与运行记录。有关联时抛出 ValueError 并列出原因，不删除任何数据。
+    """
+    from bacmap.store.isolates import IsolateService
+
+    db = home / "data" / "bacmap.sqlite"
+    with IsolateService(db) as isolates:
+        if isolates.get(isolate_id) is None:
+            return {"deleted": False, "isolate_id": isolate_id}
+        links = isolate_links(home, isolate_id)
+        blocked = {key: value for key, value in links.items() if value}
+        if blocked:
+            detail = ", ".join(f"{key}={value}" for key, value in blocked.items())
+            raise ValueError(
+                f"isolate {isolate_id!r} has linked data ({detail}); "
+                "remove or archive those records first"
+            )
+        deleted = isolates.delete(isolate_id)
+    return {"deleted": deleted, "isolate_id": isolate_id}
+
+
 def delete_specimen(
     home: Path, specimen_id: str, *, force: bool = False
 ) -> dict[str, Any]:
@@ -391,6 +464,86 @@ def assign_specimens(
         "tsv": str(tsv),
     }
 
+
+
+def backfill_same_name_specimens(home: Path, *, dry_run: bool = False) -> dict[str, Any]:
+    """未关联菌株 → 同名样本回填（v1.10.34，一次性命令）。
+
+    对 ``specimen_id`` 为空的菌株：若同名 specimen 不存在则创建（origin=backfill），
+    再把 ``isolates.specimen_id`` 与 ``samples.tsv`` 的 ``specimen`` 列同步为该编号。
+    幂等：已关联菌株跳过；不会改动已有样本编号。
+    """
+    from bacmap.store.isolates import IsolateService
+    from bacmap.store.specimens import SpecimenService, validate_specimen_id
+
+    db = home / "data" / "bacmap.sqlite"
+    with IsolateService(db) as svc:
+        rows = svc.list(limit=1_000_000)
+    pending = [str(r["isolate_id"]) for r in rows if not r["specimen_id"]]
+    invalid = [i for i in pending if not validate_specimen_id(i)]
+    targets = [i for i in pending if validate_specimen_id(i)]
+    if dry_run:
+        return {
+            "dry_run": True,
+            "candidates": len(targets),
+            "created": 0,
+            "linked": 0,
+            "updated_tsv_rows": 0,
+            "skipped_invalid": invalid,
+        }
+
+    created = 0
+    linked = 0
+    updated_tsv_rows = 0
+    # tsv 的 specimen 列应镜像 isolates.specimen_id（含本次新建与既有链接）。
+    desired: dict[str, str] = {
+        str(r["isolate_id"]): str(r["specimen_id"])
+        for r in rows
+        if r["specimen_id"]
+    }
+    desired.update({i: i for i in targets})
+    if targets:
+        with (
+            IsolateService(db) as svc,
+            SpecimenService(db) as specimens,
+        ):
+            for isolate_id in targets:
+                existed = specimens.exists(isolate_id)
+                specimens.ensure(
+                    isolate_id,
+                    origin="backfill",
+                    note="same-name specimen backfill (v1.10.34)",
+                )
+                if not existed:
+                    created += 1
+                if svc.set_specimen(isolate_id, isolate_id):
+                    linked += 1
+
+    if desired:
+        tsv, header, tsv_rows = _load_table(home)
+        if "isolate" in header:
+            if "specimen" not in header:
+                header.append("specimen")
+            spec_idx = header.index("specimen")
+            iso_idx = header.index("isolate")
+            for row in tsv_rows:
+                isolate = row[iso_idx] if len(row) > iso_idx else ""
+                target = desired.get(isolate)
+                if not target:
+                    continue
+                if len(row) <= spec_idx:
+                    row.extend([""] * (spec_idx + 1 - len(row)))
+                if row[spec_idx] != target:
+                    row[spec_idx] = target
+                    updated_tsv_rows += 1
+            if updated_tsv_rows:
+                _save_table(tsv, header, tsv_rows)
+    return {
+        "created": created,
+        "linked": linked,
+        "updated_tsv_rows": updated_tsv_rows,
+        "skipped_invalid": invalid,
+    }
 
 
 def _scan_unpaired_longreads(

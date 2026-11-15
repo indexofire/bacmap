@@ -13,6 +13,8 @@ const runs = ref<RunRow[]>([])
 const loading = ref(true)
 const refreshing = ref(false)
 const error = ref('')
+const notice = ref('')
+const purging = ref('')
 const offset = ref(0)
 const limit = ref(50)
 const total = ref(0)
@@ -65,6 +67,32 @@ async function load(initial = false) {
   }
 }
 
+async function purgeRun(run: RunRow) {
+  const ok = window.confirm(
+    `清理运行 ${run.run_id.slice(0, 16)} 的物理产物？\n\n`
+      + '运行记录、run_manifest 哈希与 GOM 分析对象保留；'
+      + '若它仍是某些样本的最新结果，服务端会拒绝。',
+  )
+  if (!ok) return
+  purging.value = run.run_id
+  error.value = ''
+  notice.value = ''
+  try {
+    const result = await api.purgeRun(run.run_id)
+    const mb = (result.bytes / 1024 / 1024).toFixed(1)
+    notice.value = result.purged
+      ? `已清理 ${result.files} 个文件（${mb} MiB）；运行记录保留。`
+      : result.already_purged
+        ? '该运行的产物此前已清理。'
+        : '未找到可清理的产物目录。'
+    await load()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '清理运行产物失败'
+  } finally {
+    purging.value = ''
+  }
+}
+
 function changePage(value: number) {
   offset.value = value
   void load()
@@ -98,6 +126,7 @@ onMounted(() => void load(true))
     </div>
 
     <div v-if="error" class="form-error" style="margin-bottom: 16px">{{ error }}</div>
+    <div v-if="notice" class="card card--pad" style="margin-bottom: 16px">{{ notice }}</div>
 
     <section class="card">
       <div class="card__head">
@@ -117,6 +146,7 @@ onMounted(() => void load(true))
               <th scope="col">任务</th>
               <th scope="col">开始时间</th>
               <th scope="col">耗时</th>
+              <th scope="col">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -146,6 +176,19 @@ onMounted(() => void load(true))
               </td>
               <td data-label="耗时">
                 <span class="mono muted">{{ fmtDuration(run.started_at, run.finished_at) }}</span>
+              </td>
+              <td data-label="操作">
+                <button
+                  class="btn btn--danger btn--sm"
+                  type="button"
+                  :disabled="purging === run.run_id"
+                  title="删除物理产物，保留运行记录与 GOM"
+                  @click="purgeRun(run)"
+                >
+                  <span v-if="purging === run.run_id" class="spinner" />
+                  <Icon v-else name="trash" />
+                  清理产物
+                </button>
               </td>
             </tr>
           </tbody>

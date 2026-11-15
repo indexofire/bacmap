@@ -50,7 +50,7 @@ bakta = ">=1.12,<2"
 eggnog-mapper = ">=2.1.12,<2.1.13"
 
 [pypi-dependencies]
-gmlst = "==0.6.1"
+gmlst = "==0.6.2"
 biopython = ">=1.83"
 sistr-cmd = ">=1.1.3,<2"
 setuptools = "<81"

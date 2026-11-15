@@ -15,7 +15,8 @@ specimen: A03-SN-001                        唯一送检编号（样本）
 
 - **specimen（样本）** —— 唯一送检编号（如 `A03-SN-001`）。一份样本可分离出 0..N 个
   菌株，也可直接测序（mNGS/tNGS，下一大版本接入）。编号可暂时为空（外部未提供），
-  后续用 `bacmap specimen import` 补录。
+  后续用 `bacmap specimen import` 补录；`bacmap specimen backfill` 可把未关联菌株
+逐个关联到同名样本（不存在则创建）。
 - **isolate（菌株）** —— 流行病学追踪的实体；可带谱系/传代信息
   （`EVO-001-P037` → 谱系 `EVO-001`，第 37 代）。一个菌株只属于一份样本。
 - **library（测序数据）** —— 一个输入文库或组装。其 ID 是 `samples.tsv` 的 `sample`

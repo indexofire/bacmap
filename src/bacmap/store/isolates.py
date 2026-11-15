@@ -114,6 +114,13 @@ class IsolateService:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def delete(self, isolate_id: str) -> bool:
+        """删除 isolates 行（仅空菌株；关联检查在 workflow/samples_registry）。"""
+        cur = self._conn.execute(
+            "DELETE FROM isolates WHERE isolate_id = ?", (isolate_id,)
+        )
+        return cur.rowcount > 0
+
     def count(self) -> int:
         row = self._conn.execute("SELECT COUNT(*) FROM isolates").fetchone()
         return int(row[0]) if row else 0
