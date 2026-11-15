@@ -55,17 +55,21 @@ class TestRegistryAccessors:
 
         assert registry.get("bio_seq_stats").effect == Effect.COMPUTE
 
-    def test_by_effect_write_matches_three_write_tools(self):
+    def test_by_effect_write_matches_write_tools(self):
         from bacmap.tools import registry
         from bacmap.tools.spec import Effect
 
         # v1.4.29：bio_generate_report 修正为 WRITE（报告落盘，冻结规则 5）。
+        # v1.10.37：bio_align/bio_samtools/bio_variant 修正为 WRITE（任意 output 路径 + 原样 extra_args）。
         names = {s.name for s in registry.by_effect(Effect.WRITE)}
         assert names == {
             "bio_analyze_pathogen",
             "bio_add_metadata",
             "bio_add_lab_result",
             "bio_generate_report",
+            "bio_align",
+            "bio_samtools",
+            "bio_variant",
         }
 
     def test_by_trust_layer_l1_non_empty(self):
