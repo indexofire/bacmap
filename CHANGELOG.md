@@ -5,6 +5,14 @@
 
 ## [Unreleased]
 
+### 研究投稿包路由路径穿越修复
+
+- `GET /research/studies/{study_id}/package` 与 `/package.zip`：`study_id` 必须匹配
+  `^[A-Za-z0-9_-]+$` 且解析后父目录必须是 `research/packages`，否则返回 400；
+  zip 路由先查研究对象（不存在返回 404），再清理/重建投稿包目录。此前
+  `%2e%2e`/`.` 会让 zip 路由在查研究前 `rmtree` 掉 `research/` 或全部投稿包。
+- 测试：新增原始路径 `%2e%2e`/`.`/`..` 穿越与未知研究不删目录的回归测试。
+
 ### 历史结果索引回填（v1.10.32）
 
 - 新增 `bacmap results reindex [--dry-run] [--force] [--json]`：扫描现有 final summary，

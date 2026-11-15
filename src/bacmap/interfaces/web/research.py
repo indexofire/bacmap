@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import re
 import shutil
 from pathlib import Path
 from typing import Any, Literal
@@ -38,6 +39,7 @@ from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 
 _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 _EMPTY_MEMBER_FORM = Form(default=[])
+_STUDY_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 _DRAFT_FILE_FORM = File(...)
 
 
@@ -460,15 +462,21 @@ def _package_routes(
     app: FastAPI, engine: DbosTaskEngine, objects: ResearchObjectService
 ) -> None:
     def _package_dir(study_id: str) -> Path:
-        return engine.home / "research" / "packages" / study_id
+        if not _STUDY_ID_RE.fullmatch(study_id):
+            raise HTTPException(400, "invalid study id")
+        root = (engine.home / "research" / "packages").resolve()
+        target = (root / study_id).resolve()
+        if target.parent != root:
+            raise HTTPException(400, "invalid study id")
+        return target
 
     @app.get("/research/studies/{study_id}/package", response_class=HTMLResponse)
     def research_package_page(request: Request, study_id: str) -> HTMLResponse:
+        target = _package_dir(study_id)
         try:
             study = objects.get_study(study_id)
         except KeyError as exc:
             raise HTTPException(404, str(exc)) from exc
-        target = _package_dir(study_id)
         shutil.rmtree(target, ignore_errors=True)
         try:
             package = reporting.build_submission_package(engine.home, study_id, target)
@@ -483,6 +491,10 @@ def _package_routes(
     @app.get("/research/studies/{study_id}/package.zip")
     def research_package_zip(study_id: str) -> FileResponse:
         target = _package_dir(study_id)
+        try:
+            objects.get_study(study_id)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
         shutil.rmtree(target, ignore_errors=True)
         try:
             reporting.build_submission_package(engine.home, study_id, target)
