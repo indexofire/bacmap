@@ -27,7 +27,15 @@ TRUSTED = ProfileSpec(
     profile=McpProfile.LOCAL_TRUSTED, max_data_class=DataClass.D4, actor="mcp-test-trusted"
 )
 
-WRITE_TOOLS = {"bio_analyze_pathogen", "bio_add_metadata", "bio_add_lab_result"}
+WRITE_TOOLS = {
+    "bio_analyze_pathogen",
+    "bio_add_metadata",
+    "bio_add_lab_result",
+    "bio_generate_report",
+    "bio_align",
+    "bio_samtools",
+    "bio_variant",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -227,6 +235,12 @@ class TestProfileDataClassFiltering:
         names = _list_tool_names(build_server(profile=TRUSTED))
         assert "bio_query_metadata" in names
         assert not (names & WRITE_TOOLS)
+
+    def test_trusted_profile_hides_output_writing_cli_tools(self):
+        # v1.10.33：这三者向调用方指定路径落盘且透传 extra_args，D4 Profile 下也不得暴露。
+        file_writers = {"bio_align", "bio_samtools", "bio_variant"}
+        assert not ({s.name for s in exposed_specs(TRUSTED)} & file_writers)
+        assert not (_list_tool_names(build_server(profile=TRUSTED)) & file_writers)
 
     def test_resolve_cloud_follows_data_policy(self, tmp_path: Path):
         (tmp_path / "config.toml").write_text(

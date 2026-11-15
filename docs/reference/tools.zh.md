@@ -3,9 +3,9 @@
 
 `bacmap.tools.registry` 中的工具注册表是 bacmap 能力的唯一目录。每个条目是一个 `ToolSpec`，包含名称、版本、描述、效果与信任层。单一事实来源同时供给 MCP 服务器与调用工具处理器的各接口。本页记录全部 27 个已注册工具；它们当前都处于 0.1.0 版本。
 
-每个工具都带有一种效果标签。`read` 工具查询已存储的结果。`compute` 工具运行分析或包装外部二进制程序，但不写入持久状态。`write` 工具会修改 GOM 或数据库，因此它们从不直接注册进 MCP。MCP 服务器暴露 23 个读/计算工具，以及任务工具 `bacmap_submit_task`、`bacmap_task_status`、`bacmap_task_result` 与 `bacmap_task_cancel`（v1.5.2），计划工具 `bacmap_create_plan`、`bacmap_revise_plan` 与 `bacmap_get_plan`，`bacmap_record_data`（仅 local-trusted，v1.8.4），以及 `bacmap_confirm_plan_locally`（stdio 对话框，v1.9.0）。任务只能通过任务提交，或在 bacmap CLI/Web 中确认的计划进入引擎；不存在由模型确认的工具。在只读模式（`bacmap start mcp --read-only`）下，连任务工具也不会注册。从 v1.5 起，每个 MCP 实例还会按其 **Profile** 裁剪（ADR-12/16）：默认的 `cloud` Profile 只暴露输出数据分级不高于 `cloud_max_data_class` 的读/算工具（默认 D1，因此只有 `bio_list_reference_genomes` 与 `bio_diagnose`；计划/任务/能力工具另行注册），而 `local-trusted`（管理员显式选择加入）暴露全部 23 个读/算工具。见[智能体与计划](../guide/agent-plans.zh.md)。
+每个工具都带有一种效果标签。`read` 工具查询已存储的结果。`compute` 工具运行分析或包装外部二进制程序，但不写入持久状态。`write` 工具会修改 GOM 或数据库，因此它们从不直接注册进 MCP。MCP 服务器暴露 20 个读/计算工具，以及任务工具 `bacmap_submit_task`、`bacmap_task_status`、`bacmap_task_result` 与 `bacmap_task_cancel`（v1.5.2），计划工具 `bacmap_create_plan`、`bacmap_revise_plan` 与 `bacmap_get_plan`，`bacmap_record_data`（仅 local-trusted，v1.8.4），以及 `bacmap_confirm_plan_locally`（stdio 对话框，v1.9.0）。任务只能通过任务提交，或在 bacmap CLI/Web 中确认的计划进入引擎；不存在由模型确认的工具。在只读模式（`bacmap start mcp --read-only`）下，连任务工具也不会注册。从 v1.5 起，每个 MCP 实例还会按其 **Profile** 裁剪（ADR-12/16）：默认的 `cloud` Profile 只暴露输出数据分级不高于 `cloud_max_data_class` 的读/算工具（默认 D1，因此只有 `bio_list_reference_genomes` 与 `bio_diagnose`；计划/任务/能力工具另行注册），而 `local-trusted`（管理员显式选择加入）暴露全部 20 个读/算工具。见[智能体与计划](../guide/agent-plans.zh.md)。
 
-信任层标记调用层拥有多少自主权：L1 是固定流水线，只能调用，不能改写；L2 是在沙箱中受控探索，并有人工复核；L3 是门之后的自由对话。27 个工具分为 10 个读、13 个计算与 4 个写。四个写工具是 `bio_analyze_pathogen`、`bio_generate_report`、`bio_add_lab_result` 与 `bio_add_metadata`。
+信任层标记调用层拥有多少自主权：L1 是固定流水线，只能调用，不能改写；L2 是在沙箱中受控探索，并有人工复核；L3 是门之后的自由对话。27 个工具分为 10 个读、10 个计算与 7 个写。七个写工具是 `bio_analyze_pathogen`、`bio_generate_report`、`bio_add_lab_result`、`bio_add_metadata`、`bio_align`、`bio_samtools` 与 `bio_variant`。后三者向调用方指定的输出路径落盘，并把原样 `extra_args` 拼进比对器/samtools/bcftools 命令行，因此归为写工具，不经 MCP 暴露（v1.10.33）。
 
 ## 调用工具
 
@@ -36,7 +36,7 @@ MCP 客户端把单个 JSON 对象作为工具参数传入（形状与下文的 
 | --- | --- | --- |
 | bio_add_lab_result | write | 记录样本的湿实验检测结果（AST、血清学、生化、PCR） |
 | bio_add_metadata | write | 添加或更新菌株背景与流行病学元数据 |
-| bio_align | compute | 将读段比对到参考基因组（BWA-MEM、minimap2、STAR） |
+| bio_align | write | 将读段比对到参考基因组（BWA-MEM、minimap2、STAR） |
 | bio_analyze_pathogen | write | 对样本运行完整的病原菌分析流水线 |
 | bio_blast | compute | 针对 NCBI 或本地目标文件运行 BLAST 搜索 |
 | bio_cgmlst | compute | 将样本的 cgMLST 谱型对照本地参考库进行追溯 |
@@ -51,14 +51,14 @@ MCP 客户端把单个 JSON 对象作为工具参数传入（形状与下文的 
 | bio_query_lab_results | read | 查询样本的湿实验检测结果 |
 | bio_query_metadata | read | 使用流行病学过滤条件查询菌株背景元数据 |
 | bio_review_flags | read | 列出被标记为需人工复核的 NLI Reflector 审计事件 |
-| bio_samtools | compute | 包装常见的 SAM/BAM/FASTA 文件 samtools 操作 |
+| bio_samtools | write | 包装常见的 SAM/BAM/FASTA 文件 samtools 操作 |
 | bio_search_samples | read | 按血清型、MLST ST、AMR 基因、物种或关键词查找菌株 |
 | bio_seq_convert | compute | 在多种格式之间转换序列文件 |
 | bio_seq_ops | compute | 执行翻译、ORF 查找、k-mer 计数等序列操作 |
 | bio_seq_stats | compute | 计算序列文件的统计信息 |
 | bio_snp_tree | compute | 获取队列 SNP 树与两两 SNP 距离 |
 | bio_tool_selection_options | read | 列出按物种的 gspec 库与 gmlst 模式/scheme（应用用户覆盖层） |
-| bio_variant | compute | 对变异进行检出、过滤、查询、注释或构建一致性序列 |
+| bio_variant | write | 对变异进行检出、过滤、查询、注释或构建一致性序列 |
 | bio_verify_result | compute | 对结果运行确定性验证，可选 NLI 反思 |
 
 ## 工具详情
@@ -92,7 +92,7 @@ MCP 客户端把单个 JSON 对象作为工具参数传入（形状与下文的 
 
 ### bio_align
 
-版本 `v0.1.0` | 效果：`compute` | 信任层：`L2`
+版本 `v0.1.0` | 效果：`write` | 信任层：`L2`
 
 将测序读段比对到参考基因组。包装 BWA-MEM（短读长 DNA）、minimap2（长读长、RNA-seq）或 STAR（RNA-seq 剪接感知）。需要安装相应工具。首次使用时为参考基因组建立索引。默认产出排序并建索引的 BAM。下游 SAM/BAM 操作请使用 bio_samtools。
 
@@ -282,7 +282,7 @@ MCP 客户端把单个 JSON 对象作为工具参数传入（形状与下文的 
 
 ### bio_samtools
 
-版本 `v0.1.0` | 效果：`compute` | 信任层：`L2`
+版本 `v0.1.0` | 效果：`write` | 信任层：`L2`
 
 包装常见的 samtools 操作：sort、index、view（过滤/区域）、depth、flagstat、mpileup、faidx、idxstats。需要安装 samtools。用于任何 SAM/BAM 文件操作。
 
@@ -377,7 +377,7 @@ MCP 客户端把单个 JSON 对象作为工具参数传入（形状与下文的 
 
 ### bio_variant
 
-版本 `v0.1.0` | 效果：`compute` | 信任层：`L2`
+版本 `v0.1.0` | 效果：`write` | 信任层：`L2`
 
 检出或操作变异。操作：'mpileup_call'（从 BAM 执行 bcftools mpileup+call）、'filter'（按质量/深度执行 bcftools filter）、'query'（用 bcftools query 提取字段）、'annotate'（添加 VCF 注释）、'consensus'（用 bcftools consensus 把变异应用到参考序列）。需要 bcftools 和/或 samtools。
 

@@ -3,9 +3,9 @@
 
 The tool registry in `bacmap.tools.registry` is the single catalog of what bacmap can do. Each entry is a `ToolSpec` with a name, version, description, effect, and trust layer. One source of truth feeds the MCP server and the interfaces that call tool handlers. This page documents all 27 registered tools; all currently sit at version 0.1.0.
 
-Every tool carries an effect label. `read` tools query stored results. `compute` tools run analysis or wrap external binaries without writing persistent state. `write` tools change the GOM or the database, and they are never registered into MCP directly. The MCP server exposes the 23 read/compute tools plus the task tools `bacmap_submit_task`, `bacmap_task_status`, `bacmap_task_result` and `bacmap_task_cancel` (v1.5.2), the plan tools `bacmap_create_plan`, `bacmap_revise_plan` and `bacmap_get_plan`, `bacmap_record_data` (local-trusted only, v1.8.4) and `bacmap_confirm_plan_locally` (stdio dialog, v1.9.0). Tasks reach the engine only through task submission or a plan confirmed in the bacmap CLI/Web; there is no model-confirm tool. In read-only mode (`bacmap start mcp --read-only`), even the task tools stay unregistered. From v1.5 each MCP instance is also filtered by its **profile** (ADR-12/16): the default `cloud` profile only exposes read/compute tools whose output data class is at or below `cloud_max_data_class` (D1 by default, so only `bio_list_reference_genomes` and `bio_diagnose`; the plan/task/capability tools are added separately), while `local-trusted` (an explicit administrator opt-in) exposes all 23 read/compute tools. See [Agents & plans](../guide/agent-plans.md).
+Every tool carries an effect label. `read` tools query stored results. `compute` tools run analysis or wrap external binaries without writing persistent state. `write` tools change the GOM or the database, and they are never registered into MCP directly. The MCP server exposes the 20 read/compute tools plus the task tools `bacmap_submit_task`, `bacmap_task_status`, `bacmap_task_result` and `bacmap_task_cancel` (v1.5.2), the plan tools `bacmap_create_plan`, `bacmap_revise_plan` and `bacmap_get_plan`, `bacmap_record_data` (local-trusted only, v1.8.4) and `bacmap_confirm_plan_locally` (stdio dialog, v1.9.0). Tasks reach the engine only through task submission or a plan confirmed in the bacmap CLI/Web; there is no model-confirm tool. In read-only mode (`bacmap start mcp --read-only`), even the task tools stay unregistered. From v1.5 each MCP instance is also filtered by its **profile** (ADR-12/16): the default `cloud` profile only exposes read/compute tools whose output data class is at or below `cloud_max_data_class` (D1 by default, so only `bio_list_reference_genomes` and `bio_diagnose`; the plan/task/capability tools are added separately), while `local-trusted` (an explicit administrator opt-in) exposes all 20 read/compute tools. See [Agents & plans](../guide/agent-plans.md).
 
-Trust layers mark how much autonomy the calling layer has: L1 is the fixed pipeline, invoke only, no rewriting; L2 is controlled exploration in a sandbox with human review; L3 is free conversation behind gates. The 27 tools split into 10 read, 13 compute, and 4 write. The four write tools are `bio_analyze_pathogen`, `bio_generate_report`, `bio_add_lab_result`, and `bio_add_metadata`.
+Trust layers mark how much autonomy the calling layer has: L1 is the fixed pipeline, invoke only, no rewriting; L2 is controlled exploration in a sandbox with human review; L3 is free conversation behind gates. The 27 tools split into 10 read, 10 compute, and 7 write. The seven write tools are `bio_analyze_pathogen`, `bio_generate_report`, `bio_add_lab_result`, `bio_add_metadata`, `bio_align`, `bio_samtools`, and `bio_variant`. The last three write to a caller-chosen output path and pass raw `extra_args` to the aligner/samtools/bcftools command line, so they count as write tools and are not exposed over MCP (v1.10.33).
 
 ## Calling a tool
 
@@ -36,7 +36,7 @@ exception type only; full details stay in logs.
 | --- | --- | --- |
 | bio_add_lab_result | write | Record a wet lab result (AST, serology, biochemical, PCR) for a sample |
 | bio_add_metadata | write | Add or update strain background and epidemiological metadata |
-| bio_align | compute | Align reads to a reference genome (BWA-MEM, minimap2, STAR) |
+| bio_align | write | Align reads to a reference genome (BWA-MEM, minimap2, STAR) |
 | bio_analyze_pathogen | write | Run the full pathogen analysis pipeline for a sample |
 | bio_blast | compute | Run a BLAST search against NCBI or a local subject file |
 | bio_cgmlst | compute | Trace a sample's cgMLST profile against the local reference library |
@@ -51,14 +51,14 @@ exception type only; full details stay in logs.
 | bio_query_lab_results | read | Query wet lab experiment results for a sample |
 | bio_query_metadata | read | Query strain background metadata with epidemiological filters |
 | bio_review_flags | read | List NLI Reflector audit events flagged for human review |
-| bio_samtools | compute | Wrap common samtools operations on SAM/BAM/FASTA files |
+| bio_samtools | write | Wrap common samtools operations on SAM/BAM/FASTA files |
 | bio_search_samples | read | Find strains by serotype, MLST ST, AMR gene, organism, or keyword |
 | bio_seq_convert | compute | Convert sequence files between formats |
 | bio_seq_ops | compute | Run sequence operations such as translation, ORF finding, and k-mer counting |
 | bio_seq_stats | compute | Compute statistics for a sequence file |
 | bio_snp_tree | compute | Retrieve the cohort SNP tree and pairwise SNP distances |
 | bio_tool_selection_options | read | List per-species gspec databases and gmlst modes/schemes with the user overlay applied |
-| bio_variant | compute | Call, filter, query, annotate, or build consensus from variants |
+| bio_variant | write | Call, filter, query, annotate, or build consensus from variants |
 | bio_verify_result | compute | Run deterministic verification on results, with optional NLI reflection |
 
 ## Tool details
@@ -92,7 +92,7 @@ Add or update strain background metadata (patient name, age, isolation date, pro
 
 ### bio_align
 
-Version `v0.1.0` | Effect: `compute` | Trust layer: `L2`
+Version `v0.1.0` | Effect: `write` | Trust layer: `L2`
 
 Align sequencing reads to a reference genome. Wraps BWA-MEM (short-read DNA), minimap2 (long-read, RNA-seq), or STAR (RNA-seq splice-aware). Requires the relevant tool installed. Indexes the reference on first use. Produces a sorted, indexed BAM by default. Use bio_samtools for downstream SAM/BAM manipulation.
 
@@ -282,7 +282,7 @@ List Layer 3 NLI Reflector audit events (nli_reflected) from the GOM: which samp
 
 ### bio_samtools
 
-Version `v0.1.0` | Effect: `compute` | Trust layer: `L2`
+Version `v0.1.0` | Effect: `write` | Trust layer: `L2`
 
 Wrap common samtools operations: sort, index, view (filter/region), depth, flagstat, mpileup, faidx, idxstats. Requires samtools installed. Use this for any SAM/BAM file manipulation.
 
@@ -377,7 +377,7 @@ List the per-species reference data available to gspec and gmlst, with the user'
 
 ### bio_variant
 
-Version `v0.1.0` | Effect: `compute` | Trust layer: `L2`
+Version `v0.1.0` | Effect: `write` | Trust layer: `L2`
 
 Call or manipulate variants. Operations: 'mpileup_call' (bcftools mpileup+call from a BAM), 'filter' (bcftools filter on quality/depth), 'query' (bcftools query to extract fields), 'annotate' (add VCF annotations), 'consensus' (bcftools consensus to apply variants to a reference). Requires bcftools and/or samtools.
 
