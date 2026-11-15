@@ -131,6 +131,18 @@ export interface RunRow {
   [key: string]: unknown
 }
 
+export interface RunPurgeResult {
+  run_id: string
+  task_id: string
+  purged: boolean
+  dry_run: boolean
+  files: number
+  bytes: number
+  latest_links: string[]
+  already_purged: boolean
+  purged_at?: string | null
+}
+
 export interface Overview {
   endpoints: Array<{
     name: string

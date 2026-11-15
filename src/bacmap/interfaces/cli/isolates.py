@@ -43,6 +43,28 @@ def run_show(args: argparse.Namespace) -> None:
     print(f"passage : {'-' if row['passage'] is None else row['passage']}")
 
 
+def run_delete(args: argparse.Namespace) -> None:
+    from bacmap.workflow.samples_registry import delete_isolate
+
+    try:
+        result = delete_isolate(Path(args.home), args.isolate_id)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    if not result["deleted"]:
+        raise SystemExit(
+            T(f"isolate not found: {args.isolate_id}", f"isolate 不存在：{args.isolate_id}")
+        )
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+    print(
+        T(
+            f"deleted isolate {args.isolate_id}",
+            f"已删除菌株 {args.isolate_id}",
+        )
+    )
+
+
 def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     p = sub.add_parser(
         "isolate", help=T("isolate entities and passage lineage (I3)", "菌株实体与传代谱系（I3）")
@@ -59,3 +81,15 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(show)
     add_json(show)
     show.set_defaults(func=run_show)
+
+    delete = s.add_parser(
+        "delete",
+        help=T(
+            "delete an empty isolate (no libraries/metadata/lab/GOM/runs)",
+            "删除空菌株（无测序数据/元数据/化验/GOM/运行记录）",
+        ),
+    )
+    delete.add_argument("isolate_id")
+    add_home(delete)
+    add_json(delete)
+    delete.set_defaults(func=run_delete)

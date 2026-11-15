@@ -5,14 +5,57 @@
 
 ## [Unreleased]
 
-### 安全：MCP 摘除落盘型 CLI 工具（v1.10.33）
+### 安全：MCP 摘除落盘型 CLI 工具（v1.10.37）
 
 - **`bio_align` / `bio_samtools` / `bio_variant` effect 修正为 `WRITE`**（冻结规则 5 违例，
   同 v1.4.29 `bio_generate_report`）：三者向调用方指定的 `output`/`output_bam` 落盘，且把原样
   `extra_args` 拼进 bwa/minimap2/samtools/bcftools 命令行（可注入 `-o`/`-d`）。此前误标
   `COMPUTE`，local-trusted/debug Profile 下经 MCP 直接暴露、绕过计划确认；改标后从 MCP 摘除。
-  docs/tools 双语同步（读/算 23→20，写 4→7）。
-- 测试：新增 local-trusted（D4）Profile 下 `exposed_specs` 不再列出三者的回归测试。
+  docs/tools 与 README 双语同步（读/算 23→20，写 4→7）。
+- 测试：新增 local-trusted（D4）Profile 下 `exposed_specs` 不再列出三者的回归测试，基线 2234 → 2235。
+
+### gmlst 0.6.2（v1.10.36）
+
+- `pixi.toml` PyPI 依赖 `gmlst` 由 `==0.6.1` 升级为 `==0.6.2`，`pixi.lock` 同步。
+- 接口复核：`gmlst scheme list -a`、`gmlst typing cgmlst -s cperfringens_2 --format json`、
+  `gmlst typing mlst -s cperfringens_1 --format json`、`gmlst visual matrix/mst` 签名不变；
+  bacmap 的 `parse_mlst` / `parse_cgmlst_profiles` 对 0.6.2 输出解析正常。
+- 单株冒烟（24CPE1001）：cgMLST 1428/1431 位点、MLST `cperfringens_1` ST=887 PERFECT。
+- `AGENTS.md` 外部工具版本同步；测试基线不变（2234）。
+
+### 运行产物清理（v1.10.35）
+### 运行产物清理（v1.10.35）
+
+- 新增 `bacmap run purge <run_id> [--dry-run] [--json]`、`POST /api/v1/runs/{id}/purge`（CSRF）
+  与控制台「运行记录」列表/详情页的「清理产物」按钮。
+- **只删除物理产物** `results/runs/<task_id>/`；不可变运行记录、`run_manifest.json` 哈希与
+  GOM 分析对象保留，ADR-18 证据链不破。
+- 安全规则：任务 `pending/running/paused/awaiting_approval` 拒绝；run 仍是某样本最新结果
+  （`results/<sample>` 指向它）时拒绝；重复调用幂等；清理动作写入追加式审计表
+  `run_artifact_purges`（runs.sqlite 迁移 2）。
+- 测试：新增清理/幂等/最新保护/活动任务/dry-run/CLI/API 共 10 个测试，基线 2224 → 2234。
+
+### 同名样本回填与默认样本模板清空（v1.10.34）
+### 同名样本回填与默认样本模板清空（v1.10.34）
+
+- 新增 `bacmap specimen backfill [--dry-run] [--json]`：把 `specimen_id` 为空的菌株
+  关联到**同名样本**（不存在则创建，`origin=backfill`），并把编号回写到 `samples.tsv`
+  的 `specimen` 列；幂等，只补空关联，不改已有样本编号。
+- 随包 `workflow/config/samples.tsv` 模板改为**只有表头**：新部署不再预置
+  `SAM-*` 等指向不存在测试夹具的样例数据（旧数据仍可正常分析）。
+- 实测本机：清空 12 行 `SAM-*` 样例登记并安全删除 12 株对应空菌株；回填 214 株未关联
+  菌株 + 同步 21 行既有链接，最终 235 株菌株全部关联、`samples.tsv` 无空 `specimen` 单元格。
+- 测试：新增 backfill（创建/幂等/dry-run/CLI）与模板无预置行测试，基线 2219 → 2224。
+
+### 安全删除空菌株（v1.10.33）
+
+- 新增 `bacmap isolate delete <id>`、`POST /api/v1/isolates/{id}/delete`（CSRF）与菌株详情页
+  「删除菌株」按钮。
+- **只允许删除空菌株**：无 `samples.tsv` 测序数据、无元数据、无化验结果、无 GOM 对象/
+  特征索引、无运行记录；有关联时返回 409 并列出计数，绝不级联删除。
+- 实测空菌株可删；有库/元数据/化验/GOM/run 任一项都会拒绝。
+- 测试：新增链接计数、空删/拒绝/CLI/API 测试。
+
 
 ### 历史结果索引回填（v1.10.32）
 

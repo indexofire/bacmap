@@ -12,7 +12,8 @@ specimen (unique submission ID, e.g. A03-SN-001)
 
 A strain may be sequenced many times; a library may be analysed many times. Results never mix
 between runs, and curation never counts one isolate twice. Specimen IDs are supplied by the lab
-and may be imported after registration (`bacmap specimen import`).
+and may be imported after registration (`bacmap specimen import`); `bacmap specimen backfill`
+links unlinked isolates to same-name specimens (creating them on demand).
 
 ## 1. The samples.tsv table
 

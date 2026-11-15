@@ -49,6 +49,7 @@ List endpoints accept `offset`/`limit` and return `{items, total, offset, limit}
 | GET | `/api/v1/isolates/{id}` | isolate + specimen + libraries |
 | POST | `/api/v1/specimens/assign` | link isolates/datasets to a specimen (CSRF; creates the specimen) |
 | POST | `/api/v1/specimens/{id}/delete` | delete a specimen (`force: true` unlinks isolates first; isolates/data are kept) |
+| POST | `/api/v1/isolates/{id}/delete` | delete an empty isolate (linked libraries/metadata/lab/GOM/runs block deletion; 409) |
 | GET | `/api/v1/search?q=&serotype=&mlst_st=&amr_gene=` | sample search by keyword/serotype/ST/gene |
 | GET | `/api/v1/search/identity?q=` | unified search: specimens and isolates |
 | GET | `/api/v1/tasks?limit=` | recent tasks |
@@ -68,6 +69,7 @@ List endpoints accept `offset`/`limit` and return `{items, total, offset, limit}
 | GET | `/api/v1/runs?limit=` | run records |
 | GET | `/api/v1/runs/{id}` | run detail + gvixb views |
 | GET | `/api/v1/runs/{id}/compare?other=` | provenance comparison |
+| POST | `/api/v1/runs/{id}/purge` | delete a run's physical artifacts (record/GOM kept; 409 for active or latest runs) |
 | GET | `/api/v1/gom/objects?type=&limit=` | latest GOM objects |
 | GET | `/api/v1/gom/objects/{id}?version=` | GOM object + linked gvixb views |
 | GET | `/api/v1/gvixb/runs/{run_id}/manifest` | gvixb views available for a run |

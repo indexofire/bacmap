@@ -48,6 +48,54 @@ def run_compact(args: argparse.Namespace) -> None:
     )
 
 
+def run_purge(args: argparse.Namespace) -> None:
+    """v1.10.35：清理运行物理产物（保留不可变运行记录与 GOM）。"""
+    from bacmap.store.runs import purge_run_artifacts
+
+    try:
+        result = purge_run_artifacts(
+            args.home, args.run_id, actor="cli", dry_run=args.dry_run
+        )
+    except KeyError as exc:
+        raise SystemExit(
+            T(f"Run record not found: {args.run_id}", f"运行记录不存在：{args.run_id}")
+        ) from exc
+    except ValueError as exc:
+        raise SystemExit(
+            T(f"Purge refused: {exc}", f"拒绝清理：{exc}")
+        ) from exc
+    if args.json:
+        _emit(result, True)
+        return
+    mb = result["bytes"] / 2**20
+    if result["dry_run"]:
+        print(
+            T(
+                f"would purge {result['files']} files ({mb:.1f} MiB)"
+                f" from run {result['run_id']}",
+                f"将清理 {result['files']} 个文件（{mb:.1f} MiB）：{result['run_id']}",
+            )
+        )
+    elif result["purged"]:
+        print(
+            T(
+                f"purged {result['files']} files ({mb:.1f} MiB);"
+                " run record and GOM objects kept",
+                f"已清理 {result['files']} 个文件（{mb:.1f} MiB）；"
+                "运行记录与 GOM 对象保留",
+            )
+        )
+    elif result["already_purged"]:
+        print(
+            T(
+                f"artifacts already purged at {result['purged_at']}",
+                f"产物此前已清理（{result['purged_at']}）",
+            )
+        )
+    else:
+        print(T("no artifacts found", "未找到产物目录"))
+
+
 def run_expand(args: argparse.Namespace) -> None:
     from bacmap.store.results_layout import expand_run_artifacts, run_results_dir
 
@@ -146,8 +194,8 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     p = sub.add_parser(
         "run",
         help=T(
-            "read-only queries on run records (ADR-18 evidence chain)",
-            "运行记录（ADR-18 证据链）只读查询",
+            "run-record queries and artifact purge (ADR-18 evidence chain)",
+            "运行记录查询与产物清理（ADR-18 证据链）",
         ),
     )
     r = p.add_subparsers(dest="run_command", required=True)
@@ -173,6 +221,22 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     )
     _run_dir_arg(compact)
     compact.set_defaults(func=run_compact)
+    purge = r.add_parser(
+        "purge",
+        help=T(
+            "delete a run's physical artifacts (record and GOM are kept)",
+            "清理运行的物理产物（运行记录与 GOM 保留）",
+        ),
+    )
+    purge.add_argument("run_id")
+    purge.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=T("report files/bytes only", "只统计文件数与大小"),
+    )
+    add_home(purge)
+    add_json(purge)
+    purge.set_defaults(func=run_purge)
     expand = r.add_parser(
         "expand",
         help=T(

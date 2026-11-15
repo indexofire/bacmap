@@ -220,7 +220,9 @@ and the run IDs behind it. That is what makes the conclusion auditable.
 ## 7. Retention and backup
 
 - `results/` is not removed automatically; clean old runs deliberately after checking retention
-  policy.
+  policy. `bacmap run purge <run_id>` deletes one run's physical artifacts while keeping its
+  immutable record, manifest hash and GOM objects; active runs and runs that are still the latest
+  result for a sample are refused. Purges are recorded in `run_artifact_purges`.
 - `bacmap backup` includes databases and run manifests; add `--with-results` for result files.
 - `bacmap events prune --days N` removes old coordination events, not gate approvals or run records.
 - Restoring an older backup restores `dbos.sqlite` too, so in-flight tasks can resume.

@@ -41,7 +41,7 @@ pixi run -e web web-build
 | `/console/specimens`, `/console/specimens/{id}` | 样本、其菌株与测序数据；页面内可直接把未关联菌株/测序数据关联到样本；详情页可删除样本（默认仅空样本，或先解除菌株关联再删——菌株/数据保留） |
 | `/console/isolates`, `/console/isolates/{id}` | 菌株实体、所属样本与测序数据 |
 | `/console/samples`、`/console/samples/{id}` | 测序数据（library）：单库结果/注释、可视化组装质控（QUAST 指标、contig 长度/GC 分布、Nx 曲线）；完整报告独立成页 |
-| `/console/runs`、`/console/runs/{id}` | 不可变运行记录与来源比较 |
+| `/console/runs`、`/console/runs/{id}` | 不可变运行记录与来源比较；列表/详情可清理物理产物（保留记录与 GOM；运行中或最新 run 拒绝） |
 | `/console/records` | 元数据、化验结果、知识导入/审核表单 |
 | `/console/gom`、`/console/gom/{id}` | GOM 对象、不可变版本与载荷 |
 | `/console/research` | 研究会话与 Study/Cohort/Plan/Claim 总览 |

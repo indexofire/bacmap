@@ -12,7 +12,8 @@ specimen（样本，唯一送检编号，如 A03-SN-001）
 
 一个菌株可能被测序多次；一份测序数据可能被分析多次。结果绝不会在运行之间混淆，整理基线时
 也绝不会把同一个菌株实体重复计数。样本编号由实验室提供，可在登记后通过
-`bacmap specimen import` 补录；旧库自动生成影子样本（`specimen_id = isolate_id`）。
+`bacmap specimen import` 补录，或用 `bacmap specimen backfill` 把未关联菌株关联到同名样本
+（不存在则创建）；旧库自动生成影子样本（`specimen_id = isolate_id`）。
 
 ## 1. samples.tsv 表
 

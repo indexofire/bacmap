@@ -559,7 +559,7 @@ def _event_routes(router: APIRouter, engine: DbosTaskEngine, events: EventLog) -
         )
 
 
-def _identity_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
+def _identity_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa: C901
     """样本/菌株身份模型只读接口（v1.10.27，P2）。
 
     现有 ``/samples`` 仍是"测序数据（library）"的分析结果视图（历史路径）；
@@ -597,6 +597,20 @@ def _identity_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         if data is None:
             raise NotFound(f"no such isolate: {isolate_id}")
         return data
+
+    @router.post("/isolates/{isolate_id}/delete")
+    def delete_isolate_route(request: Request, isolate_id: str) -> dict[str, Any]:
+        """安全删除空菌株（无测序数据/元数据/化验/GOM/运行记录；CSRF）。"""
+        _require_csrf(request)
+        from bacmap.workflow.samples_registry import delete_isolate
+
+        try:
+            result = delete_isolate(engine.home, isolate_id)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        if not result["deleted"]:
+            raise NotFound(f"no such isolate: {isolate_id}")
+        return result
 
     @router.post("/specimens/{specimen_id}/delete")
     def delete_specimen_route(
@@ -694,6 +708,23 @@ def _evidence_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         # gvixb 入口只列真实存在的产物；任务未成功/结果目录缺失时为空列表。
         data["gvixb_views"] = run_visualizations(engine, run_id)
         return data
+
+    @router.post("/runs/{run_id}/purge")
+    def purge_run_artifacts_route(
+        request: Request, run_id: str, dry_run: bool = False
+    ) -> dict[str, Any]:
+        """清理运行物理产物（CSRF）：保留运行记录与 GOM；最新 run 拒绝。"""
+        _require_csrf(request)
+        from bacmap.store.runs import purge_run_artifacts
+
+        try:
+            return purge_run_artifacts(
+                engine.home, run_id, actor="api", dry_run=dry_run
+            )
+        except KeyError as exc:
+            raise NotFound(f"no such run: {run_id}") from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @router.get("/runs/{run_id}/compare")
     def run_compare(run_id: str, other: str) -> dict[str, Any]:

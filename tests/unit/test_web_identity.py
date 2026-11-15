@@ -178,3 +178,20 @@ def test_identity_search_pagination(tmp_path):
         assert "isolate_total" in body and "isolate_offset" in body
     finally:
         eng.shutdown_dbos()
+
+
+def test_delete_isolate_endpoint(tmp_path):
+    home = _home(tmp_path)
+    db = home / "data" / "bacmap.sqlite"
+    with IsolateService(db) as isolates:
+        isolates.ensure("ISO-3")
+    engine = eng.DbosTaskEngine(home)
+    try:
+        client = TestClient(create_app(engine))
+        assert client.post("/api/v1/isolates/ISO-1/delete").status_code == 409
+        assert client.post("/api/v1/isolates/ISO-3/delete").status_code == 200
+        with IsolateService(db) as isolates:
+            assert isolates.get("ISO-3") is None
+        assert client.post("/api/v1/isolates/ISO-3/delete").status_code == 404
+    finally:
+        eng.shutdown_dbos()

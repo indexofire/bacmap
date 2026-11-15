@@ -173,11 +173,15 @@ bacmap specimen list|ls [--limit N] [--home H] [--json]
 bacmap specimen show <specimen_id> [--home H] [--json]
 bacmap specimen import <map.tsv> [--by {dataset,isolate}] [--dry-run]
 bacmap specimen assign --specimen ID [--dataset D ...] [--isolate I ...]
+bacmap specimen backfill [--dry-run]
 bacmap specimen delete <specimen_id> [--force]
 ```
 
 样本（specimen）是唯一送检编号，下辖 0..N 个菌株，每个菌株可有多次测序数据。
 编号可为空（外部未提供时先留白），后续用 `import`/`assign` 补录。
+
+`backfill` 把所有未关联菌株关联到**同名样本**（不存在则创建，`origin=backfill`），
+并把编号回写到 `samples.tsv` 的 `specimen` 列；幂等，只补空关联，`--dry-run` 只预览数量。
 
 ```bash
 bacmap specimen assign --specimen A03-SN-001 --dataset 26SAL0501 --dataset 26SAL0501__ont
@@ -354,7 +358,13 @@ bacmap config path [--json]
 bacmap run list|ls [--limit N] [--json]
 bacmap run show <run_id> [--json]
 bacmap run compare <run_a> <run_b> [--json]
+bacmap run purge <run_id> [--dry-run] [--json]
 ```
+
+`purge` 只删除运行的物理产物（`results/runs/<task_id>/`），保留不可变运行记录、
+`run_manifest.json` 哈希与 GOM 对象；任务仍在运行或该 run 仍是某样本最新结果时拒绝；
+`--dry-run` 只统计文件数与大小。
+
 
 ```bash
 bacmap run compare 4f2c... 9a31...
@@ -374,7 +384,11 @@ bacmap gom show <object_id> [--version N] [--json]
 ```text
 bacmap isolate list|ls [--json]
 bacmap isolate show <isolate_id> [--json]
+bacmap isolate delete <isolate_id> [--home H] [--json]
 ```
+
+`delete` 只允许删除**空菌株**（无测序数据、元数据、化验结果、GOM 对象/索引、运行记录）；
+否则拒绝并列出关联计数；绝不级联删除。
 
 ## `bacmap sample`
 

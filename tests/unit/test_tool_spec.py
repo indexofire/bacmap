@@ -60,7 +60,7 @@ class TestRegistryAccessors:
         from bacmap.tools.spec import Effect
 
         # v1.4.29：bio_generate_report 修正为 WRITE（报告落盘，冻结规则 5）。
-        # v1.10.33：bio_align/bio_samtools/bio_variant 修正为 WRITE（任意 output 路径 + 原样 extra_args）。
+        # v1.10.37：bio_align/bio_samtools/bio_variant 修正为 WRITE（任意 output 路径 + 原样 extra_args）。
         names = {s.name for s in registry.by_effect(Effect.WRITE)}
         assert names == {
             "bio_analyze_pathogen",

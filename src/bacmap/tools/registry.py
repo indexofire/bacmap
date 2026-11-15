@@ -65,7 +65,7 @@ _META: dict[str, tuple[TrustLayer, Effect, DataClass, bool]] = {
     "bio_fastq_qc": (TrustLayer.L2, Effect.COMPUTE, DataClass.D3, False),
     "bio_seq_convert": (TrustLayer.L2, Effect.COMPUTE, DataClass.D3, False),
     "bio_blast": (TrustLayer.L2, Effect.COMPUTE, DataClass.D3, False),
-    # effect=WRITE（v1.10.33 修正）：三者向调用方指定的 output/output_bam 落盘，并把原样
+    # effect=WRITE（v1.10.37 修正）：三者向调用方指定的 output/output_bam 落盘，并把原样
     # extra_args 拼进 bwa/minimap2/samtools/bcftools 命令行（可注入 -o/-d 另写任意路径），
     # 按冻结规则 5 不得经 MCP 直接暴露——此前误标 COMPUTE（同 v1.4.29 bio_generate_report）。
     "bio_align": (TrustLayer.L2, Effect.WRITE, DataClass.D3, False),
