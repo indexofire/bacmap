@@ -12,7 +12,7 @@
   `extra_args` 拼进 bwa/minimap2/samtools/bcftools 命令行（可注入 `-o`/`-d`）。此前误标
   `COMPUTE`，local-trusted/debug Profile 下经 MCP 直接暴露、绕过计划确认；改标后从 MCP 摘除。
   docs/tools 与 README 双语同步（读/算 23→20，写 4→7）。
-- 测试：新增 local-trusted（D4）Profile 下 `exposed_specs` 不再列出三者的回归测试，基线 2234 → 2235。
+- 测试：新增 local-trusted（D4）Profile 下 `exposed_specs` 不再列出三者的回归测试，基线 2238 → 2239。
 
 ### gmlst 0.6.2（v1.10.36）
 
