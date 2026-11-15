@@ -49,7 +49,7 @@ $BACMAP_HOME/
 ## 2. 样本登记（samples.tsv）
 
 标准 `analyze` 任务要求样本 ID 已登记在
-`$BACMAP_HOME/workflows/bacmap/config/samples.tsv` 中：
+`$BACMAP_HOME/workflows/bacmap/config/samples.tsv` 中（随包模板只有表头，不会预置任何样本行）：
 
 ```tsv
 sample	species	R1	R2	longread	assembly	isolate	platform	checksum

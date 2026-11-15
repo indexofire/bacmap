@@ -50,7 +50,8 @@ Most commands accept `--home DIR`; the environment variable is the default.
 ## 2. Sample registration (samples.tsv)
 
 The standard `analyze` task requires sample IDs to be registered in
-`$BACMAP_HOME/workflows/bacmap/config/samples.tsv`:
+`$BACMAP_HOME/workflows/bacmap/config/samples.tsv` (the shipped template contains only the
+header; no sample rows are pre-registered):
 
 ```tsv
 sample	species	R1	R2	longread	assembly	isolate	platform	checksum

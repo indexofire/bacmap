@@ -156,6 +156,42 @@ def _snakemake_cores(deployed: Path, params: dict[str, Any]) -> int:
         return 8
 
 
+def _cohort_targets(deployed: Path, params: dict[str, Any], run_dir: Path) -> list[str]:
+    """本次运行的样本所涉及的 cohort 产物（v1.10.28）。
+
+    cohort 规则（cgMLST 距离矩阵/MST/SNP 树）只挂在 Snakefile 的 ``rule all`` 下，
+    而引擎按样本传显式目标（``<sample>/report/<sample>_summary.json``）——于是
+    ``cgmlst_summary.json`` 从未进入 DAG，cohort 永远不产出。这里按运行样本的
+    物种把对应 group 的 cohort 摘要追加为目标；只取与本次样本有交集的组，
+    不会把 samples.tsv 里其它批次的样本拖进来。
+    """
+    import csv as _csv
+
+    samples = params.get("samples") or []
+    if not samples:
+        return []
+    cfg = _deployed_config(deployed)
+    tsv = Path(deployed) / "config" / "samples.tsv"
+    species: dict[str, str] = {}
+    if tsv.is_file():
+        with tsv.open(encoding="utf-8", newline="") as fh:
+            for row in _csv.DictReader(fh, delimiter="\t"):
+                sid = (row.get("sample") or "").strip()
+                if sid:
+                    species[sid] = (row.get("species") or "").strip()
+
+    from bacmap.core.pathogen_registry import get_workflow_tables, resolve_species
+
+    codes = {resolve_species(species.get(str(s), "")) for s in samples}
+    codes.discard(None)
+    targets: list[str] = []
+    if cfg.get("cgmlst", {}).get("run_cgmlst_cohort"):
+        for group, spec in get_workflow_tables().cgmlst_species_groups.items():
+            if set(spec.get("species") or []) & codes:
+                targets.append(str(Path(run_dir) / "cgmlst" / group / "cgmlst_summary.json"))
+    return targets
+
+
 def _run_snakemake(params: dict[str, Any]) -> Any:
     from bacmap.workflow.runner import WorkflowRunner, deploy
 
@@ -186,6 +222,7 @@ def _run_snakemake(params: dict[str, Any]) -> Any:
     targets = [
         str(run_dir / s / "report" / f"{s}_summary.json") for s in params["samples"]
     ]
+    targets += _cohort_targets(deployed, params, run_dir)
     # 同一部署目录有 Snakemake 目录锁：并发 analyze（TUI+CLI 同时提交是合法用户行为）
     # 会撞 LockException——退避重试而非直接失败（v1.4.39）。
 

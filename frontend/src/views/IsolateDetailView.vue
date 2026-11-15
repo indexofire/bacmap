@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import CopyButton from '../components/CopyButton.vue'
 import { api } from '../api'
 import type { IsolateDetail } from '../types'
 
 const route = useRoute()
+const router = useRouter()
 const id = String(route.params.id)
 
 const data = ref<IsolateDetail | null>(null)
 const loading = ref(true)
 const error = ref('')
+const deleting = ref(false)
 
 const isolate = computed(() => data.value?.isolate ?? null)
 const specimen = computed(() => data.value?.specimen ?? null)
@@ -26,6 +28,20 @@ async function load() {
     error.value = err instanceof Error ? err.message : '加载菌株详情失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function remove() {
+  if (!window.confirm(`删除菌株 ${id}？只有无测序数据/元数据/化验/GOM/运行记录的空菌株可以删除。`)) return
+  deleting.value = true
+  error.value = ''
+  try {
+    await api.deleteIsolate(id)
+    await router.push('/isolates')
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '删除菌株失败'
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -52,6 +68,18 @@ onMounted(() => void load())
         <button class="btn btn--ghost" type="button" :disabled="loading" @click="load">
           <Icon name="refresh" />
           刷新
+        </button>
+        <button
+          v-if="isolate"
+          class="btn btn--danger"
+          type="button"
+          :disabled="deleting"
+          title="仅空菌株可删除"
+          @click="remove"
+        >
+          <span v-if="deleting" class="spinner" />
+          <Icon v-else name="trash" />
+          删除菌株
         </button>
       </div>
     </div>

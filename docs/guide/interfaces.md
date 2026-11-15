@@ -43,9 +43,9 @@ Console routes:
 | `/console/tasks/{id}` | task detail, event timeline, approval card, cancel |
 | `/console/plans`, `/console/plans/{id}` | agent-proposed plans, full parameters, confirm/reject |
 | `/console/specimens`, `/console/specimens/{id}` | specimens, their isolates and libraries; an inline form links unassigned isolates/datasets to a specimen; the detail page can delete a specimen (empty by default, or unlink its isolates first — isolates/data are kept) |
-| `/console/isolates`, `/console/isolates/{id}` | isolate entities, specimen link and libraries |
+| `/console/isolates`, `/console/isolates/{id}` | isolate entities, specimen link and libraries; the detail page can delete an empty isolate (linked data blocks deletion) |
 | `/console/samples`, `/console/samples/{id}` | libraries (sequencing data): per-library results/annotation and a visual assembly-QC panel (QUAST KPIs, contig length/GC distributions, Nx curve); the full report opens standalone |
-| `/console/runs`, `/console/runs/{id}` | immutable run records and source comparison |
+| `/console/runs`, `/console/runs/{id}` | immutable run records and source comparison; list/detail can purge physical artifacts (record and GOM are kept; latest/active runs are refused) |
 | `/console/records` | metadata, lab result, knowledge import/approval forms |
 | `/console/gom`, `/console/gom/{id}` | GOM objects, immutable versions and payload |
 | `/console/research` | research sessions and Study/Cohort/Plan/Claim overview |

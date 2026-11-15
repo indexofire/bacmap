@@ -196,6 +196,12 @@ pathogens:
   CPE:
     display_name: 产气荚膜梭菌
     gside_labels: [Clostridium_perfringens]
+    # v1.10.28：CPE 纳入 cgMLST cohort（此前只有显示名，MLST/cgMLST 均未启用）。
+    mlst_scheme: cperfringens_1
+    cgmlst_scheme: cperfringens_2
+    # 无 SNP 参考基因组（provisioning 未覆盖 CPE），故只开 cgMLST；SNP/重组不开。
+    snp_group: cpe
+    plan: {snp: false, cgmlst: true, recombination: false}
   CJE:
     display_name: 空肠弯曲菌
     gside_labels: [Campylobacter_jejuni]
@@ -206,6 +212,10 @@ pathogens:
     gside_labels: [Campylobacter_coli]
 
 snp_groups:
+  # CPE 只用于 cgMLST cohort 分组（plan.snp=false，ref 不参与计算）。
+  cpe:
+    ref: data/reference/genomes/cpe_nctc8237.fasta
+    organism: Clostridium perfringens
   salmonella:
     ref: data/reference/genomes/salmonella_LT2.fasta
     organism: Salmonella enterica

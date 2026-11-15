@@ -49,6 +49,7 @@ Origin: http://127.0.0.1:8800
 | GET | `/api/v1/isolates/{id}` | 菌株 + 所属样本 + 测序数据 |
 | POST | `/api/v1/specimens/assign` | 把菌株/测序数据关联到样本（CSRF；样本不存在则创建） |
 | POST | `/api/v1/specimens/{id}/delete` | 删除样本（`force: true` 先解除菌株关联；菌株/数据保留） |
+| POST | `/api/v1/isolates/{id}/delete` | 删除空菌株（有测序数据/元数据/化验/GOM/运行记录时 409 拒绝） |
 | GET | `/api/v1/search?q=&serotype=&mlst_st=&amr_gene=` | 按关键词/血清型/ST/基因检索样本 |
 | GET | `/api/v1/search/identity?q=` | 统一检索：样本与菌株 |
 | GET | `/api/v1/tasks?limit=` | 最近的任务 |
@@ -68,6 +69,7 @@ Origin: http://127.0.0.1:8800
 | GET | `/api/v1/runs?limit=` | 运行记录 |
 | GET | `/api/v1/runs/{id}` | 运行详情 + gvixb 视图 |
 | GET | `/api/v1/runs/{id}/compare?other=` | 来源比较 |
+| POST | `/api/v1/runs/{id}/purge` | 清理运行的物理产物（保留记录/GOM；运行中或最新 run 返回 409） |
 | GET | `/api/v1/gom/objects?type=&limit=` | 最新的 GOM 对象 |
 | GET | `/api/v1/gom/objects/{id}?version=` | GOM 对象 + 关联 gvixb 视图 |
 | GET | `/api/v1/gvixb/runs/{run_id}/manifest` | 某运行可用的 gvixb 视图 |

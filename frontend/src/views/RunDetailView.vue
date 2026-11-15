@@ -29,6 +29,8 @@ const compareWith = ref('')
 const compare = ref<Record<string, unknown> | null>(null)
 const loading = ref(true)
 const comparing = ref(false)
+const purging = ref(false)
+const purgeNotice = ref('')
 const error = ref('')
 const compareError = ref('')
 
@@ -146,6 +148,32 @@ async function compareRuns() {
   }
 }
 
+async function purgeArtifacts() {
+  const ok = window.confirm(
+    '清理该运行的物理产物？\n\n会删除结果目录中的 assembly/annotation/报告等文件，'
+      + '运行记录、run_manifest 哈希与 GOM 分析对象保留。\n'
+      + '若它仍是某些样本的最新结果，服务端会拒绝。',
+  )
+  if (!ok) return
+  purging.value = true
+  error.value = ''
+  purgeNotice.value = ''
+  try {
+    const result = await api.purgeRun(id)
+    const mb = (result.bytes / 1024 / 1024).toFixed(1)
+    purgeNotice.value = result.purged
+      ? `已清理 ${result.files} 个文件（${mb} MiB）；运行记录与 GOM 保留。`
+      : result.already_purged
+        ? '该运行的产物此前已清理。'
+        : '未找到可清理的产物目录。'
+    await load()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '清理运行产物失败'
+  } finally {
+    purging.value = false
+  }
+}
+
 onMounted(() => void load())
 </script>
 
@@ -164,9 +192,25 @@ onMounted(() => void load())
         </h1>
         <p class="pagehead__sub">不可变证据：工具版本、参考库、配置与输入指纹。</p>
       </div>
+      <div class="pagehead__actions">
+        <button
+          class="btn btn--danger"
+          type="button"
+          :disabled="purging || loading || !run"
+          title="删除物理产物，保留运行记录与 GOM"
+          @click="purgeArtifacts"
+        >
+          <span v-if="purging" class="spinner" />
+          <Icon v-else name="trash" />
+          清理产物
+        </button>
+      </div>
     </div>
 
     <div v-if="error" class="form-error" style="margin-bottom: 16px">{{ error }}</div>
+    <div v-if="purgeNotice" class="card card--pad" style="margin-bottom: 16px">
+      {{ purgeNotice }}
+    </div>
 
     <template v-if="loading">
       <div class="card card--pad"><div class="skeleton" style="height: 220px" /></div>

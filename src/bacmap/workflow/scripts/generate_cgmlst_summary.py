@@ -119,11 +119,17 @@ def main() -> int:
         inner = matrix_payload.get("data")
         if isinstance(inner, dict):
             matrix_payload = inner
-    missing_rate = _missing_rate(profiles_path.read_text())
+    profiles_text = profiles_path.read_text()
+    missing_rate = _missing_rate(profiles_text)
 
     samples = matrix_payload.get("samples") or matrix_payload.get("labels") or []
     scheme = args.scheme or matrix_payload.get("scheme", "")
     n_loci = matrix_payload.get("n_loci", 0)
+    if not n_loci:
+        # gmlst visual matrix 的 JSON 不带 n_loci；从 profiles 表头回算
+        # （列 = File/Scheme/ST + 各位点），v1.10.28。
+        header = profiles_text.splitlines()[0].split("\t") if profiles_text else []
+        n_loci = max(len(header) - 3, 0)
     # Prefer the flat allele_distances ("A|B" -> int); fall back to rebuilding
     # from the nested distances dict so the summary is populated regardless of
     # which matrix-generator version produced the JSON.

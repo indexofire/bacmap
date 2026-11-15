@@ -152,6 +152,8 @@ class WorkflowRunner:
             str(cores),
             "--rerun-incomplete",
             "--printshellcmds",
+            "--latency-wait",
+            "60",
         ]
         # targets 必须放在 --config 之前：snakemake 的 --config 是 nargs="*"，
         # 会贪婪吞掉其后所有参数，把目标文件当 KEY=VALUE 解析（v1.9.3 巡检）。

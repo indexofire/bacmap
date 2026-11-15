@@ -17,6 +17,7 @@ import type {
   ResearchSessionView,
   ResearchStudy,
   RunRow,
+  RunPurgeResult,
   SampleDetail,
   SampleRow,
   SpecimenDetail,
@@ -139,6 +140,11 @@ export const api = {
   runsPage: (offset = 0, limit = 50) =>
     request<Page<RunRow>>(`/runs?offset=${offset}&limit=${limit}`),
   getRun: (id: string) => request<RunRow>(`/runs/${encodeURIComponent(id)}`),
+  purgeRun: (id: string, dryRun = false) =>
+    request<RunPurgeResult>(
+      `/runs/${encodeURIComponent(id)}/purge${dryRun ? '?dry_run=true' : ''}`,
+      json({}),
+    ),
   compareRuns: (id: string, other: string) =>
     request<Record<string, unknown>>(
       `/runs/${encodeURIComponent(id)}/compare?other=${encodeURIComponent(other)}`,
@@ -252,6 +258,11 @@ export const api = {
   isolatesPage: (offset = 0, limit = 50) =>
     request<Page<IsolateRow>>(`/isolates?offset=${offset}&limit=${limit}`),
   getIsolate: (id: string) => request<IsolateDetail>(`/isolates/${encodeURIComponent(id)}`),
+  deleteIsolate: (id: string) =>
+    request<{ deleted: boolean; isolate_id: string }>(
+      `/isolates/${encodeURIComponent(id)}/delete`,
+      json({}),
+    ),
 
   listGom: (type?: string, limit = 100) => {
     const q = new URLSearchParams({ limit: String(limit) })

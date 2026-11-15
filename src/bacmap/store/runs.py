@@ -12,6 +12,8 @@ import hashlib
 import hmac
 import json
 import os
+import re
+import shutil
 import sqlite3
 import subprocess
 from contextlib import closing
@@ -51,7 +53,31 @@ CREATE TABLE IF NOT EXISTS analysis_runs (
 """
 
 # runs.sqlite 的 schema 迁移（ADR-13，v1.5.2）；只追加。
-RUNS_MIGRATIONS: tuple[Migration, ...] = (Migration(1, "baseline: analysis_runs", (_SCHEMA_SQL,)),)
+_PURGE_DDL = """
+CREATE TABLE IF NOT EXISTS run_artifact_purges (
+    purge_id   TEXT PRIMARY KEY,
+    run_id     TEXT NOT NULL,
+    task_id    TEXT NOT NULL,
+    purged_at  TEXT NOT NULL,
+    actor      TEXT NOT NULL DEFAULT '',
+    files      INTEGER NOT NULL DEFAULT 0,
+    bytes      INTEGER NOT NULL DEFAULT 0,
+    note       TEXT NOT NULL DEFAULT ''
+)
+"""
+
+RUNS_MIGRATIONS: tuple[Migration, ...] = (
+    Migration(1, "baseline: analysis_runs", (_SCHEMA_SQL,)),
+    Migration(
+        2,
+        "run artifact purges: append-only audit (records stay immutable)",
+        (_PURGE_DDL,),
+    ),
+)
+
+# 这些状态的任务仍在写/即将写结果，禁止清理产物。
+_ACTIVE_TASK_STATES = {"pending", "running", "paused", "awaiting_approval"}
+
 
 
 class RefDatabase(BaseModel):
@@ -366,6 +392,162 @@ def count_runs(db_path: Path) -> int:
     with closing(sqlite3.connect(db_path)) as conn:
         row = conn.execute("SELECT COUNT(*) FROM analysis_runs").fetchone()
     return int(row[0]) if row else 0
+
+
+_TASK_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
+
+def _task_state(home: Path, task_id: str) -> str | None:
+    db = home / "tasks.sqlite"
+    if not db.is_file():
+        return None
+    try:
+        with closing(sqlite3.connect(f"file:{db}?mode=ro", uri=True)) as conn:
+            row = conn.execute(
+                "SELECT state FROM tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+    except sqlite3.Error:
+        return None
+    return str(row[0]) if row else None
+
+
+def _latest_alias_names(home: Path, run_dir: Path) -> list[str]:
+    """指向该 run 目录（或其子目录）的 results 扁平别名。"""
+    from bacmap.store.results_layout import results_root
+
+    root = results_root(home)
+    if not root.is_dir():
+        return []
+    target = run_dir.resolve()
+    names: list[str] = []
+    for link in root.iterdir():
+        if not link.is_symlink():
+            continue
+        try:
+            resolved = link.resolve()
+        except OSError:
+            continue
+        if resolved == target or target in resolved.parents:
+            names.append(link.name)
+    return sorted(names)
+
+
+def _purged_at(db_path: Path, run_id: str) -> str | None:
+    if not Path(db_path).is_file():
+        return None
+    migrate(Path(db_path), RUNS_MIGRATIONS)
+    with closing(sqlite3.connect(db_path)) as conn:
+        row = conn.execute(
+            "SELECT purged_at FROM run_artifact_purges"
+            " WHERE run_id = ? ORDER BY purged_at DESC LIMIT 1",
+            (run_id,),
+        ).fetchone()
+    return str(row[0]) if row else None
+
+
+def purge_run_artifacts(
+    home: Path,
+    run_id: str,
+    *,
+    actor: str = "",
+    dry_run: bool = False,
+    note: str = "",
+) -> dict[str, Any]:
+    """清理一次运行的物理产物，保留不可变的运行记录（v1.10.35）。
+
+    仅删除 ``results/runs/<task_id>/``；``analysis_runs`` 行、``run_manifest.json``
+    与 GOM 分析对象全部保留。安全规则：
+
+    - 任务仍在 ``pending/running/paused/awaiting_approval`` → 拒绝；
+    - 该 run 是任一结果别名（``results/<sample>``）的当前目标 → 拒绝；
+    - 重复调用幂等：目录已不存在时返回 ``already_purged``；
+    - 删除前把 actor/文件数/字节数写入追加式审计表 ``run_artifact_purges``。
+
+    ``dry_run=True`` 只统计，不删除、不写审计。
+    """
+    from bacmap.store.results_layout import run_results_dir
+
+    home = Path(home)
+    db_path = home / "runs.sqlite"
+    run = read_run(run_id, db_path)
+    if run is None:
+        raise KeyError(run_id)
+    task_id = run.task_id
+    if not task_id:
+        raise ValueError(f"run {run_id!r} has no task_id; there are no artifacts to purge")
+    if not _TASK_ID_RE.fullmatch(task_id):
+        raise ValueError(f"invalid task id on run {run_id!r}: {task_id!r}")
+
+    run_dir = run_results_dir(home, task_id)
+    if run_dir.is_symlink():
+        raise ValueError(f"refusing to purge symlinked run directory: {run_dir}")
+    latest_links = _latest_alias_names(home, run_dir)
+    result: dict[str, Any] = {
+        "run_id": run_id,
+        "task_id": task_id,
+        "purged": False,
+        "dry_run": dry_run,
+        "files": 0,
+        "bytes": 0,
+        "latest_links": latest_links,
+        "already_purged": False,
+        "purged_at": None,
+    }
+
+    if not run_dir.is_dir():
+        purged_at = _purged_at(db_path, run_id)
+        result["already_purged"] = purged_at is not None
+        result["purged_at"] = purged_at
+        return result
+
+    files = 0
+    size = 0
+    for path in run_dir.rglob("*"):
+        if path.is_file() and not path.is_symlink():
+            files += 1
+            try:
+                size += path.stat().st_size
+            except OSError:
+                continue
+    result["files"] = files
+    result["bytes"] = size
+
+    state = _task_state(home, task_id)
+    if state in _ACTIVE_TASK_STATES:
+        raise ValueError(
+            f"task {task_id} is {state}; wait for it to finish before purging artifacts"
+        )
+    if latest_links:
+        preview = ", ".join(latest_links[:5])
+        if len(latest_links) > 5:
+            preview += f", … (+{len(latest_links) - 5} more)"
+        raise ValueError(
+            f"run is the latest result for {len(latest_links)} sample(s)"
+            f" ({preview}); run a newer analysis before purging artifacts"
+        )
+    if dry_run:
+        return result
+
+    shutil.rmtree(run_dir)
+    migrate(db_path, RUNS_MIGRATIONS)
+    with closing(sqlite3.connect(db_path)) as conn, conn:
+        conn.execute(
+            "INSERT INTO run_artifact_purges"
+            " (purge_id, run_id, task_id, purged_at, actor, files, bytes, note)"
+            " VALUES (?,?,?,?,?,?,?,?)",
+            (
+                uuid4().hex,
+                run_id,
+                task_id,
+                datetime.now(UTC).isoformat(),
+                actor,
+                files,
+                size,
+                note,
+            ),
+        )
+    result["purged"] = True
+    return result
 
 
 def read_run(run_id: str, db_path: Path) -> AnalysisRun | None:
