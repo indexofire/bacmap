@@ -1,0 +1,366 @@
+{
+  "schema": "gvixb.mst/v1",
+  "demo": true,
+  "title": "Seven-locus MLST demo",
+  "source": "模拟演示数据（gmlst visual mst 载荷格式）：等位基因谱与元数据仅用于演示，不代表真实分离株关系。",
+  "scheme": "demo_7locus",
+  "n_loci": 7,
+  "loci": [
+    "aroC",
+    "dnaN",
+    "hemD",
+    "hisD",
+    "purE",
+    "sucA",
+    "thrA"
+  ],
+  "nodes": [
+    {
+      "id": "0",
+      "label": "A01",
+      "member_count": 8,
+      "meta": {
+        "st": "ST19",
+        "group": "Lineage A",
+        "host": "poultry",
+        "amr": 2
+      },
+      "profile": [
+        10,
+        12,
+        7,
+        9,
+        5,
+        6,
+        2
+      ]
+    },
+    {
+      "id": "1",
+      "label": "A02",
+      "member_count": 5,
+      "meta": {
+        "st": "ST19",
+        "group": "Lineage A",
+        "host": "human",
+        "amr": 3
+      },
+      "profile": [
+        10,
+        12,
+        7,
+        9,
+        5,
+        6,
+        3
+      ]
+    },
+    {
+      "id": "2",
+      "label": "A03",
+      "member_count": 3,
+      "meta": {
+        "st": "ST34",
+        "group": "Lineage A",
+        "host": "cattle",
+        "amr": 1
+      },
+      "profile": [
+        10,
+        12,
+        8,
+        9,
+        5,
+        6,
+        2
+      ]
+    },
+    {
+      "id": "3",
+      "label": "A04",
+      "member_count": 4,
+      "meta": {
+        "st": "ST34",
+        "group": "Lineage A",
+        "host": "human",
+        "amr": 4
+      },
+      "profile": [
+        10,
+        15,
+        8,
+        9,
+        5,
+        6,
+        2
+      ]
+    },
+    {
+      "id": "4",
+      "label": "B01",
+      "member_count": 7,
+      "meta": {
+        "st": "ST11",
+        "group": "Lineage B",
+        "host": "swine",
+        "amr": 0
+      },
+      "profile": [
+        4,
+        3,
+        12,
+        8,
+        11,
+        2,
+        14
+      ]
+    },
+    {
+      "id": "5",
+      "label": "B02",
+      "member_count": 2,
+      "meta": {
+        "st": "ST11",
+        "group": "Lineage B",
+        "host": "human",
+        "amr": 2
+      },
+      "profile": [
+        4,
+        3,
+        12,
+        8,
+        11,
+        2,
+        15
+      ]
+    },
+    {
+      "id": "6",
+      "label": "B03",
+      "member_count": 5,
+      "meta": {
+        "st": "ST198",
+        "group": "Lineage B",
+        "host": "poultry",
+        "amr": 1
+      },
+      "profile": [
+        4,
+        3,
+        12,
+        8,
+        11,
+        9,
+        14
+      ]
+    },
+    {
+      "id": "7",
+      "label": "B04",
+      "member_count": 3,
+      "meta": {
+        "st": "ST198",
+        "group": "Lineage B",
+        "host": "environment",
+        "amr": 0
+      },
+      "profile": [
+        4,
+        6,
+        12,
+        8,
+        11,
+        9,
+        14
+      ]
+    },
+    {
+      "id": "8",
+      "label": "C01",
+      "member_count": 9,
+      "meta": {
+        "st": "ST313",
+        "group": "Lineage C",
+        "host": "human",
+        "amr": 5
+      },
+      "profile": [
+        21,
+        18,
+        3,
+        16,
+        20,
+        7,
+        11
+      ]
+    },
+    {
+      "id": "9",
+      "label": "C02",
+      "member_count": 6,
+      "meta": {
+        "st": "ST313",
+        "group": "Lineage C",
+        "host": "human",
+        "amr": 6
+      },
+      "profile": [
+        21,
+        18,
+        3,
+        16,
+        20,
+        7,
+        19
+      ]
+    },
+    {
+      "id": "10",
+      "label": "C03",
+      "member_count": 4,
+      "meta": {
+        "st": "ST99",
+        "group": "Lineage C",
+        "host": "cattle",
+        "amr": 2
+      },
+      "profile": [
+        21,
+        18,
+        3,
+        16,
+        20,
+        13,
+        11
+      ]
+    },
+    {
+      "id": "11",
+      "label": "C04",
+      "member_count": 2,
+      "meta": {
+        "st": "ST99",
+        "group": "Lineage C",
+        "host": "swine",
+        "amr": 3
+      },
+      "profile": [
+        21,
+        22,
+        3,
+        16,
+        20,
+        13,
+        11
+      ]
+    },
+    {
+      "id": "12",
+      "label": "X01",
+      "member_count": 1,
+      "meta": {
+        "st": "ST novel",
+        "group": "Intermediate",
+        "host": "human",
+        "amr": 2
+      },
+      "profile": [
+        10,
+        12,
+        7,
+        16,
+        11,
+        7,
+        11
+      ]
+    },
+    {
+      "id": "13",
+      "label": "X02",
+      "member_count": 2,
+      "meta": {
+        "st": "ST novel",
+        "group": "Intermediate",
+        "host": "environment",
+        "amr": 1
+      },
+      "profile": [
+        4,
+        12,
+        7,
+        16,
+        11,
+        7,
+        14
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "0",
+      "target": "1",
+      "weight": 1
+    },
+    {
+      "source": "0",
+      "target": "2",
+      "weight": 1
+    },
+    {
+      "source": "2",
+      "target": "3",
+      "weight": 1
+    },
+    {
+      "source": "4",
+      "target": "5",
+      "weight": 1
+    },
+    {
+      "source": "4",
+      "target": "6",
+      "weight": 1
+    },
+    {
+      "source": "6",
+      "target": "7",
+      "weight": 1
+    },
+    {
+      "source": "8",
+      "target": "9",
+      "weight": 1
+    },
+    {
+      "source": "8",
+      "target": "10",
+      "weight": 1
+    },
+    {
+      "source": "10",
+      "target": "11",
+      "weight": 1
+    },
+    {
+      "source": "12",
+      "target": "13",
+      "weight": 2
+    },
+    {
+      "source": "0",
+      "target": "12",
+      "weight": 4
+    },
+    {
+      "source": "4",
+      "target": "13",
+      "weight": 4
+    },
+    {
+      "source": "8",
+      "target": "12",
+      "weight": 4
+    }
+  ]
+}

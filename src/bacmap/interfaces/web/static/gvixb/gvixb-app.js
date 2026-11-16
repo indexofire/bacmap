@@ -14,7 +14,9 @@ if (queryView && ['assembly', 'circle', 'phylo', 'mst'].includes(queryView)) {
   mount.dataset.view = queryView;
 }
 const queryEndpoint = params.get('endpoint') || '';
-if (queryEndpoint.startsWith('/api/v1/gvixb/')) mount.dataset.endpoint = queryEndpoint;
+if (queryEndpoint.startsWith('/api/v1/gvixb/') || queryEndpoint.startsWith('/gvixb/demo/data/')) {
+  mount.dataset.endpoint = queryEndpoint;
+}
 const definitions = {
   assembly: assemblyView, phylo: phyloView, mst: mstView, circle: circularAnnotationView,
 };

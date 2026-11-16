@@ -1,0 +1,22 @@
+{
+  "schema": "gvixb.phylogeny/v1",
+  "demo": true,
+  "title": "Bacterial isolate phylogeny demo",
+  "source": "模拟演示数据：拓扑、分支长度和样本元数据仅用于验证 3D 视图，不是由 LT2 或真实菌株集合推断的进化结论。",
+  "distanceLabel": "累计相对遗传距离（模拟）",
+  "newick": "((((S01:0.025,S02:0.031)NA1:0.018,(S03:0.028,S04:0.034)NA2:0.021)NA:0.035,((S05:0.022,S06:0.029)NB1:0.019,(S07:0.033,S08:0.026)NB2:0.024)NB:0.039)NAB:0.028,((S09:0.030,S10:0.036)NC1:0.020,(S11:0.027,S12:0.032)NC2:0.023)NC:0.047)ROOT;",
+  "metadata": {
+    "S01": { "group": "Lineage A", "st": "ST19", "host": "poultry", "year": 2024, "amr": 2 },
+    "S02": { "group": "Lineage A", "st": "ST19", "host": "human", "year": 2024, "amr": 3 },
+    "S03": { "group": "Lineage A", "st": "ST34", "host": "cattle", "year": 2023, "amr": 1 },
+    "S04": { "group": "Lineage A", "st": "ST34", "host": "human", "year": 2025, "amr": 4 },
+    "S05": { "group": "Lineage B", "st": "ST11", "host": "swine", "year": 2023, "amr": 0 },
+    "S06": { "group": "Lineage B", "st": "ST11", "host": "human", "year": 2024, "amr": 2 },
+    "S07": { "group": "Lineage B", "st": "ST198", "host": "poultry", "year": 2025, "amr": 1 },
+    "S08": { "group": "Lineage B", "st": "ST198", "host": "environment", "year": 2024, "amr": 0 },
+    "S09": { "group": "Lineage C", "st": "ST313", "host": "human", "year": 2022, "amr": 5 },
+    "S10": { "group": "Lineage C", "st": "ST313", "host": "human", "year": 2023, "amr": 6 },
+    "S11": { "group": "Lineage C", "st": "ST99", "host": "cattle", "year": 2024, "amr": 2 },
+    "S12": { "group": "Lineage C", "st": "ST99", "host": "swine", "year": 2025, "amr": 3 }
+  }
+}

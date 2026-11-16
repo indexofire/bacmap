@@ -13,7 +13,7 @@ export const mstView = {
   dockLabel: 'MST',
   title: '3D 最小生成树',
   subtitle: 'MLST MINIMUM SPANNING TREE',
-  dataUrl: './data/framework/mst.json',
+  dataUrl: './data/framework/mst-isolates.json',
   description: '根据多位点序列分型（MLST）等位基因谱计算汉明距离，再以 Kruskal 算法实时构建最小生成树。节点大小表示聚合样本数。',
   controls: [
     { key: 'labels', label: '显示样本标签', type: 'toggle', value: true },

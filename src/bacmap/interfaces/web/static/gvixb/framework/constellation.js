@@ -22,14 +22,16 @@ export const NETWORK_NEUTRAL = '#aab3c5';
 export const NETWORK_ACCENT = '#ff7a1a';
 
 const backOut = t => { const s = 1.70158; const x = t - 1; return 1 + (s + 1) * x * x * x + s * x * x; };
-const PULSE_COUNT = 12;
+const MAX_PULSE_COUNT = 64;
+const DEFAULT_PULSE_COUNT = 12;
 
 export function createConstellation({
   root, host, registerPickable, nodes, edges, layers,
   accent = NETWORK_ACCENT, showLabels = true, showEdgeLabels = false, sidebarNote = '',
   decks: drawDecks = layers.size > 1, heightAxis = null, legendTitle = '分组图层 · Decks',
   legendNote = null, pulsesOn: initialPulses = true, glow: initialGlow = 0.2, edgeAlpha: initialEdgeAlpha = 0.6,
-  sizeScale: initialSizeScale = 1,
+  sizeScale: initialSizeScale = 1, pulseCount: initialPulseCount = DEFAULT_PULSE_COUNT,
+  pulseSpeed: initialPulseSpeed = 1, dashedEdgePredicate = null,
 }) {
   const ownPickables = [];
   const pick = (object, payload) => { ownPickables.push(object); return registerPickable(object, payload); };
@@ -54,6 +56,7 @@ export function createConstellation({
   let edgeFilter = null;
   const edgeVisible = i => nodeVisible(edges[i].source) && nodeVisible(edges[i].target)
     && (!edgeFilter || edgeFilter(edges[i]));
+  const edgeDashed = i => dashedEdgePredicate?.(edges[i], i) === true;
   const layerOrder = key => layers.get(key)?.order ?? 0;
 
   // ---- nodes: flat solid dots, normal blending so overlaps occlude --------
@@ -116,12 +119,40 @@ export function createConstellation({
       const pair = edgeColorFn(edge, i);
       const [ca, cb] = Array.isArray(pair) ? pair : [pair, pair];
       tmpA.set(ca); tmpB.set(cb);
-      const alpha = edgeVisible(i) ? edgeAlpha * density : 0;
+      const dashed = dashedEdgePredicate?.(edge, i) === true;
+      const alpha = edgeVisible(i) && !dashed ? edgeAlpha * density : 0;
       edgeColors.set([tmpA.r, tmpA.g, tmpA.b, alpha, tmpB.r, tmpB.g, tmpB.b, alpha], i * 8);
     });
     edgeGeometry.getAttribute('color').needsUpdate = true;
   }
   writeEdgeColors();
+
+  // Δ=4 只画虚线、不参与实线/流光（GrapeTree 式提示）。
+  const dashedIndices = edges.map((edge, i) => i).filter(i => dashedEdgePredicate?.(edges[i], i));
+  let dashedLines = null;
+  if (dashedIndices.length) {
+    const dashedPositions = new Float32Array(dashedIndices.length * 6);
+    dashedIndices.forEach((index, slot) => {
+      const edge = edges[index];
+      const a = nodes[edge.source].position, b = nodes[edge.target].position;
+      dashedPositions.set([a.x, a.y, a.z, b.x, b.y, b.z], slot * 6);
+    });
+    const dashedGeometry = new THREE.BufferGeometry();
+    dashedGeometry.setAttribute('position', new THREE.BufferAttribute(dashedPositions, 3));
+    const dashedMaterial = new THREE.LineDashedMaterial({
+      color: 0xd8dde8, transparent: true, opacity: initialEdgeAlpha,
+      dashSize: 0.34, gapSize: 0.24, depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    dashedLines = new THREE.LineSegments(dashedGeometry, dashedMaterial);
+    dashedLines.name = 'dashed-edges';
+    dashedLines.computeLineDistances();
+    dashedLines.userData.pickFor = (_, hit) => {
+      const slot = Math.floor((hit?.index ?? -1) / 2);
+      const index = dashedIndices[slot];
+      return index === undefined ? null : (edges[index].payload ?? null);
+    };
+    scene.add(pick(dashedLines, null));
+  }
 
   const edgeLabels = edges.map(edge => {
     if (!edge.label) return null;
@@ -187,9 +218,10 @@ export function createConstellation({
   }
 
   // ---- decorative pulses: symmetric streaks from an edge midpoint ---------
-  const pulseCount = Math.min(PULSE_COUNT, edges.length);
-  const pulsePositions = new Float32Array(pulseCount * 12);
-  const pulseColors = new Float32Array(pulseCount * 16);
+  let pulseCount = Math.min(Math.max(0, Number(initialPulseCount) || 0), MAX_PULSE_COUNT, edges.length);
+  let pulseSpeed = clamp(Number(initialPulseSpeed) || 1, 0, 3);
+  const pulsePositions = new Float32Array(MAX_PULSE_COUNT * 12);
+  const pulseColors = new Float32Array(MAX_PULSE_COUNT * 16);
   const pulseGeometry = new THREE.BufferGeometry();
   pulseGeometry.setAttribute('position', new THREE.BufferAttribute(pulsePositions, 3));
   pulseGeometry.setAttribute('color', new THREE.BufferAttribute(pulseColors, 4));
@@ -200,18 +232,19 @@ export function createConstellation({
   scene.add(pulseLines);
   let seed = 1337;
   const rand = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296;
-  const pulses = Array.from({ length: pulseCount }, () => ({ edge: -1, t: 0, dur: 1, delay: 0 }));
+  const pulses = Array.from({ length: MAX_PULSE_COUNT }, () => ({ edge: -1, t: 0, dur: 1, delay: 0 }));
   function respawn(pulse) {
     pulse.edge = -1;
     for (let k = 0; k < 8 && edges.length; k++) {
       const i = Math.floor(rand() * edges.length);
-      if (edgeVisible(i)) { pulse.edge = i; break; }
+      if (edgeVisible(i) && !edgeDashed(i)) { pulse.edge = i; break; }
     }
     pulse.t = 0;
     pulse.dur = 0.5 + rand() * 0.5;
     pulse.delay = rand() * 1.1;
   }
-  pulses.forEach(respawn);
+  pulses.slice(0, pulseCount).forEach(respawn);
+  pulseGeometry.setDrawRange(0, pulseCount * 2);
   let pulsesOn = initialPulses;
 
   // ---- selection marks: accent ring + callout + incident-edge highlight ---
@@ -413,7 +446,8 @@ export function createConstellation({
     edgeLabels.forEach((label, i) => { if (label) label.visible = edgeVisible(i); });
     for (const [key, deck] of decks) deck.ring.visible = deck.pill.visible = layerVisible(key);
     writeEdgeColors();
-    pulses.forEach(pulse => { if (pulse.edge >= 0 && !edgeVisible(pulse.edge)) respawn(pulse); });
+    if (dashedLines) dashedLines.visible = dashedIndices.some(i => edgeVisible(i));
+    pulses.forEach(pulse => { if (pulse.edge >= 0 && (!edgeVisible(pulse.edge) || edgeDashed(pulse.edge))) respawn(pulse); });
     if (selectedNode >= 0 && !nodeVisible(selectedNode)) clearSelection();
     if (selectedEdge >= 0 && !edgeVisible(selectedEdge)) clearSelection();
     renderDeckList();
@@ -499,7 +533,7 @@ export function createConstellation({
       pulse.delay -= dt;
       let alpha = 0, head = 0, tail = 0;
       if (pulse.edge >= 0 && pulse.delay <= 0) {
-        pulse.t += dt / pulse.dur;
+        pulse.t += dt * pulseSpeed / pulse.dur;
         if (pulse.t >= 1) respawn(pulse);
         head = clamp(pulse.t, 0, 1);
         tail = Math.max(0, head - 0.24);
@@ -590,12 +624,19 @@ export function createConstellation({
     setLabels: value => { labelsOn = !!value; labelGroup.visible = labelsOn; },
     setEdgeLabels: value => { edgeLabelsOn = !!value; edgeLabelGroup.visible = edgeLabelsOn; },
     setPulses: value => { pulsesOn = !!value; },
+    setPulseSpeed: value => { pulseSpeed = clamp(Number(value) || 0, 0, 3); },
+    setPulseCount: value => {
+      pulseCount = Math.min(Math.max(0, Math.round(Number(value) || 0)), MAX_PULSE_COUNT, edges.length);
+      pulseGeometry.setDrawRange(0, pulseCount * 2);
+      pulses.slice(0, pulseCount).forEach(respawn);
+    },
     setGlow,
-    setEdgeAlpha: value => { edgeAlpha = clamp(Number(value) || 0, 0.05, 1); writeEdgeColors(); },
+    setEdgeAlpha: value => { edgeAlpha = clamp(Number(value) || 0, 0.05, 1); writeEdgeColors(); if (dashedLines) dashedLines.material.opacity = edgeAlpha; },
     // display-only filter (e.g. hide branches with distance > N, GrapeTree
     // style): filtered edges go fully transparent, lose labels/picking and
     // are skipped by pulses and selection bursts; nodes stay in place.
     setEdgeFilter: fn => { edgeFilter = typeof fn === 'function' ? fn : null; applyVisibility(); },
+    setDashedVisible: value => { if (dashedLines) dashedLines.visible = !!value; },
     // uniform size coefficient (GrapeTree "node size" knob): rescales every dot
     // without a rebuild; also rescales the selection ring via update()
     setSizeScale: value => {

@@ -73,7 +73,7 @@ export const mstView = {
       },
       { key: 'height', label: '高度模式', type: 'select', value: 'flat', options: heightModeOptions(fields, STRUCTURE_LABEL, { treeModes: true }).filter(o => o.value !== 'cone') },
       { key: 'elevate', label: '分支仰角展开（叠加）', type: 'toggle', value: true },
-      { key: 'amp', label: '纵向展开', type: 'range', min: 0.3, max: 3, step: 0.1, value: 1.5 },
+      { key: 'amp', label: '纵向展开', type: 'range', min: 0.3, max: 3, step: 0.1, value: 0.7 },
       {
         key: 'color', label: '颜色字段', type: 'select', value: defaultColorField(fields),
         options: [{ value: '', label: '不着色' }, ...fields.colorable.map(key => ({
@@ -98,10 +98,12 @@ export const mstView = {
         ],
       },
       {
-        key: 'edgeMax', label: '连线距离上限（超过则隐藏）', type: 'range',
-        min: 0, max: maxDist, step: Math.max(1, Math.round(maxDist / 200)), value: maxDist,
+        key: 'edgeMax', label: '实线上限（Δ=4 显示虚线，超过隐藏）', type: 'range',
+        min: 0, max: maxDist, step: Math.max(1, Math.round(maxDist / 200)), value: 3,
       },
-      { key: 'edgeAlpha', label: '连线亮度', type: 'range', min: 0.1, max: 1, step: 0.05, value: 0.6 },
+      { key: 'edgeAlpha', label: '连线亮度', type: 'range', min: 0.05, max: 1, step: 0.05, value: 0.15 },
+      { key: 'pulseSpeed', label: '流光速度', type: 'range', min: 0, max: 3, step: 0.1, value: 1 },
+      { key: 'pulseCount', label: '流光数量', type: 'range', min: 0, max: 32, step: 1, value: 12 },
       { key: 'distances', label: '显示等位距离', type: 'toggle', value: !many },
       { type: 'section', label: '节点 · Nodes' },
       { key: 'nodeSize', label: '节点大小', type: 'range', min: 0.3, max: 3, step: 0.05, value: 1 },
@@ -124,8 +126,8 @@ export const mstView = {
 
     const state = {
       layout: 'free3d', height: 'flat', elevate: true, color: defaultColorField(fields),
-      edgeColor: 'group', labels: !many, distances: !many, pulses: true, glow: 0.2, edgeAlpha: 0.6, nodeSize: 1,
-      edgeMax: Math.max(1, ...edges.map(edge => edge.distance)), edgeScale: 'linear', palette: 'auto', amp: 1.5,
+      edgeColor: 'group', labels: !many, distances: !many, pulses: true, glow: 0.2, edgeAlpha: 0.15, nodeSize: 1,
+      edgeMax: 3, edgeScale: 'linear', palette: 'auto', amp: 0.7, pulseSpeed: 1, pulseCount: 12,
     };
     const layouts = new Map();
     const radius = clamp(Math.sqrt(isolates.length) * 1.6, 8, 14);
@@ -198,11 +200,12 @@ export const mstView = {
         legendTitle: state.color ? `颜色 · ${state.color}` : '颜色 · 未着色',
         legendNote: `${encoded.note}${state.color ? ' 点击行可隐藏 / 显示该类别。' : ''}`,
         showLabels: state.labels, showEdgeLabels: state.distances, pulsesOn: state.pulses, glow: state.glow, edgeAlpha: state.edgeAlpha,
-        sizeScale: state.nodeSize,
+        sizeScale: state.nodeSize, pulseSpeed: state.pulseSpeed, pulseCount: state.pulseCount,
+        dashedEdgePredicate: edge => edge.distance === 4,
         sidebarNote: 'MST 拓扑与 Δ 来自宿主 / gmlst；Δ 为等位基因距离（不是核苷酸差异数）。连线与流光不表示方向或传播。',
       });
       applyEdgeColor();
-      constellation.setEdgeFilter(edge => edge.distance <= state.edgeMax);
+      constellation.setEdgeFilter(edge => edge.distance <= Math.max(4, state.edgeMax));
       if (constellationHost) constellation.mountSidebar(constellationHost);
     }
     function applyEdgeColor() {
@@ -277,12 +280,14 @@ export const mstView = {
         if (key === 'rotate') host.setAutoRotate(Number(value) > 0, Number(value));
         if (key === 'glow') { state.glow = Number(value); constellation.setGlow(state.glow); }
         if (key === 'edgeAlpha') { state.edgeAlpha = Number(value); constellation.setEdgeAlpha(state.edgeAlpha); }
+        if (key === 'pulseSpeed') { state.pulseSpeed = Number(value); constellation.setPulseSpeed(state.pulseSpeed); }
+        if (key === 'pulseCount') { state.pulseCount = Number(value); constellation.setPulseCount(state.pulseCount); }
         if (key === 'nodeSize') { state.nodeSize = Number(value); constellation.setSizeScale(state.nodeSize); }
         if (key === 'edgeColor') { state.edgeColor = value; applyEdgeColor(); }
         if (key === 'layout' || key === 'height' || key === 'color' || key === 'edgeScale' || key === 'palette') { state[key] = String(value); build(); }
         if (key === 'amp') { state.amp = Number(value); build(); }
         if (key === 'elevate') { state.elevate = !!value; build(); }
-        if (key === 'edgeMax') { state.edgeMax = Number(value); constellation.setEdgeFilter(edge => edge.distance <= state.edgeMax); }
+        if (key === 'edgeMax') { state.edgeMax = Number(value); constellation.setEdgeFilter(edge => edge.distance <= Math.max(4, state.edgeMax)); }
       },
       update: dt => {
         dust.rotation.y += dt * 0.006;

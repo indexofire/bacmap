@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gvixb preview</title>
+<link rel="stylesheet" href="gvixb.css">
+<link rel="stylesheet" href="gvixb-shell.css">
+</head>
+<body>
+<div id="app" data-view="mst" data-endpoint="/gvixb/demo/data/preview/fixture-mst-mlst-870.json">
+  <canvas id="scene" aria-label="gvixb 3D 可视化画布"></canvas>
+  <header class="topbar">
+    <div class="crumb">
+      <div class="l1"><b>GVIXB</b><span class="sep">//</span>PREVIEW</div>
+      <div class="l2" id="crumb-sub">ANALYSIS // PREVIEW</div>
+    </div>
+    <a class="gvixb-back" href="/gvixb/demo/">← 返回 Demo</a>
+  </header>
+  <aside id="analysis-sidebar">
+    <div class="analysis-kicker" id="analysis-kicker">PREVIEW</div>
+    <h2 class="analysis-title" id="analysis-title">preview</h2>
+    <p class="analysis-description" id="analysis-description">loading…</p>
+    <div id="analysis-stats"></div>
+    <div id="analysis-lists"></div>
+    <div class="view-controls" id="analysis-controls"></div>
+    <div class="analysis-actions">
+      <button id="btn-analysis-auto" type="button">自转</button>
+      <button id="btn-analysis-reset" type="button">复位</button>
+      <button id="btn-analysis-export" type="button">PNG</button>
+    </div>
+    <p class="source-note" id="analysis-source">demo fixture</p>
+  </aside>
+  <aside id="analysis-panel" class="empty">
+    <div class="slab-head"><i></i><span id="analysis-head">Selection</span></div>
+    <div id="analysis-body"></div>
+  </aside>
+  <div id="bottombar" class="analysis">
+    <div id="dock">
+      <div class="dock-brand">gvixb <span>preview</span></div>
+      <div class="dock-read">
+        <span>Zoom</span><b id="dock-zoom">—</b>
+        <span>Sel</span><b id="dock-sel">—</b>
+      </div>
+    </div>
+  </div>
+  <div id="tooltip"></div>
+</div>
+<script type="module" src="gvixb-app.js"></script>
+</body>
+</html>

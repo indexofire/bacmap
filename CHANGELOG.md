@@ -14,6 +14,14 @@
 - 同步 `gvixb/web/views/circular-annotation-view.js` 上游副本。
 - 修复 Bakta 改写 contig 名（`contig00001` → `contig_1`）且无 `replicons.tsv` 时
   GC / GC-skew 轨道为空：按唯一长度回填组装 contig。
+- Demo 底部 Phylo/MST 改为打开 `/static/gvixb/preview.html?view=…&endpoint=…`，
+  使用与 `scripts/preview/preview-dev.html` 相同的 modular 预览壳（左侧统计/控件、
+  右侧 Selection）；不再把分析视图嵌在 Demo 单页里。
+- MST 默认参数：连线亮度 **0.15**、纵向展开 **0.7**；连线面板新增 **流光速度**、
+  **流光数量**；距离上限默认 **3**，Δ=4 显示虚线且不参与流光，>4 隐藏。
+- 预览页使用 gvixb `scripts/preview/` 的 `fixture-phylo-320.json`（320 taxa）与
+  `fixture-mst-mlst-870.json`（870 节点 / 869 边），复制到
+  `/gvixb/demo/data/preview/`；Demo 单页仍保留 `mst-isolates.json` 兼容旧视图。
 - 结果页右上角新增 **Demo** 按钮，本地托管上游 demo（`/gvixb/demo/`）；gvixb 静态
   资源改为 `no-cache, must-revalidate`，升级后不再执行旧 JS（无需重启，普通刷新即生效）。
 - 详情面板补齐 demo 行为：选中基因显示白色标签/引线 + 悬停提示，右侧显示长度、

@@ -1584,7 +1584,19 @@ document.getElementById('btn-gc').addEventListener('click', (ev) => {
   ev.currentTarget.classList.toggle('on', gcGroup.visible);
 });
 document.querySelectorAll('#dock [data-mode]').forEach(button => {
-  button.addEventListener('click', () => setMode(button.dataset.mode));
+  button.addEventListener('click', () => {
+    const mode = button.dataset.mode;
+    // phylo/mst 使用 modular preview 页面（与 scripts/preview/preview-dev.html 同壳），
+    // 不再在 demo 单页里挂载分析视图。
+    if (mode === 'phylo' || mode === 'mst') {
+      const endpoint = mode === 'phylo'
+        ? '/gvixb/demo/data/preview/fixture-phylo-320.json'
+        : '/gvixb/demo/data/preview/fixture-mst-mlst-870.json';
+      location.href = `/static/gvixb/preview.html?view=${mode}&endpoint=${encodeURIComponent(endpoint)}`;
+      return;
+    }
+    setMode(mode);
+  });
 });
 
 // UTC clock

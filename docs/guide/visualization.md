@@ -33,8 +33,8 @@ serves the upstream gvixb demo dataset from the same local server (no external n
 
 Run-scoped gvixb pages also have a **view** selector for the current isolate's assembly/annotation
 circle and the run's tree/mst views, and accept a same-origin
-`?view=phylo&endpoint=/api/v1/gvixb/...` override. The upstream
-`gvixb/scripts/preview/preview-dev.html` is a development fixture page and is not shipped by bacmap.
+`?view=phylo&endpoint=/api/v1/gvixb/...` override. The demo page's Phylo/MST buttons open `/static/gvixb/preview.html` (the same modular preview shell as
+the upstream `scripts/preview/preview-dev.html`); the upstream preview-dev file itself is not shipped.
 
 | bacmap page | gvixb view |
 |---|---|

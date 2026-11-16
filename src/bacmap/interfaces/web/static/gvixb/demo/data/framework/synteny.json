@@ -1,0 +1,57 @@
+{
+  "schema": "gvixb.synteny/v1",
+  "demo": true,
+  "title": "Three-genome conserved-block demo",
+  "source": "模拟演示数据：基因组长度、区块坐标、方向和 identity 仅用于验证共线性渲染，不是 LT2 的真实比对结果。",
+  "genomes": [
+    { "id": "REF", "label": "Reference · demo", "length": 4850000, "color": "#6d8bff" },
+    { "id": "DEMO_A", "label": "Isolate A · demo", "length": 4820000, "color": "#53e6ff" },
+    { "id": "DEMO_B", "label": "Isolate B · demo", "length": 4790000, "color": "#45d69b" }
+  ],
+  "blocks": [
+    { "id": "R01", "genome": "REF", "label": "C01", "start": 300000, "end": 390000, "strand": "+" },
+    { "id": "R02", "genome": "REF", "label": "C02", "start": 780000, "end": 870000, "strand": "+" },
+    { "id": "R03", "genome": "REF", "label": "C03", "start": 1260000, "end": 1350000, "strand": "+" },
+    { "id": "R04", "genome": "REF", "label": "C04", "start": 1740000, "end": 1830000, "strand": "+" },
+    { "id": "R05", "genome": "REF", "label": "C05", "start": 2220000, "end": 2310000, "strand": "+" },
+    { "id": "R06", "genome": "REF", "label": "C06", "start": 2700000, "end": 2790000, "strand": "+" },
+    { "id": "R07", "genome": "REF", "label": "C07", "start": 3180000, "end": 3270000, "strand": "+" },
+    { "id": "R08", "genome": "REF", "label": "C08", "start": 3660000, "end": 3750000, "strand": "+" },
+
+    { "id": "A01", "genome": "DEMO_A", "label": "C01", "start": 330000, "end": 420000, "strand": "+" },
+    { "id": "A02", "genome": "DEMO_A", "label": "C02", "start": 810000, "end": 900000, "strand": "+" },
+    { "id": "A03", "genome": "DEMO_A", "label": "C03", "start": 1290000, "end": 1380000, "strand": "+" },
+    { "id": "A04", "genome": "DEMO_A", "label": "C04", "start": 1770000, "end": 1860000, "strand": "+" },
+    { "id": "A05", "genome": "DEMO_A", "label": "C05", "start": 2250000, "end": 2340000, "strand": "+" },
+    { "id": "A06", "genome": "DEMO_A", "label": "C06", "start": 2730000, "end": 2820000, "strand": "+" },
+    { "id": "A07", "genome": "DEMO_A", "label": "C07", "start": 3210000, "end": 3300000, "strand": "+" },
+    { "id": "A08", "genome": "DEMO_A", "label": "C08", "start": 3690000, "end": 3780000, "strand": "+" },
+
+    { "id": "B01", "genome": "DEMO_B", "label": "C01", "start": 360000, "end": 450000, "strand": "+" },
+    { "id": "B02", "genome": "DEMO_B", "label": "C02", "start": 840000, "end": 930000, "strand": "+" },
+    { "id": "B03", "genome": "DEMO_B", "label": "C03", "start": 1320000, "end": 1410000, "strand": "+" },
+    { "id": "B04", "genome": "DEMO_B", "label": "C04", "start": 2280000, "end": 2370000, "strand": "-" },
+    { "id": "B05", "genome": "DEMO_B", "label": "C05", "start": 1800000, "end": 1890000, "strand": "-" },
+    { "id": "B06", "genome": "DEMO_B", "label": "C06", "start": 2760000, "end": 2850000, "strand": "+" },
+    { "id": "B07", "genome": "DEMO_B", "label": "C07", "start": 3240000, "end": 3330000, "strand": "+" },
+    { "id": "B08", "genome": "DEMO_B", "label": "C08", "start": 3720000, "end": 3810000, "strand": "+" }
+  ],
+  "links": [
+    { "id": "RA01", "source": "R01", "target": "A01", "identity": 99.2, "orientation": "forward" },
+    { "id": "RA02", "source": "R02", "target": "A02", "identity": 98.7, "orientation": "forward" },
+    { "id": "RA03", "source": "R03", "target": "A03", "identity": 98.1, "orientation": "forward" },
+    { "id": "RA04", "source": "R04", "target": "A04", "identity": 97.6, "orientation": "forward" },
+    { "id": "RA05", "source": "R05", "target": "A05", "identity": 96.9, "orientation": "forward" },
+    { "id": "RA06", "source": "R06", "target": "A06", "identity": 95.8, "orientation": "forward" },
+    { "id": "RA07", "source": "R07", "target": "A07", "identity": 94.6, "orientation": "forward" },
+    { "id": "RA08", "source": "R08", "target": "A08", "identity": 92.4, "orientation": "forward" },
+    { "id": "AB01", "source": "A01", "target": "B01", "identity": 98.8, "orientation": "forward" },
+    { "id": "AB02", "source": "A02", "target": "B02", "identity": 97.9, "orientation": "forward" },
+    { "id": "AB03", "source": "A03", "target": "B03", "identity": 97.1, "orientation": "forward" },
+    { "id": "AB04", "source": "A04", "target": "B04", "identity": 95.4, "orientation": "reverse" },
+    { "id": "AB05", "source": "A05", "target": "B05", "identity": 94.8, "orientation": "reverse" },
+    { "id": "AB06", "source": "A06", "target": "B06", "identity": 93.7, "orientation": "forward" },
+    { "id": "AB07", "source": "A07", "target": "B07", "identity": 91.5, "orientation": "forward" },
+    { "id": "AB08", "source": "A08", "target": "B08", "identity": 88.6, "orientation": "forward" }
+  ]
+}

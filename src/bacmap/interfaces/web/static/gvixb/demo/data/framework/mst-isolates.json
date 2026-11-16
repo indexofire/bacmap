@@ -1,0 +1,229 @@
+{
+  "schema": "gvixb.mst/v1",
+  "demo": true,
+  "title": "Seven-locus MLST demo",
+  "source": "模拟演示数据（gmlst visual mst 载荷格式）：等位基因谱与元数据仅用于演示，不代表真实分离株关系。",
+  "scheme": "demo_7locus",
+  "n_loci": 7,
+  "loci": [
+    "aroC",
+    "dnaN",
+    "hemD",
+    "hisD",
+    "purE",
+    "sucA",
+    "thrA"
+  ],
+  "isolates": [
+    {
+      "id": "A01",
+      "label": "A01",
+      "group": "Lineage A",
+      "count": 8,
+      "profile": [
+        10,
+        12,
+        7,
+        9,
+        5,
+        6,
+        2
+      ]
+    },
+    {
+      "id": "A02",
+      "label": "A02",
+      "group": "Lineage A",
+      "count": 5,
+      "profile": [
+        10,
+        12,
+        7,
+        9,
+        5,
+        6,
+        3
+      ]
+    },
+    {
+      "id": "A03",
+      "label": "A03",
+      "group": "Lineage A",
+      "count": 3,
+      "profile": [
+        10,
+        12,
+        8,
+        9,
+        5,
+        6,
+        2
+      ]
+    },
+    {
+      "id": "A04",
+      "label": "A04",
+      "group": "Lineage A",
+      "count": 4,
+      "profile": [
+        10,
+        15,
+        8,
+        9,
+        5,
+        6,
+        2
+      ]
+    },
+    {
+      "id": "B01",
+      "label": "B01",
+      "group": "Lineage B",
+      "count": 7,
+      "profile": [
+        4,
+        3,
+        12,
+        8,
+        11,
+        2,
+        14
+      ]
+    },
+    {
+      "id": "B02",
+      "label": "B02",
+      "group": "Lineage B",
+      "count": 2,
+      "profile": [
+        4,
+        3,
+        12,
+        8,
+        11,
+        2,
+        15
+      ]
+    },
+    {
+      "id": "B03",
+      "label": "B03",
+      "group": "Lineage B",
+      "count": 5,
+      "profile": [
+        4,
+        3,
+        12,
+        8,
+        11,
+        9,
+        14
+      ]
+    },
+    {
+      "id": "B04",
+      "label": "B04",
+      "group": "Lineage B",
+      "count": 3,
+      "profile": [
+        4,
+        6,
+        12,
+        8,
+        11,
+        9,
+        14
+      ]
+    },
+    {
+      "id": "C01",
+      "label": "C01",
+      "group": "Lineage C",
+      "count": 9,
+      "profile": [
+        21,
+        18,
+        3,
+        16,
+        20,
+        7,
+        11
+      ]
+    },
+    {
+      "id": "C02",
+      "label": "C02",
+      "group": "Lineage C",
+      "count": 6,
+      "profile": [
+        21,
+        18,
+        3,
+        16,
+        20,
+        7,
+        19
+      ]
+    },
+    {
+      "id": "C03",
+      "label": "C03",
+      "group": "Lineage C",
+      "count": 4,
+      "profile": [
+        21,
+        18,
+        3,
+        16,
+        20,
+        13,
+        11
+      ]
+    },
+    {
+      "id": "C04",
+      "label": "C04",
+      "group": "Lineage C",
+      "count": 2,
+      "profile": [
+        21,
+        22,
+        3,
+        16,
+        20,
+        13,
+        11
+      ]
+    },
+    {
+      "id": "X01",
+      "label": "X01",
+      "group": "Intermediate",
+      "count": 1,
+      "profile": [
+        10,
+        12,
+        7,
+        16,
+        11,
+        7,
+        11
+      ]
+    },
+    {
+      "id": "X02",
+      "label": "X02",
+      "group": "Intermediate",
+      "count": 2,
+      "profile": [
+        4,
+        12,
+        7,
+        16,
+        11,
+        7,
+        14
+      ]
+    }
+  ]
+}

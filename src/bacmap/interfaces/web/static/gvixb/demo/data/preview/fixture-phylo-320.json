@@ -1,0 +1,2571 @@
+{
+ "schema": "gvixb.phylogeny/v1",
+ "demo": true,
+ "title": "Synthetic phylogeny (320 taxa)",
+ "source": "合成预览数据：随机拓扑与分支长度（模拟 IQ-TREE .treefile）+ 模拟元数据，不构成真实进化结论。",
+ "distanceLabel": "substitutions / site",
+ "n_snp_sites": 4120,
+ "newick": "((((S001:0.004178,(S009:0.001959,S014:0.003121):0.004139):0.002697,(((S031:0.004212,S038:0.004217):0.001633,(S039:0.000907,S048:0.003812):0.003289):0.001344,((S051:0.002657,S055:0.001092):0.003737,((S057:0.002920,((S060:0.001566,(S069:0.002249,S071:0.001307):0.002484):0.001324,S076:0.002841):0.003052):0.003907,S079:0.002432):0.003250):0.001668):0.001808):0.005530,((((((S007:0.003764,(S010:0.002354,S021:0.002735):0.002938):0.001388,S022:0.002084):0.001867,((S024:0.001192,(S025:0.002355,S026:0.001548):0.003088):0.001056,(S029:0.001680,((S030:0.003339,S033:0.000765):0.003525,S034:0.001571):0.001465):0.001005):0.003929):0.004299,((S035:0.003618,S036:0.002570):0.003768,S037:0.001874):0.002675):0.003105,((S041:0.002992,(S042:0.001310,S043:0.004193):0.001628):0.003962,((S053:0.003791,(S056:0.002494,S061:0.001072):0.003044):0.003297,(S063:0.002675,(S064:0.003870,S066:0.002742):0.004092):0.001579):0.002436):0.001800):0.002212,((S068:0.001623,S081:0.000914):0.002456,S082:0.002184):0.003466):0.007984,(((S006:0.001418,((S012:0.002417,S016:0.001443):0.001091,S019:0.001574):0.002614):0.003194,(((S027:0.002505,S032:0.001949):0.003387,S045:0.002250):0.002890,S047:0.001712):0.001850):0.003419,(((S052:0.004090,((S058:0.002483,S059:0.002320):0.001825,(S062:0.003826,S065:0.004028):0.001774):0.000806):0.002683,S073:0.004213):0.002867,(S075:0.001376,S077:0.000796):0.002809):0.001455):0.008681,((((S002:0.001364,S003:0.002483):0.004048,(((S004:0.002775,(S005:0.003318,S008:0.003280):0.003003):0.003200,(S011:0.002802,S013:0.000816):0.001936):0.002423,(S015:0.004070,S017:0.003836):0.001647):0.001259):0.004046,(S018:0.003248,S020:0.002516):0.002749):0.003786,(((((((S023:0.002364,(S028:0.001775,S040:0.002101):0.002849):0.001539,(S044:0.000973,S046:0.003606):0.003670):0.002384,(S049:0.003331,S050:0.002569):0.003419):0.001030,(S054:0.003387,S067:0.002800):0.004080):0.004199,S070:0.002393):0.000975,S072:0.000908):0.002562,((S074:0.004019,S078:0.002024):0.002869,S080:0.001858):0.000810):0.003868):0.008160):0.017998,((((((((S083:0.005741,S086:0.004696):0.002964,(S090:0.002934,S093:0.001950):0.003504):0.003259,((S096:0.002193,S097:0.005711):0.004733,((S102:0.004349,((S110:0.005214,S112:0.005372):0.003782,S119:0.004749):0.001484):0.001108,(S121:0.001209,((S122:0.004050,(S126:0.005074,(S128:0.002630,S130:0.002210):0.004646):0.001158):0.005284,S132:0.002557):0.004660):0.003017):0.005114):0.005378):0.004914,((S135:0.003684,S137:0.001618):0.001855,(S139:0.003758,(S140:0.005366,S142:0.002756):0.001647):0.001562):0.004364):0.006268,((((((S084:0.004407,S087:0.003234):0.003372,(S094:0.001751,S098:0.002271):0.002659):0.004878,(S099:0.005581,S101:0.005346):0.005436):0.003216,S103:0.001565):0.003155,((S105:0.005526,((S106:0.004603,S108:0.004575):0.005038,S109:0.004465):0.004475):0.001621,(S114:0.005373,(((S116:0.004523,S117:0.002147):0.005146,S120:0.003683):0.003613,S123:0.003564):0.005637):0.002631):0.005516):0.002024,((S127:0.003128,S131:0.004552):0.005295,(S136:0.004650,(S143:0.005475,S144:0.001671):0.001225):0.001771):0.005651):0.008777,((((S085:0.001334,S088:0.005391):0.005236,(S089:0.001607,(S091:0.003331,S092:0.003453):0.002142):0.004920):0.001982,(S095:0.001870,(((S100:0.001849,(S104:0.002892,S107:0.004714):0.004099):0.001934,S111:0.002551):0.001086,S113:0.003899):0.002985):0.003529):0.003329,((((S115:0.005019,S118:0.004849):0.005721,S124:0.002930):0.005405,(((S125:0.004369,S129:0.003575):0.001289,S133:0.005609):0.004873,(S134:0.004571,S138:0.005075):0.002067):0.002686):0.003047,S141:0.002085):0.001068):0.004013):0.014811,(((S145:0.001000,S149:0.001910):0.000693,(((S151:0.000509,S155:0.001310):0.002179,(S157:0.001801,(S158:0.001043,S159:0.001187):0.002054):0.000627):0.000752,(((S161:0.000938,(((S165:0.000980,S166:0.002582):0.001330,S168:0.000934):0.000620,((S172:0.001434,(S174:0.001226,S175:0.001751):0.001949):0.002244,S176:0.001729):0.001215):0.002268):0.002444,((S177:0.001435,(S178:0.001970,S180:0.002544):0.002362):0.001594,(S181:0.002082,S182:0.002575):0.001616):0.002506):0.000540,(S185:0.002212,(S189:0.001313,S192:0.001975):0.001705):0.002140):0.001136):0.002395):0.005345,(((((S148:0.002714,S152:0.001824):0.002529,S154:0.002423):0.002362,(S160:0.002127,S163:0.001991):0.001916):0.000856,(((S167:0.002671,S169:0.001688):0.001650,(S184:0.000518,S186:0.001593):0.002726):0.002653,((S187:0.002186,S188:0.001371):0.000591,S193:0.001568):0.002006):0.001291):0.002125,S194:0.001309):0.004594,((((S146:0.000550,S147:0.001077):0.001414,((S150:0.001568,S153:0.001848):0.000797,(S156:0.000532,S162:0.001393):0.000941):0.001991):0.002170,(S164:0.002707,(((S170:0.002710,S171:0.002640):0.001749,S173:0.002358):0.002666,S179:0.001961):0.001289):0.000517):0.001036,(S183:0.002532,(S190:0.001625,S191:0.000684):0.002154):0.001744):0.009905):0.008078):0.006189,((S196:0.002320,(S197:0.002280,(S198:0.003813,((S199:0.002166,S200:0.002200):0.002459,((((S201:0.004863,S203:0.006754):0.006329,(S204:0.003956,((S205:0.006948,S206:0.006334):0.006754,((S207:0.003720,S208:0.001832):0.003108,S209:0.006085):0.006601):0.006374):0.005779):0.003413,(((S210:0.004919,((S211:0.003437,S212:0.004430):0.003028,S213:0.006337):0.006721):0.005959,S216:0.003242):0.002132,(((S217:0.006632,S219:0.004211):0.001369,(S221:0.004199,S222:0.006625):0.004129):0.002652,((S223:0.006645,S226:0.004304):0.001894,S228:0.001597):0.005386):0.005303):0.003503):0.006412,(S230:0.007121,(S231:0.003649,(S232:0.004536,S233:0.004097):0.002783):0.002017):0.004980):0.002641):0.004382):0.005822):0.005817):0.007880,((S195:0.004680,S202:0.006318):0.004576,(((S214:0.002495,S215:0.004249):0.003762,((S218:0.004315,S220:0.001441):0.003169,S224:0.003885):0.004846):0.003577,((S225:0.001646,S227:0.004500):0.003912,S229:0.002066):0.004166):0.002226):0.004906):0.009223):0.004958,((((S234:0.004282,(((S236:0.003279,(S238:0.003239,S239:0.001528):0.003660):0.001247,(((S240:0.001307,(S242:0.001068,S243:0.003357):0.000980):0.002366,(S244:0.001887,((S247:0.003209,S249:0.001912):0.003219,(S251:0.002230,S252:0.002967):0.002558):0.003095):0.003740):0.004272,((S253:0.000882,S256:0.000938):0.003958,S257:0.003744):0.001658):0.003964):0.002014,(((S261:0.003785,S263:0.003915):0.001581,S264:0.001540):0.003530,S265:0.003673):0.001135):0.001319):0.007728,(((S235:0.001050,(S237:0.002380,((S241:0.001441,((S245:0.001612,S246:0.002971):0.003034,S248:0.003438):0.002791):0.003761,((S250:0.003871,S254:0.003098):0.002026,S255:0.001350):0.002625):0.003774):0.000912):0.002975,(S258:0.000785,S259:0.001886):0.003522):0.002779,(S260:0.003125,S262:0.003350):0.000930):0.008635):0.012155,((((S266:0.002322,(S268:0.004115,S270:0.005680):0.001964):0.003946,((((((S271:0.003916,S273:0.005066):0.002977,S274:0.004915):0.002439,S278:0.005166):0.004870,(S279:0.001470,S280:0.001375):0.004071):0.002502,S283:0.001482):0.002450,((S285:0.002436,S288:0.002528):0.002826,S290:0.003806):0.003891):0.004472):0.001899,(S291:0.000990,S292:0.002854):0.002494):0.006146,(((((S267:0.002696,((S269:0.003545,S272:0.005240):0.001069,S275:0.005250):0.003984):0.002214,((S276:0.004302,S277:0.002189):0.005628,S281:0.004467):0.002303):0.001874,S282:0.001396):0.004960,S284:0.002978):0.003400,((S286:0.002550,S287:0.001260):0.002680,S289:0.004363):0.002860):0.005556):0.015029):0.004047,((((S293:0.007956,(S294:0.023773,(((S295:0.006394,S296:0.013119):0.021966,S297:0.015559):0.022268,S298:0.018614):0.009527):0.021301):0.010628,(S299:0.008455,((S300:0.008937,S301:0.023059):0.022706,(((S302:0.006394,S303:0.010808):0.012249,S304:0.022391):0.012145,(S305:0.004696,(S306:0.016704,(S307:0.023593,S308:0.012659):0.014380):0.012314):0.023111):0.010682):0.012249):0.004226):0.012155,(((S309:0.017623,(S310:0.018946,(S311:0.010650,S312:0.015113):0.015081):0.013603):0.023154,(S313:0.020094,S314:0.007974):0.017514):0.017731,(((S315:0.022458,S316:0.023436):0.011501,S317:0.005411):0.015657,(S318:0.019184,(S319:0.014465,S320:0.020961):0.015246):0.019236):0.006238):0.020202):0.008162):0.003502):0.015382):0.005906);",
+ "metadata": {
+  "S001": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2021,
+   "amr": 0
+  },
+  "S002": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "JS",
+   "year": 2023,
+   "amr": 1
+  },
+  "S003": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "HB",
+   "year": 2019,
+   "amr": 8
+  },
+  "S004": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "JS",
+   "year": 2019,
+   "amr": 8
+  },
+  "S005": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2024,
+   "amr": 4
+  },
+  "S006": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2014,
+   "amr": 0
+  },
+  "S007": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "GD",
+   "year": 2024,
+   "amr": 5
+  },
+  "S008": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "JS",
+   "year": 2014,
+   "amr": 3
+  },
+  "S009": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2022,
+   "amr": 2
+  },
+  "S010": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "SC",
+   "year": 2014,
+   "amr": 0
+  },
+  "S011": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "JS",
+   "year": 2024,
+   "amr": 5
+  },
+  "S012": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2022,
+   "amr": 1
+  },
+  "S013": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2018,
+   "amr": 1
+  },
+  "S014": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "SD",
+   "year": 2016,
+   "amr": 8
+  },
+  "S015": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "GD",
+   "year": 2017,
+   "amr": 7
+  },
+  "S016": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "HB",
+   "year": 2020,
+   "amr": 7
+  },
+  "S017": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "SD",
+   "year": 2023,
+   "amr": 7
+  },
+  "S018": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2018,
+   "amr": 2
+  },
+  "S019": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2021,
+   "amr": 4
+  },
+  "S020": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2020,
+   "amr": 0
+  },
+  "S021": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "SC",
+   "year": 2014,
+   "amr": 6
+  },
+  "S022": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "SD",
+   "year": 2019,
+   "amr": 0
+  },
+  "S023": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "HB",
+   "year": 2024,
+   "amr": 5
+  },
+  "S024": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2022,
+   "amr": 7
+  },
+  "S025": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2024,
+   "amr": 3
+  },
+  "S026": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2016,
+   "amr": 6
+  },
+  "S027": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2023,
+   "amr": 5
+  },
+  "S028": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2020,
+   "amr": 2
+  },
+  "S029": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "GD",
+   "year": 2023,
+   "amr": 1
+  },
+  "S030": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2024,
+   "amr": 6
+  },
+  "S031": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "SC",
+   "year": 2014,
+   "amr": 0
+  },
+  "S032": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2021,
+   "amr": 2
+  },
+  "S033": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "GD",
+   "year": 2020,
+   "amr": 7
+  },
+  "S034": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2014,
+   "amr": 1
+  },
+  "S035": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "SC",
+   "year": 2023,
+   "amr": 1
+  },
+  "S036": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2018,
+   "amr": 7
+  },
+  "S037": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2018,
+   "amr": 3
+  },
+  "S038": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "GD",
+   "year": 2017,
+   "amr": 1
+  },
+  "S039": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "GD",
+   "year": 2018,
+   "amr": 8
+  },
+  "S040": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2016,
+   "amr": 2
+  },
+  "S041": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "SD",
+   "year": 2015,
+   "amr": 6
+  },
+  "S042": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "SD",
+   "year": 2020,
+   "amr": 9
+  },
+  "S043": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "SC",
+   "year": 2017,
+   "amr": 6
+  },
+  "S044": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "GD",
+   "year": 2023,
+   "amr": 1
+  },
+  "S045": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "JS",
+   "year": 2015,
+   "amr": 0
+  },
+  "S046": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2014,
+   "amr": 5
+  },
+  "S047": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2015,
+   "amr": 0
+  },
+  "S048": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "SD",
+   "year": 2021,
+   "amr": 6
+  },
+  "S049": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "SD",
+   "year": 2017,
+   "amr": 2
+  },
+  "S050": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2023,
+   "amr": 4
+  },
+  "S051": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "SD",
+   "year": 2015,
+   "amr": 8
+  },
+  "S052": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "SD",
+   "year": 2024,
+   "amr": 0
+  },
+  "S053": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2021,
+   "amr": 5
+  },
+  "S054": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "ZJ",
+   "year": 2019,
+   "amr": 2
+  },
+  "S055": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "HB",
+   "year": 2015,
+   "amr": 1
+  },
+  "S056": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2019,
+   "amr": 5
+  },
+  "S057": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "GD",
+   "year": 2014,
+   "amr": 2
+  },
+  "S058": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "JS",
+   "year": 2024,
+   "amr": 7
+  },
+  "S059": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "GD",
+   "year": 2022,
+   "amr": 0
+  },
+  "S060": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "JS",
+   "year": 2018,
+   "amr": 1
+  },
+  "S061": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2016,
+   "amr": 2
+  },
+  "S062": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2015,
+   "amr": 5
+  },
+  "S063": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2024,
+   "amr": 2
+  },
+  "S064": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "JS",
+   "year": 2019,
+   "amr": 4
+  },
+  "S065": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "SD",
+   "year": 2019,
+   "amr": 6
+  },
+  "S066": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "HB",
+   "year": 2019,
+   "amr": 9
+  },
+  "S067": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "ZJ",
+   "year": 2016,
+   "amr": 7
+  },
+  "S068": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "GD",
+   "year": 2021,
+   "amr": 4
+  },
+  "S069": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "JS",
+   "year": 2022,
+   "amr": 1
+  },
+  "S070": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "ZJ",
+   "year": 2015,
+   "amr": 2
+  },
+  "S071": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2019,
+   "amr": 3
+  },
+  "S072": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "SC",
+   "year": 2018,
+   "amr": 0
+  },
+  "S073": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "JS",
+   "year": 2023,
+   "amr": 2
+  },
+  "S074": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "GD",
+   "year": 2016,
+   "amr": 6
+  },
+  "S075": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2021,
+   "amr": 6
+  },
+  "S076": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2022,
+   "amr": 2
+  },
+  "S077": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "human",
+   "region": "JS",
+   "year": 2019,
+   "amr": 8
+  },
+  "S078": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "JS",
+   "year": 2014,
+   "amr": 0
+  },
+  "S079": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2021,
+   "amr": 4
+  },
+  "S080": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "JS",
+   "year": 2020,
+   "amr": 1
+  },
+  "S081": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "swine",
+   "region": "SD",
+   "year": 2014,
+   "amr": 1
+  },
+  "S082": {
+   "group": "Lineage A",
+   "st": "ST19",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2018,
+   "amr": 7
+  },
+  "S083": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "SC",
+   "year": 2015,
+   "amr": 9
+  },
+  "S084": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "ZJ",
+   "year": 2020,
+   "amr": 8
+  },
+  "S085": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "JS",
+   "year": 2014,
+   "amr": 0
+  },
+  "S086": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2017,
+   "amr": 10
+  },
+  "S087": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "HB",
+   "year": 2018,
+   "amr": 1
+  },
+  "S088": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2016,
+   "amr": 4
+  },
+  "S089": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "GD",
+   "year": 2014,
+   "amr": 7
+  },
+  "S090": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2021,
+   "amr": 10
+  },
+  "S091": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "SC",
+   "year": 2015,
+   "amr": 3
+  },
+  "S092": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2019,
+   "amr": 6
+  },
+  "S093": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2014,
+   "amr": 4
+  },
+  "S094": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "HB",
+   "year": 2018,
+   "amr": 1
+  },
+  "S095": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "JS",
+   "year": 2017,
+   "amr": 10
+  },
+  "S096": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "HB",
+   "year": 2015,
+   "amr": 1
+  },
+  "S097": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "HB",
+   "year": 2015,
+   "amr": 10
+  },
+  "S098": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "JS",
+   "year": 2024,
+   "amr": 5
+  },
+  "S099": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2016,
+   "amr": 7
+  },
+  "S100": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "ZJ",
+   "year": 2016,
+   "amr": 0
+  },
+  "S101": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "SC",
+   "year": 2022,
+   "amr": 1
+  },
+  "S102": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2021,
+   "amr": 4
+  },
+  "S103": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2015,
+   "amr": 6
+  },
+  "S104": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "HB",
+   "year": 2019,
+   "amr": 6
+  },
+  "S105": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2014,
+   "amr": 8
+  },
+  "S106": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "GD",
+   "year": 2023,
+   "amr": 7
+  },
+  "S107": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2021,
+   "amr": 9
+  },
+  "S108": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "SC",
+   "year": 2018,
+   "amr": 6
+  },
+  "S109": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "HB",
+   "year": 2019,
+   "amr": 2
+  },
+  "S110": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "HB",
+   "year": 2018,
+   "amr": 6
+  },
+  "S111": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "JS",
+   "year": 2015,
+   "amr": 7
+  },
+  "S112": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "JS",
+   "year": 2017,
+   "amr": 7
+  },
+  "S113": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2023,
+   "amr": 11
+  },
+  "S114": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2019,
+   "amr": 9
+  },
+  "S115": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2015,
+   "amr": 7
+  },
+  "S116": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "HB",
+   "year": 2018,
+   "amr": 5
+  },
+  "S117": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2017,
+   "amr": 1
+  },
+  "S118": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "SD",
+   "year": 2024,
+   "amr": 3
+  },
+  "S119": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "SC",
+   "year": 2019,
+   "amr": 2
+  },
+  "S120": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2021,
+   "amr": 11
+  },
+  "S121": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "SC",
+   "year": 2024,
+   "amr": 8
+  },
+  "S122": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2021,
+   "amr": 4
+  },
+  "S123": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "GD",
+   "year": 2014,
+   "amr": 10
+  },
+  "S124": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "GD",
+   "year": 2017,
+   "amr": 9
+  },
+  "S125": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "HB",
+   "year": 2020,
+   "amr": 1
+  },
+  "S126": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2018,
+   "amr": 5
+  },
+  "S127": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "HB",
+   "year": 2019,
+   "amr": 4
+  },
+  "S128": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "SC",
+   "year": 2021,
+   "amr": 8
+  },
+  "S129": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "HB",
+   "year": 2017,
+   "amr": 9
+  },
+  "S130": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2016,
+   "amr": 2
+  },
+  "S131": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "SC",
+   "year": 2019,
+   "amr": 1
+  },
+  "S132": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "GD",
+   "year": 2017,
+   "amr": 8
+  },
+  "S133": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2022,
+   "amr": 1
+  },
+  "S134": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "GD",
+   "year": 2021,
+   "amr": 0
+  },
+  "S135": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2023,
+   "amr": 1
+  },
+  "S136": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2016,
+   "amr": 9
+  },
+  "S137": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "JS",
+   "year": 2017,
+   "amr": 0
+  },
+  "S138": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "SD",
+   "year": 2015,
+   "amr": 4
+  },
+  "S139": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2023,
+   "amr": 0
+  },
+  "S140": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "GD",
+   "year": 2014,
+   "amr": 6
+  },
+  "S141": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "SD",
+   "year": 2016,
+   "amr": 2
+  },
+  "S142": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2019,
+   "amr": 9
+  },
+  "S143": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "swine",
+   "region": "SC",
+   "year": 2020,
+   "amr": 5
+  },
+  "S144": {
+   "group": "Lineage B",
+   "st": "ST34",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2022,
+   "amr": 7
+  },
+  "S145": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "SC",
+   "year": 2019,
+   "amr": 1
+  },
+  "S146": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2017,
+   "amr": 2
+  },
+  "S147": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "human",
+   "region": "SC",
+   "year": 2024,
+   "amr": 0
+  },
+  "S148": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "GD",
+   "year": 2022,
+   "amr": 6
+  },
+  "S149": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2019,
+   "amr": 4
+  },
+  "S150": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "human",
+   "region": "HB",
+   "year": 2014,
+   "amr": 1
+  },
+  "S151": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "human",
+   "region": "JS",
+   "year": 2015,
+   "amr": 1
+  },
+  "S152": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2020,
+   "amr": 7
+  },
+  "S153": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2017,
+   "amr": 4
+  },
+  "S154": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "JS",
+   "year": 2014,
+   "amr": 4
+  },
+  "S155": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2016,
+   "amr": 3
+  },
+  "S156": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2017,
+   "amr": 4
+  },
+  "S157": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "HB",
+   "year": 2019,
+   "amr": 7
+  },
+  "S158": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2015,
+   "amr": 2
+  },
+  "S159": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "human",
+   "region": "SC",
+   "year": 2016,
+   "amr": 2
+  },
+  "S160": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "ZJ",
+   "year": 2021,
+   "amr": 1
+  },
+  "S161": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "HB",
+   "year": 2021,
+   "amr": 5
+  },
+  "S162": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2024,
+   "amr": 0
+  },
+  "S163": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2022,
+   "amr": 6
+  },
+  "S164": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2016,
+   "amr": 0
+  },
+  "S165": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "human",
+   "region": "SC",
+   "year": 2017,
+   "amr": 5
+  },
+  "S166": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2020,
+   "amr": 0
+  },
+  "S167": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2022,
+   "amr": 3
+  },
+  "S168": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2014,
+   "amr": 2
+  },
+  "S169": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2018,
+   "amr": 6
+  },
+  "S170": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "JS",
+   "year": 2017,
+   "amr": 2
+  },
+  "S171": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2014,
+   "amr": 2
+  },
+  "S172": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "SD",
+   "year": 2023,
+   "amr": 4
+  },
+  "S173": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2016,
+   "amr": 4
+  },
+  "S174": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2023,
+   "amr": 0
+  },
+  "S175": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "GD",
+   "year": 2019,
+   "amr": 4
+  },
+  "S176": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2020,
+   "amr": 4
+  },
+  "S177": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2018,
+   "amr": 5
+  },
+  "S178": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "SD",
+   "year": 2020,
+   "amr": 4
+  },
+  "S179": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2020,
+   "amr": 1
+  },
+  "S180": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "ZJ",
+   "year": 2022,
+   "amr": 5
+  },
+  "S181": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "GD",
+   "year": 2022,
+   "amr": 4
+  },
+  "S182": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "GD",
+   "year": 2017,
+   "amr": 3
+  },
+  "S183": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "human",
+   "region": "GD",
+   "year": 2018,
+   "amr": 4
+  },
+  "S184": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "GD",
+   "year": 2019,
+   "amr": 6
+  },
+  "S185": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "human",
+   "region": "JS",
+   "year": 2014,
+   "amr": 1
+  },
+  "S186": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "HB",
+   "year": 2016,
+   "amr": 0
+  },
+  "S187": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2014,
+   "amr": 6
+  },
+  "S188": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2024,
+   "amr": 2
+  },
+  "S189": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2022,
+   "amr": 2
+  },
+  "S190": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "SD",
+   "year": 2024,
+   "amr": 3
+  },
+  "S191": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2014,
+   "amr": 3
+  },
+  "S192": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2023,
+   "amr": 0
+  },
+  "S193": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "ZJ",
+   "year": 2017,
+   "amr": 0
+  },
+  "S194": {
+   "group": "Lineage C",
+   "st": "ST313",
+   "host": "swine",
+   "region": "JS",
+   "year": 2023,
+   "amr": 2
+  },
+  "S195": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "human",
+   "region": "SC",
+   "year": 2019,
+   "amr": 5
+  },
+  "S196": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "human",
+   "region": "HB",
+   "year": 2018,
+   "amr": 1
+  },
+  "S197": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2018,
+   "amr": 0
+  },
+  "S198": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "swine",
+   "region": "GD",
+   "year": 2014,
+   "amr": 2
+  },
+  "S199": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2024,
+   "amr": 6
+  },
+  "S200": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "human",
+   "region": "GD",
+   "year": 2023,
+   "amr": 6
+  },
+  "S201": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2015,
+   "amr": 7
+  },
+  "S202": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "swine",
+   "region": "SC",
+   "year": 2022,
+   "amr": 5
+  },
+  "S203": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2016,
+   "amr": 0
+  },
+  "S204": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "human",
+   "region": "HB",
+   "year": 2019,
+   "amr": 5
+  },
+  "S205": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2021,
+   "amr": 7
+  },
+  "S206": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2016,
+   "amr": 7
+  },
+  "S207": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "human",
+   "region": "JS",
+   "year": 2018,
+   "amr": 6
+  },
+  "S208": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2022,
+   "amr": 1
+  },
+  "S209": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2019,
+   "amr": 3
+  },
+  "S210": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "swine",
+   "region": "HB",
+   "year": 2016,
+   "amr": 1
+  },
+  "S211": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "swine",
+   "region": "SC",
+   "year": 2018,
+   "amr": 5
+  },
+  "S212": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "swine",
+   "region": "SC",
+   "year": 2019,
+   "amr": 6
+  },
+  "S213": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "human",
+   "region": "SC",
+   "year": 2016,
+   "amr": 6
+  },
+  "S214": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2018,
+   "amr": 3
+  },
+  "S215": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2015,
+   "amr": 2
+  },
+  "S216": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2021,
+   "amr": 2
+  },
+  "S217": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2015,
+   "amr": 2
+  },
+  "S218": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2016,
+   "amr": 2
+  },
+  "S219": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "swine",
+   "region": "ZJ",
+   "year": 2017,
+   "amr": 3
+  },
+  "S220": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "swine",
+   "region": "ZJ",
+   "year": 2019,
+   "amr": 5
+  },
+  "S221": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "swine",
+   "region": "SC",
+   "year": 2020,
+   "amr": 7
+  },
+  "S222": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2022,
+   "amr": 3
+  },
+  "S223": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "swine",
+   "region": "SC",
+   "year": 2019,
+   "amr": 6
+  },
+  "S224": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "swine",
+   "region": "SD",
+   "year": 2017,
+   "amr": 5
+  },
+  "S225": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "human",
+   "region": "JS",
+   "year": 2015,
+   "amr": 3
+  },
+  "S226": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "swine",
+   "region": "SC",
+   "year": 2020,
+   "amr": 1
+  },
+  "S227": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2023,
+   "amr": 1
+  },
+  "S228": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "swine",
+   "region": "JS",
+   "year": 2023,
+   "amr": 7
+  },
+  "S229": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "swine",
+   "region": "GD",
+   "year": 2014,
+   "amr": 3
+  },
+  "S230": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2016,
+   "amr": 6
+  },
+  "S231": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "human",
+   "region": "SD",
+   "year": 2019,
+   "amr": 0
+  },
+  "S232": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2019,
+   "amr": 3
+  },
+  "S233": {
+   "group": "Lineage D",
+   "st": "ST11",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2020,
+   "amr": 3
+  },
+  "S234": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "swine",
+   "region": "SC",
+   "year": 2024,
+   "amr": 7
+  },
+  "S235": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2023,
+   "amr": 4
+  },
+  "S236": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2015,
+   "amr": 0
+  },
+  "S237": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "human",
+   "region": "SC",
+   "year": 2021,
+   "amr": 6
+  },
+  "S238": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2019,
+   "amr": 3
+  },
+  "S239": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "human",
+   "region": "SD",
+   "year": 2019,
+   "amr": 3
+  },
+  "S240": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "swine",
+   "region": "SD",
+   "year": 2016,
+   "amr": 3
+  },
+  "S241": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "swine",
+   "region": "HB",
+   "year": 2019,
+   "amr": 5
+  },
+  "S242": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "human",
+   "region": "GD",
+   "year": 2020,
+   "amr": 3
+  },
+  "S243": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2016,
+   "amr": 3
+  },
+  "S244": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2018,
+   "amr": 3
+  },
+  "S245": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "human",
+   "region": "JS",
+   "year": 2015,
+   "amr": 6
+  },
+  "S246": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2020,
+   "amr": 1
+  },
+  "S247": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2020,
+   "amr": 5
+  },
+  "S248": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2019,
+   "amr": 6
+  },
+  "S249": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "human",
+   "region": "SC",
+   "year": 2021,
+   "amr": 0
+  },
+  "S250": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "human",
+   "region": "JS",
+   "year": 2019,
+   "amr": 0
+  },
+  "S251": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2024,
+   "amr": 3
+  },
+  "S252": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "human",
+   "region": "SD",
+   "year": 2019,
+   "amr": 5
+  },
+  "S253": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2020,
+   "amr": 7
+  },
+  "S254": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2021,
+   "amr": 5
+  },
+  "S255": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2024,
+   "amr": 2
+  },
+  "S256": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "human",
+   "region": "SD",
+   "year": 2022,
+   "amr": 3
+  },
+  "S257": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "swine",
+   "region": "SD",
+   "year": 2018,
+   "amr": 6
+  },
+  "S258": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "human",
+   "region": "SC",
+   "year": 2017,
+   "amr": 4
+  },
+  "S259": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "swine",
+   "region": "HB",
+   "year": 2021,
+   "amr": 3
+  },
+  "S260": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "human",
+   "region": "GD",
+   "year": 2024,
+   "amr": 4
+  },
+  "S261": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2021,
+   "amr": 1
+  },
+  "S262": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "swine",
+   "region": "SD",
+   "year": 2020,
+   "amr": 3
+  },
+  "S263": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2021,
+   "amr": 0
+  },
+  "S264": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "human",
+   "region": "SC",
+   "year": 2021,
+   "amr": 0
+  },
+  "S265": {
+   "group": "Lineage E",
+   "st": "ST36",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2022,
+   "amr": 7
+  },
+  "S266": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "swine",
+   "region": "GD",
+   "year": 2023,
+   "amr": 5
+  },
+  "S267": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "swine",
+   "region": "SC",
+   "year": 2022,
+   "amr": 1
+  },
+  "S268": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "human",
+   "region": "JS",
+   "year": 2023,
+   "amr": 3
+  },
+  "S269": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2021,
+   "amr": 4
+  },
+  "S270": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "swine",
+   "region": "JS",
+   "year": 2020,
+   "amr": 1
+  },
+  "S271": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "human",
+   "region": "SC",
+   "year": 2016,
+   "amr": 4
+  },
+  "S272": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "human",
+   "region": "GD",
+   "year": 2014,
+   "amr": 6
+  },
+  "S273": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "swine",
+   "region": "GD",
+   "year": 2015,
+   "amr": 1
+  },
+  "S274": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "swine",
+   "region": "GD",
+   "year": 2017,
+   "amr": 0
+  },
+  "S275": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "swine",
+   "region": "GD",
+   "year": 2014,
+   "amr": 4
+  },
+  "S276": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "swine",
+   "region": "ZJ",
+   "year": 2020,
+   "amr": 1
+  },
+  "S277": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "human",
+   "region": "SC",
+   "year": 2017,
+   "amr": 4
+  },
+  "S278": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2022,
+   "amr": 3
+  },
+  "S279": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "poultry",
+   "region": "SC",
+   "year": 2020,
+   "amr": 4
+  },
+  "S280": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2023,
+   "amr": 1
+  },
+  "S281": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "human",
+   "region": "SD",
+   "year": 2024,
+   "amr": 1
+  },
+  "S282": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "human",
+   "region": "SD",
+   "year": 2017,
+   "amr": 0
+  },
+  "S283": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "swine",
+   "region": "JS",
+   "year": 2018,
+   "amr": 6
+  },
+  "S284": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2019,
+   "amr": 2
+  },
+  "S285": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "poultry",
+   "region": "SD",
+   "year": 2023,
+   "amr": 6
+  },
+  "S286": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "swine",
+   "region": "JS",
+   "year": 2018,
+   "amr": 2
+  },
+  "S287": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "swine",
+   "region": "SD",
+   "year": 2020,
+   "amr": 0
+  },
+  "S288": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2017,
+   "amr": 6
+  },
+  "S289": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "human",
+   "region": "JS",
+   "year": 2014,
+   "amr": 4
+  },
+  "S290": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "poultry",
+   "region": "HB",
+   "year": 2020,
+   "amr": 2
+  },
+  "S291": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "human",
+   "region": "HB",
+   "year": 2015,
+   "amr": 0
+  },
+  "S292": {
+   "group": "Lineage F",
+   "st": "ST26",
+   "host": "human",
+   "region": "GD",
+   "year": 2021,
+   "amr": 0
+  },
+  "S293": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "swine",
+   "region": "ZJ",
+   "year": 2022,
+   "amr": 2
+  },
+  "S294": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "swine",
+   "region": "SD",
+   "year": 2021,
+   "amr": 3
+  },
+  "S295": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "human",
+   "region": "HB",
+   "year": 2020,
+   "amr": 6
+  },
+  "S296": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "swine",
+   "region": "JS",
+   "year": 2019,
+   "amr": 3
+  },
+  "S297": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "human",
+   "region": "GD",
+   "year": 2018,
+   "amr": 1
+  },
+  "S298": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "swine",
+   "region": "HB",
+   "year": 2015,
+   "amr": 2
+  },
+  "S299": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "environment",
+   "region": "ZJ",
+   "year": 2024,
+   "amr": 0
+  },
+  "S300": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "swine",
+   "region": "SD",
+   "year": 2018,
+   "amr": 2
+  },
+  "S301": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "human",
+   "region": "ZJ",
+   "year": 2014,
+   "amr": 5
+  },
+  "S302": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "poultry",
+   "region": "GD",
+   "year": 2020,
+   "amr": 6
+  },
+  "S303": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "environment",
+   "region": "SC",
+   "year": 2021,
+   "amr": 2
+  },
+  "S304": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "human",
+   "region": "HB",
+   "year": 2014,
+   "amr": 2
+  },
+  "S305": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "environment",
+   "region": "SC",
+   "year": 2021,
+   "amr": 4
+  },
+  "S306": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "human",
+   "region": "HB",
+   "year": 2014,
+   "amr": 3
+  },
+  "S307": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "swine",
+   "region": "SD",
+   "year": 2018,
+   "amr": 7
+  },
+  "S308": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "environment",
+   "region": "GD",
+   "year": 2014,
+   "amr": 6
+  },
+  "S309": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "human",
+   "region": "SD",
+   "year": 2024,
+   "amr": 4
+  },
+  "S310": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "environment",
+   "region": "ZJ",
+   "year": 2021,
+   "amr": 3
+  },
+  "S311": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "swine",
+   "region": "GD",
+   "year": 2015,
+   "amr": 5
+  },
+  "S312": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "swine",
+   "region": "HB",
+   "year": 2023,
+   "amr": 7
+  },
+  "S313": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "swine",
+   "region": "HB",
+   "year": 2024,
+   "amr": 5
+  },
+  "S314": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "swine",
+   "region": "SD",
+   "year": 2019,
+   "amr": 0
+  },
+  "S315": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "human",
+   "region": "SC",
+   "year": 2023,
+   "amr": 1
+  },
+  "S316": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "environment",
+   "region": "ZJ",
+   "year": 2018,
+   "amr": 6
+  },
+  "S317": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "poultry",
+   "region": "JS",
+   "year": 2020,
+   "amr": 5
+  },
+  "S318": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "bovine",
+   "region": "ZJ",
+   "year": 2015,
+   "amr": 2
+  },
+  "S319": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "bovine",
+   "region": "SC",
+   "year": 2020,
+   "amr": 0
+  },
+  "S320": {
+   "group": "Sporadic",
+   "st": "ST-",
+   "host": "poultry",
+   "region": "ZJ",
+   "year": 2021,
+   "amr": 3
+  }
+ }
+}
