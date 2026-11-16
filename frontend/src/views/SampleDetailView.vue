@@ -5,6 +5,7 @@ import Icon from '../components/Icon.vue'
 import AssemblyQcPanel from '../components/AssemblyQcPanel.vue'
 import CopyButton from '../components/CopyButton.vue'
 import { api } from '../api'
+import { useTheme } from '../composables/useTheme'
 import type { AssemblyContigStats, GvixbLink, RunRow, SampleDetail } from '../types'
 import { appUrl, fmtTime, jsonText, shortId } from '../lib/format'
 
@@ -19,9 +20,13 @@ const loading = ref(true)
 const error = ref('')
 const expandedGeneGroups = ref<Record<string, boolean>>({})
 
+const { resolved: resolvedTheme } = useTheme()
+const activeTab = ref<'summary' | 'report'>('summary')
 const reportUrl = computed(
-  () => appUrl(`/samples/${encodeURIComponent(id)}/report`),
+  () =>
+    appUrl(`/samples/${encodeURIComponent(id)}/report?theme=${resolvedTheme.value}`),
 )
+const embeddedReportUrl = computed(() => `${reportUrl.value}&embed=1`)
 const reportDownload = computed(
   () => appUrl(`/samples/${encodeURIComponent(id)}/report?download=1`),
 )
@@ -145,8 +150,8 @@ async function load() {
     latestRun.value = runs.find((run) => runStrainIds(run).includes(id)) ?? null
     runsLoaded.value = true
     if (route.query.tab === 'report' && hasAnyReport.value) {
-      // 旧深链（?tab=report）→ 独立报告页，不再用 iframe 预览。
-      window.location.assign(reportUrl.value)
+      // 旧深链（?tab=report）继续可用：直接切到内嵌报告页签。
+      activeTab.value = 'report'
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载样本详情失败'
@@ -157,8 +162,7 @@ async function load() {
 
 function openReport() {
   if (!hasAnyReport.value) return
-  // 完整报告自带目录与返回链接，作为独立页面打开（不再 iframe 嵌入）。
-  window.open(reportUrl.value, '_blank', 'noopener')
+  activeTab.value = 'report'
 }
 
 onMounted(() => void load())
@@ -200,7 +204,51 @@ onMounted(() => void load())
     <div v-if="loading" class="card card--pad"><div class="skeleton" style="height: 220px" /></div>
 
     <template v-else-if="digest">
-      <div class="stack">
+      <div class="viewtabs" role="tablist" aria-label="样本视图">
+        <button
+          type="button"
+          class="viewtabs__tab"
+          role="tab"
+          :aria-selected="activeTab === 'summary'"
+          :class="{ 'is-active': activeTab === 'summary' }"
+          @click="activeTab = 'summary'"
+        >
+          结果详情
+        </button>
+        <button
+          type="button"
+          class="viewtabs__tab"
+          role="tab"
+          :aria-selected="activeTab === 'report'"
+          :class="{ 'is-active': activeTab === 'report' }"
+          :disabled="!hasAnyReport"
+          @click="activeTab = 'report'"
+        >
+          完整报告
+        </button>
+        <span class="filter-spacer" />
+        <template v-if="activeTab === 'report'">
+          <a class="btn btn--ghost btn--sm" :href="reportUrl" target="_blank" rel="noopener">
+            <Icon name="arrow-right" />
+            新标签打开
+          </a>
+          <a v-if="digest?.has_report" class="btn btn--ghost btn--sm" :href="reportDownload">
+            下载 HTML
+          </a>
+        </template>
+      </div>
+
+      <section v-if="activeTab === 'report'" class="card report-embed">
+        <iframe
+          :src="embeddedReportUrl"
+          class="report-embed__frame"
+          title="分析报告"
+          referrerpolicy="no-referrer"
+          loading="eager"
+        />
+      </section>
+
+      <div v-show="activeTab === 'summary'" class="stack">
         <div class="stack">
           <section class="card card--pad">
             <h2 class="card__title" style="margin-bottom: 14px">结果概要</h2>
@@ -322,9 +370,8 @@ onMounted(() => void load())
         <div class="stack">
           <AssemblyQcPanel :stats="contigStats" :quast-text="quast" />
         </div>
-      </div>
 
-      <details class="card dev-details">
+        <details class="card dev-details">
         <summary class="dev-details__summary">
           <span class="dev-details__label">
             <Icon name="chevron-right" class="dev-details__chevron" :size="14" />
@@ -335,12 +382,62 @@ onMounted(() => void load())
         <div class="card__body">
           <pre class="code-block">{{ jsonText(data?.summary) }}</pre>
         </div>
-      </details>
+        </details>
+      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
+.viewtabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.viewtabs__tab {
+  padding: 9px 4px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.viewtabs__tab:hover:not(:disabled),
+.viewtabs__tab.is-active {
+  color: var(--text-1);
+}
+
+.viewtabs__tab.is-active {
+  border-bottom-color: var(--accent);
+}
+
+.viewtabs__tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.report-embed {
+  padding: 0;
+  overflow: hidden;
+}
+
+.report-embed__frame {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 220px);
+  min-height: 640px;
+  border: 0;
+  background: transparent;
+}
+
 .summary-list :deep(.statuslist__row) {
   grid-template-columns: 148px minmax(0, 1fr);
 }

@@ -13,7 +13,7 @@
 控制台提供 **INK / PAPER / CONCRETE 三套主题**：右上角主题菜单即时切换，选择写入
 `localStorage`（`bacmap-theme`），刷新后保持。INK 为暗色仪器台，PAPER 为 TailAdmin
 风格浅色文档，CONCRETE 为 Swiss/brutalist 灰色模板（网格纸、硬边框、Helvetica 大标题、
-等宽数据与分屏海报式首页）。图表与样本 HTML 报告同步主题（`?theme=light|gray`）。
+等宽数据与分屏海报式首页）。图表与样本 HTML 报告同步主题：控制台链接带 `?theme=light|gray`，直接打开报告 URL 时回退到控制台写入的 `bacmap-theme` cookie。
 
 **控制台登录**（单部署令牌，无账号体系）：把 `BACMAP_WEB_TOKEN` 与
 `BACMAP_WEB_AUTH=cookie` 写入 `$BACMAP_HOME/web.env`（0600），`bacmap restart` 会自动加载；未登录的浏览器导航会跳转到 `/console/login`（Vue 登录页）；
@@ -40,7 +40,7 @@ pixi run -e web web-build
 | `/console/plans`、`/console/plans/{id}` | 智能体提出的计划、完整参数、确认/拒绝 |
 | `/console/specimens`, `/console/specimens/{id}` | 样本、其菌株与测序数据；页面内可直接把未关联菌株/测序数据关联到样本；详情页可删除样本（默认仅空样本，或先解除菌株关联再删——菌株/数据保留） |
 | `/console/isolates`, `/console/isolates/{id}` | 菌株实体、所属样本与测序数据 |
-| `/console/samples`、`/console/samples/{id}` | 测序数据（library）：列表展示物种、基因组大小、contigs 数量与 GC 含量；任意表头都可在浏览器内即时排序（全量行只加载一次，排序/筛选/翻页不再发请求）；详情页另有单库结果/注释、可视化组装质控（QUAST 指标、contig 长度/GC 分布、Nx 曲线）；完整报告独立成页 |
+| `/console/samples`、`/console/samples/{id}` | 测序数据（library）：列表展示物种、基因组大小、contigs 数量与 GC 含量；任意表头都可在浏览器内即时排序（全量行只加载一次，排序/筛选/翻页不再发请求）；详情页另有单库结果/注释、可视化组装质控（QUAST 指标、contig 长度/GC 分布、Nx 曲线）与内嵌完整报告的页签（可新标签打开/下载） |
 | `/console/runs`、`/console/runs/{id}` | 不可变运行记录与来源比较；列表/详情可清理物理产物（保留记录与 GOM；运行中或最新 run 拒绝） |
 | `/console/records` | 元数据、化验结果、知识导入/审核表单 |
 | `/console/gom`、`/console/gom/{id}` | GOM 对象、不可变版本与载荷 |
@@ -50,12 +50,13 @@ pixi run -e web web-build
 | `/console/overview` | 系统概览（版本、路径、数据策略、沙箱） |
 | `/console/search` | 统一检索：样本（背景信息）、菌株（湿实验元数据）与测序数据（分析结果） |
 | `/research` | 高级研究工具（系统发育、logistic、对象写操作；Jinja） |
-| `/samples/{id}/report` | 独立报告页：自带固定目录导航与“返回控制台”；`?download=1` 改为附件，`?theme=light|gray` 浅色/灰色渲染（`?embed=1` 仅为旧内嵌兼容保留） |
+| `/samples/{id}/report` | 独立报告页：自带固定目录导航与“返回控制台”；`?download=1` 改为附件，`?theme=light|gray` 浅色/灰色渲染，缺省时跟随控制台主题 cookie（`?embed=1` 隐藏独立页的返回链接，供控制台页签内嵌） |
 | `/api/v1/*` | JSON API（见 [HTTP API 参考](../reference/api.zh.md)） |
 
-样本详情页通过“查看报告”在新标签页打开**独立报告页**，不再用 iframe 嵌入。报告自带
-固定目录导航（窄屏为可折叠目录）、锚点书签与“返回控制台”入口。旧模板生成的报告（无
-`bacmap-report` 版本标记）会在首次访问时自动重渲染。
+样本详情页有两个页签：**结果详情** 与 **完整报告**。报告页签用同源 iframe 内嵌同一份
+独立 HTML，并保留“新标签打开”“下载 HTML”入口。单独打开报告页时自带固定目录导航
+（窄屏为可折叠目录）、锚点书签与“返回控制台”入口；内嵌模式下这些返回链接会隐藏。
+旧模板生成的报告（无 `bacmap-report` 版本标记）会在首次访问时自动重渲染。
 
 报告内容包含：KPI 摘要、AMR 类别分布与高置信基因条形图、VFDB 毒力基因、质粒复制子、
 Bakta/eggNOG 注释与 COG 功能分类（有注释数据时）、副溶血弧菌的 VPAI 环状结构图，

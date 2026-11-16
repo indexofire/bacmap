@@ -153,6 +153,30 @@ class TestResultsPages:
         assert r.status_code == 200
         assert 'data-report-theme="gray"' in r.text
 
+    def test_report_theme_follows_console_cookie(self, client):
+        """直接打开报告 URL 时跟随控制台主题 cookie；显式 ?theme= 优先。"""
+        c, home = client
+        rep = home / "results" / "SAM-001" / "report" / "SAM-001_report.html"
+        rep.write_text('<html lang="zh-CN"><body>ok</body></html>', encoding="utf-8")
+        c.cookies.set("bacmap-theme", "light")
+        r = c.get("/samples/SAM-001/report")
+        assert r.status_code == 200
+        assert 'data-report-theme="light"' in r.text
+        overridden = c.get("/samples/SAM-001/report?theme=gray")
+        assert 'data-report-theme="gray"' in overridden.text
+
+    def test_report_embed_mode_hides_standalone_chrome(self, client):
+        """控制台页签内嵌：注入 embed 标记并隐藏报告自带的返回链接。"""
+        c, home = client
+        rep = home / "results" / "SAM-001" / "report" / "SAM-001_report.html"
+        rep.write_text(
+            '<html lang="zh-CN"><head></head><body>ok</body></html>', encoding="utf-8"
+        )
+        r = c.get("/samples/SAM-001/report?embed=1")
+        assert r.status_code == 200
+        assert 'data-report-embed="1"' in r.text
+        assert 'html[data-report-embed="1"] .report-nav__back' in r.text
+
     def test_report_file_route_404_when_absent(self, client):
         c, _ = client
         assert c.get("/samples/NOPE/report").status_code == 404

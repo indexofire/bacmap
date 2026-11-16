@@ -76,6 +76,15 @@ logger = logging.getLogger(__name__)
 
 # 报告模板版本标记：旧模板生成的 HTML 在首次访问时原地重渲染。
 _REPORT_MARKER = b'name="bacmap-report" content="12"'
+
+# 内嵌模式（控制台 iframe）：隐藏报告自带的返回链接，避免 iframe 里再套控制台。
+_REPORT_EMBED_STYLE = (
+    "<style>"
+    'html[data-report-embed="1"] .report-nav__back,'
+    'html[data-report-embed="1"] .pagehead__actions a[href^="/console/"]{display:none}'
+    'html[data-report-embed="1"] .report-layout{padding:12px}'
+    "</style>"
+)
 _REPORT_LOCK = threading.Lock()
 
 
@@ -205,7 +214,11 @@ def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
 
     @app.get("/samples/{sample_id}/report")
     def sample_report(
-        sample_id: str, download: int = 0, embed: int = 0, theme: str = ""
+        sample_id: str,
+        request: Request,
+        download: int = 0,
+        embed: int = 0,
+        theme: str = "",
     ) -> Response:
         if not _validate_sample_id(sample_id):
             raise HTTPException(400, "非法样本 ID")
@@ -245,14 +258,22 @@ def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
                 else f'inline; filename="{sample_id}_report.html"'
             ),
         }
-        # 控制台浅色/灰色主题：按请求注入 report token，不修改磁盘产物。
-        if theme in {"light", "gray"}:
+        # 控制台主题：优先显式 ?theme=，否则读控制台写入的 cookie
+        # （直接访问 /samples/{id}/report、新标签打开也会跟随当前主题）。
+        if theme not in {"light", "gray", "dark"}:
+            cookie_theme = request.cookies.get("bacmap-theme", "")
+            if cookie_theme in {"light", "gray"}:
+                theme = cookie_theme
+        if theme in {"light", "gray"} or embed:
             html = path.read_text(encoding="utf-8")
+            attrs = [f'data-report-theme="{theme}"'] if theme in {"light", "gray"} else []
+            if embed:
+                attrs.append('data-report-embed="1"')
             html = html.replace(
-                '<html lang="zh-CN">',
-                f'<html lang="zh-CN" data-report-theme="{theme}">',
-                1,
+                '<html lang="zh-CN">', f'<html lang="zh-CN" {" ".join(attrs)}>', 1
             )
+            if embed:
+                html = html.replace("</head>", _REPORT_EMBED_STYLE + "</head>", 1)
             return HTMLResponse(html, headers=headers)
         return FileResponse(
             path,
