@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from bacmap.interfaces import gvixb as service
+from bacmap.interfaces.web.static import STATIC_DIR
 
 
 def _call(factory: Callable[[], Any]) -> Any:
@@ -36,6 +38,40 @@ def run_visualizations(engine: Any, run_id: str) -> list[service.GvixbLink]:
     return _call(lambda: service.run_visualizations(engine, run_id))
 
 
+def _asset_version() -> str:
+    """静态 gvixb 资源的版本串：升级后 URL 变化，绕过旧 CSS/JS 缓存。"""
+    base = STATIC_DIR / "gvixb"
+    parts: list[str] = []
+    for rel in (
+        "gvixb.css", "gvixb-shell.css", "gvixb-app.js",
+        "views/circular-annotation-view.js", "framework/analysis-framework.js",
+    ):
+        path = base / rel
+        if path.is_file():
+            stat = path.stat()
+            parts.append(f"{rel}:{stat.st_mtime_ns}:{stat.st_size}")
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()[:12]
+
+
+def _switcher_views(
+    engine: Any, run_id: str, current: service.GvixbLink
+) -> list[service.GvixbLink]:
+    """同一运行内可切换的视图：当前菌株的 genome/circle + 全部 tree/mst。"""
+    try:
+        views = run_visualizations(engine, run_id)
+    except Exception:  # 只影响切换器，不影响当前视图
+        return [current]
+    sample = current.context
+    keep = [
+        view for view in views
+        if view.kind in ("tree", "mst")
+        or (view.kind in ("genome", "circle") and view.context == sample)
+    ]
+    if current not in keep:
+        keep.insert(0, current)
+    return keep
+
+
 def build_gvixb_routes(
     app: FastAPI, engine: Any, templates: Jinja2Templates
 ) -> None:
@@ -48,8 +84,9 @@ def build_gvixb_routes(
         title: str,
         back_url: str,
         back_label: str,
+        views: list[service.GvixbLink] | None = None,
     ) -> HTMLResponse:
-        return templates.TemplateResponse(
+        response = templates.TemplateResponse(
             request,
             "gvixb.html",
             {
@@ -58,7 +95,26 @@ def build_gvixb_routes(
                 "title": title,
                 "back_url": back_url,
                 "back_label": back_label,
+                "asset_version": _asset_version(),
+                "views": views or [link],
             },
+        )
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
+    @app.get("/gvixb-assets/{version}/{path:path}", include_in_schema=False)
+    def gvixb_asset(version: str, path: str) -> FileResponse:
+        """版本化静态资源：整棵 JS 模块图 URL 随版本变化，彻底绕过旧缓存。"""
+        if version != _asset_version():
+            raise HTTPException(404, "stale gvixb asset version")
+        base = (STATIC_DIR / "gvixb").resolve()
+        target = (base / path).resolve()
+        if target != base and base not in target.parents:
+            raise HTTPException(404, "asset path outside gvixb")
+        if not target.is_file():
+            raise HTTPException(404, "asset not found")
+        return FileResponse(
+            target, headers={"Cache-Control": "public, max-age=31536000, immutable"}
         )
 
     @app.get("/gvixb/samples/{sample_id}/genome", response_class=HTMLResponse)
@@ -78,6 +134,7 @@ def build_gvixb_routes(
         return render(
             request, link, "assembly", f"3D 基因组 · {sample_id}",
             f"/console/runs/{run_id}", "返回运行记录",
+            views=_switcher_views(engine, run_id, link),
         )
 
     @app.get("/gvixb/runs/{run_id}/annotation/{sample_id}", response_class=HTMLResponse)
@@ -87,6 +144,7 @@ def build_gvixb_routes(
         return render(
             request, link, "circle", f"3D 注释圈图 · {sample_id}",
             f"/console/runs/{run_id}", "返回运行记录",
+            views=_switcher_views(engine, run_id, link),
         )
 
     @app.get("/gvixb/samples/{sample_id}/annotation", response_class=HTMLResponse)
@@ -106,6 +164,7 @@ def build_gvixb_routes(
         return render(
             request, link, "phylo", f"3D 进化树 · {group}",
             f"/console/runs/{run_id}", "返回运行记录",
+            views=_switcher_views(engine, run_id, link),
         )
 
     @app.get("/gvixb/runs/{run_id}/mst/{group}", response_class=HTMLResponse)
@@ -115,6 +174,7 @@ def build_gvixb_routes(
         return render(
             request, link, "mst", f"3D 最小生成树 · {group}",
             f"/console/runs/{run_id}", "返回运行记录",
+            views=_switcher_views(engine, run_id, link),
         )
 
     _build_gvixb_api_routes(app, engine)

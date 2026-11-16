@@ -7,6 +7,14 @@ import { circularAnnotationView } from './views/circular-annotation-view.js';
 
 const mount = document.getElementById('app');
 const canvas = document.getElementById('scene');
+// dev/preview-style overrides: ?view=phylo&endpoint=/api/v1/gvixb/... (same-origin only)
+const params = new URLSearchParams(location.search);
+const queryView = params.get('view');
+if (queryView && ['assembly', 'circle', 'phylo', 'mst'].includes(queryView)) {
+  mount.dataset.view = queryView;
+}
+const queryEndpoint = params.get('endpoint') || '';
+if (queryEndpoint.startsWith('/api/v1/gvixb/')) mount.dataset.endpoint = queryEndpoint;
 const definitions = {
   assembly: assemblyView, phylo: phyloView, mst: mstView, circle: circularAnnotationView,
 };
@@ -20,6 +28,10 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setClearColor(0x05070d, 1);
 
 const framework = createAnalysisFramework({ renderer, canvas, views: [selectedView] });
+document.getElementById('gvixb-view-switch')?.addEventListener('change', event => {
+  const target = event.target;
+  if (target instanceof HTMLSelectElement && target.value) location.href = target.value;
+});
 const clock = new THREE.Clock();
 
 function resize() {

@@ -1,6 +1,21 @@
-/* bacmap result-launch shell: no global demo switcher. */
+/* bacmap result-launch shell: result page + upstream demo entry. */
+.gvixb-switch {
+  margin-left: auto; pointer-events: auto; display: flex; align-items: center; gap: 6px;
+  color: var(--text-3); font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
+}
+.gvixb-switch select {
+  height: 27px; max-width: 280px; color: var(--text-1); background: rgba(11,17,31,.78);
+  border: 1px solid var(--border); border-radius: var(--r); padding: 0 8px; font-size: 10px;
+}
+.gvixb-switch + .gvixb-demo { margin-left: 8px; }
+.gvixb-demo {
+  margin-left: auto; pointer-events: auto; color: var(--accent-2); text-decoration: none;
+  border: 1px solid var(--border); border-radius: var(--r); padding: 7px 11px;
+  background: rgba(11,17,31,.78); font-size: 10px; letter-spacing: .05em;
+}
+.gvixb-demo:hover { color: #fff; border-color: var(--accent-2); }
 .gvixb-back {
-  margin-left: auto; pointer-events: auto; color: var(--text-2); text-decoration: none;
+  margin-left: 8px; pointer-events: auto; color: var(--text-2); text-decoration: none;
   border: 1px solid var(--border); border-radius: var(--r); padding: 7px 11px;
   background: rgba(11,17,31,.78); font-size: 10px; letter-spacing: .05em;
 }

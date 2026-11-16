@@ -366,6 +366,29 @@ def create_app(
         extra_frame_sources=_frame_sources,
         sameorigin_prefixes=("/research",),
     )
+    # gvixb 运行时没有内容哈希：浏览器必须每次复验，避免升级后仍执行旧 JS
+    # （ETag/Last-Modified 仍在，命中时只返回 304）。
+    class _NoCacheStaticFiles(StaticFiles):
+        async def get_response(self, path: str, scope: Any) -> Response:
+            response = await super().get_response(path, scope)
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+            return response
+
+    gvixb_static = STATIC_DIR / "gvixb"
+    if gvixb_static.is_dir():
+        app.mount(
+            "/static/gvixb",
+            _NoCacheStaticFiles(directory=gvixb_static),
+            name="gvixb-static",
+        )
+    # gvixb 原始 demo（与上游 index.html/app.js/data.json 同源），页面角落提供入口。
+    demo_dir = gvixb_static / "demo"
+    if demo_dir.is_dir():
+        app.mount(
+            "/gvixb/demo",
+            _NoCacheStaticFiles(directory=demo_dir, html=True),
+            name="gvixb-demo",
+        )
     # 静态资源仅本地（CSS/图标/脚本；零外联，ADR-16）
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     # v1.10.24：SPA 资源经 /console/assets/ 可达（<base href="/console/"> 的

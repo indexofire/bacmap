@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import bacmap.tasks.engine.dbos_engine as eng
+from bacmap.interfaces import gvixb as gvixb_service
 from bacmap.interfaces.web import create_app
 from bacmap.store import runs as runs_store
 from bacmap.store.genome_object_service import GenomeObject, GenomeObjectService, ObjectType
@@ -235,6 +236,30 @@ class TestGvixbAnnotation:
         assert trna["category"] == "trna"
         assert "annotation/bakta" not in json.dumps(data) and str(Path.home()) not in json.dumps(data)
 
+    def test_bakta_renamed_contigs_keep_gc_track(self, seeded):
+        """Bakta 把 contig00001 改名为 contig_1 且无 replicons 表时，按长度回填 GC 轨道。"""
+        engine, _, run, root = seeded
+        sample = root / "S1"
+        (sample / "annotation" / "bakta" / "S1.replicons.tsv").unlink()
+        (sample / "assembly" / "S1.fasta").write_text(
+            ">contig00001 len=120\n" + "ACGT" * 30 + "\n", encoding="utf-8"
+        )
+        (sample / "annotation" / "bakta" / "S1.gff3").write_text(
+            "##gff-version 3\n"
+            "##sequence-region contig_1 1 120\n"
+            "contig_1\tBakta\tCDS\t2\t20\t.\t+\t0\tID=cds:1;locus_tag=LOC1;product=test\n",
+            encoding="utf-8",
+        )
+        for name in ("abricate_card.tsv", "abricate_vfdb.tsv"):
+            path = sample / "amr" / name
+            path.write_text(path.read_text(encoding="utf-8").replace("\tc1\t", "\tcontig00001\t"),
+                            encoding="utf-8")
+        payload = gvixb_service.annotated_genome_payload(engine, run.run_id, "S1")
+        replicon = payload.replicons[0]
+        assert replicon.id == "contig_1"
+        assert replicon.gc is not None
+        assert replicon.track is not None and replicon.track.pos
+
     def test_annotation_routes_and_sample_entry(self, seeded):
         engine, client, run, root = seeded
         page = client.get(f"/gvixb/runs/{run.run_id}/annotation/S1")
@@ -350,3 +375,12 @@ class TestGvixbBoundaries:
             "/api/v1/gvixb/samples/S1/genome", headers={"Authorization": "Bearer secret"}
         ).status_code == 404  # latest alias not created by this fixture; auth passed
         eng.shutdown_dbos()
+
+
+def test_gvixb_demo_route_and_no_cache(seeded):
+    _, client, _, _ = seeded
+    assert client.get("/gvixb/demo/").status_code == 200
+    assert "GVIXB" in client.get("/gvixb/demo/").text
+    asset = client.get("/static/gvixb/views/circular-annotation-view.js")
+    assert asset.status_code == 200
+    assert asset.headers["cache-control"] == "no-cache, must-revalidate"

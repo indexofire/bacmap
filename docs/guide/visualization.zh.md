@@ -26,6 +26,13 @@ Vue 控制台的样本、运行和 GOM 页面会列出当前结果实际存在�
 （`/api/v1/samples/{id}` → `gvixb`，`/api/v1/runs/{id}` 与 `/api/v1/gom/objects/{id}` →
 `gvixb_views`）；旧深链 `/samples/...`、`/runs/...`、`/gom/...` 会重定向到控制台。
 
+结果页右上角提供 **Demo** 按钮（`/gvixb/demo/`），由同一本地服务提供 gvixb 上游
+demo 数据集，零外网请求。
+
+运行作用域的 gvixb 页面顶部还有「视图」选择器，可在当前菌株的组装/注释圈图与运行内
+tree/mst 之间切换；也接受 `?view=phylo&endpoint=/api/v1/gvixb/...` 形式的同源覆盖参数。
+`gvixb/scripts/preview/preview-dev.html` 是上游开发夹具页，不随 bacmap 分发。
+
 | bacmap 页面 | gvixb 视图 |
 |---|---|
 | 控制台样本页（`/console/samples/<dataset>`） | 最新结果组装图或注释圈图 |

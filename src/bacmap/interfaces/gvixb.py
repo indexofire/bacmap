@@ -25,12 +25,13 @@ from bacmap.tools._common import _validate_sample_id
 
 _GROUP_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _MAX_JSON_BYTES = 24 * 1024 * 1024
+_MAX_SEQUENCE_PAYLOAD_BP = 12_000_000
 _MAX_FASTA_BYTES = 64 * 1024 * 1024
 _MAX_TABLE_BYTES = 96 * 1024 * 1024
 _MAX_ASSEMBLY_BP = 50_000_000
 _MAX_CONTIGS = 10_000
 _MAX_ANNOTATED_FEATURES = 20_000
-_TRACK_WINDOW = 10_000
+_TRACK_WINDOW = 1_000
 _READ_CHUNK = 1 << 20
 _GFF_KINDS = {"CDS", "tRNA", "rRNA", "tmRNA", "ncRNA", "sorf", "pseudogene"}
 
@@ -69,6 +70,8 @@ class Contig(GvixbModel):
     gc: float
     topology: Literal["linear"] = "linear"
     track: Track
+    # 仅供注释圈图取子序列；assembly payload 通过 exclude 保持原体积。
+    sequence: str = Field(default="", exclude=True)
 
 
 class AssemblyFeature(GvixbModel):
@@ -162,6 +165,8 @@ class AnnotationReplicon(GvixbModel):
     topology: Literal["circular", "linear"]
     type: Literal["chromosome", "plasmid", "contig"] = "contig"
     track: Track | None = None
+    # 圈图详情面板的碱基序列/翻译；超过载荷上限时为 null。
+    sequence: str | None = None
 
 
 class AnnotationFeature(GvixbModel):
@@ -366,6 +371,7 @@ def _read_fasta(path: Path) -> list[Contig]:
                 if called
                 else 0.0,
                 track=_track(sequence),
+                sequence=upper,
             )
         )
 
@@ -759,8 +765,15 @@ def _gff_annotation(
         raise FileNotFoundError("该运行没有 Bakta GFF3 注释")
     seq_ids, seq_lengths, features = _parse_gff_features(path)
     assembly_by_id = {contig.id: contig for contig in contigs}
+    # Bakta renames input contigs (contig00001 → contig_1) in the GFF/fna;
+    # the annotation table has no original-name column for assembly input.
+    # Map by exact length when unique so GC/GC-skew tracks still render.
+    assembly_by_length: dict[int, list[Contig]] = {}
+    for contig in contigs:
+        assembly_by_length.setdefault(contig.length, []).append(contig)
     replicon_table = _replicon_table(scope, sample_id)
 
+    include_sequence = sum(seq_lengths.values()) <= _MAX_SEQUENCE_PAYLOAD_BP
     replicons: list[AnnotationReplicon] = []
     assembly_to_replicon: dict[str, int] = {}
     for seq_id in seq_ids:
@@ -768,6 +781,11 @@ def _gff_annotation(
         source_id = seq_id if seq_id in assembly_by_id else table.get("original", "")
         source = assembly_by_id.get(source_id)
         length = seq_lengths.get(seq_id) or (source.length if source else 0)
+        if source is None and length > 0:
+            candidates = assembly_by_length.get(length, [])
+            if len(candidates) == 1:
+                source = candidates[0]
+                source_id = source.id
         if length <= 0:
             continue
         raw_type = table.get("type", "contig")
@@ -787,6 +805,7 @@ def _gff_annotation(
             topology=topology,
             type=replicon_type,
             track=source.track if source else None,
+            sequence=source.sequence if include_sequence and source else None,
         )
         if source_id:
             assembly_to_replicon[source_id] = len(replicons)

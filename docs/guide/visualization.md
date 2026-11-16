@@ -28,6 +28,14 @@ current result (`/api/v1/samples/{id}` → `gvixb`, `/api/v1/runs/{id}` and
 `/api/v1/gom/objects/{id}` → `gvixb_views`); legacy `/samples/...`, `/runs/...` and `/gom/...`
 deep links redirect to the console.
 
+The result page also exposes a **Demo** button in the top-right corner (`/gvixb/demo/`), which
+serves the upstream gvixb demo dataset from the same local server (no external network).
+
+Run-scoped gvixb pages also have a **view** selector for the current isolate's assembly/annotation
+circle and the run's tree/mst views, and accept a same-origin
+`?view=phylo&endpoint=/api/v1/gvixb/...` override. The upstream
+`gvixb/scripts/preview/preview-dev.html` is a development fixture page and is not shipped by bacmap.
+
 | bacmap page | gvixb view |
 |---|---|
 | Console sample page (`/console/samples/<dataset>`) | latest-result assembly or annotated circle |

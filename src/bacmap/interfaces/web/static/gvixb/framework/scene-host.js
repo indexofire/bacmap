@@ -6,6 +6,53 @@ import { UnrealBloomPass } from '../vendor/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/postprocessing/OutputPass.js';
 import { disposeHierarchy } from './primitives.js';
 
+function _radialSprite(size, stops, blending = THREE.AdditiveBlending) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+  for (const [position, color] of stops) gradient.addColorStop(position, color);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 256, 256);
+  const texture = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: texture, transparent: true, depthWrite: false, blending,
+  }));
+  sprite.scale.set(size, size, 1);
+  return sprite;
+}
+
+function _makeHalo() {
+  const sprite = _radialSprite(30, [
+    [0.00, 'rgba(0,0,0,0)'],
+    [0.55, 'rgba(0,0,0,0)'],
+    [0.72, 'rgba(30,46,110,0.035)'],
+    [0.86, 'rgba(44,70,160,0.05)'],
+    [1.00, 'rgba(0,0,0,0)'],
+  ]);
+  sprite.position.z = -6;
+  return sprite;
+}
+
+function _makeDust() {
+  const count = 320;
+  const positions = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const radius = 12 + Math.random() * 30;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.random() * Math.PI;
+    positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+    positions[i * 3 + 1] = radius * Math.cos(phi);
+    positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta) - 8;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  return new THREE.Points(geometry, new THREE.PointsMaterial({
+    color: 0x7f9ad8, size: 0.05, transparent: true, opacity: 0.16,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+}
+
 /**
  * Shared runtime for analytical visualization plugins.
  * The original genome view and this host reuse one WebGLRenderer, but own
@@ -53,6 +100,14 @@ export class SceneHost {
     const rim = new THREE.DirectionalLight(0x53e6ff, 1.3);
     rim.position.set(-10, -3, 7);
     this.scene.add(rim);
+
+    // demo 的深空氛围：极淡光晕 + 缓慢漂移的尘埃（不参与拾取/统计）。
+    this.atmosphere = new THREE.Group();
+    this.atmosphere.name = 'atmosphere';
+    this.halo = _makeHalo();
+    this.dust = _makeDust();
+    this.atmosphere.add(this.halo, this.dust);
+    this.scene.add(this.atmosphere);
 
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
@@ -258,6 +313,13 @@ export class SceneHost {
       if (t >= 1) this.cameraAnim = null;
     }
     this.controls.update();
+    if (this.dust) {
+      this.dust.rotation.y += dt * 0.03;
+      this.dust.rotation.x += dt * 0.011;
+    }
+    if (this.halo) {
+      this.halo.material.opacity = 0.75 + Math.sin(performance.now() * 0.0012) * 0.15;
+    }
     this.view?.update?.(dt);
     this.composer.render();
     const distance = this.camera.position.distanceTo(this.controls.target);

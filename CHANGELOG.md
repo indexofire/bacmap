@@ -5,6 +5,41 @@
 
 ## [Unreleased]
 
+### gvixb 注释圈图交互修复（v1.10.37）
+
+- 修复圈图基因点击无效：draft/circular 两条渲染路径的 `pickFor` 返回裸 record，
+  而 `select`/`inspect` 按 `{type:'feature', id}` 取值；现统一返回该 payload。
+- 左侧面板补齐 demo 的「圈图 / 位点」结构：contig 列表（可筛选）、基因搜索框与
+  可点击的位点列表；点击列表行会选中、飞向并打开右侧详情。
+- 同步 `gvixb/web/views/circular-annotation-view.js` 上游副本。
+- 修复 Bakta 改写 contig 名（`contig00001` → `contig_1`）且无 `replicons.tsv` 时
+  GC / GC-skew 轨道为空：按唯一长度回填组装 contig。
+- 结果页右上角新增 **Demo** 按钮，本地托管上游 demo（`/gvixb/demo/`）；gvixb 静态
+  资源改为 `no-cache, must-revalidate`，升级后不再执行旧 JS（无需重启，普通刷新即生效）。
+- 详情面板补齐 demo 行为：选中基因显示白色标签/引线 + 悬停提示，右侧显示长度、
+  AA、GC、链、locus/COG/位置与**碱基序列 + 氨基酸翻译**；序列随注释载荷下发
+  （>12 Mbp 的组装省略序列并提示）。
+- 选中基因方块沿径向弹出、放大并显示为白色；不使用线框或额外光晕。
+- GC/GC-skew 轨道按 demo 重做：1 kb 滑窗，GC 含量为蓝/琥珀双色带宽，GC skew 为青绿色折线。
+- 移除与「功能分类 · COG」复选面板重复的「功能过滤」下拉控件，只保留侧栏分类面板。
+- 移除左侧「临床高亮 · Clinical」面板（AMR/毒力计数），只保留「轨道 · Tracks」图例。
+- COG 分类面板与标签显示具体含义（如 `J · 翻译/核糖体`、`T · 信号转导`），不再只显示字母。
+- 选中基因保持白色高亮（方块放大 + 弹出），按要求不添加光晕。
+- 新的分类调色板：信息存储（蓝/紫）、细胞过程（青/蓝）、代谢（黄/橙/橙红/黄绿）、
+  功能未明（中性灰/淡紫），避免整环偏绿偏蓝；AMR/毒力保持红/橙高对比。
+- 左侧补齐「功能分类 · COG」复选面板（全选/全不选/重置，含各类计数）、
+  「轨道 · Tracks」与「临床高亮 · Clinical」图例；位点列表内部滚动，避免把图例挤出面板。
+- 视觉对齐 demo：采用 demo 的 CAT 调色板（无 COG 的 CDS 为暗灰），
+  scene-host 增加深空光晕 + 漂移尘埃。
+- 运行作用域页面顶部新增「视图」选择器：当前菌株的 genome/circle + 运行内全部
+  tree/mst；页面同时支持 preview 风格的 `?view=phylo&endpoint=/api/v1/gvixb/...`
+  （仅同源前缀，`scripts/preview/preview-dev.html` 本身仍只属于 gvixb 开发仓库）。
+- 静态资源改为整棵模块图版本化 `/gvixb-assets/<version>/...`（HTML `no-cache`）：
+  旧 `gvixb-app.js`/view 模块即使此前被浏览器启发式缓存也不会再被加载。
+- 模板对 CSS/JS 追加 `?v=<asset_version>`，修复旧 `gvixb-shell.css` 缓存导致 Demo
+  按钮出现在左上、无样式且被 `pointer-events:none` 挡住无法点击的问题。
+- 测试：新增 GC 轨道回填与 demo/no-cache 2 个测试；连同期间 CPE cgMLST cohort 4 个测试，基线 2234 → 2240。
+
 ### gmlst 0.6.2（v1.10.36）
 
 - `pixi.toml` PyPI 依赖 `gmlst` 由 `==0.6.1` 升级为 `==0.6.2`，`pixi.lock` 同步。
@@ -14,7 +49,6 @@
 - 单株冒烟（24CPE1001）：cgMLST 1428/1431 位点、MLST `cperfringens_1` ST=887 PERFECT。
 - `AGENTS.md` 外部工具版本同步；测试基线不变（2234）。
 
-### 运行产物清理（v1.10.35）
 ### 运行产物清理（v1.10.35）
 
 - 新增 `bacmap run purge <run_id> [--dry-run] [--json]`、`POST /api/v1/runs/{id}/purge`（CSRF）
@@ -26,7 +60,6 @@
   `run_artifact_purges`（runs.sqlite 迁移 2）。
 - 测试：新增清理/幂等/最新保护/活动任务/dry-run/CLI/API 共 10 个测试，基线 2224 → 2234。
 
-### 同名样本回填与默认样本模板清空（v1.10.34）
 ### 同名样本回填与默认样本模板清空（v1.10.34）
 
 - 新增 `bacmap specimen backfill [--dry-run] [--json]`：把 `specimen_id` 为空的菌株
