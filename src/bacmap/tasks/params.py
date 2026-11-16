@@ -131,13 +131,16 @@ class ResearchParams(BaseModel):
     两种分析：
     - ``session``：从既有 run 创建确定性 AMR 关联草案（P1 薄链路）；
     - ``advstats``：高级统计外部化（ADR-22）——类型化规格 → bacmap 渲染 R 脚本 →
-      固定镜像沙箱拟合 → 结果归一。脚本非 agent 编写，计划确认即授权，无挖掘门。
+      固定镜像沙箱拟合 → 结果归一。脚本非 agent 编写，计划确认即授权，无挖掘门；
+    - ``dag``：研究编排层（P1）——线性分析图，节点为注册表算子，产物内容寻址。
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     task_type: Literal["research"] = "research"
-    analysis: Literal["session", "advstats"]
+    analysis: Literal["session", "advstats", "dag"]
+    # dag（研究编排层，schema=bacmap.research.dag/1）：
+    dag: dict[str, Any] | None = None
     # session：
     run_id: str = ""
     gene: str = ""
@@ -178,6 +181,15 @@ class ResearchParams(BaseModel):
                 raise ValueError(
                     "research/session requires run_id, gene and test_name"
                 )
+        elif self.analysis == "dag":
+            if not self.dag:
+                raise ValueError("research/dag requires a dag spec")
+            from bacmap.research.dag import DagValidationError, ResearchDag
+
+            try:
+                ResearchDag.model_validate(self.dag).validate_dag()
+            except (DagValidationError, ValueError) as exc:
+                raise ValueError(f"invalid dag: {exc}") from exc
         else:
             # advstats 的方法级校验复用 AnalysisSpec（单一实现）
             from bacmap.research.advstats import AnalysisSpec

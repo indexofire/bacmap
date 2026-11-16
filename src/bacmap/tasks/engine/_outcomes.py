@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -66,12 +67,44 @@ def _finalize_curate_approval(
     return TaskState.SUCCEEDED, f"published baseline v{version} (signed by {approval.approver})"
 
 
+def _finalize_research_approval(
+    home: Path, task_id: str, approval: Approval
+) -> tuple[TaskState, str]:
+    """研究 DAG 的代码审核通过：重启工作流继续执行（P4）。
+
+    非 DAG 的 research 任务（session/advstats）不会进入 AWAITING_APPROVAL，
+    这里按普通审批收敛为 SUCCEEDED。
+    """
+    from bacmap.tasks.engine.task_engine import DbosTaskEngine
+    from bacmap.tasks.spec import TaskId
+
+    analysis = ""
+    db = Path(home) / "tasks.sqlite"
+    if db.is_file():
+        try:
+            with sqlite3.connect(f"file:{db}?mode=ro", uri=True) as conn:
+                row = conn.execute(
+                    "SELECT params_json FROM tasks WHERE task_id = ?", (task_id,)
+                ).fetchone()
+            if row is not None:
+                analysis = str(json.loads(row[0]).get("analysis") or "")
+        except (sqlite3.Error, ValueError):
+            analysis = ""
+    if analysis != "dag":
+        return TaskState.SUCCEEDED, f"approved by {approval.approver}"
+
+    engine = DbosTaskEngine(Path(home))
+    engine.restart_for_approval(TaskId(task_id))
+    return TaskState.RUNNING, f"code approved by {approval.approver}"
+
+
 # 审批副作用分发表：新增任务类型在此注册终态化函数，不再往 approve() 塞 if 链。
 _APPROVE_FINALIZERS: dict[
     str, Callable[[Path, str, Approval], tuple[TaskState, str]]
 ] = {
     TaskType.MINE.value: _finalize_mine_approval,
     TaskType.CURATE.value: _finalize_curate_approval,
+    TaskType.RESEARCH.value: _finalize_research_approval,
 }
 
 
@@ -91,6 +124,7 @@ def _map_workflow_outcome(
         status_val = str(result.get("status", "SUCCEEDED"))
         state = {
             "AWAITING_APPROVAL": TaskState.AWAITING_APPROVAL,
+            "PAUSED": TaskState.PAUSED,
             "FAILED": TaskState.FAILED,
         }.get(status_val, TaskState.SUCCEEDED)
         message = str(result.get("message") or "") or json.dumps(

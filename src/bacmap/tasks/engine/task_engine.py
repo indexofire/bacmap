@@ -511,8 +511,6 @@ class DbosTaskEngine:
         清掉旧工作流行后以**同一 task_id** 重建工作流：snakemake
         ``--rerun-incomplete`` 在同一 run 目录续跑，已完成规则不重算。
         """
-        from dbos import DBOS as _DBOS
-
         with self._conn() as conn:
             row = conn.execute(
                 "SELECT state, task_type, params_json FROM tasks WHERE task_id = ?",
@@ -530,18 +528,32 @@ class DbosTaskEngine:
                 "only paused/failed/cancelled tasks can resume"
             )
         task_type = TaskType(row["task_type"])
-        workflow = self._workflows().get(task_type)
-        if workflow is None:
-            raise ValueError(f"task type {task_type.value!r} cannot be resumed")
-        try:
-            _DBOS.delete_workflow(str(task_id))  # 旧工作流行（含孤儿 PENDING）
-        except Exception:
-            logger.warning("resume: delete_workflow %s failed", task_id, exc_info=True)
         params = json.loads(row["params_json"])
         params.setdefault("home", str(self.home))
         params["task_id"] = str(task_id)
         params["resumed"] = True
+        self._restart_workflow(task_id, task_type, params, actor="resume")
+        self.events.append(
+            EventType.TASK_SUBMITTED,
+            task_id=str(task_id),
+            actor="resume",
+            payload={"task_type": row["task_type"], "resumed": True},
+        )
 
+    def _restart_workflow(
+        self, task_id: TaskId, task_type: TaskType, params: dict[str, Any], *, actor: str
+    ) -> None:
+        """删除旧工作流行并以同一 task_id 重建（resume / 审批后重启共用）。"""
+        from dbos import DBOS as _DBOS
+        from dbos import SetWorkflowID
+
+        workflow = self._workflows().get(task_type)
+        if workflow is None:
+            raise ValueError(f"task type {task_type.value!r} cannot be resumed")
+        try:
+            _DBOS.delete_workflow(str(task_id))
+        except Exception:
+            logger.warning("restart: delete_workflow %s failed", task_id, exc_info=True)
         with self._conn() as conn:
             conn.execute(
                 "UPDATE tasks SET state = ?, message = '', current_step = ?, "
@@ -553,15 +565,29 @@ class DbosTaskEngine:
                     str(task_id),
                 ),
             )
-        from dbos import SetWorkflowID
-
         with SetWorkflowID(str(task_id)):
             _DBOS.start_workflow(workflow, params)
-        self.events.append(
-            EventType.TASK_SUBMITTED,
-            task_id=str(task_id),
-            actor="resume",
-            payload={"task_type": row["task_type"], "resumed": True},
+
+    def restart_for_approval(self, task_id: TaskId) -> None:
+        """代码审核通过后重启 DAG 工作流（AWAITING_APPROVAL → RUNNING）。"""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT state, task_type, params_json FROM tasks WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"no such task: {task_id}")
+        if row["state"] != TaskState.AWAITING_APPROVAL.value:
+            raise ValueError(
+                f"task {task_id} state is {row['state']!r}; only awaiting_approval tasks"
+                " can restart after approval"
+            )
+        params = json.loads(row["params_json"])
+        params.setdefault("home", str(self.home))
+        params["task_id"] = str(task_id)
+        params["resumed"] = True
+        self._restart_workflow(
+            task_id, TaskType(row["task_type"]), params, actor="approval"
         )
 
     def approve(self, task_id: TaskId, approval: Approval) -> None:

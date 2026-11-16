@@ -280,6 +280,60 @@ CREATE TABLE IF NOT EXISTS experiments (
 )
 """
 
+# v1.10.31（研究编排层 P1）：一个 DAG = 一个 research 任务；节点执行与
+# 内容寻址产物分开存，便于缓存命中、单节点重放与报告数字回溯。
+DAG_RUNS_DDL = """
+CREATE TABLE IF NOT EXISTS dag_runs (
+    task_id     TEXT PRIMARY KEY,
+    dag_hash    TEXT NOT NULL,
+    state       TEXT NOT NULL DEFAULT 'running',
+    data_class  INTEGER NOT NULL DEFAULT 2,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+)
+"""
+
+DAG_NODES_DDL = """
+CREATE TABLE IF NOT EXISTS dag_nodes (
+    task_id      TEXT NOT NULL,
+    node_id      TEXT NOT NULL,
+    op           TEXT NOT NULL,
+    state        TEXT NOT NULL,
+    cache_hit    INTEGER NOT NULL DEFAULT 0,
+    outputs_json TEXT NOT NULL DEFAULT '{}',
+    error        TEXT NOT NULL DEFAULT '',
+    started_at   TEXT NOT NULL DEFAULT '',
+    finished_at  TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (task_id, node_id)
+)
+"""
+
+DAG_ARTIFACTS_DDL = """
+CREATE TABLE IF NOT EXISTS dag_artifacts (
+    artifact_id   TEXT PRIMARY KEY,
+    type          TEXT NOT NULL,
+    sha256        TEXT NOT NULL,
+    path          TEXT NOT NULL,
+    producer_task TEXT NOT NULL DEFAULT '',
+    producer_node TEXT NOT NULL DEFAULT '',
+    data_class    INTEGER NOT NULL DEFAULT 2,
+    size_bytes    INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT NOT NULL
+)
+"""
+
+# v1.10.38（P6）：确定性节点缓存（跨任务复用产物，重放依赖同一键）。
+DAG_CACHE_DDL = """
+CREATE TABLE IF NOT EXISTS dag_cache (
+    cache_key    TEXT PRIMARY KEY,
+    op           TEXT NOT NULL,
+    outputs_json TEXT NOT NULL,
+    created_at   TEXT NOT NULL,
+    last_hit_at  TEXT NOT NULL,
+    hits         INTEGER NOT NULL DEFAULT 0
+)
+"""
+
 RESEARCH_MIGRATIONS: tuple[Migration, ...] = (
     Migration(
         1,
@@ -347,6 +401,16 @@ RESEARCH_MIGRATIONS: tuple[Migration, ...] = (
         10,
         "research: persisted analysis results",
         (ANALYSES_DDL,),
+    ),
+    Migration(
+        11,
+        "research: dag execution (runs, nodes, content-addressed artifacts)",
+        (DAG_RUNS_DDL, DAG_NODES_DDL, DAG_ARTIFACTS_DDL),
+    ),
+    Migration(
+        12,
+        "research: deterministic node cache (cross-task artifact reuse)",
+        (DAG_CACHE_DDL,),
     ),
 )
 

@@ -820,3 +820,178 @@ Practical consequences:
 3. **Data prerequisites**: an existing run (`runs.sqlite`), the gene in `strain_amr_genes`
    (`gom.sqlite`) and the phenotype in `lab_results`. If they are missing, run an analyze task or
    ingest lab results first.
+
+## 20. Research orchestration layer (P1: linear DAGs)
+
+> Status: P1 (2026-11). Design: `dev/PLAN-research-orchestration.md`.
+> P1 shipped the **executor** (operators + typed DAG + artifacts + checkpoints), P2 the
+> Chinese surveillance report, numeric-audit gate and export, and P3 the **planner**
+> (question → DAG draft). LLM prose and environment builds remain future phases.
+
+### 20.1 One DAG = one research task
+
+A DAG is not a new task type; it is the third analysis mode of the `research` task
+(`analysis="dag"`). It keeps the existing plan loop: **create a plan → a human confirms
+with `bacmap plan confirm` → the engine executes**. Confirmation binds
+`(plan_id, version, plan_hash)`; the hash covers the canonical DAG JSON, operator
+versions and input fingerprints.
+
+```json
+{
+  "schema": "bacmap.research.dag/1",
+  "nodes": [
+    {"id": "cohort", "op": "cohort.from_run@1.0", "params": {"run_id": "<run_id>"}},
+    {"id": "assoc", "op": "stats.assoc@1.0",
+     "params": {"gene": "blaCTX-M-15", "test_name": "meropenem"},
+     "inputs": {"cohort": "cohort.cohort"}},
+    {"id": "forest", "op": "figure.forest@1.0", "params": {},
+     "inputs": {"table": "assoc.table"}},
+    {"id": "report", "op": "text.report@1.0", "params": {},
+     "inputs": {"table": "assoc.table", "figure": "forest.figure"}}
+  ],
+  "checkpoints": ["assoc"]
+}
+```
+
+`inputs` are the edges: `"<node>.<port>"`. Port type mismatches, missing inputs,
+cycles and checkpoints without artifacts are rejected **before** confirmation.
+
+### 20.2 CLI
+
+```bash
+bacmap research dag catalog                 # registered operators
+bacmap research dag validate dag.json       # validate (no execution)
+bacmap research dag submit dag.json         # create a plan (one research task)
+bacmap plan confirm <plan_id>               # human confirmation → submit
+bacmap research dag nodes <task_id>         # node states
+bacmap research dag artifacts <task_id>     # artifact list
+bacmap research dag report <task_id>        # print the Chinese surveillance report
+bacmap research dag export <task_id> --out DIR  # report.md + figure.svg + provenance.json
+bacmap research dag replay <task_id> --node ID # replay one node, compare hashes
+bacmap research dag gc [--keep-days N] [--apply] # remove unreferenced artifacts (dry-run default)
+bacmap research dag resume <task_id>        # continue from a checkpoint
+
+bacmap research ask "question..." [--max-class 2] [--no-checkpoints] [--out dag.json]
+```
+
+### 20.3 Checkpoints (semi-automatic research)
+
+When a node listed in `checkpoints` finishes, the task moves to `paused` and keeps its
+artifacts. Inspect them, then `bacmap research dag resume <task_id>` to continue.
+Completed nodes are not re-executed on resume (recorded in `dag_nodes`), which supports
+"look at the association result before deciding whether to draw or write".
+
+### 20.4 Artifacts and evidence
+
+- Content addressing: `sha256:<hex>` under `$BACMAP_HOME/artifacts/<aa>/<sha256>.json`;
+- Re-writing identical content is idempotent — node caching and replay rely on it;
+- `text.report` returns `slots` (number slots) and `claims` (with evidence artifact ids);
+- The **numeric audit gate** is live: every number in the report must trace back to a slot or
+  a template constant, otherwise generation is rejected (`numeric_audit.py`);
+- The report is rendered deterministically from a template, with **no LLM prose** yet;
+  `dag export` also writes `provenance.json` (node states, artifact hashes, claims, audit).
+
+### 20.5 P1 operators
+
+| Operator | Input → output | Notes |
+|---|---|---|
+| `cohort.from_run@1.0` | — → Cohort | take strains from an existing run |
+| `stats.assoc@1.0` | Cohort → Table | 2×2 association (OR/95% CI/p) |
+| `figure.forest@1.0` | Table → Figure | forest plot SVG |
+| `text.report@1.0` | Table + Figure → Text | Chinese surveillance report (slots) |
+| `text.manuscript@1.0` | Table + Figure? → Text | English IMRAD manuscript (data-driven) |
+| `script.python@1.0` | Artifact? → Artifact + Text | arbitrary Python in a no-network sandbox |
+| `env.build@1.0` | — → Env | build an image from allowlisted mirrors (Podman) |
+
+### 20.6 Boundaries
+
+1. **Linear execution**: P1 supports `execution.mode="linear"` only; branching/parallelism is P2.
+2. **No nesting**: nodes cannot embed another DAG; a "sub-study" is a new plan referencing
+   parent artifacts.
+3. **No planner**: DAGs are hand-written for now; natural-language planning is P3.
+4. **Data class**: operators declare `data_class`; the DAG ceiling must not be lower than any
+   node — violations are rejected at validation time (ADR-16).
+5. **Arbitrary code / software installs**: not open in P1 (`script.*` / `env.build` are P4-P5);
+   only the four deterministic operators exist today.
+
+### 20.7 Planner (P3)
+
+```bash
+bacmap research ask "Is blaCTX-M-15 associated with meropenem resistance in this batch?\
+ Produce a surveillance report" --out /tmp/dag.json
+bacmap research dag submit /tmp/dag.json
+bacmap plan confirm <plan_id>
+```
+
+- The planner sees only the **operator catalog + recent run summaries** (run_id, strain count,
+  start time); never sample-level data;
+- Missing key parameters (gene, drug, run_id) produce clarifying questions — it does not guess;
+- Output goes through the same DAG validation as hand-written plans; up to 3 repair rounds;
+- It only drafts: no plan is created and nothing is confirmed; MCP tool `bacmap_research_plan`;
+- Requires `[llm.routing] planner = <endpoint>` (cloud endpoints must be named explicitly; D2 ceiling).
+
+### 20.8 Open operators and environment builds (P4)
+
+**`script.python`** (`data_class=3`, `approval=code`):
+
+- The script reads `/workspace/inputs/data.json` (when the `data` port is connected) and must
+  write a JSON result to `/workspace/result.json`;
+- Runs with `--network none` and can only touch the workspace;
+- The full code is part of the DAG parameters (visible on the confirmation page); with
+  `code_review=always` a separate signature is required before execution.
+
+**`env.build`** (`data_class=0`, `approval=code`):
+
+- Parameters: `base` / `apt` / `pip` / `script` / `tag`;
+- Requires `[research.env] allow_network=true` and a non-empty `mirrors`, otherwise it refuses;
+- Produces an image tag + digest + the rendered Dockerfile (all recorded as artifacts);
+- Builds are the **only** execution path allowed to use the network; the build container mounts
+  no business data.
+
+**Review tiers**: `[research.approval] code_review = always|plan|off` (configuration §10.1).
+`always` (default) parks the task at `awaiting_approval` before code nodes;
+`bacmap task approve <id>` restarts the workflow. `plan` relies on plan confirmation; `off`
+adds no extra review.
+
+### 20.9 English IMRAD manuscript (P5)
+
+`text.manuscript` turns the same statistical artifact into an English manuscript: Abstract /
+Introduction / Methods / Results / Discussion / Limitations / Data availability. It shares the
+**number slots** and the **numeric audit gate** with the Chinese report, so every number in the
+manuscript traces back to the Table artifact.
+
+- No literature citations are generated: References are added by a human or by the existing
+  `write` task (citation gate);
+- `dag export` names the output by template: `imrad-*` → `manuscript.md`, otherwise `report.md`;
+- The figure is optional: without a Figure input the caption is omitted.
+
+```bash
+bacmap research dag export <task_id> --out ./submission
+# submission/manuscript.md
+# submission/figure.svg
+# submission/provenance.json
+```
+
+### 20.10 Caching, parallelism, replay and GC (P6)
+
+- **Node cache**: operators declared `determinism=deterministic` are keyed by
+  `(operator version, params, input artifact ids)`; a cross-task hit marks the node
+  `cache_hit=1` and reuses the artifacts. `script.python` is declared stochastic and is never
+  cached. A cache-hit task still lists and exports the reused artifacts.
+- **Parallel execution**: `"execution": {"mode": "parallel"}` groups nodes into dependency waves
+  and runs each wave concurrently (up to 4). Checkpoints pause after a whole wave completes.
+- **Single-node replay**: `bacmap research dag replay <task_id> --node <id>` recomputes one node
+  with the same operator/params/inputs and compares artifact hashes (deterministic operators
+  must match exactly).
+- **Artifact GC**: `bacmap research dag gc [--keep-days N] [--apply]` (dry-run by default)
+  removes only artifacts not referenced by node outputs or claim evidence.
+- **Web timeline**: `/console/research/dag/<task_id>` (linked from the task detail page) shows
+  node states, cache hits, errors and artifact previews; paused/awaiting-approval tasks can be
+  resumed or code-approved inline.
+- **Read-only API**: `GET /api/v1/research/dag/{task_id}` returns run / nodes / artifacts;
+  artifact content is served by `.../artifacts/{artifact_id}` (task-scoped).
+
+```bash
+bacmap research dag replay <task_id> --node assoc
+bacmap research dag gc --keep-days 30 --apply
+```

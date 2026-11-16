@@ -61,11 +61,13 @@
 # tier = "T2"
 # supports_tools_with_schema = true
 
-# 用途路由：purpose → 端点名。两个内置 purpose：
+# 用途路由：purpose → 端点名。三个内置 purpose：
 #   interpretation     分析解读（T1；无路由条目时回落首个 enabled 端点并告警）
 #   intent_classifier  意图分类（保留键；对话外移后仅状态行探测用）
+#   planner            研究计划器（P3：问题 → 研究 DAG；云端点必须显式点名，D2 上限）
 # [llm.routing]
 # interpretation = "strata"
+# planner = "strata"
 
 # 资源仲裁（ADR-17）：模型与分析管线同机时防止内存挤占。
 #   co_located                    模型是否与本机管线同机（false=模型在别处/云端，仲裁关闭）

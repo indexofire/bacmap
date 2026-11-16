@@ -292,3 +292,31 @@ POST /api/v1/research/explore
 
 只对 screening 数据排序候选。`role` 非 `screening` 会被拒绝；候选只是提议，不会创建
 Claim 或改变证据等级。
+
+## 研究 DAG（P6）
+
+```http
+GET /api/v1/research/dag/{task_id}
+```
+
+返回研究 DAG 任务的只读视图：
+
+```json
+{
+  "run": {"task_id": "...", "dag_hash": "...", "state": "succeeded", ...},
+  "nodes": [{"node_id": "assoc", "op": "stats.assoc@1.0", "state": "succeeded", "cache_hit": 0}],
+  "artifacts": [{"artifact_id": "sha256:...", "type": "Table", "size_bytes": 471, ...}]
+}
+```
+
+- 任务不存在（且无节点记录）→ `404`；
+- 只读，不触发执行；鉴权与其它 `/api/v1` 路由一致；
+- 供 Web 时间线与外部集成使用。
+
+```http
+GET /api/v1/research/dag/{task_id}/artifacts/{artifact_id}
+```
+
+返回单个产物的内容 `{artifact_id, type, value}`。只允许读取**该任务可见**的产物
+（本任务产出或节点引用/缓存复用），否则 `404`。
+

@@ -317,3 +317,53 @@ class TestPaginationContract:
             body = c.get(f"{path}?limit=10&offset=0").json()
             assert set(body) >= {"items", "total", "offset", "limit"}, path
             assert body["offset"] == 0 and body["limit"] == 10
+
+
+class TestResearchDagApi:
+    def test_dag_endpoint(self, env):
+        import json as _json
+
+        from bacmap.research.dagstore import DagStore
+
+        engine, client, _started = env
+        with DagStore(Path(engine.home)) as store:
+            store.ensure_run("t1", "hash", 2)
+            store.put_artifact(
+                type_="Table", value={"a": 1}, task_id="t1", node_id="n1"
+            )
+            store.mark_running("t1", "n1", "stats.assoc@1.0")
+        res = client.get("/api/v1/research/dag/t1")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["run"]["task_id"] == "t1"
+        assert body["nodes"][0]["node_id"] == "n1"
+        assert len(body["artifacts"]) == 1
+        assert _json.dumps(body)  # JSON-serialisable
+
+    def test_dag_endpoint_missing(self, env):
+        _engine, client, _started = env
+        assert client.get("/api/v1/research/dag/nope").status_code == 404
+
+    def test_dag_artifact_content_and_scope(self, env):
+        import urllib.parse
+
+        from bacmap.research.dagstore import DagStore
+
+        engine, client, _started = env
+        with DagStore(Path(engine.home)) as store:
+            store.ensure_run("t1", "hash", 2)
+            artifact = store.put_artifact(
+                type_="Text", value={"markdown": "# hello"}, task_id="t1", node_id="n1"
+            )
+            # 另一个任务的产物不可通过 t1 读取
+            store.put_artifact(
+                type_="Text", value={"markdown": "secret"}, task_id="t2", node_id="n2"
+            )
+        encoded = urllib.parse.quote(artifact, safe="")
+        res = client.get(f"/api/v1/research/dag/t1/artifacts/{encoded}")
+        assert res.status_code == 200
+        assert res.json()["value"]["markdown"] == "# hello"
+        other = client.get(
+            "/api/v1/research/dag/t1/artifacts/" + urllib.parse.quote("sha256:" + "0" * 64)
+        )
+        assert other.status_code == 404

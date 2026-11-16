@@ -234,6 +234,18 @@ bacmap research advstats render --method M --data FILE [--outcome C] [--treatmen
                                 [--time C] [--event C] [--output FILE]
 bacmap research package <study_id> --out DIR
 
+bacmap research ask "QUESTION" [--max-class 2] [--no-checkpoints] [--out FILE]
+bacmap research dag catalog [--json]
+bacmap research dag validate FILE [--json]
+bacmap research dag submit FILE [--rationale TEXT] [--home DIR] [--json]
+bacmap research dag nodes <task_id> [--home DIR] [--json]
+bacmap research dag artifacts <task_id> [--home DIR] [--json]
+bacmap research dag report <task_id> [--home DIR]
+bacmap research dag export <task_id> --out DIR [--home DIR] [--json]
+bacmap research dag replay <task_id> --node ID [--home DIR] [--json]
+bacmap research dag gc [--keep-days N] [--apply] [--home DIR] [--json]
+bacmap research dag resume <task_id> [--home DIR]
+
 bacmap research request create --question TEXT [--run-id ID]... [--gene NAME]
                               [--test-name NAME] [--analysis association|logistic|phylo|figure]
 bacmap research request list [--status proposed|approved|rejected]

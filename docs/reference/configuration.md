@@ -320,6 +320,28 @@ Rootless Podman without a working systemd session is retried once with
 `--cgroup-manager=cgroupfs`; the sandbox also aligns `USER`/`LOGNAME` with the real account
 so subuid/subgid ranges resolve. The image must be present locally (pull it before a run).
 
+### 10.1 `[research]`: research orchestration (P4)
+
+```toml
+[research.env]
+allow_network = false          # true enables package pulls / image builds
+mirrors = []                   # mirror allowlist used by builds
+proxy = ""                     # optional HTTP(S) proxy
+
+[research.approval]
+code_review = "always"         # always | plan | off
+```
+
+| Setting | Default | Notes |
+|---|---|---|
+| `env.allow_network` | `false` | when off, `env.build` refuses; analysis nodes always run `--network none` |
+| `env.mirrors` | `[]` | must be non-empty for network builds; drives PIP/apt sources |
+| `env.proxy` | `""` | HTTP(S) proxy for the build container |
+| `approval.code_review` | `always` | `always` = separate signature per plan; `plan` = plan confirmation authorizes code; `off` = no extra review (debug/at your own risk) |
+
+Only the local user can change these values; MCP and external harnesses have no write path.
+Existing gates (`open-test`/`research`/`publication`) are unaffected.
+
 ## 11. Validation and failure behaviour
 
 - Unknown TOML keys in typed sections are rejected (pydantic `extra="forbid"`).

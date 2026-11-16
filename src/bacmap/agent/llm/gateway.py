@@ -216,6 +216,8 @@ class LlmGateway:
                     endpoint.name,
                     exc,
                 )
+        cause = f"{type(last_exc).__name__}: {last_exc}"[:300] if last_exc else "unknown"
         raise LlmUnavailableError(
             f"structured output failed after {MAX_RETRIES + 1} attempts on {endpoint.name}"
+            f" ({cause})"
         ) from last_exc

@@ -12,7 +12,7 @@
 - ``bacmap task list|show|submit|approve|cancel``  任务查询与写操作（list 别名 ls）
 - ``bacmap sample ls|show``                        样本查询
 - ``bacmap search``                                样本检索
-- ``bacmap --version``                             版本号
+- ``bacmap --version`` / ``bacmap -V``             版本号
 
 显示语言：``[ui] language``（en|zh，默认 en）或环境变量 ``BACMAP_LANG``；
 所有查询子命令支持 ``--json`` 便于脚本消费。
@@ -1036,7 +1036,12 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=_epilog(),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--version", action="version", version=f"bacmap {pkg_version('bacmap')}")
+    parser.add_argument(
+        "--version",
+        "-V",
+        action="version",
+        version=f"bacmap {pkg_version('bacmap')}",
+    )
     sub = parser.add_subparsers(
         dest="command",
         required=True,

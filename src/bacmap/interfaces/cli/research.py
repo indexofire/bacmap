@@ -1784,3 +1784,7 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(bench)
     add_json(bench)
     bench.set_defaults(func=run_benchmark)
+
+    from bacmap.interfaces.cli.research_dag import add_parser as _add_dag_parser
+
+    _add_dag_parser(s, add_home, add_json)

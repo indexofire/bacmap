@@ -762,3 +762,183 @@ phenos     = _phenotypes(home, strain_ids)    # 表型：lab_results（全库）
    `open-test` 输出标 `TEST/UNVERIFIED`；`research` / `publication` 为 `REVIEW REQUIRED`。
 3. **数据前置**：已存在的 run（`runs.sqlite`）、`strain_amr_genes` 中的基因（`gom.sqlite`）、
    `lab_results` 中的表型。缺了就先跑 analyze 或补录药敏。
+
+## 20. 研究编排层（P1：线性 DAG）
+
+> 状态：P1（2026-11）。设计见 `dev/PLAN-research-orchestration.md`。
+> P1 已落地执行器（算子 + DAG + 产物 + 检查点），P2 落地中文监测报告、
+> 数字审计门与导出，P3 落地**计划器**（问题 → DAG 草案）。LLM 行文与环境构建
+> 仍属后续阶段。
+
+### 20.1 一个 DAG = 一个 research 任务
+
+DAG 不是新任务类型，而是 `research` 任务的第三种分析方式（`analysis="dag"`）。
+它仍走既有计划闭环：**创建计划 → 人在 `bacmap plan confirm` 确认 → 引擎执行**。
+确认绑定 `(plan_id, version, plan_hash)`；`plan_hash` 覆盖 DAG 规范 JSON、
+算子版本与输入指纹。
+
+```json
+{
+  "schema": "bacmap.research.dag/1",
+  "nodes": [
+    {"id": "cohort", "op": "cohort.from_run@1.0", "params": {"run_id": "<run_id>"}},
+    {"id": "assoc", "op": "stats.assoc@1.0",
+     "params": {"gene": "blaCTX-M-15", "test_name": "meropenem"},
+     "inputs": {"cohort": "cohort.cohort"}},
+    {"id": "forest", "op": "figure.forest@1.0", "params": {},
+     "inputs": {"table": "assoc.table"}},
+    {"id": "report", "op": "text.report@1.0", "params": {},
+     "inputs": {"table": "assoc.table", "figure": "forest.figure"}}
+  ],
+  "checkpoints": ["assoc"]
+}
+```
+
+`inputs` 即边：`"<节点>.<端口>"`。端口类型不匹配、缺输入、有环、检查点无产物
+都会在**确认前**被拒绝。
+
+### 20.2 CLI
+
+```bash
+bacmap research dag catalog                 # 已注册算子
+bacmap research dag validate dag.json       # 校验（不执行）
+bacmap research dag submit dag.json         # 创建计划（一个 research 任务）
+bacmap plan confirm <plan_id>               # 人确认 → 提交执行
+bacmap research dag nodes <task_id>         # 节点状态
+bacmap research dag artifacts <task_id>     # 产物清单
+bacmap research dag report <task_id>        # 打印中文监测报告
+bacmap research dag export <task_id> --out DIR  # 导出 report.md + figure.svg + provenance.json
+bacmap research dag replay <task_id> --node ID # 单节点重放并比对产物哈希
+bacmap research dag gc [--keep-days N] [--apply] # 清理无引用产物（默认 dry-run）
+bacmap research dag resume <task_id>        # 从检查点继续
+
+bacmap research ask "问题..." [--max-class 2] [--no-checkpoints] [--out dag.json]
+```
+
+### 20.3 检查点（半自动研究）
+
+`checkpoints` 里的节点执行完，任务转入 `paused` 并保留产物；查看后再
+`bacmap research dag resume <task_id>` 继续。恢复时已完成节点不会重跑
+（`dag_nodes` 记录为证），适合"先看关联结果，再决定要不要出图/成文"。
+
+### 20.4 产物与证据
+
+- 产物内容寻址：`sha256:<hex>`，落 `$BACMAP_HOME/artifacts/<aa>/<sha256>.json`；
+- 同一内容重复写入幂等，节点缓存与重放依赖这一点；
+- `text.report` 返回 `slots`（数字槽位）与 `claims`（含证据 artifact id）；
+- **数字审计门**已启用：报告文本中的每个数字必须能回溯到槽位或模板常量，
+  出现"凭空数字"直接拒绝生成（`numeric_audit.py`）；
+- 当前报告由模板确定性渲染，**无 LLM 行文**；`dag export` 同时输出
+  `provenance.json`（节点状态、产物哈希、claims、审计结果）。
+
+### 20.5 P1 算子
+
+| 算子 | 输入 → 输出 | 说明 |
+|---|---|---|
+| `cohort.from_run@1.0` | — → Cohort | 从既有 run 取菌株集合 |
+| `stats.assoc@1.0` | Cohort → Table | 2×2 关联（OR/95% CI/p） |
+| `figure.forest@1.0` | Table → Figure | 森林图 SVG |
+| `text.report@1.0` | Table + Figure → Text | 中文监测报告（槽位渲染） |
+| `text.manuscript@1.0` | Table + Figure? → Text | 英文 IMRAD 稿（数据成文） |
+| `script.python@1.0` | Artifact? → Artifact + Text | 沙箱内任意 Python（无网络） |
+| `env.build@1.0` | — → Env | 按白名单源构建镜像（Podman） |
+
+### 20.6 边界
+
+1. **线性执行**：P1 只支持 `execution.mode="linear"`；并行与分支在 P2。
+2. **无嵌套**：节点不得内嵌 DAG；需要"子研究"时新建计划并引用父产物。
+3. **无计划器**：DAG 目前手写；自然语言生成在 P3。
+4. **数据级别**：算子声明 `data_class`，DAG 声明的上限不得低于任一节点；越界在
+   校验期拒绝（ADR-16）。
+5. **任意代码/装软件**：P1 尚未开放（`script.*` / `env.build` 属 P4-P5）；当前只有
+   四个确定性算子。
+
+### 20.7 计划器（P3）
+
+```bash
+bacmap research ask "这批沙门菌里 blaCTX-M-15 与美罗培南有没有关联？给我一份监测报告" \
+  --out /tmp/dag.json
+bacmap research dag submit /tmp/dag.json
+bacmap plan confirm <plan_id>
+```
+
+- 计划器只拿到**算子目录 + 最近 run 摘要**（run_id/菌株数/时间），不接触样本明细；
+- 缺关键参数（基因、药物、run_id）时返回澄清问题，**不猜**；
+- 输出过与手写 DAG 相同的校验；失败自动修复最多 3 轮；
+- 只输出草案，不创建计划、不确认；MCP 对应工具 `bacmap_research_plan`；
+- 需要 `[llm.routing] planner = <端点名>`（云端点必须显式点名，数据级别上限 D2）。
+
+### 20.8 开放算子与环境构建（P4）
+
+**`script.python`**（`data_class=3`，`approval=code`）：
+
+- 脚本读取 `/workspace/inputs/data.json`（上游有 `data` 端口时），
+  必须把 JSON 结果写到 `/workspace/result.json`；
+- 容器内 `--network none`，只能访问工作区；
+- 代码全文进入 DAG 参数，计划确认页可见；`code_review=always` 时执行前还要单独签字。
+
+**`env.build`**（`data_class=0`，`approval=code`）：
+
+- 参数：`base` / `apt` / `pip` / `script` / `tag`；
+- 必须配置 `[research.env] allow_network=true` 且 `mirrors` 非空，否则直接拒绝；
+- 产出镜像 tag + digest + 渲染出的 Dockerfile（全部进产物，可审计）；
+- 构建是**唯一**允许联网的执行路径；构建容器不挂载任何业务数据。
+
+**审核三档**：`[research.approval] code_review = always|plan|off`（配置参考 §10.1）。
+`always`（默认）在执行代码节点前把任务置为 `awaiting_approval`，
+`bacmap task approve <id>` 后自动重启工作流；`plan` 以计划确认为准；`off` 不额外审核。
+
+```json
+{
+  "schema": "bacmap.research.dag/1",
+  "data_class": 3,
+  "execution": {"mode": "linear", "on_failure": "fail_fast"},
+  "nodes": [
+    {"id": "cohort", "op": "cohort.from_run@1.0", "params": {"run_id": "<run_id>"}},
+    {"id": "assoc", "op": "stats.assoc@1.0",
+     "params": {"gene": "blaCTX-M-15", "test_name": "meropenem"},
+     "inputs": {"cohort": "cohort.cohort"}},
+    {"id": "custom", "op": "script.python@1.0",
+     "params": {"code": "import json; json.dump({'n': 1}, open('/workspace/result.json','w'))", "objective": "自定义统计"},
+     "inputs": {"data": "assoc.table"}}
+  ]
+}
+```
+
+### 20.9 英文 IMRAD 稿（P5）
+
+`text.manuscript` 把同一批统计产物写成英文稿：Abstract / Introduction / Methods /
+Results / Discussion / Limitations / Data availability。与中文报告共用**数字槽位**与
+**数字审计门**，因此稿中的每个数字同样可回溯到 Table 产物。
+
+- 不生成文献引用：References 由人工或既有 `write` 任务（引用门）补齐；
+- `dag export` 会按模板命名：`imrad-*` → `manuscript.md`，否则 `report.md`；
+- 图可选：没有 Figure 输入时省略图注。
+
+```bash
+bacmap research dag export <task_id> --out ./submission
+# submission/manuscript.md
+# submission/figure.svg
+# submission/provenance.json
+```
+
+### 20.10 缓存、并行、重放与回收（P6）
+
+- **节点缓存**：`determinism=deterministic` 的算子按
+  `(算子版本, 参数, 输入产物 id)` 做键；跨任务命中时节点标记 `cache_hit=1` 并复用产物。
+  `script.python` 声明为 stochastic，不进入缓存。缓存命中的任务仍能列出/导出复用来的产物。
+- **并行执行**：`"execution": {"mode": "parallel"}` 时按依赖分层，同层节点并发执行
+  （最多 4 个）；检查点在整层完成后暂停。
+- **单节点重放**：`bacmap research dag replay <task_id> --node <id>` 用同一算子/参数/输入
+  重算一次，比对产物哈希（确定性算子应完全一致）。
+- **产物回收**：`bacmap research dag gc [--keep-days N] [--apply]`；默认 dry-run。
+  只删除**未被节点输出或 claims 证据引用**的产物。
+- **Web 时间线**：控制台 `/console/research/dag/<task_id>`（任务详情页「DAG 时间线」按钮进入）
+  展示节点状态、缓存命中、错误与产物预览；暂停/待审批时可直接恢复或批准代码。
+- **只读 API**：`GET /api/v1/research/dag/{task_id}` 返回 run / nodes / artifacts；
+  产物内容经 `.../artifacts/{artifact_id}` 读取（仅限该任务可见产物）。
+
+```bash
+bacmap research dag replay <task_id> --node assoc
+bacmap research dag gc --keep-days 30 --apply
+```

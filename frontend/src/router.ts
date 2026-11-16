@@ -142,6 +142,12 @@ const router = createRouter({
       },
     },
     {
+      path: '/research/dag/:id',
+      name: 'research-dag',
+      component: () => import('./views/DagView.vue'),
+      meta: { title: '研究 DAG' },
+    },
+    {
       path: '/research/sessions/:id',
       name: 'research-session',
       component: () => import('./views/ResearchSessionView.vue'),

@@ -9,14 +9,19 @@ import pytest
 from bacmap.interfaces.cli.main import main
 
 
+@pytest.mark.parametrize("flag", ["--version", "-V"])
 def test_version_prints_and_exits(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    flag: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["bacmap", "--version"])
+    monkeypatch.setattr(sys, "argv", ["bacmap", flag])
     with pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 0
-    assert "bacmap" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "bacmap" in out
+    assert out.strip().split()[-1].count(".") >= 2  # 形如 0.1.8
 
 
 def test_missing_subcommand_rejected(monkeypatch: pytest.MonkeyPatch) -> None:

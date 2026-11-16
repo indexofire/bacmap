@@ -758,6 +758,35 @@ def _evidence_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
 
 def _research_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
     """P1 Research Workbench API（trusted operator surface）。"""
+    @router.get("/research/dag/{task_id}")
+    def research_dag(task_id: str) -> dict[str, Any]:
+        """研究 DAG 的只读视图：run + 节点状态 + 产物（P6）。"""
+        from bacmap.research.dagstore import DagStore
+
+        with DagStore(Path(engine.home)) as store:
+            run = store.get_run(task_id)
+            nodes = store.node_rows(task_id)
+            artifacts = store.list_artifacts(task_id)
+        if run is None and not nodes:
+            raise HTTPException(status_code=404, detail=f"no such dag task: {task_id}")
+        return {"run": run, "nodes": nodes, "artifacts": artifacts}
+
+    @router.get("/research/dag/{task_id}/artifacts/{artifact_id}")
+    def research_dag_artifact(task_id: str, artifact_id: str) -> dict[str, Any]:
+        """单个产物的内容（只读；仅限该任务可见的产物）。"""
+        from bacmap.research.dagstore import DagStore
+
+        with DagStore(Path(engine.home)) as store:
+            visible = {row["artifact_id"] for row in store.list_artifacts(task_id)}
+            if artifact_id not in visible:
+                raise HTTPException(status_code=404, detail="artifact not found for this task")
+            payload = store.load_artifact(artifact_id)
+        return {
+            "artifact_id": artifact_id,
+            "type": payload.get("type"),
+            "value": payload.get("value"),
+        }
+
     _research_session_routes(router, engine)
     _research_artifact_routes(router, engine)
     _research_object_routes(router, engine)

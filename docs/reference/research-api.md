@@ -298,3 +298,31 @@ POST /api/v1/research/explore
 
 Ranks screening candidates only. `role` other than `screening` is rejected; candidates are
 proposals and never create Claims or change evidence levels.
+
+## Research DAG (P6)
+
+```http
+GET /api/v1/research/dag/{task_id}
+```
+
+Returns a read-only view of a research DAG task:
+
+```json
+{
+  "run": {"task_id": "...", "dag_hash": "...", "state": "succeeded", ...},
+  "nodes": [{"node_id": "assoc", "op": "stats.assoc@1.0", "state": "succeeded", "cache_hit": 0}],
+  "artifacts": [{"artifact_id": "sha256:...", "type": "Table", "size_bytes": 471, ...}]
+}
+```
+
+- Unknown task (and no node records) → `404`;
+- Read-only, never triggers execution; same auth as the other `/api/v1` routes;
+- Used by the Web timeline and external integrations.
+
+```http
+GET /api/v1/research/dag/{task_id}/artifacts/{artifact_id}
+```
+
+Returns one artifact as `{artifact_id, type, value}`. Only artifacts **visible to that task**
+(produced by it, or referenced/reused via cache) can be read; otherwise `404`.
+

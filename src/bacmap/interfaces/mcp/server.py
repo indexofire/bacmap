@@ -736,6 +736,82 @@ def _register_task_control_tools(server: MCPServer, engine: Any, profile: Profil
         )
 
 
+def _register_dag_tools(server: MCPServer, engine: Any) -> None:
+    """研究编排层 P1：DAG 节点状态与产物（调用方已完成 D2 门）。"""
+    from pathlib import Path as _Path
+
+    @server.tool(
+        name="bacmap_research_plan",
+        description=(
+            "Compile a natural-language research question into a typed research DAG draft "
+            "using only registered operators. Returns dag/questions/rationale/problems; "
+            "nothing is created or executed. To run it, pass the dag to bacmap_create_plan "
+            "(task_type=research, analysis='dag') and let a human confirm. D2 metadata only."
+        ),
+    )
+    def research_plan(question: str, max_data_class: int = 2) -> str:
+        from bacmap.agent.llm.endpoints import load_llm_config
+        from bacmap.agent.llm.gateway import LlmGateway, LlmUnavailableError
+        from bacmap.agent.planner import (
+            PlannerConstraints,
+            propose_dag,
+            recent_run_summaries,
+        )
+        from bacmap.config import config_path
+
+        home = _Path(engine.home)
+        ceiling = min(max(int(max_data_class), 0), 2)
+        try:
+            gateway = LlmGateway(load_llm_config(config_path(home)))
+            proposal = propose_dag(
+                question,
+                gateway,
+                constraints=PlannerConstraints(max_data_class=ceiling),
+                runs=recent_run_summaries(home),
+            )
+        except LlmUnavailableError as exc:
+            return json.dumps(
+                {
+                    "error": "planner_unavailable",
+                    "message": str(exc),
+                    "hint": (
+                        "add `planner = <endpoint>` under [llm.routing] in "
+                        f"{config_path(home)}"
+                    ),
+                },
+                ensure_ascii=False,
+            )
+        return json.dumps(proposal.model_dump(mode="json"), ensure_ascii=False)
+
+    @server.tool(
+        name="bacmap_research_dag_nodes",
+        description=(
+            "Node-level states of a research DAG task (P1 orchestration): node_id, op, state,"
+            " cache_hit, error. Read-only, D2 metadata; artifacts are listed separately."
+        ),
+    )
+    def research_dag_nodes(task_id: str) -> str:
+        from bacmap.research.dagstore import DagStore
+
+        with DagStore(_Path(engine.home)) as store:
+            rows = store.node_rows(task_id)
+        return json.dumps(rows, ensure_ascii=False)
+
+    @server.tool(
+        name="bacmap_research_dag_artifacts",
+        description=(
+            "Content-addressed artifacts produced by a research DAG task (artifact_id, type,"
+            " size, producing node). Read-only, D2 metadata."
+        ),
+    )
+    def research_dag_artifacts(task_id: str) -> str:
+        from bacmap.research.dagstore import DagStore
+
+        with DagStore(_Path(engine.home)) as store:
+            rows = store.list_artifacts(task_id)
+        return json.dumps(rows, ensure_ascii=False)
+
+
 def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -> None:
     """P1 Research Workbench 只读工具（D2；cloud D1 不注册）。"""
     from pathlib import Path as _Path
@@ -876,6 +952,8 @@ def _register_research_tools(server: MCPServer, engine: Any, profile: ProfileSpe
         return json.dumps(
             checklist.model_dump(mode="json", by_alias=True), ensure_ascii=False
         )
+
+    _register_dag_tools(server, engine)
 
     _register_evidence_tools(server, engine, service)
     _register_analysis_tools(server, engine, profile)

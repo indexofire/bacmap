@@ -402,3 +402,48 @@ export interface DatabaseStats {
   }
   results: { sample_reports: number; [key: string]: unknown }
 }
+
+export interface DagRun {
+  task_id: string
+  dag_hash: string
+  state: string
+  data_class: number
+  created_at: string
+  updated_at: string
+}
+
+export interface DagNodeRow {
+  task_id: string
+  node_id: string
+  op: string
+  state: string
+  cache_hit: number
+  outputs_json: string
+  error: string
+  started_at: string
+  finished_at: string
+}
+
+export interface DagArtifactRow {
+  artifact_id: string
+  type: string
+  sha256: string
+  path: string
+  producer_task: string
+  producer_node: string
+  data_class: number
+  size_bytes: number
+  created_at: string
+}
+
+export interface DagView {
+  run: DagRun | null
+  nodes: DagNodeRow[]
+  artifacts: DagArtifactRow[]
+}
+
+export interface DagArtifactPayload {
+  artifact_id: string
+  type: string
+  value: unknown
+}

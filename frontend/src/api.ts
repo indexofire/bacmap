@@ -9,6 +9,8 @@ import type {
   IsolateRow,
   Overview,
   PlanRecord,
+  DagArtifactPayload,
+  DagView,
   ResearchClaim,
   ResearchCohort,
   ResearchLedgerEntry,
@@ -123,6 +125,13 @@ export const api = {
     request<TaskRow>(`/tasks/${encodeURIComponent(id)}/pause`, { method: 'POST' }),
   resumeTask: (id: string) =>
     request<TaskRow>(`/tasks/${encodeURIComponent(id)}/resume`, { method: 'POST' }),
+
+  researchDag: (id: string) =>
+    request<DagView>(`/research/dag/${encodeURIComponent(id)}`),
+  researchDagArtifact: (id: string, artifactId: string) =>
+    request<DagArtifactPayload>(
+      `/research/dag/${encodeURIComponent(id)}/artifacts/${encodeURIComponent(artifactId)}`,
+    ),
 
   listPlans: (limit = 100) =>
     request<{ items: PlanRecord[] }>(`/plans?limit=${limit}`).then((r) => r.items),

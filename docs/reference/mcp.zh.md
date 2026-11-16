@@ -161,9 +161,13 @@ JSON 只含 D1 元数据——`task_id`、`kind`（`submitted|step|progress|fini
 | `bacmap_research_phylo_plan` | `alignment`、`goal?`、`dates_file?` | D3；仅 local-trusted；类型化 ML/BEAST2 计划 |
 | `bacmap_research_logistic` | `data_path`、`outcome`、`predictors` | D3；仅 local-trusted；多变量 logistic 回归 |
 | `bacmap_research_power` | `p1?`、`p2?`、`baseline?`、`odds_ratio?`、`n1?`、`n2?`、`alpha?`、`power?`、`ratio?`、`session_id?` | D2；两比例的事先样本量/把握度 |
+| `bacmap_research_plan` | `question`、`max_data_class?` | D2；问题 → DAG 草案（只提案，不提交） |
+| `bacmap_research_dag_nodes` | `task_id` | D2；研究 DAG 的节点状态（只读） |
+| `bacmap_research_dag_artifacts` | `task_id` | D2；研究 DAG 的内容寻址产物清单（只读） |
 
-研究任务（ADR-23）：`bacmap_create_plan` 接受 `task_type=research`（`analysis=session|advstats`）；
-高级统计经类型化规格外部化（ADR-22），见 `docs/guide/research-workbench` §12。
+研究任务（ADR-23）：`bacmap_create_plan` 接受 `task_type=research`
+（`analysis=session|advstats|dag`）；高级统计经类型化规格外部化（ADR-22），
+研究 DAG 见 `docs/guide/research-workbench` §20。
 | `bacmap_research_reporting_checklist` | `study_id` | D2；确定性 STROBE 草案 |
 | `bacmap_research_request` | question、run_ids?、gene?、test_name?、analysis? 等 | D2+；只写请求草案，由 Web 人工确认 |
 | `bacmap_research_requests` | `status?`、`limit?` | D2+；列出请求草案 |

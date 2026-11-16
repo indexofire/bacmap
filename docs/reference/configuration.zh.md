@@ -317,6 +317,28 @@ Rootless Podman 在没有可用 systemd 会话时会自动用 `--cgroup-manager=
 沙箱同时把 `USER`/`LOGNAME` 对齐到真实账户，确保 subuid/subgid 范围可解析。镜像需先在本地存在
 （运行前 pull）。
 
+### 10.1 `[research]`：研究编排层（P4）
+
+```toml
+[research.env]
+allow_network = false          # true 才允许 env.build 拉包/构建
+mirrors = []                   # 镜像源白名单（构建仅使用这些源）
+proxy = ""                     # 可选 HTTP(S) 代理
+
+[research.approval]
+code_review = "always"         # always | plan | off
+```
+
+| 设置 | 默认值 | 说明 |
+|---|---|---|
+| `env.allow_network` | `false` | 关闭时 `env.build` 直接拒绝；分析节点始终 `--network none` |
+| `env.mirrors` | `[]` | 非空才允许联网构建；PIP/apt 源由它决定 |
+| `env.proxy` | `""` | 构建容器的 HTTP(S) 代理 |
+| `approval.code_review` | `always` | `always`=自写脚本需单独签字；`plan`=计划确认即授权；`off`=不额外审核（仅 debug/自担风险） |
+
+约束：这三个值只能由本机用户改配置文件；MCP 与外部 Harness 没有修改入口。
+`open-test`/`research`/`publication` 的既有门不受影响。
+
 ## 11. 校验与失败行为
 
 - 类型化段中的未知 TOML 键会被拒绝（pydantic `extra="forbid"`）。

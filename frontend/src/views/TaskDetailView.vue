@@ -330,6 +330,14 @@ onMounted(() => void load())
       </div>
       <div class="pagehead__actions">
         <RouterLink
+          v-if="task?.task_type === 'research'"
+          :to="`/research/dag/${task.task_id}`"
+          class="btn btn--ghost"
+        >
+          <Icon name="activity" />
+          DAG 时间线
+        </RouterLink>
+        <RouterLink
           v-if="planRef"
           :to="`/plans/${planRef.id}?version=${planRef.version}`"
           class="btn btn--ghost"

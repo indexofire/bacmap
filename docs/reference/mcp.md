@@ -165,10 +165,13 @@ The call returns `{"task_id": "...", "kind": "...", "state": "running"}`. Follow
 | `bacmap_research_phylo_plan` | `alignment`, `goal?`, `dates_file?` | D3; local-trusted only; typed ML/BEAST2 plan |
 | `bacmap_research_logistic` | `data_path`, `outcome`, `predictors` | D3; local-trusted only; multivariable logistic regression |
 | `bacmap_research_power` | `p1?`, `p2?`, `baseline?`, `odds_ratio?`, `n1?`, `n2?`, `alpha?`, `power?`, `ratio?`, `session_id?` | D2; a priori sample size / achieved power for two proportions |
+| `bacmap_research_plan` | `question`, `max_data_class?` | D2; question → DAG draft (proposal only, no submission) |
+| `bacmap_research_dag_nodes` | `task_id` | D2; node-level states of a research DAG (read-only) |
+| `bacmap_research_dag_artifacts` | `task_id` | D2; content-addressed artifacts of a research DAG (read-only) |
 
 Research tasks (ADR-23): `bacmap_create_plan` accepts `task_type=research`
-(`analysis=session|advstats`); advanced statistics are externalised from typed specs
-(ADR-22) — see `docs/guide/research-workbench` §12.
+(`analysis=session|advstats|dag`); advanced statistics are externalised from typed specs
+(ADR-22); research DAGs are documented in `docs/guide/research-workbench` §20.
 | `bacmap_research_reporting_checklist` | `study_id` | D2; deterministic STROBE draft |
 | `bacmap_research_request` | question, run_ids?, gene?, test_name?, analysis?, ... | D2+; writes a draft request only; human approves in Web |
 | `bacmap_research_requests` | `status?`, `limit?` | D2+; list request drafts |

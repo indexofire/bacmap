@@ -40,6 +40,63 @@
   按钮出现在左上、无样式且被 `pointer-events:none` 挡住无法点击的问题。
 - 测试：新增 GC 轨道回填与 demo/no-cache 2 个测试；连同期间 CPE cgMLST cohort 4 个测试，基线 2234 → 2240。
 
+## [0.1.8] - 2026-11-16
+
+### 版本与 CLI
+
+- 新增 `-V` 作为 `--version` 的等价短参数。
+- 程序版本 `0.1.7` → `0.1.8`（`pyproject.toml` / `pixi.toml`）。
+
+### 研究编排层 P1/P2：线性 DAG + 中文监测报告（v1.10.37）
+
+- 新增**算子注册表**（`bacmap.research.operators`）：算子声明端口类型、参数模型、
+  数据级别与资源；目录可导出 JSON Schema，供计划器与 UI 消费。
+- 首批四个确定性算子：`cohort.from_run`、`stats.assoc`、`figure.forest`、`text.report`
+  （中文监测报告，槽位渲染 + claims 证据绑定，无 LLM 行文）。
+- `research` 任务新增 `analysis="dag"`：**一个 DAG = 一个 research 任务**，仍走
+  `bacmap_create_plan` → 人在 CLI/Web 确认的既有闭环；`plan_hash` 覆盖 DAG JSON。
+- 执行器：线性拓扑序、节点级状态、**检查点暂停/恢复**（复用 `task.resume`，
+  已完成节点不重跑）、失败即停。
+- 产物内容寻址（`sha256:<hex>`，`$BACMAP_HOME/artifacts/`），节点缓存与重放的基础。
+- research.sqlite 迁移 11：`dag_runs` / `dag_nodes` / `dag_artifacts`。
+- CLI：`bacmap research dag catalog|validate|submit|nodes|artifacts|report|resume`。
+- MCP 只读工具：`bacmap_research_dag_nodes`、`bacmap_research_dag_artifacts`（D2）。
+- **P2 数字审计门**：报告文本中的每个数字必须能回溯到槽位或模板常量，出现
+  "凭空数字"直接拒绝生成（`research/numeric_audit.py`）；时间戳、内容哈希与
+  章节号在审计前屏蔽。
+- **P2 报告导出**：`bacmap research dag export <task_id> --out DIR` 输出
+  `report.md` + `figure.svg` + `provenance.json`（节点状态、产物哈希、claims、审计结果）。
+- **P3 计划器**：`bacmap research ask "问题"` 与 MCP `bacmap_research_plan` 把自然语言
+  编译成 DAG 草案（只提案，不创建/不确认）：只看算子目录与最近 run 摘要，缺关键参数
+  返回澄清问题，输出过同一套 DAG 校验并最多修复 3 轮；需配置
+  `[llm.routing] planner = <端点名>`（云端点必须显式点名，D2 上限）。
+- `LlmUnavailableError` 附带最后一次失败原因（如 401/模型不可用），便于定位端点问题。
+- **P4 开放算子**：`script.python` 在 `--network none` 沙箱执行任意 Python（读
+  `/workspace/inputs/data.json`，必须写 `/workspace/result.json`）；`env.build` 用
+  Podman 按白名单镜像源构建镜像，产出 tag + digest + Dockerfile（全部进产物）。
+- **P4 审核三档**：`[research.approval] code_review = always|plan|off`；`always`（默认）
+  在执行代码节点前把任务置为 `awaiting_approval`，`bacmap task approve` 后自动重启工作流。
+- **P4 配置**：`[research.env] allow_network/mirrors/proxy`；构建是唯一允许联网的执行
+  路径，构建容器不挂载业务数据（配置参考 §10.1）。
+- 算子支持**可选输入端口**（`optional_inputs`），DAG 校验按算子声明放行。
+- **P5 英文 IMRAD 稿**：`text.manuscript` 复用数字槽位与审计门，输出
+  Abstract/Introduction/Methods/Results/Discussion/Limitations/Data availability；
+  不生成文献引用（由人工或 `write` 任务补齐）；`dag export` 按模板写成 `manuscript.md`。
+- **P6 执行优化**：确定性节点**跨任务缓存**（`determinism=deterministic`，命中标记
+  `cache_hit`；`script.python` 为 stochastic 不缓存）；`execution.mode=parallel` 按依赖
+  分层并行执行（最多 4 并发）；`bacmap research dag replay --node` 单节点重放并比对哈希；
+  `bacmap research dag gc` 回收无引用产物（默认 dry-run，保留 claims 证据）；
+  `GET /api/v1/research/dag/{task_id}` 只读视图（run/nodes/artifacts）。
+  缓存命中的任务仍能列出并导出复用来的产物（`list_artifacts` 合并节点引用）。
+- **Web DAG 时间线**：控制台新增 `/research/dag/:task_id` 页面（任务详情页入口），
+  展示节点状态/缓存命中/错误/产物预览，并支持暂停恢复与代码审核；
+  新增 `GET /api/v1/research/dag/{task_id}/artifacts/{artifact_id}`（任务内可见产物）。
+- 文档：`docs/guide/research-workbench.{md,zh.md}` 新增「研究编排层（P1：线性 DAG）」；
+  `docs/reference/cli.{md,zh.md}` 与 `docs/reference/mcp.{md,zh.md}` 同步命令/工具面。
+- 测试：新增 81 个（算子/DAG 校验/产物库/执行器/内置链路端到端/数字审计/导出/计划器/
+  沙箱脚本/环境构建/审核三档/IMRAD 稿/缓存并行重放回收/DAG API/产物内容 API），
+  基线 2238 → 2319。
+
 ### gmlst 0.6.2（v1.10.36）
 
 - `pixi.toml` PyPI 依赖 `gmlst` 由 `==0.6.1` 升级为 `==0.6.2`，`pixi.lock` 同步。

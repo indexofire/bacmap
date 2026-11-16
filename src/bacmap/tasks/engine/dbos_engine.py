@@ -1290,6 +1290,12 @@ def _step_research_advstats(params: dict[str, Any]) -> dict[str, Any]:
 
 @DBOS.workflow()
 def research_workflow(params: dict[str, Any]) -> dict[str, Any]:
+    if params.get("analysis") == "dag":
+        # 研究编排层 P1：节点级 step 在 dag_engine（模块级 @DBOS.step），
+        # 这里不另开工作流，保持同一 task 身份与既有恢复/检查点语义。
+        from bacmap.tasks.engine.dag_engine import run_dag
+
+        return run_dag(params)
     if params.get("analysis") == "advstats":
         return _step_research_advstats(params)
     return _step_research_session(params)
