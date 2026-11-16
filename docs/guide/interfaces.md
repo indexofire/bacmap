@@ -44,7 +44,7 @@ Console routes:
 | `/console/plans`, `/console/plans/{id}` | agent-proposed plans, full parameters, confirm/reject |
 | `/console/specimens`, `/console/specimens/{id}` | specimens, their isolates and libraries; an inline form links unassigned isolates/datasets to a specimen; the detail page can delete a specimen (empty by default, or unlink its isolates first — isolates/data are kept) |
 | `/console/isolates`, `/console/isolates/{id}` | isolate entities, specimen link and libraries; the detail page can delete an empty isolate (linked data blocks deletion) |
-| `/console/samples`, `/console/samples/{id}` | libraries (sequencing data): per-library results/annotation and a visual assembly-QC panel (QUAST KPIs, contig length/GC distributions, Nx curve); the full report opens standalone |
+| `/console/samples`, `/console/samples/{id}` | libraries (sequencing data): the list shows species, genome size, contig count and GC per library; every column header sorts instantly in the browser (all rows are loaded once, so sorting/filtering/paging make no further requests); the detail page adds per-library results/annotation and a visual assembly-QC panel (QUAST KPIs, contig length/GC distributions, Nx curve); the full report opens standalone |
 | `/console/runs`, `/console/runs/{id}` | immutable run records and source comparison; list/detail can purge physical artifacts (record and GOM are kept; latest/active runs are refused) |
 | `/console/records` | metadata, lab result, knowledge import/approval forms |
 | `/console/gom`, `/console/gom/{id}` | GOM objects, immutable versions and payload |
@@ -69,9 +69,10 @@ available, a circular VPAI structure map for *V. parahaemolyticus*, and collapsi
 `interpretation_text`, and calls `bio_verify_result` with it; the NLI Reflector checks factual
 consistency and persists the text, so the report shows “AI interpretation & NLI self-check”
 (passed or needs human review). Without an LLM the report contains deterministic results only.
-Data list pages (tasks, sequencing data, runs, GOM, specimens, isolates, records, search) share
-the same server-side pagination controls (page size, page x/y, total). The records page lists all
-record tasks with paging instead of only the latest ten.
+Data list pages (tasks, runs, GOM, specimens, isolates, records, search) share the same
+server-side pagination controls (page size, page x/y, total). The records page lists all record
+tasks with paging instead of only the latest ten. The sequencing-data list is the exception: it
+loads all rows once and paginates in the browser so every column can sort instantly.
 
 Strain counts use two explicit measures: **analyzed strains** is `strains.total` from
 `strain_genotype_index` (the source of the species/typing breakdown), while **registered

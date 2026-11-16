@@ -40,7 +40,7 @@ pixi run -e web web-build
 | `/console/plans`、`/console/plans/{id}` | 智能体提出的计划、完整参数、确认/拒绝 |
 | `/console/specimens`, `/console/specimens/{id}` | 样本、其菌株与测序数据；页面内可直接把未关联菌株/测序数据关联到样本；详情页可删除样本（默认仅空样本，或先解除菌株关联再删——菌株/数据保留） |
 | `/console/isolates`, `/console/isolates/{id}` | 菌株实体、所属样本与测序数据 |
-| `/console/samples`、`/console/samples/{id}` | 测序数据（library）：单库结果/注释、可视化组装质控（QUAST 指标、contig 长度/GC 分布、Nx 曲线）；完整报告独立成页 |
+| `/console/samples`、`/console/samples/{id}` | 测序数据（library）：列表展示物种、基因组大小、contigs 数量与 GC 含量；任意表头都可在浏览器内即时排序（全量行只加载一次，排序/筛选/翻页不再发请求）；详情页另有单库结果/注释、可视化组装质控（QUAST 指标、contig 长度/GC 分布、Nx 曲线）；完整报告独立成页 |
 | `/console/runs`、`/console/runs/{id}` | 不可变运行记录与来源比较；列表/详情可清理物理产物（保留记录与 GOM；运行中或最新 run 拒绝） |
 | `/console/records` | 元数据、化验结果、知识导入/审核表单 |
 | `/console/gom`、`/console/gom/{id}` | GOM 对象、不可变版本与载荷 |
@@ -63,8 +63,9 @@ Bakta/eggNOG 注释与 COG 功能分类（有注释数据时）、副溶血弧�
 **AI 解读**：外部 Harness/分析师读取 summary 后生成 `interpretation_text`，调用
 `bio_verify_result` 并传入该文本；NLI Reflector 会做事实一致性自检并持久化，报告展示
 “AI 解读与 NLI 自检”（通过或需人工审核）。没有 LLM 时报告只显示确定性结果，不伪造解读。
-数据列表页（任务、测序数据、运行记录、GOM、样本、菌株、数据记录、检索）统一使用服务端分页
+数据列表页（任务、运行记录、GOM、样本、菌株、数据记录、检索）统一使用服务端分页
 （每页条数、第 x/y 页、总数）；「数据记录」页分页列出全部 record 任务，不再只显示最近 10 条。
+测序数据列表例外：一次加载全量行后在浏览器内分页，因此任意列都能即时排序。
 
 菌株计数区分两个口径：**已分析菌株**是 `strains.total`（来自 `strain_genotype_index`，
 也是物种/型别分布的数据源），**已登记菌株**是 `strains.registered`（`isolates` 表）。

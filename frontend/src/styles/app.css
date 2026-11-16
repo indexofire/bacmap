@@ -1539,3 +1539,34 @@ code {
     content: attr(data-label);
   }
 }
+
+/* 可排序表头（v1.10.42）：按钮继承 th 排版，箭头提示方向 */
+.table th .th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.table th .th-sort:hover,
+.table th .th-sort:focus-visible,
+.table th .th-sort.is-active {
+  color: var(--text-1);
+}
+
+.table th .th-sort__arrow {
+  font-size: 10px;
+  opacity: 0.55;
+}
+
+.table th .th-sort.is-active .th-sort__arrow {
+  opacity: 1;
+  color: var(--link);
+}

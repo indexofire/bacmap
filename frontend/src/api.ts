@@ -212,9 +212,14 @@ export const api = {
     )
   },
   getSample: (id: string) => request<SampleDetail>(`/samples/${encodeURIComponent(id)}`),
-  samplesPage: (offset = 0, limit = 50) =>
+  samplesPage: (
+    offset = 0,
+    limit = 50,
+    sort: 'sample_id' | 'genome_size' | 'contigs' | 'gc_pct' = 'sample_id',
+    order: 'asc' | 'desc' = 'asc',
+  ) =>
     request<Page<SampleRow> & { next_cursor: string | null }>(
-      `/samples?offset=${offset}&limit=${limit}`,
+      `/samples?offset=${offset}&limit=${limit}&sort=${sort}&order=${order}`,
     ),
 
   listSpecimens: (limit = 200) =>

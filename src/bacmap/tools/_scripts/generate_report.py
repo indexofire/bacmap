@@ -25,6 +25,7 @@ from pathlib import Path
 
 from bacmap.config import GOM_DB as _NLI_DB_PATH
 from bacmap.config import REF_DIR, RESULTS_DIR, WORKFLOWS_DIR
+from bacmap.core.analysis.assembly_qc import quast_metrics
 from bacmap.core.analysis.cgmlst_projection import (
     ProjectionResult,
     Verdict,
@@ -168,28 +169,6 @@ def _stat_strip(items: list[tuple[str, str, str]]) -> str:
 
 
 _QUAST_THRESHOLD_RE = re.compile(r">= (\d+) bp\)")
-
-
-def _quast_metrics(text: str) -> dict[str, str]:
-    """QUAST 报告文本 → {指标: 值}。
-
-    同时接受两种布局：``report.tsv``（纵向，一行一指标）与
-    ``transposed_report.tsv``（横向，首行指标名 + 单行值），分别对应
-    collect_summary 嵌入的历史文本与测试夹具。
-    """
-    lines = [line for line in text.strip().splitlines() if line.strip()]
-    first = lines[0].split("\t") if lines else []
-    # 转置布局：首行 "Assembly" + ≥2 个指标名，且数据行列数与表头一致；
-    # 纵向 report.tsv 首行是 "Assembly\t<样本名>"（恒 2 列），逐行解析。
-    if len(lines) >= 2 and first[0] == "Assembly" and len(first) >= 3 and len(lines[1].split("\t")) == len(first):
-        values = lines[1].split("\t")[1:]
-        return dict(zip(first[1:], values, strict=False))
-    out: dict[str, str] = {}
-    for line in lines:
-        cells = line.split("\t")
-        if len(cells) == 2 and cells[0] != "Assembly":
-            out[cells[0].strip()] = cells[1].strip()
-    return out
 
 
 def _fmt_bp(value: object) -> str:
@@ -551,7 +530,7 @@ def _render_quast_section(text: str, contig_stats: dict | None = None) -> str:
     ``--no-html``，QUAST 自带的 icarus 可视化不落盘；报告 CSP 禁脚本，故用
     纯 CSS 条形图 + 指标卡），原始文本保留在折叠块供溯源。
     """
-    metrics = _quast_metrics(text)
+    metrics = quast_metrics(text)
     if not metrics and not (isinstance(contig_stats, dict) and contig_stats):
         return ""
     total = _num(metrics.get("Total length"))

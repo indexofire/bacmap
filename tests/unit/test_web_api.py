@@ -30,11 +30,23 @@ def env(tmp_path: Path, monkeypatch):
         task_engine.DBOS, "start_workflow", lambda wf, p: started.append(p["task_id"])
     )
     monkeypatch.setattr(task_engine.DBOS, "cancel_workflow", lambda wid: None)
+    metrics = {
+        "S1": (5_000_000, 100, 50.0),
+        "S2": (4_000_000, 50, 45.0),
+        "S3": None,  # 缺组装字段：排序时必须排在最后
+    }
     for sid in ("S1", "S2", "S3"):
         rep = tmp_path / "results" / sid / "report"
         rep.mkdir(parents=True)
+        steps: dict[str, object] = {"species": {"verdict": "Salmonella"}}
+        if metrics[sid] is not None:
+            size, contigs, gc = metrics[sid]
+            steps["assembly_quast"] = (
+                "Assembly\t# contigs\tTotal length\tGC (%)\n"
+                f"assembly\t{contigs}\t{size}\t{gc}"
+            )
         (rep / f"{sid}_summary.json").write_text(
-            json.dumps({"sample": sid, "steps": {"species": {"verdict": "Salmonella"}}})
+            json.dumps({"sample": sid, "steps": steps})
         )
     engine = eng.DbosTaskEngine(tmp_path)
     yield engine, TestClient(create_app(engine)), started
@@ -201,6 +213,17 @@ class TestSamples:
         assert [s["sample_id"] for s in p1["items"]] == ["S1", "S2"] and p1["next_cursor"] == "S2"
         p2 = c.get(f"/api/v1/samples?limit=2&cursor={p1['next_cursor']}").json()
         assert [s["sample_id"] for s in p2["items"]] == ["S3"] and p2["next_cursor"] is None
+
+    def test_sort_by_assembly_metrics(self, env):
+        _, c, _ = env
+        desc = c.get("/api/v1/samples?sort=genome_size&order=desc&offset=0&limit=10").json()
+        assert [s["sample_id"] for s in desc["items"]] == ["S1", "S2", "S3"]
+        assert desc["items"][0]["genome_size"] == 5_000_000
+        asc = c.get("/api/v1/samples?sort=contigs&order=asc&offset=0&limit=10").json()
+        assert [s["sample_id"] for s in asc["items"]] == ["S2", "S1", "S3"]
+        assert asc["total"] == 3 and asc["items"][0]["contigs"] == 50
+        assert c.get("/api/v1/samples?sort=bogus").status_code == 400
+        assert c.get("/api/v1/samples?sort=contigs&order=sideways").status_code == 400
 
     def test_sample_detail(self, env):
         _, c, _ = env

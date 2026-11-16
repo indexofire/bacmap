@@ -5,6 +5,26 @@
 
 ## [Unreleased]
 
+### 测序数据列表全字段排序（v1.10.42）
+
+- `/console/samples` 首次加载一次性取全量行，筛选、排序与翻页都在浏览器内完成：
+  点击任意表头即时切换升/降序（箭头 + `aria-sort`），**排序不再发 HTTP 请求**。
+  全部 10 列可排序：测序数据、物种、基因组大小、Contigs、GC 含量、MLST、血清型、
+  CARD、VFDB、质粒；缺失值恒排最后。
+- `/api/v1/samples` 同时提供 `sort`（`sample_id|genome_size|contigs|gc_pct`）与
+  `order`（`asc|desc`），供 CLI/智能体/大结果集使用；未知字段/方向返回 400。
+  默认 `sample_id` 升序且未显式 `offset` 时仍走游标分页（只解析本页 summary）。
+- 测试：新增 API 排序/缺失值后置/非法参数 1 个测试，基线 2343 → 2344。
+
+### 测序数据列表增加组装指标（v1.10.41）
+
+- `/console/samples` 表格在「物种」与「MLST」之间新增三列：**基因组大小**、**Contigs**、**GC 含量**。
+- `/api/v1/samples` 的每行新增 `genome_size` / `contigs` / `gc_pct`：
+  优先取 `steps.assembly_contig_stats`（seqkit 聚合），回退 `steps.assembly_quast`
+  （QUAST 汇总），再无 GC 时回退 `steps.assembly`（seqkit stats）；缺失显示 —。
+- 报告与列表共用同一 QUAST 解析器（`assembly_qc.quast_metrics`），不再各写一套。
+- 测试：新增 contig 统计优先、QUAST/seqkit 回退与 digest 集成 3 个测试，基线 2340 → 2343。
+
 ### Dashboard 菌株统计口径（v1.10.40）
 
 - `/api/v1/stats` 新增 `strains.registered`（`data/bacmap.sqlite` 的 `isolates` 计数），

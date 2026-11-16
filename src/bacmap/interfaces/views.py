@@ -71,6 +71,7 @@ def overview_data(engine: DbosTaskEngine) -> dict[str, Any]:
 
 def sample_digest(summary: dict[str, Any]) -> dict[str, Any]:
     """summary JSON → 展示行（物种/MLST/血清型/基因计数，口径对齐 bio_get_result）。"""
+    from bacmap.core.analysis.assembly_qc import summary_metrics
     from bacmap.core.utils import parse_mlst
 
     steps = summary.get("steps", {}) or {}
@@ -103,9 +104,12 @@ def sample_digest(summary: dict[str, Any]) -> dict[str, Any]:
 
     card_genes = _genes(card)
     vfdb_genes = _genes(vfdb)
+    # v1.10.41：列表展示基因组大小 / contigs / GC（与报告同一数据源）。
+    metrics = summary_metrics(steps if isinstance(steps, dict) else {})
     return {
         "sample_id": summary.get("_sample_id", summary.get("sample", "")),
         "verdict": verdict,
+        **metrics,
         "st": st,
         "serovar": serovar,
         "n_card": len(card) if isinstance(card, list) else 0,
@@ -368,6 +372,26 @@ def count_samples(home: Path | str) -> int:
         for p in results.glob("*/report/*_summary.json")
         if p.name == f"{p.parent.parent.name}_summary.json"
     )
+
+
+SAMPLE_SORT_FIELDS = ("sample_id", "genome_size", "contigs", "gc_pct")
+
+
+def sort_samples(
+    rows: list[dict[str, Any]], sort: str = "sample_id", descending: bool = False
+) -> list[dict[str, Any]]:
+    """按列表字段排序；缺失值恒排最后（升/降序都不把空值顶到前面）。"""
+    if sort not in SAMPLE_SORT_FIELDS:
+        raise ValueError(
+            f"unknown sort field {sort!r}; allowed: {', '.join(SAMPLE_SORT_FIELDS)}"
+        )
+    present = [row for row in rows if row.get(sort) is not None]
+    missing = [row for row in rows if row.get(sort) is None]
+    if sort == "sample_id":
+        present.sort(key=lambda row: str(row[sort]), reverse=descending)
+    else:
+        present.sort(key=lambda row: float(row[sort]), reverse=descending)
+    return present + missing
 
 
 def sample_rows(engine: DbosTaskEngine) -> list[dict[str, Any]]:

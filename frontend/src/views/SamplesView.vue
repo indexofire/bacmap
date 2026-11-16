@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -14,7 +14,33 @@ const error = ref('')
 const query = ref('')
 const offset = ref(0)
 const limit = ref(50)
-const total = ref(0)
+
+type SortKey =
+  | 'sample_id'
+  | 'verdict'
+  | 'genome_size'
+  | 'contigs'
+  | 'gc_pct'
+  | 'st'
+  | 'serovar'
+  | 'n_card'
+  | 'n_vfdb'
+  | 'n_plasmid'
+const sort = ref<SortKey>('sample_id')
+const order = ref<'asc' | 'desc'>('asc')
+
+const columns: { key: SortKey; label: string }[] = [
+  { key: 'sample_id', label: '测序数据' },
+  { key: 'verdict', label: '物种' },
+  { key: 'genome_size', label: '基因组大小' },
+  { key: 'contigs', label: 'Contigs' },
+  { key: 'gc_pct', label: 'GC 含量' },
+  { key: 'st', label: 'MLST' },
+  { key: 'serovar', label: '血清型' },
+  { key: 'n_card', label: 'CARD' },
+  { key: 'n_vfdb', label: 'VFDB' },
+  { key: 'n_plasmid', label: '质粒' },
+]
 
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()
@@ -27,19 +53,55 @@ const filtered = computed(() => {
   )
 })
 
+function isMissing(value: unknown): boolean {
+  if (value === null || value === undefined) return true
+  if (typeof value === 'number') return !Number.isFinite(value)
+  const text = String(value).trim()
+  return text === '' || text === 'N/A'
+}
+
+/** 本地排序：空缺值恒排最后，数字按数值、其余按本地化字符串（含数字的自然序）。 */
+const sorted = computed(() => {
+  const key = sort.value
+  return [...filtered.value].sort((a, b) => {
+    const av = a[key]
+    const bv = b[key]
+    const aMissing = isMissing(av)
+    const bMissing = isMissing(bv)
+    if (aMissing || bMissing) return aMissing === bMissing ? 0 : aMissing ? 1 : -1
+    const cmp =
+      typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv), 'zh-Hans-CN', { numeric: true, sensitivity: 'base' })
+    return order.value === 'asc' ? cmp : -cmp
+  })
+})
+
+const paged = computed(() => sorted.value.slice(offset.value, offset.value + limit.value))
+
 function goRow(event: Event, path: string) {
   const target = event.target
   if (target instanceof Element && target.closest('a,button')) return
   void router.push(path)
 }
 
+/** 一次取全量行（分批 500）；之后的筛选、排序、翻页都在浏览器内完成，不再发请求。 */
+const FETCH_PAGE = 500
+
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    const page = await api.samplesPage(offset.value, limit.value)
-    rows.value = page.items
-    total.value = page.total
+    const all: SampleRow[] = []
+    let next = 0
+    for (;;) {
+      const page = await api.samplesPage(next, FETCH_PAGE)
+      all.push(...page.items)
+      next += page.items.length
+      if (page.items.length === 0 || all.length >= page.total) break
+    }
+    rows.value = all
+    if (offset.value >= all.length) offset.value = 0
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载样本失败'
   } finally {
@@ -49,14 +111,36 @@ async function load() {
 
 function changePage(value: number) {
   offset.value = value
-  void load()
 }
 
 function changeLimit(value: number) {
   limit.value = value
   offset.value = 0
-  void load()
 }
+
+function changeSort(key: SortKey) {
+  if (sort.value === key) {
+    order.value = order.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sort.value = key
+    order.value = 'asc'
+  }
+  offset.value = 0
+}
+
+function ariaSort(key: SortKey): 'ascending' | 'descending' | 'none' {
+  if (sort.value !== key) return 'none'
+  return order.value === 'asc' ? 'ascending' : 'descending'
+}
+
+function sortArrow(key: SortKey): string {
+  if (sort.value !== key) return '↕'
+  return order.value === 'asc' ? '↑' : '↓'
+}
+
+watch(query, () => {
+  offset.value = 0
+})
 
 onMounted(() => void load())
 
@@ -66,6 +150,21 @@ function displaySpecies(value: string): string {
 
 function displayOrDash(value: string): string {
   return !value || value === 'N/A' ? '—' : value
+}
+
+function formatBases(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return '—'
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)} Mb`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)} kb`
+  return `${value} bp`
+}
+
+function formatContigs(value: number | null): string {
+  return value == null || !Number.isFinite(value) ? '—' : String(value)
+}
+
+function formatGc(value: number | null): string {
+  return value == null || !Number.isFinite(value) ? '—' : `${value.toFixed(1)}%`
 }
 </script>
 
@@ -98,22 +197,25 @@ function displayOrDash(value: string): string {
 
       <div v-if="loading" class="card__body"><div class="skeleton" style="height: 220px" /></div>
 
-      <div v-else-if="filtered.length" class="table-wrap">
+      <div v-else-if="sorted.length" class="table-wrap">
         <table class="table">
           <thead>
             <tr>
-              <th scope="col">测序数据</th>
-              <th scope="col">物种</th>
-              <th scope="col">MLST</th>
-              <th scope="col">血清型</th>
-              <th scope="col">CARD</th>
-              <th scope="col">VFDB</th>
-              <th scope="col">质粒</th>
+              <th v-for="col in columns" :key="col.key" scope="col" :aria-sort="ariaSort(col.key)">
+                <button
+                  type="button"
+                  class="th-sort"
+                  :class="{ 'is-active': sort === col.key }"
+                  @click="changeSort(col.key)"
+                >
+                  {{ col.label }} <span class="th-sort__arrow">{{ sortArrow(col.key) }}</span>
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
             <tr
-              v-for="row in filtered"
+              v-for="row in paged"
               :key="row.sample_id"
               class="row-click"
               @click="goRow($event, `/samples/${row.sample_id}`)"
@@ -124,6 +226,13 @@ function displayOrDash(value: string): string {
                 </RouterLink>
               </td>
               <td data-label="物种"><i>{{ displaySpecies(row.verdict) }}</i></td>
+              <td data-label="基因组大小">
+                <span class="mono" :title="row.genome_size ? `${row.genome_size} bp` : ''">
+                  {{ formatBases(row.genome_size) }}
+                </span>
+              </td>
+              <td data-label="Contigs"><span class="mono">{{ formatContigs(row.contigs) }}</span></td>
+              <td data-label="GC 含量"><span class="mono">{{ formatGc(row.gc_pct) }}</span></td>
               <td data-label="MLST"><span class="mono">{{ displayOrDash(row.st) }}</span></td>
               <td data-label="血清型">{{ displayOrDash(row.serovar) }}</td>
               <td data-label="CARD"><span class="mono">{{ row.n_card }}</span></td>
@@ -145,7 +254,7 @@ function displayOrDash(value: string): string {
       <Pager
         :offset="offset"
         :limit="limit"
-        :total="total"
+        :total="sorted.length"
         :disabled="loading"
         @update:offset="changePage"
         @update:limit="changeLimit"

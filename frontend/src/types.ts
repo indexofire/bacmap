@@ -162,6 +162,9 @@ export interface Overview {
 export interface SampleRow {
   sample_id: string
   verdict: string
+  genome_size: number | null
+  contigs: number | null
+  gc_pct: number | null
   st: string
   serovar: string
   n_card: number

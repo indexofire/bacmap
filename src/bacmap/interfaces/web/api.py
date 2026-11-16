@@ -295,25 +295,38 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
 
     @router.get("/samples")
     def list_samples(
-        cursor: str | None = None, limit: int = 50, offset: int | None = None
+        cursor: str | None = None,
+        limit: int = 50,
+        offset: int | None = None,
+        sort: str = "sample_id",
+        order: str = "asc",
     ) -> dict[str, Any]:
-        total = count_samples(engine.home)
-        if offset is not None:
-            rows = sample_rows(engine)
-            start = max(0, offset)
+        from bacmap.interfaces.views import SAMPLE_SORT_FIELDS, sort_samples
+
+        if sort not in SAMPLE_SORT_FIELDS:
+            raise HTTPException(400, f"unknown sort field: {sort}")
+        if order not in ("asc", "desc"):
+            raise HTTPException(400, f"unknown order: {order}")
+        descending = order == "desc"
+        # 默认按样本 ID 升序且未显式 offset 时保持游标分页：只解析本页 summary。
+        if sort == "sample_id" and not descending and offset is None:
+            total = count_samples(engine.home)
+            items, next_cursor = sample_page(engine.home, cursor, _limit(limit))
             return {
-                "items": rows[start : start + _limit(limit, 500)],
-                "next_cursor": None,
+                "items": items,
+                "next_cursor": next_cursor,
                 "total": total,
-                "offset": start,
-                "limit": _limit(limit, 500),
+                "limit": _limit(limit),
             }
-        items, next_cursor = sample_page(engine.home, cursor, _limit(limit))
+        # 按组装指标排序需要看到全量行（449 级规模，全量解析仍是一次请求内完成）。
+        rows = sort_samples(sample_rows(engine), sort, descending)
+        start = max(0, offset or 0)
         return {
-            "items": items,
-            "next_cursor": next_cursor,
-            "total": total,
-            "limit": _limit(limit),
+            "items": rows[start : start + _limit(limit, 500)],
+            "next_cursor": None,
+            "total": len(rows),
+            "offset": start,
+            "limit": _limit(limit, 500),
         }
 
     @router.get("/samples/{sample_id}")

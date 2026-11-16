@@ -169,6 +169,72 @@ def from_fasta(path: Path | str) -> dict[str, Any]:
     return summarize(contigs)
 
 
+def quast_metrics(text: str) -> dict[str, str]:
+    """QUAST 报告文本 → {指标: 值}。
+
+    同时接受两种布局：``report.tsv``（纵向，一行一指标）与
+    ``transposed_report.tsv``（横向，首行指标名 + 单行值），分别对应
+    collect_summary 嵌入的历史文本与测试夹具。
+    """
+    lines = [line for line in text.strip().splitlines() if line.strip()]
+    first = lines[0].split("\t") if lines else []
+    # 转置布局：首行 "Assembly" + ≥2 个指标名，且数据行列数与表头一致；
+    # 纵向 report.tsv 首行是 "Assembly\t<样本名>"（恒 2 列），逐行解析。
+    if (
+        len(lines) >= 2
+        and first[0] == "Assembly"
+        and len(first) >= 3
+        and len(lines[1].split("\t")) == len(first)
+    ):
+        values = lines[1].split("\t")[1:]
+        return dict(zip(first[1:], values, strict=False))
+    out: dict[str, str] = {}
+    for line in lines:
+        cells = line.split("\t")
+        if len(cells) == 2 and cells[0] != "Assembly":
+            out[cells[0].strip()] = cells[1].strip()
+    return out
+
+
+def _number(value: object, cast: type[int] | type[float]) -> int | float | None:
+    try:
+        return cast(float(str(value).replace(",", "").strip()))
+    except (TypeError, ValueError):
+        return None
+
+
+def summary_metrics(steps: dict[str, Any]) -> dict[str, Any]:
+    """summary.steps → 列表展示用的基因组大小 / contigs / GC。
+
+    优先级：逐 contig 统计（seqkit 聚合）> QUAST 汇总 > seqkit stats。
+    只做描述性提取，不产生判定（ADR-20）；缺数据给 None，由界面显示 —。
+    """
+    stats = steps.get("assembly_contig_stats")
+    if isinstance(stats, dict) and is_usable(stats):
+        return {
+            "genome_size": _number(stats.get("total_length"), int),
+            "contigs": _number(stats.get("count"), int),
+            "gc_pct": _number(stats.get("gc_mean"), float),
+        }
+    quast = quast_metrics(str(steps.get("assembly_quast") or ""))
+    genome_size = _number(quast.get("Total length"), int)
+    contigs = _number(quast.get("# contigs"), int)
+    gc_pct = _number(quast.get("GC (%)"), float)
+    if genome_size is not None or contigs is not None or gc_pct is not None:
+        return {"genome_size": genome_size, "contigs": contigs, "gc_pct": gc_pct}
+    # 旧运行只有 seqkit stats（无 GC）：num_seqs / sum_len。
+    lines = str(steps.get("assembly") or "").strip().splitlines()
+    if len(lines) >= 2:
+        cells = lines[1].split("\t")
+        if len(cells) >= 5:
+            return {
+                "genome_size": _number(cells[4], int),
+                "contigs": _number(cells[3], int),
+                "gc_pct": None,
+            }
+    return {"genome_size": None, "contigs": None, "gc_pct": None}
+
+
 def is_usable(stats: Any) -> bool:
     """summary 里的统计块是否可信（v1.10.29 修复前的 GC 被错误乘 100）。
 
