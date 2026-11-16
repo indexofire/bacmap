@@ -88,7 +88,7 @@ class TestEngineWritesRunScoped:
             def __init__(self, deployed_dir, timeout):
                 pass
 
-            def run(self, targets, cores, config_overrides=None):
+            def run(self, targets, cores, config_overrides=None, env_overrides=None):
                 seen["targets"] = targets
                 seen["overrides"] = config_overrides
                 return SimpleNamespace(returncode=0, stderr="")

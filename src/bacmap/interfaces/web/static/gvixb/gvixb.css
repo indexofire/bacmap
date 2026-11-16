@@ -110,6 +110,18 @@
   .rep-row .rmeta span { font-size: 8.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
   .rep-row .rmeta b { font-family: var(--font-mono); color: var(--text-2); font-weight: 600; letter-spacing: 0; }
   .rep-row .rmeta .hot b { color: #ff8f6b; }
+  .rep-row { position: relative; padding-left: 19px; }
+  .rep-row input[type="checkbox"] { position: absolute; left: 3px; top: 4px; width: 11px; height: 11px; accent-color: var(--accent-2); }
+  .rep-row.promoted { border-left-color: var(--accent-2); background: rgba(83,230,255,0.07); }
+  .ring-actions { display: flex; gap: 6px; padding-top: 7px; }
+  .ring-actions button {
+    flex: 1; height: 24px; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text-1); font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    border-radius: var(--r); cursor: pointer; transition: border-color .14s ease, background .14s ease;
+  }
+  .ring-actions button:hover:not(:disabled) { border-color: var(--accent); color: #fff; }
+  .ring-actions button:disabled { opacity: 0.4; cursor: default; }
+  .ring-hint { padding-top: 6px; font-size: 10px; line-height: 1.45; color: var(--text-3); }
 
   .sb-search { padding: 6px 0 7px; flex: none; }
   .sb-search input {

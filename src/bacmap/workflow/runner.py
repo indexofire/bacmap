@@ -143,6 +143,7 @@ class WorkflowRunner:
         cores: int = 8,
         config_overrides: dict[str, str] | None = None,
         timeout: int | None = None,
+        env_overrides: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         cmd = [
             "snakemake",
@@ -160,13 +161,16 @@ class WorkflowRunner:
         cmd += targets
         if config_overrides:
             cmd += ["--config"] + [f"{k}={v}" for k, v in config_overrides.items()]
+        env = _env_with_src()
+        if env_overrides:
+            env.update(env_overrides)
         return subprocess.run(
             cmd,
             cwd=str(self.dir),
             timeout=timeout or self.timeout,
             text=True,
             capture_output=True,
-            env=_env_with_src(),
+            env=env,
             # 独立进程组：取消任务时可对整个组定向发信号（task_engine 按
             # runs/<task_id> 定位组后 killpg），不波及同机同名生信进程。
             start_new_session=True,

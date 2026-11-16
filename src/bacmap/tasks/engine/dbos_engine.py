@@ -85,12 +85,18 @@ def _run_targets_with_retry(
     home: Path,
     task_id: str,
     params: dict[str, Any],
+    env_overrides: dict[str, str] | None = None,
 ) -> Any:
     """带锁自愈/退避的目标执行（v1.10.23 抽取复用：prelim 与最终两阶段共用）。"""
     import time as _time
 
     for attempt in range(4):
-        result = runner.run(targets=targets, cores=cores, config_overrides=overrides)
+        result = runner.run(
+            targets=targets,
+            cores=cores,
+            config_overrides=overrides,
+            env_overrides=env_overrides,
+        )
         if result.returncode == 0:
             from bacmap.store.results_layout import link_run_results
 
@@ -209,6 +215,20 @@ def _run_snakemake(params: dict[str, Any]) -> Any:
     task_id = str(params.get("task_id", ""))
     run_dir = run_results_dir(home, task_id) if task_id else home / "results"
     run_dir.mkdir(parents=True, exist_ok=True)
+    annotation = bool(params.get("annotation", True))
+    env_overrides = {"BACMAP_ANNOTATION_ENABLED": "1" if annotation else "0"}
+    # 供 Snakemake 的 database_preflight 规则读取本次真实样本子集（而不是
+    # 全量 samples.tsv），直跑场景也有一致的缺库检查。
+    try:
+        (run_dir / ".bacmap_request.json").write_text(
+            json.dumps(
+                {"samples": list(params.get("samples") or []), "annotation": annotation},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+    except OSError:
+        logger.warning("cannot write run request manifest for preflight", exc_info=True)
     runner = WorkflowRunner(
         deployed_dir=deployed, timeout=params.get("timeout", 12 * 3600)
     )
@@ -233,13 +253,14 @@ def _run_snakemake(params: dict[str, Any]) -> Any:
     # 阶段1：prelim（快步骤）。失败不致命——最终阶段会重跑并补全；
     # 成功即建立扁平别名（web 立即可读 live 步骤状态与 prelim 报告）。
     prelim = _run_targets_with_retry(
-        runner, prelim_targets, cores, overrides, home, task_id, params
+        runner, prelim_targets, cores, overrides, home, task_id, params,
+        env_overrides,
     )
     if prelim.returncode == 0:
         _progress(params, "prelim_ready")
     # 阶段2：最终 summary（注释在此自然垫底）+ 失败语义与历史一致。
     result = _run_targets_with_retry(
-        runner, targets, cores, overrides, home, task_id, params
+        runner, targets, cores, overrides, home, task_id, params, env_overrides
     )
     if result.returncode == 0:
         link_run_results(home, task_id, params["samples"])
@@ -407,6 +428,8 @@ def _step_create_run(params: dict[str, Any]) -> dict[str, Any]:
         task_id=params.get("task_id", ""),
         started_at=started_at,
         finished_at=finished_at,
+        base_run_id=str(params.get("base_run_id") or ""),
+        reanalysis_steps=list(params.get("steps") or []),
     )
     return {"run_id": run.run_id}
 
@@ -852,6 +875,28 @@ def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
             _step_mark_terminal(params, failed)
             return failed
         params = {**params, "samples": reg["samples"]}
+
+    # 数据库/参考基因组预检：缺库时秒级失败，不进入 DAG、不创建 run。
+    try:
+        from bacmap.core.pipeline.resources import preflight_resources
+
+        preflight = preflight_resources(
+            home,
+            list(params["samples"]),
+            annotation=bool(params.get("annotation", True)),
+        )
+    except Exception:  # 预检自身异常不应把可运行的分析判死
+        logger.exception("resource preflight crashed; continuing without it")
+        preflight = None
+    if preflight is not None and not preflight.ok:
+        failed = {
+            "status": "FAILED",
+            "snakemake_returncode": 0,
+            "message": "数据库预检失败：\n" + preflight.failure_message(),
+            "gates": {},
+        }
+        _step_mark_terminal(params, failed)
+        return failed
 
     rc = _step_run(params)
     params = {
@@ -1520,4 +1565,179 @@ def record_workflow(params: dict[str, Any]) -> dict[str, Any]:
         return {"status": "FAILED", "message": f"{type(exc).__name__}: {exc}"}
     if out.get("status") != "SUCCEEDED":
         return {**out, "status": "FAILED"}
+    return out
+
+
+# ---------------------------------------------------------------------------
+# reanalyze（v1.10.39）：快照 + 指定 stage 补跑
+# ---------------------------------------------------------------------------
+
+
+@DBOS.step()
+def _step_prepare_reanalysis(params: dict[str, Any]) -> dict[str, Any]:
+    from bacmap.tasks.reanalyze import prepare_reanalysis
+
+    home = Path(params["home"])
+    result = prepare_reanalysis(
+        home,
+        list(params["samples"]),
+        list(params["steps"]),
+        str(params["task_id"]),
+        str(params.get("base_run_id") or ""),
+    )
+    return {
+        "base_run_id": result["base"]["run_id"],
+        "base_task_id": result["base"]["task_id"],
+        "run_dir": str(result["run_dir"]),
+    }
+
+
+@DBOS.step()
+def _step_run_reanalyze(params: dict[str, Any], prepared: dict[str, Any]) -> dict[str, Any]:
+    from bacmap.workflow.runner import WorkflowRunner, deploy
+
+    started_at = datetime.now(UTC)
+    home = Path(params["home"])
+    run_dir = Path(prepared["run_dir"])
+    steps = list(params["steps"])
+    annotation = "annotation" in steps
+    request = run_dir / ".bacmap_request.json"
+    try:
+        request.write_text(
+            json.dumps(
+                {"samples": list(params["samples"]), "annotation": annotation},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+    except OSError:
+        logger.warning("cannot write reanalyze request manifest", exc_info=True)
+
+    try:
+        with _memory_arbiter().heavy_step():
+            deployed = deploy()
+            runner = WorkflowRunner(
+                deployed_dir=deployed, timeout=params.get("timeout", 12 * 3600)
+            )
+            from bacmap.tasks.reanalyze import reanalysis_targets
+
+            targets = reanalysis_targets(run_dir, list(params["samples"]), steps)
+            overrides = {"workdir": f"results/runs/{params['task_id']}"}
+            cores = _snakemake_cores(deployed, params)
+            proc = _run_targets_with_retry(
+                runner,
+                targets,
+                cores,
+                overrides,
+                home,
+                str(params["task_id"]),
+                params,
+                {"BACMAP_ANNOTATION_ENABLED": "1" if annotation else "0"},
+            )
+    except Exception as exc:
+        logger.exception("reanalyze preparation failed")
+        return {
+            "returncode": 1,
+            "error": f"{type(exc).__name__}: {exc}",
+            "started_at": started_at.isoformat(),
+            "ended_at": datetime.now(UTC).isoformat(),
+        }
+    return {
+        "returncode": proc.returncode,
+        "error": None,
+        "stderr_tail": (getattr(proc, "stderr", "") or "").strip()[-500:],
+        "started_at": started_at.isoformat(),
+        "ended_at": datetime.now(UTC).isoformat(),
+    }
+
+
+@DBOS.workflow()
+def reanalyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
+    """在既有 run 上补跑指定阶段，生成新 run；base 保持不可变。"""
+    home = Path(params["home"])
+    samples = list(params["samples"])
+    steps = list(params["steps"])
+
+    try:
+        from bacmap.core.pipeline.resources import preflight_resources
+
+        preflight = preflight_resources(
+            home,
+            samples,
+            annotation="annotation" in steps,
+            stages=set(steps),
+        )
+    except Exception:
+        logger.exception("reanalyze resource preflight crashed; continuing")
+        preflight = None
+    if preflight is not None and not preflight.ok:
+        failed = {
+            "status": "FAILED",
+            "snakemake_returncode": 0,
+            "message": "数据库预检失败：\n" + preflight.failure_message(),
+            "gates": {},
+        }
+        _step_mark_terminal(params, failed)
+        return failed
+
+    try:
+        prepared = _step_prepare_reanalysis(params)
+    except Exception as exc:
+        logger.exception("reanalyze snapshot failed")
+        failed = {
+            "status": "FAILED",
+            "snakemake_returncode": 0,
+            "message": f"补跑准备失败：{type(exc).__name__}: {exc}",
+            "gates": {},
+        }
+        _step_mark_terminal(params, failed)
+        return failed
+
+    params = {
+        **params,
+        "base_run_id": prepared["base_run_id"],
+        "base_task_id": prepared["base_task_id"],
+    }
+    rc = _step_run_reanalyze(params, prepared)
+    params = {
+        **params,
+        "_run_times": {"started_at": rc.get("started_at"), "ended_at": rc.get("ended_at")},
+    }
+    if rc["returncode"] != 0:
+        detail = rc.get("error") or rc.get("stderr_tail") or "无 stderr 输出"
+        failed = {
+            "status": "FAILED",
+            "snakemake_returncode": rc["returncode"],
+            "message": f"snakemake 退出码 {rc['returncode']}：{detail}",
+            "gates": {},
+        }
+        _step_mark_terminal(params, failed)
+        return failed
+
+    run = _step_create_run(params)
+    _step_finish_run(run["run_id"], params)
+    run_dir = prepared["run_dir"]
+    out: dict[str, Any] = {
+        "status": "SUCCEEDED",
+        "run_id": run["run_id"],
+        "base_run_id": prepared["base_run_id"],
+        "steps": steps,
+        "gates": {},
+    }
+    for sample in samples:
+        summary = _load_summary(home, sample, Path(run_dir))
+        object_id: str | None = None
+        if summary:
+            object_id = _step_ingest_gom(str(home), sample, run["run_id"], summary)
+        gate_out = _step_gate(str(home), sample, "", run_dir)
+        if object_id is not None:
+            _step_record_gate(str(home), object_id, gate_out)
+        out["gates"][sample] = gate_out
+        out.setdefault("reports", {})[sample] = _step_report(sample, run_dir)
+    from bacmap.store import runs as runs_store
+
+    runs_store.mark_ingested(run["run_id"], home / "runs.sqlite")
+    if any(gate["verdict"] != "pass" for gate in out["gates"].values()):
+        out["status"] = "AWAITING_APPROVAL"
+    _step_mark_terminal(params, out)
     return out

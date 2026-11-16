@@ -183,6 +183,7 @@ class TestRunnerSubprocess:
             recorded["cmd"] = cmd
             recorded["cwd"] = cwd
             recorded["start_new_session"] = start_new_session
+            recorded["env"] = env
 
             class P:
                 returncode = 0
@@ -192,7 +193,11 @@ class TestRunnerSubprocess:
 
         monkeypatch.setattr(wf_runner.subprocess, "run", fake_run)
         r = wf_runner.WorkflowRunner(deployed_dir=tmp_path)
-        r.run(["results/S/report/s.json"], cores=4, config_overrides={"threads": "4"})
+        r.run(
+            ["results/S/report/s.json"], cores=4,
+            config_overrides={"threads": "4"},
+            env_overrides={"BACMAP_ANNOTATION_ENABLED": "0"},
+        )
         cmd = recorded["cmd"]
         assert cmd[0] == "snakemake" and cmd[1] == "-s"
         assert "--cores" in cmd and "4" in cmd
@@ -204,6 +209,7 @@ class TestRunnerSubprocess:
         # 独立进程组：取消时按 runs/<task_id> 定位组后 killpg，
         # 不波及同机同名生信进程
         assert recorded["start_new_session"] is True
+        assert recorded["env"]["BACMAP_ANNOTATION_ENABLED"] == "0"
 
 
 class TestFinalizeRunManifest:

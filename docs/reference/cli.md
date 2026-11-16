@@ -111,9 +111,9 @@ Read-only summary: versions, paths, data policy, endpoints, sandbox, task counts
 ```text
 bacmap task list|ls [--limit N] [--home H] [--json]
 bacmap task show <task_id> [--json]
-bacmap task submit --type {analyze,curate}
+bacmap task submit --type {analyze,reanalyze,curate}
                     (--samples IDS | --fasta-dir DIR | --fastq-dir DIR)
-                    [--species CODE] [--scope JSON] [--by ACTOR] [--json]
+                    [--species CODE] [--scope JSON] [--annotation|--no-annotation] [--by ACTOR] [--json]
 bacmap task approve <task_id> --approver NAME --decision {approve,reject}
                     --signature SIG [--comment TEXT]
 bacmap task cancel <task_id>
@@ -127,12 +127,17 @@ bacmap task show 3f9c2a1b
 bacmap task submit --type analyze --samples SAM-001,SAM-002
 bacmap task submit --type analyze --fasta-dir /data/genomes --species VPA
 bacmap task submit --type analyze --fastq-dir /data/run42 --species Salmonella
+bacmap task submit --type analyze --samples SAM-001 --no-annotation
+# Re-run only MLST on an existing run; a new immutable run is produced
+bacmap task submit --type reanalyze --samples SAM-001 --steps mlst
+bacmap task submit --type reanalyze --samples SAM-001 --steps mlst --base-run <run_id>
 bacmap task submit --type curate --scope '{"pathogen":"Salmonella"}'
 bacmap task approve 3f9c2a1b --approver "Jane" --decision approve --signature "jd-2026-10-30"
 bacmap task cancel 3f9c2a1b
 ```
 
 Only `analyze`/`curate` can be submitted from the CLI. `mine`/`write` are plan-only; `record` has
+`--no-annotation` skips Bakta/eggNOG for this task; the report records the annotation step as disabled.
 its own command.
 
 ## `bacmap plan`
@@ -430,6 +435,16 @@ bacmap search [--query TEXT] [--serotype TEXT] [--st ST] [--gene GENE]
 bacmap search --query Salmonella
 bacmap search --serotype Typhimurium --st 19 --gene blaCTX-M-15
 ```
+
+## `bacmap database`
+
+```text
+bacmap database status [--samples IDS] [--annotation|--no-annotation] [--home H] [--json]
+```
+
+Read-only preflight for an analyze run: Bakta/eggNOG (unless disabled), AMRFinderPlus,
+gmlst schemes, gspec databases and SNP reference genomes. It never downloads; missing
+resources are printed with the exact install command and the exit code is `1`.
 
 ## `bacmap doctor`
 

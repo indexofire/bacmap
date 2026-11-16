@@ -33,7 +33,8 @@ def _prelim_inputs(wc):
 rule report_summary_prelim:
     """初步汇总（不含注释）：快步骤（物种/MLST/血清型/AMR/质粒）完成即产出。"""
     input:
-        unpack(_prelim_inputs)
+        unpack(_prelim_inputs),
+        database_preflight=str(WORKDIR) + "/.database_preflight.json",
     output:
         summary = str(WORKDIR) + "/{sample}/report/{sample}_summary.prelim.json"
     script:
@@ -42,7 +43,8 @@ rule report_summary_prelim:
 
 rule report_summary:
     input:
-        unpack(_report_inputs)
+        unpack(_report_inputs),
+        database_preflight=str(WORKDIR) + "/.database_preflight.json",
     output:
         summary = str(WORKDIR) + "/{sample}/report/{sample}_summary.json"
     script:

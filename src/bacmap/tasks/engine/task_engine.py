@@ -153,6 +153,7 @@ class DbosTaskEngine:
             TaskType.WRITE: _wf.write_workflow,
             TaskType.RECORD: _wf.record_workflow,
             TaskType.RESEARCH: _wf.research_workflow,
+            TaskType.REANALYZE: _wf.reanalyze_workflow,
         }
 
     @contextmanager
@@ -201,6 +202,10 @@ class DbosTaskEngine:
             and not (p.get("fasta_dir") or p.get("fastq_dir"))
         ):
             raise ValueError("analyze requires samples or fasta_dir/fastq_dir")
+        if task_type == TaskType.REANALYZE and (
+            not p.get("samples") or not p.get("steps")
+        ):
+            raise ValueError("reanalyze requires samples and steps")
 
         # 防御纵深：样本 ID 白名单（MCP/Web 已校验；引擎是最终写入口）。
         samples = p.get("samples")
@@ -219,10 +224,9 @@ class DbosTaskEngine:
             new_id = str(task_id)
         p["task_id"] = new_id
         now = datetime.now(UTC).isoformat()
-        if task_type == TaskType.ANALYZE:
+        if task_type in (TaskType.ANALYZE, TaskType.REANALYZE):
             # v1.10.25：运行记录 started_at 优先取管线真实开始时间（_step_run），
-            # 缺失时退回提交时间——不再是"登记运行记录那一刻"。仅 analyze 需要：
-            # 其它任务把 params 交给严格校验（extra="forbid"），不能夹带字段。
+            # 缺失时退回提交时间——不再是"登记运行记录那一刻"。
             p.setdefault("submitted_at", now)
 
         # 先落任务行（可见性）：workflow_id 用确定性的 SetWorkflowID(task_id)，

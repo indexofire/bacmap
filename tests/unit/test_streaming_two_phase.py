@@ -48,7 +48,7 @@ class TestEngineTwoPhase:
         class FakeRunner:
             def __init__(self, *a, **k): ...
 
-            def run(self, targets=None, cores=None, config_overrides=None, timeout=None):
+            def run(self, targets=None, cores=None, config_overrides=None, timeout=None, env_overrides=None):
                 calls.append(list(targets or []))
                 import types
 

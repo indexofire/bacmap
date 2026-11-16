@@ -107,6 +107,52 @@ def run_species_resolve(args: argparse.Namespace) -> None:
     print(json.dumps({"input": args.name, "code": code}, ensure_ascii=False))
 
 
+def run_database_status(args: argparse.Namespace) -> None:
+    """数据库/参考基因组预检（只读；缺库时退出码 1，便于 agent/CI 判断）。"""
+    import csv
+    import json
+    from pathlib import Path
+
+    from bacmap.core.pipeline.resources import preflight_resources
+
+    home = Path(args.home).expanduser()
+    if args.samples:
+        samples = [item.strip() for item in args.samples.split(",") if item.strip()]
+    else:
+        samples = []
+        tsv = home / "workflows" / "bacmap" / "config" / "samples.tsv"
+        if tsv.is_file():
+            try:
+                with tsv.open("r", encoding="utf-8", newline="") as handle:
+                    samples = [
+                        row.get("sample", "")
+                        for row in csv.DictReader(handle, delimiter="\t")
+                        if row.get("sample")
+                    ]
+            except OSError:
+                samples = []
+    report = preflight_resources(home, samples, annotation=args.annotation)
+    payload = report.as_dict()
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        state = "ok" if report.ok else "missing"
+        print(T(f"database preflight: {state}", f"数据库预检：{state}"))
+        for item in report.checked:
+            mark = "OK" if item.present else "MISSING"
+            print(f"  [{mark:<7}] {item.name:<28} {item.path}")
+        for item in report.skipped:
+            print(T(f"  [SKIP   ] {item.name}: {item.detail}", f"  [跳过   ] {item.name}：{item.detail}"))
+        if report.warning:
+            print(report.warning)
+        if not report.ok:
+            print(T("install:", "安装："))
+            for item in report.missing:
+                print(f"  {item.install}")
+    if not report.ok:
+        raise SystemExit(1)
+
+
 def run_reference_ls(args: argparse.Namespace) -> None:
     """列出参考基因组清单（薄适配 tools/services 的 JSON 字符串返回）。"""
     import json as _json
@@ -133,7 +179,7 @@ _bacmap_completions() {
     local cur prev commands
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="start overview task plan record run gom config doctor backup restore results events isolate sample search selection db research agent stats detect species reference completion ops"  # noqa: E501
+    commands="start overview task plan record run gom config doctor backup restore results events isolate sample search selection db research agent stats detect species reference database completion ops"  # noqa: E501
     if [[ $COMP_CWORD -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
         return
@@ -230,6 +276,20 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(ref_ls)
     add_json(ref_ls)
     ref_ls.set_defaults(func=run_reference_ls)
+
+    p_database = sub.add_parser(
+        "database",
+        help=T("database/reference preflight (no download)", "数据库/参考基因组预检（不下载）"),
+    )
+    database_sub = p_database.add_subparsers(dest="database_command", required=True)
+    db_status = database_sub.add_parser(
+        "status", help=T("check required resources for an analyze run", "检查 analyze 所需资源")
+    )
+    db_status.add_argument("--samples", default="", help=T("comma-separated sample IDs (default: all registered)", "样本 ID，逗号分隔（默认全部已登记）"))
+    db_status.add_argument("--annotation", action=argparse.BooleanOptionalAction, default=True, help=T("include Bakta/eggNOG databases", "包含 Bakta/eggNOG 数据库"))
+    add_home(db_status)
+    add_json(db_status)
+    db_status.set_defaults(func=run_database_status)
 
     p_completion = sub.add_parser(
         "completion",

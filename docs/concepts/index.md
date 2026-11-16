@@ -54,7 +54,7 @@ code, reviewing a security boundary, or interpreting an audit trail.
 | **isolate** | biological strain; stable across sequencing runs (`HZCPE-01`, `EVO-001-P037`) |
 | **dataset** | one sequencing library or assembled genome (`HZCPE-01__ilm__20261012`) |
 | **run** | one analysis execution of one or more datasets (`run_id`, immutable record) |
-| **task** | unit of work in the engine (`analyze`, `curate`, `mine`, `write`, `record`) |
+| **task** | unit of work in the engine (`analyze`, `reanalyze`, `curate`, `mine`, `write`, `record`, `research`) |
 | **plan** | versioned, human-confirmable set of typed tasks proposed by an agent |
 | **gate** | deterministic code check that can pass, reject or request human review |
 | **approval** | human signature that lets a gated task/release proceed |

@@ -5,6 +5,31 @@
 
 ## [Unreleased]
 
+### partial reanalyze：在既有 run 上补跑指定阶段（v1.10.39）
+
+- 新增第七类任务 `reanalyze`（计划/CLI）：`samples + steps + base_run_id(optional)`。
+- 阶段白名单：`mlst` / `amr` / `annotation`；未知阶段在计划期拒绝。
+- 执行模型：从 base run 硬链接快照未变化产物，删除选中阶段与 summary/report，
+  只重算这些目标；生成新的不可变 run（`base_run_id`/`reanalysis_steps` 入库），
+  base run 保持只读，成功后 latest 别名切到新 run。
+- 预检按阶段收窄：只补跑 mlst 时不要求 Bakta/eggNOG；`annotation` 阶段才检查注释库。
+- 测试：新增 base run 解析、硬链接快照、阶段失效、目标、运行记录溯源、参数/计划注册
+  与工作流编排 9 个测试；基线 2331 → 2340。
+
+### 数据库预检与按任务关闭注释（v1.10.38）
+### 数据库预检与按任务关闭注释（v1.10.38）
+
+- `AnalyzeParams.annotation`（默认 true）与 CLI `--annotation/--no-annotation`：按任务关闭
+  Bakta/eggNOG，报告把注释步骤记为 disabled，不影响 MLST/AMR/gspec。
+- 新增只读资源预检 `bacmap database status` 与 MCP 只读工具 `bacmap_database_status`（计划参数也支持 `annotation`）：
+  检查 Bakta/eggNOG、AMRFinderPlus、gmlst scheme、gspec 库、SNP 参考基因组；
+  缺库时打印安装命令，退出码 1。
+- analyze 在进入 Snakemake 前执行同一预检，缺库秒级 FAILED；Snakemake 增加
+  `database_preflight` 规则，作为直接 `snakemake` 运行的兜底。
+- **不自动下载**：下载需要网络/磁盘/许可证确认，后续作为受控 fetch 阶段实现。
+- 测试：新增预检解析、缺库命令、annotation 参数、CLI 状态与引擎 fail-fast 6 个测试，
+  基线 2325 → 2331。
+
 ### 研究投稿包路由路径穿越修复
 
 - `GET /research/studies/{study_id}/package` 与 `/package.zip`：`study_id` 必须匹配
@@ -13,6 +38,7 @@
   `%2e%2e`/`.` 会让 zip 路由在查研究前 `rmtree` 掉 `research/` 或全部投稿包。
 - 测试：新增原始路径 `%2e%2e`/`.`/`..` 穿越与未知研究不删目录的回归测试，全量实测 2241 passed。
 
+### MST 预览页与连线参数（v1.10.37）
 ### gvixb 注释圈图交互修复（v1.10.37）
 
 - 修复圈图基因点击无效：draft/circular 两条渲染路径的 `pickFor` 返回裸 record，

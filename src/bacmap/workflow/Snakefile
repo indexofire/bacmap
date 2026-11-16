@@ -107,6 +107,7 @@ include: "rules/snp.smk"
 include: "rules/recombination.smk"
 include: "rules/cgmlst.smk"
 include: "rules/annotation.smk"
+include: "rules/preflight.smk"
 include: "rules/report.smk"
 
 # reads 级 kraken2 预筛按需启用（与物种鉴定档位无关）。

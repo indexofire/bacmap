@@ -64,6 +64,24 @@ bacmap task submit --type analyze --fasta-dir /data/genomes
 bacmap task submit --type analyze --fastq-dir /data/run42 --species Salmonella
 ```
 
+管线启动前会执行只读数据库预检（`bacmap database status`）；缺 Bakta/eggNOG、gmlst scheme、
+gspec 库或 SNP 参考基因组时立即失败并给出安装命令，不会隐式下载。需要更快出结果时可关闭
+注释：
+
+```bash
+bacmap task submit --type analyze --samples SAM-TYP-001 --no-annotation
+```
+
+已有 run 可以只补跑指定阶段，不必重跑整条管线；会生成新的不可变 run，并 hardlink 复用
+未变化产物：
+
+```bash
+bacmap task submit --type reanalyze --samples SAM-TYP-001 --steps mlst
+```
+
+当前允许 `mlst`、`amr`、`annotation`；base run 默认取这些样本共同的最近一次运行，
+可用 `--base-run <run_id>` 指定。
+
 作为 MCP 计划：
 
 ```json

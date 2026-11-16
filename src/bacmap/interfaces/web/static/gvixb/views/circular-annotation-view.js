@@ -63,11 +63,11 @@ function sectorMesh(r0, r1, a0, a1, z, color, cx = 0, cy = 0) {
   }));
 }
 
-function ring(reference, z, color = '#3d4d75', opacity = 0.35) {
+function ring(reference, z, color = '#3d4d75', opacity = 0.35, cx = 0, cy = 0) {
   const points = [];
   for (let i = 0; i <= 360; i++) {
     const angle = i / 360 * Math.PI * 2;
-    points.push(new THREE.Vector3(Math.cos(angle) * reference, -Math.sin(angle) * reference, z));
+    points.push(new THREE.Vector3(cx + Math.cos(angle) * reference, cy - Math.sin(angle) * reference, z));
   }
   return new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({
     color, transparent: true, opacity,
@@ -207,6 +207,8 @@ function createDraftView({ root, data, host, registerPickable, contigs }) {
   let sidebarEl = null;
   let activeContig = null;
   let ringContigs = [], ringFeatures = 0;
+  const promoted = new Set();      // 用户声明成环的 contig id
+  const ringSelection = new Set(); // 圈图列表里的待成环选择
   const dynamicPickables = [];
   const layoutGroup = new THREE.Group();
   layoutGroup.name = 'draft-ring';
@@ -310,15 +312,71 @@ function createDraftView({ root, data, host, registerPickable, contigs }) {
     const counts = new Map();
     for (const feature of data.features) counts.set(feature.contig, (counts.get(feature.contig) || 0) + 1);
     box.innerHTML = ringContigs.map((contig, index) => `
-      <button class="rep-row${activeContig === contig.id ? ' on' : ''}" data-id="${escapeHtml(contig.id)}">
-        <div class="rname"><span>${escapeHtml(truncText(contig.name || contig.id, 22))}</span><span class="rlen">${formatBp(contig.length)}</span></div>
-        <div class="rmeta"><span>#${index + 1}</span><span><b>${counts.get(contig.id) || 0}</b> features</span></div>
-      </button>`).join('');
-    box.querySelectorAll('.rep-row').forEach(btn => btn.addEventListener('click', () => {
-      activeContig = activeContig === btn.dataset.id ? null : btn.dataset.id;
+      <label class="rep-row${activeContig === contig.id ? ' on' : ''}${promoted.has(contig.id) ? ' promoted' : ''}" data-id="${escapeHtml(contig.id)}">
+        <input type="checkbox" data-ring="${escapeHtml(contig.id)}"${ringSelection.has(contig.id) ? ' checked' : ''}>
+        <span class="rname"><span data-filter="${escapeHtml(contig.id)}">${escapeHtml(truncText(contig.name || contig.id, 22))}</span><span class="rlen">${formatBp(contig.length)}</span></span>
+        <span class="rmeta"><span>#${index + 1}</span><span><b>${counts.get(contig.id) || 0}</b> features</span>${promoted.has(contig.id) ? '<span class="hot"><b>●</b> CIRCULAR</span>' : ''}</span>
+      </label>`).join('');
+    box.querySelectorAll('input[data-ring]').forEach(input => input.addEventListener('change', () => {
+      if (input.checked) ringSelection.add(input.dataset.ring);
+      else ringSelection.delete(input.dataset.ring);
+      syncRingActions();
+    }));
+    // Row body click keeps the original behavior: filter the site list to this
+    // contig. Only the checkbox participates in the 成环 selection.
+    box.querySelectorAll('.rep-row').forEach(row => row.addEventListener('click', event => {
+      if (event.target.matches('input[type="checkbox"]')) return;
+      event.preventDefault();
+      activeContig = activeContig === row.dataset.id ? null : row.dataset.id;
       renderRingList();
       renderSiteList();
     }));
+  }
+
+  function syncRingActions() {
+    if (!sidebarEl) return;
+    const promoteBtn = sidebarEl.querySelector('[data-role="promote"]');
+    const restoreBtn = sidebarEl.querySelector('[data-role="restore"]');
+    const hint = sidebarEl.querySelector('[data-role="ring-hint"]');
+    if (promoteBtn) {
+      promoteBtn.disabled = ringSelection.size === 0;
+      promoteBtn.textContent = ringSelection.size ? `成环 (${ringSelection.size})` : '成环';
+    }
+    if (restoreBtn) restoreBtn.disabled = promoted.size === 0;
+    if (hint) {
+      hint.textContent = promoted.size
+        ? `已声明 ${promoted.size} 个环状 replicon；未成环的 contigs 仍按 draft 环排列`
+        : '勾选完整环状染色体/质粒后点「成环」；它们将各自渲染为闭合环';
+    }
+  }
+
+  function promoteSelected() {
+    let changed = false;
+    for (const id of ringSelection) {
+      if (!promoted.has(id)) {
+        promoted.add(id);
+        changed = true;
+      }
+    }
+    ringSelection.clear();
+    if (changed) {
+      clearLayout();
+      render();
+      // reframe so every promoted ring clears the side panels
+      host.setCamera(new THREE.Vector3(0, 6.5, 34), new THREE.Vector3(0, -1.5, 0));
+    } else {
+      renderRingList();
+      syncRingActions();
+    }
+  }
+
+  function restoreRings() {
+    if (!promoted.size) return;
+    promoted.clear();
+    ringSelection.clear();
+    clearLayout();
+    render();
+    host.setCamera(new THREE.Vector3(5.5, 4.8, 22.5), new THREE.Vector3(0, 0, 0));
   }
 
   function renderSiteList() {
@@ -371,6 +429,11 @@ function createDraftView({ root, data, host, registerPickable, contigs }) {
       <div class="blk">
         <div class="blk-head"><span class="t">圈图 · Ring</span><span class="n" data-role="ring-count"></span></div>
         <div data-role="ring" style="max-height:210px; overflow-y:auto;"></div>
+        <div class="ring-actions">
+          <button type="button" data-role="promote" disabled>成环</button>
+          <button type="button" data-role="restore" disabled>恢复</button>
+        </div>
+        <div class="ring-hint" data-role="ring-hint"></div>
       </div>
       <div class="blk grow">
         <div class="blk-head"><span class="t">位点 · Sites</span><span class="n" data-role="site-count"></span></div>
@@ -396,6 +459,8 @@ function createDraftView({ root, data, host, registerPickable, contigs }) {
         </div>
       </div>`;
     el.querySelector('[data-role="search"]').addEventListener('input', renderSiteList);
+    el.querySelector('[data-role="promote"]').addEventListener('click', promoteSelected);
+    el.querySelector('[data-role="restore"]').addEventListener('click', restoreRings);
     el.querySelector('[data-role="cat-all"]').addEventListener('click', () => {
       categorySelection = null; applyCategoryVisibility(); syncCategoryChecks();
     });
@@ -408,8 +473,11 @@ function createDraftView({ root, data, host, registerPickable, contigs }) {
     renderRingList();
     renderSiteList();
     renderCategoryList();
+    syncRingActions();
     const ringCount = el.querySelector('[data-role="ring-count"]');
-    if (ringCount) ringCount.textContent = `${ringContigs.length} contigs`;
+    if (ringCount) ringCount.textContent = promoted.size
+      ? `${promoted.size} 成环 · ${ringContigs.length} contigs`
+      : `${ringContigs.length} contigs`;
   }
 
   function categoryKeys() {
@@ -467,50 +535,87 @@ function createDraftView({ root, data, host, registerPickable, contigs }) {
     if (count) count.textContent = `${keys.length} 类`;
   }
 
-  function render() {
-    const threshold = thresholdKb * 1000;
-    ringContigs = sorted.filter(contig => contig.length >= threshold);
-    if (!ringContigs.length) ringContigs = [sorted[0]];
-    const totalBp = ringContigs.reduce((sum, contig) => sum + contig.length, 0);
-    const gap = Math.min(0.018, (Math.PI * 2 / ringContigs.length) * 0.20);
-    const usable = Math.PI * 2 - gap * ringContigs.length;
+  function promotedSlots(count) {
+    if (count === 1) return [{ x: 0, y: 0, scale: 1 }];
+    if (count === 2) return [{ x: -9.5, y: 0, scale: 0.5 }, { x: 9.5, y: 0, scale: 0.5 }];
+    if (count === 3) return [{ x: 0, y: 8.4, scale: 0.4 }, { x: -10.6, y: -6.6, scale: 0.4 }, { x: 10.6, y: -6.6, scale: 0.4 }];
+    const cols = Math.ceil(Math.sqrt(count));
+    const rows = Math.ceil(count / cols);
+    const dx = cols > 1 ? 19 / (cols - 1) : 0;
+    const dy = rows > 1 ? 15 / (rows - 1) : 0;
+    return Array.from({ length: count }, (_, i) => ({
+      x: cols > 1 ? -9.5 + (i % cols) * dx : 0,
+      y: rows > 1 ? 7.5 - Math.floor(i / cols) * dy : 0,
+      scale: 0.34,
+    }));
+  }
+
+  /** Draw one ring: a shared draft ring of contigs, or one promoted closed ring. */
+  function drawRing(contigs, cx, cy, scale, { closed = false, summary = false, title = '' } = {}) {
+    const sr = value => value * scale;
     const labels = new THREE.Group(), gcGroup = new THREE.Group();
+    labels.userData.role = 'labels';
+    gcGroup.userData.role = 'gc';
     if (!showLabels) labels.visible = false;
     if (!showGc) gcGroup.visible = false;
     layoutGroup.add(labels, gcGroup);
-    layoutGroup.add(ring(3.95, .01), ring(6.55, .01), ring(7.15, -.01, '#2c3854', .25));
+    layoutGroup.add(
+      ring(sr(3.95), .01, '#3d4d75', .35, cx, cy),
+      ring(sr(6.55), .01, '#3d4d75', .35, cx, cy),
+      ring(sr(7.15), -.01, '#2c3854', .25, cx, cy),
+    );
 
+    const totalBp = contigs.reduce((sum, contig) => sum + contig.length, 0);
+    const gap = closed ? 0 : Math.min(0.018, (Math.PI * 2 / contigs.length) * 0.20);
+    const usable = Math.PI * 2 - gap * contigs.length;
     let cursor = Math.PI / 2;
     const arcOf = new Map();
-    for (const contig of ringContigs) {
-      const arcLength = contig.length / totalBp * usable;
+    for (const contig of contigs) {
+      const arcLength = closed ? Math.PI * 2 : contig.length / totalBp * usable;
       const a0 = cursor, a1 = cursor + arcLength;
       arcOf.set(contig.id, { a0, arcLength, contig });
       cursor = a1 + gap;
-      layoutGroup.add(sectorMesh(6.70, 7.30, a0, a1, 0, '#3a4d78'));
-      for (const boundary of [a0, a1]) {
-        layoutGroup.add(sectorMesh(6.58, 7.42, boundary - 0.004, boundary + 0.004, 0.01, '#7e8bb0'));
+      layoutGroup.add(sectorMesh(sr(6.70), sr(7.30), a0, a1, 0, '#3a4d78', cx, cy));
+      if (!closed) {
+        for (const boundary of [a0, a1]) {
+          layoutGroup.add(sectorMesh(sr(6.58), sr(7.42), boundary - 0.004, boundary + 0.004, 0.01, '#7e8bb0', cx, cy));
+        }
       }
-      if (arcLength > 0.05) {
-        const mid = (a0 + a1) / 2;
+      const mid = (a0 + a1) / 2;
+      if (closed) {
+        // promoted rings mirror the closed-replicon rendering: bp ticks + coordinate labels
+        const step = niceStep(contig.length, contig.length > 1e6 ? 8 : 5);
+        for (let position = 0; position < contig.length; position += step) {
+          const angle = position / contig.length * Math.PI * 2;
+          layoutGroup.add(sectorMesh(sr(6.58), sr(6.74), angle, angle + 0.0015, 0.01, '#9aabd8', cx, cy));
+          const label = makeLabel(formatCoordinate(position), { color: '#a8b5d6', height: Math.max(0.14, .26 * scale), fontSize: 22, align: 'center' });
+          label.position.set(cx + Math.cos(angle) * sr(7.45), cy - Math.sin(angle) * sr(7.45), .04);
+          labels.add(label);
+        }
+        const ringTitle = makeLabel(`${contig.name || contig.id} · CIRCULAR（用户成环）`, {
+          color: '#c3cdf0', height: Math.max(0.2, .34 * scale), fontSize: 24, align: 'center',
+        });
+        ringTitle.position.set(cx, cy + sr(1.1), .03);
+        labels.add(ringTitle);
+      } else if (arcLength > 0.05) {
         const label = makeLabel(`${contig.name || contig.id} · ${formatBp(contig.length)}`, {
           color: '#a8b5d6', height: 0.24, fontSize: 21, align: 'center',
         });
-        label.position.set(Math.cos(mid) * 7.75, -Math.sin(mid) * 7.75, 0.04);
+        label.position.set(cx + Math.cos(mid) * sr(7.75), cy - Math.sin(mid) * sr(7.75), 0.04);
         labels.add(label);
       }
+
       if (contig.track?.pos?.length > 1) {
-        // 与 demo 相同的两条轨道：GC 含量是有厚度的带（高于均值蓝、低于均值琥珀），
-        // GC skew 是青绿色折线；此前把 GC 画成绿色线、skew 画成蓝色线，视觉上不对。
+        // GC 含量带（高于均值蓝、低于均值琥珀）与 GC skew 青绿色折线，与 demo 一致。
         const track = contig.track;
         const mean = track.gc.reduce((a, b) => a + b, 0) / track.gc.length;
-        const gcBase = 3.18, gcAmp = 0.22;
-        const skewBase = 2.52, skewAmp = 0.20;
+        const gcBase = sr(3.18), gcAmp = sr(0.22);
+        const skewBase = sr(2.52), skewAmp = sr(0.20);
         const positions = [], colors = [];
         const angleAt = index => a0 + track.pos[index] / contig.length * arcLength;
         const point = (index, radius) => {
           const angle = angleAt(index);
-          return [Math.cos(angle) * radius, -Math.sin(angle) * radius, 0.02];
+          return [cx + Math.cos(angle) * radius, cy - Math.sin(angle) * radius, 0.02];
         };
         const pushTriangle = (a, b, c, rgb) => {
           for (const vertex of [a, b, c]) {
@@ -542,7 +647,7 @@ function createDraftView({ root, data, host, registerPickable, contigs }) {
         const skewPositions = track.pos.map((position, i) => {
           const angle = angleAt(i);
           const radius = skewBase + clamp(track.skew[i] * 6, -1, 1) * skewAmp;
-          return new THREE.Vector3(Math.cos(angle) * radius, -Math.sin(angle) * radius, 0.02);
+          return new THREE.Vector3(cx + Math.cos(angle) * radius, cy - Math.sin(angle) * radius, 0.02);
         });
         gcGroup.add(new THREE.Line(
           new THREE.BufferGeometry().setFromPoints(skewPositions),
@@ -551,19 +656,26 @@ function createDraftView({ root, data, host, registerPickable, contigs }) {
       }
     }
 
-    const head = makeLabel(`DRAFT CIRCULAR LAYOUT · ≥ ${thresholdKb} kb`, {
-      color: '#f0b07a', height: 0.42, fontSize: 26, align: 'center',
-    });
-    head.position.set(0, 0.55, 0.05);
-    labels.add(head);
-    const summary = makeLabel(`${ringContigs.length} contigs · ${formatBp(totalBp)} · sorted by length`, {
-      color: '#c3cdf0', height: 0.3, fontSize: 22, align: 'center',
-    });
-    summary.position.set(0, 0.05, 0.05);
-    labels.add(summary);
-    const notice = makeLabel('draft 布局 · 未声明闭合', { color: '#68779b', height: 0.26, fontSize: 20, align: 'center' });
-    notice.position.set(0, -0.4, 0.05);
-    labels.add(notice);
+    if (summary) {
+      const head = makeLabel(`DRAFT CIRCULAR LAYOUT · ≥ ${thresholdKb} kb`, {
+        color: '#f0b07a', height: 0.42, fontSize: 26, align: 'center',
+      });
+      head.position.set(cx, cy + 0.55, 0.05);
+      labels.add(head);
+      const summaryLabel = makeLabel(`${contigs.length} contigs · ${formatBp(totalBp)} · sorted by length`, {
+        color: '#c3cdf0', height: 0.3, fontSize: 22, align: 'center',
+      });
+      summaryLabel.position.set(cx, cy + 0.05, 0.05);
+      labels.add(summaryLabel);
+      const notice = makeLabel('draft 布局 · 未声明闭合', { color: '#68779b', height: 0.26, fontSize: 20, align: 'center' });
+      notice.position.set(cx, cy - 0.4, 0.05);
+      labels.add(notice);
+    }
+    if (title) {
+      const titleLabel = makeLabel(title, { color: '#f0b07a', height: 0.3, fontSize: 20, align: 'center' });
+      titleLabel.position.set(cx, cy + sr(1.6), 0.05);
+      labels.add(titleLabel);
+    }
 
     const grouped = new Map();
     for (const feature of data.features) {
@@ -573,7 +685,6 @@ function createDraftView({ root, data, host, registerPickable, contigs }) {
       if (!grouped.has(key)) grouped.set(key, []);
       grouped.get(key).push({ feature, arc });
     }
-    ringFeatures = 0;
     const matrix = new THREE.Matrix4(), position = new THREE.Vector3();
     const tangent = new THREE.Vector3(), radial = new THREE.Vector3(), normal = new THREE.Vector3(0, 0, 1);
     for (const [category, entries] of grouped) {
@@ -588,14 +699,14 @@ function createDraftView({ root, data, host, registerPickable, contigs }) {
         const end = a0 + feature.end / contig.length * arcLength;
         const mid = (start + end) / 2;
         const plus = feature.strand !== '-';
-        const rMid = (plus ? radius.plusIn + radius.plusOut : radius.minusIn + radius.minusOut) / 2;
-        const width = Math.max(.004, rMid * (end - start));
+        const rMid = sr((plus ? radius.plusIn + radius.plusOut : radius.minusIn + radius.minusOut) / 2);
+        const width = Math.max(sr(0.004), rMid * (end - start));
         const cos = Math.cos(mid), sin = Math.sin(mid);
-        position.set(cos * rMid, -sin * rMid, .18);
+        position.set(cx + cos * rMid, cy - sin * rMid, .18);
         tangent.set(-sin, -cos, 0);
         radial.set(cos, -sin, 0);
         matrix.makeBasis(tangent, radial, normal);
-        matrix.scale(new THREE.Vector3(width, .52, .32));
+        matrix.scale(new THREE.Vector3(width, Math.max(0.12, sr(0.52)), sr(0.32)));
         matrix.setPosition(position);
         mesh.setMatrixAt(instanceId, matrix);
         mesh.setColorAt(instanceId, new THREE.Color(featureColor(feature)));
@@ -612,12 +723,39 @@ function createDraftView({ root, data, host, registerPickable, contigs }) {
       };
       ringFeatures += entries.length;
     }
+    return arcOf;
+  }
+
+  function render() {
+    const threshold = thresholdKb * 1000;
+    ringContigs = sorted.filter(contig => contig.length >= threshold);
+    if (!ringContigs.length) ringContigs = [sorted[0]];
+    ringFeatures = 0;
+    const promotedContigs = ringContigs.filter(contig => promoted.has(contig.id));
+    const draftContigs = ringContigs.filter(contig => !promoted.has(contig.id));
+
+    if (!promotedContigs.length) {
+      drawRing(draftContigs, 0, 0, 1, { summary: true });
+    } else {
+      const slots = promotedSlots(promotedContigs.length);
+      promotedContigs.forEach((contig, index) => {
+        const slot = slots[index];
+        drawRing([contig], slot.x, slot.y, slot.scale, { closed: true });
+      });
+      if (draftContigs.length) {
+        const lowest = slots.reduce((min, slot) => Math.min(min, slot.y), 0);
+        drawRing(draftContigs, 0, lowest - 10.5, 0.28, { title: `DRAFT · ${draftContigs.length} contigs（未成环）` });
+      }
+    }
     if (sidebarEl) {
       renderRingList();
       renderSiteList();
       renderCategoryList();
       const ringCount = sidebarEl.querySelector('[data-role="ring-count"]');
-      if (ringCount) ringCount.textContent = `${ringContigs.length} contigs`;
+      if (ringCount) ringCount.textContent = promoted.size
+        ? `${promoted.size} 成环 · ${ringContigs.length} contigs`
+        : `${ringContigs.length} contigs`;
+      syncRingActions();
     }
   }
   render();
@@ -636,18 +774,23 @@ function createDraftView({ root, data, host, registerPickable, contigs }) {
       draft: true,
       thresholdKb,
       contigs: ringContigs.length,
+      promoted: [...promoted],
       records: ringFeatures,
     }),
     stats: () => [
       { label: '组装总长度', value: formatBp(ringContigs.reduce((sum, contig) => sum + contig.length, 0)) },
       { label: '圈图 contigs', value: `${ringContigs.length} / ${sorted.length}` },
+      ...(promoted.size ? [{ label: '成环 replicons', value: promoted.size }] : []),
       { label: '注释特征', value: ringFeatures },
       { label: '功能类别', value: new Set(data.features.filter(feature => ringContigs.some(contig => contig.id === feature.contig)).map(feature => feature.flag || feature.category)).size },
       ...(Number.isFinite(data.eggnog_matched) && Number.isFinite(data.eggnog_total)
         ? [{ label: 'eggNOG 匹配', value: `${data.eggnog_matched}/${data.eggnog_total}` }] : []),
     ],
     mountSidebar,
-    resetCamera: () => host.setCamera(new THREE.Vector3(5.5, 4.8, 22.5), new THREE.Vector3(0, 0, 0)),
+    resetCamera: () => host.setCamera(
+      promoted.size ? new THREE.Vector3(0, 6.5, 34) : new THREE.Vector3(5.5, 4.8, 22.5),
+      new THREE.Vector3(0, promoted.size ? -1.5 : 0, 0),
+    ),
     setOption: (key, value) => {
       if (key === 'thresholdKb') {
         thresholdKb = value;
@@ -661,13 +804,12 @@ function createDraftView({ root, data, host, registerPickable, contigs }) {
         syncCategoryChecks();
         return;
       }
-      if (key === 'gc') showGc = value;
-      if (key === 'labels') showLabels = value;
-      for (const child of layoutGroup.children) {
-        if (!child.isGroup || child.children.length === 0) continue;
-        const first = child.children[0];
-        if (first?.isLine) child.visible = showGc;
-        else if (first?.isSprite) child.visible = showLabels;
+      if (key === 'gc' || key === 'labels') {
+        if (key === 'gc') showGc = value;
+        else showLabels = value;
+        for (const child of layoutGroup.children) {
+          if (child.userData.role === key) child.visible = value;
+        }
       }
     },
     select: selectPayload,
@@ -750,7 +892,7 @@ export const circularAnnotationView = {
 
       const backbone = sectorMesh(sr(3.95), sr(6.55), 0, Math.PI * 2, -.025, '#111a2e', cx, cy);
       group.add(backbone);
-      group.add(ring(sr(3.95), .01), ring(sr(6.55), .01), ring(sr(7.15), -.01, '#2c3854', .25));
+      group.add(ring(sr(3.95), .01, '#3d4d75', .35, cx, cy), ring(sr(6.55), .01, '#3d4d75', .35, cx, cy), ring(sr(7.15), -.01, '#2c3854', .25, cx, cy));
       const midline = sectorMesh(sr(5.835), sr(5.865), 0, Math.PI * 2, 0, '#314069', cx, cy);
       group.add(midline);
 

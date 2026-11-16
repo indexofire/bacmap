@@ -73,6 +73,14 @@ RUNS_MIGRATIONS: tuple[Migration, ...] = (
         "run artifact purges: append-only audit (records stay immutable)",
         (_PURGE_DDL,),
     ),
+    Migration(
+        3,
+        "reanalysis provenance: base run + selected stages",
+        (
+            "ALTER TABLE analysis_runs ADD COLUMN base_run_id TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE analysis_runs ADD COLUMN reanalysis_steps TEXT NOT NULL DEFAULT '[]'",
+        ),
+    ),
 )
 
 # 这些状态的任务仍在写/即将写结果，禁止清理产物。
@@ -108,6 +116,8 @@ class AnalysisRun(BaseModel):
     nondeterministic_steps: list[str] = []
     host: dict[str, Any] = {}
     baseline_version: str | None = None
+    base_run_id: str = ""
+    reanalysis_steps: list[str] = []
     manifest_sha256: str = ""
 
 
@@ -246,6 +256,8 @@ def create_run(
     refs_dir: Path | None = None,
     started_at: datetime | None = None,
     finished_at: datetime | None = None,
+    base_run_id: str = "",
+    reanalysis_steps: list[str] | None = None,
 ) -> AnalysisRun:
     """登记一次运行记录。
 
@@ -310,6 +322,8 @@ def create_run(
         nondeterministic_steps=nondeterministic,
         ref_databases=load_ref_databases(refs_dir or REFS_DIR),
         host={"hostname": _hostname()},
+        base_run_id=base_run_id,
+        reanalysis_steps=list(reanalysis_steps or []),
     )
     lock = env_lock_path()
     if lock is not None:
@@ -323,8 +337,8 @@ def create_run(
             "INSERT INTO analysis_runs (run_id, task_id, strain_ids, workflow, workflow_commit,"
             " workflow_dirty, started_at, finished_at, resolved_config, config_sha256,"
             " ref_databases, tool_versions, env_lock_sha256, input_files, seeds,"
-            " nondeterministic_steps, host, manifest_sha256)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " nondeterministic_steps, host, manifest_sha256, base_run_id, reanalysis_steps)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 run.run_id, run.task_id, json.dumps(run.strain_ids), run.workflow,
                 run.workflow_commit, int(run.workflow_dirty),
@@ -335,7 +349,7 @@ def create_run(
                 json.dumps(run.tool_versions), run.env_lock_sha256,
                 json.dumps(run.input_files), json.dumps(run.seeds),
                 json.dumps(run.nondeterministic_steps), json.dumps(run.host),
-                run.manifest_sha256,
+                run.manifest_sha256, run.base_run_id, json.dumps(run.reanalysis_steps),
             ),
         )
     return run
@@ -580,6 +594,8 @@ def read_run(run_id: str, db_path: Path) -> AnalysisRun | None:
         nondeterministic_steps=json.loads(row["nondeterministic_steps"]),
         host=json.loads(row["host"]),
         baseline_version=row["baseline_version"],
+        base_run_id=row["base_run_id"],
+        reanalysis_steps=json.loads(row["reanalysis_steps"] or "[]"),
         manifest_sha256=row["manifest_sha256"],
     )
 

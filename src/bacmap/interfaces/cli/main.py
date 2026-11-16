@@ -597,14 +597,14 @@ def _run_task_show(args: argparse.Namespace) -> None:
         c.print(f"  message: {_safe(st.message)}")
 
 
-def _run_task_submit(args: argparse.Namespace) -> None:
+def _run_task_submit(args: argparse.Namespace) -> None:  # noqa: C901
     from bacmap.tasks.spec import TaskType
 
-    if args.type not in ("analyze", "curate"):
+    if args.type not in ("analyze", "reanalyze", "curate"):
         raise SystemExit(
             T(
-                "task submit only accepts analyze|curate (mine/write go through plans)",
-                "task submit 仅支持 analyze|curate（mine/write 属开放路径）",
+                "task submit accepts analyze|reanalyze|curate (mine/write go through plans)",
+                "task submit 仅支持 analyze|reanalyze|curate（mine/write 属开放路径）",
             )
         )
     params: dict[str, Any] = {}
@@ -630,6 +630,21 @@ def _run_task_submit(args: argparse.Namespace) -> None:
             params["species"] = args.species
     elif args.samples:
         params["samples"] = [s.strip() for s in args.samples.split(",") if s.strip()]
+    if args.type == "analyze" and args.annotation is not None:
+        params["annotation"] = args.annotation
+    if args.type == "reanalyze":
+        if not params.get("samples"):
+            raise SystemExit(
+                T("reanalyze requires --samples", "reanalyze 需要 --samples")
+            )
+        steps = [item.strip() for item in args.steps.split(",") if item.strip()]
+        if not steps:
+            raise SystemExit(
+                T("reanalyze requires --steps", "reanalyze 需要 --steps")
+            )
+        params["steps"] = steps
+        if args.base_run:
+            params["base_run_id"] = args.base_run
     if args.scope:
         try:
             scope = _json.loads(args.scope)
@@ -1022,7 +1037,7 @@ def _epilog() -> str:
 _COMMAND_METAVAR = (
     "{start,overview,task,plan,record,run,gom,config,doctor,backup,"
     "restore,results,events,isolate,specimen,sample,search,selection,db,research,"
-    "agent,stats,detect,species,reference,completion,ops}"
+    "agent,stats,detect,species,reference,database,completion,ops}"
 )
 
 
@@ -1096,11 +1111,14 @@ def build_parser() -> argparse.ArgumentParser:
             "样本物种（码或名称；省略时 FASTA 逐株自动识别）",
         ),
     )
-    t_sub.add_argument("--type", choices=["analyze", "curate"], required=True)
+    t_sub.add_argument("--type", choices=["analyze", "reanalyze", "curate"], required=True)
     t_sub.add_argument(
         "--samples",
         default="",
-        help=T("comma-separated sample IDs (analyze)", "样本 ID，逗号分隔（analyze）"),
+        help=T(
+            "comma-separated sample IDs (analyze/reanalyze)",
+            "样本 ID，逗号分隔（analyze/reanalyze）",
+        ),
     )
     t_sub.add_argument(
         "--scope",
@@ -1108,6 +1126,31 @@ def build_parser() -> argparse.ArgumentParser:
         help=T(
             'filter JSON (curate, e.g. {"pathogen":"Salmonella"})',
             '筛选 JSON（curate，如 {"pathogen":"Salmonella"}）',
+        ),
+    )
+    t_sub.add_argument(
+        "--steps",
+        default="",
+        help=T(
+            "reanalyze: comma-separated stages (mlst/amr/annotation)",
+            "reanalyze：阶段，逗号分隔（mlst/amr/annotation）",
+        ),
+    )
+    t_sub.add_argument(
+        "--base-run",
+        default="",
+        help=T(
+            "reanalyze: base run_id (default: common latest run)",
+            "reanalyze：base run_id（默认取共同最近一次运行）",
+        ),
+    )
+    t_sub.add_argument(
+        "--annotation",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=T(
+            "run Bakta/eggNOG annotation (use --no-annotation for a faster run)",
+            "运行 Bakta/eggNOG 注释（--no-annotation 可显著提速）",
         ),
     )
     t_sub.add_argument("--by", default="cli", help=T("submitter", "提交者"))

@@ -544,7 +544,7 @@ class TestCapabilitiesTool:
         out = _call(build_server(), "bacmap_capabilities", {})
         assert out["profile"] == "cloud" and out["max_data_class"] == "D1"
         assert out["plannable_task_types"] == [
-            "analyze", "curate", "mine", "write", "research",
+            "analyze", "reanalyze", "curate", "mine", "write", "research",
         ]
         assert out["tasks_extension"] == "unsupported_by_sdk"
         assert "bacmap_create_plan" in out["recommended_write_path"]

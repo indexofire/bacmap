@@ -58,7 +58,7 @@ class TestCapabilities:
         body = c.get("/api/v1/capabilities").json()
         assert body["api_version"] == "1"
         assert set(body["plannable_task_types"]) == {
-            "analyze", "curate", "mine", "write", "research",
+            "analyze", "reanalyze", "curate", "mine", "write", "research",
         }
         assert "events.sse" in body["features"]
         assert "/" not in json.dumps({k: v for k, v in body.items() if k != "endpoints"})

@@ -109,9 +109,9 @@ bacmap overview --json
 ```text
 bacmap task list|ls [--limit N] [--home H] [--json]
 bacmap task show <task_id> [--json]
-bacmap task submit --type {analyze,curate}
+bacmap task submit --type {analyze,reanalyze,curate}
                     (--samples IDS | --fasta-dir DIR | --fastq-dir DIR)
-                    [--species CODE] [--scope JSON] [--by ACTOR] [--json]
+                    [--species CODE] [--scope JSON] [--annotation|--no-annotation] [--by ACTOR] [--json]
 bacmap task approve <task_id> --approver NAME --decision {approve,reject}
                     --signature SIG [--comment TEXT]
 bacmap task cancel <task_id>
@@ -125,6 +125,10 @@ bacmap task show 3f9c2a1b
 bacmap task submit --type analyze --samples SAM-001,SAM-002
 bacmap task submit --type analyze --fasta-dir /data/genomes --species VPA
 bacmap task submit --type analyze --fastq-dir /data/run42 --species Salmonella
+bacmap task submit --type analyze --samples SAM-001 --no-annotation
+# 在既有 run 上只补跑 MLST；生成新的不可变 run
+bacmap task submit --type reanalyze --samples SAM-001 --steps mlst
+bacmap task submit --type reanalyze --samples SAM-001 --steps mlst --base-run <run_id>
 bacmap task submit --type curate --scope '{"pathogen":"Salmonella"}'
 bacmap task approve 3f9c2a1b --approver "Jane" --decision approve --signature "jd-2026-10-30"
 bacmap task cancel 3f9c2a1b
@@ -422,6 +426,15 @@ bacmap search [--query TEXT] [--serotype TEXT] [--st ST] [--gene GENE]
 bacmap search --query Salmonella
 bacmap search --serotype Typhimurium --st 19 --gene blaCTX-M-15
 ```
+
+## `bacmap database`
+
+```text
+bacmap database status [--samples IDS] [--annotation|--no-annotation] [--home H] [--json]
+```
+
+analyze 的只读数据库预检：Bakta/eggNOG（可关闭）、AMRFinderPlus、gmlst scheme、gspec 库与
+SNP 参考基因组。它不会下载；缺库时打印安装命令并以退出码 `1` 结束。
 
 ## `bacmap doctor`
 

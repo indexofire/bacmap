@@ -428,7 +428,7 @@ Exact visibility depends on the profile. Ask the server first:
   "api": "mcp",
   "profile": "cloud",
   "max_data_class": "D1",
-  "plannable_task_types": ["analyze", "curate", "mine", "write"],
+  "plannable_task_types": ["analyze", "reanalyze", "curate", "mine", "write", "research"],
   "recommended_write_path": "bacmap_create_plan -> user confirms in bacmap CLI/Web -> bacmap_get_plan -> bacmap_task_status",
   "long_running": "explicit task handles (bacmap_task_status polling)",
   "tasks_extension": "unsupported_by_sdk"
@@ -480,7 +480,8 @@ Response (abridged):
 Plannable task shapes:
 
 ```json
-{"task_type": "analyze", "samples": ["SAM-001"]}
+{"task_type": "analyze", "samples": ["SAM-001"], "annotation": false}
+{"task_type": "reanalyze", "samples": ["SAM-001"], "steps": ["mlst"]}
 {"task_type": "analyze", "fasta_dir": "/abs/dir"}
 {"task_type": "analyze", "fastq_dir": "/abs/dir", "species": "SAL"}
 {"task_type": "curate", "scope": {"pathogen": "Salmonella"}}

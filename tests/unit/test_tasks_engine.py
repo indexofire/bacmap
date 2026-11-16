@@ -509,9 +509,10 @@ class TestRunSnakemakeDeploys:
             def __init__(self, deployed_dir=None, timeout=0):
                 seen["deployed_dir"] = deployed_dir
 
-            def run(self, targets, cores=8, config_overrides=None):
+            def run(self, targets, cores=8, config_overrides=None, env_overrides=None):
                 seen["targets"] = targets
                 seen["overrides"] = config_overrides
+                seen["env"] = env_overrides
                 return _Proc(0)
 
         monkeypatch.setattr(wf_runner, "deploy", lambda force=False: deployed)

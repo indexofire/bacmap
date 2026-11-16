@@ -43,6 +43,10 @@ class AnalyzeParams(BaseModel):
     species: str | None = Field(
         default=None, description="目录直入时的物种（码或名称；省略则 FASTA 逐株自动识别）"
     )
+    annotation: bool = Field(
+        default=True,
+        description="是否运行 Bakta/eggNOG 注释（false 时写 disabled 占位，流程更快）",
+    )
 
     @field_validator("samples")
     @classmethod
@@ -64,6 +68,38 @@ class AnalyzeParams(BaseModel):
         if self.species is not None and self.samples:
             raise ValueError("species only applies to fasta_dir / fastq_dir")
         return self
+
+
+class ReanalyzeParams(BaseModel):
+    """在既有 run 上补跑指定阶段（v1.10.39，partial reanalyze）。
+
+    快照复用 base run 的未变化产物（硬链接），只重算 ``steps`` 与 summary/report；
+    产生新的不可变 run，成功后 latest 别名才切换。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    task_type: Literal["reanalyze"] = "reanalyze"
+    samples: list[str] = Field(min_length=1)
+    base_run_id: str = Field(default="", description="base run；省略则取这些样本共同的最近一次 run")
+    steps: list[str] = Field(min_length=1, description="阶段名，如 mlst/amr/annotation")
+
+    @field_validator("samples")
+    @classmethod
+    def _samples_ok(cls, v: list[str]) -> list[str]:
+        return _check_sample_ids(v)
+
+    @field_validator("steps")
+    @classmethod
+    def _steps_ok(cls, v: list[str]) -> list[str]:
+        from bacmap.core.pipeline.stages import get_stage
+
+        normalized = [item.strip() for item in v if item.strip()]
+        if not normalized:
+            raise ValueError("at least one stage is required")
+        for name in normalized:
+            get_stage(name)
+        return list(dict.fromkeys(normalized))
 
 
 class CurateScope(BaseModel):
@@ -228,6 +264,7 @@ class ResearchParams(BaseModel):
 
 PlannableTask = Annotated[
     AnalyzeParams
+    | ReanalyzeParams
     | CurateParams
     | MineParams
     | WriteParams
@@ -237,13 +274,23 @@ PlannableTask = Annotated[
 
 
 def task_type_of(
-    task: AnalyzeParams | CurateParams | MineParams | WriteParams | ResearchParams,
+    task: AnalyzeParams
+    | ReanalyzeParams
+    | CurateParams
+    | MineParams
+    | WriteParams
+    | ResearchParams,
 ) -> TaskType:
     return TaskType(task.task_type)
 
 
 def engine_params(
-    task: AnalyzeParams | CurateParams | MineParams | WriteParams | ResearchParams,
+    task: AnalyzeParams
+    | ReanalyzeParams
+    | CurateParams
+    | MineParams
+    | WriteParams
+    | ResearchParams,
 ) -> dict[str, Any]:
     """转换为引擎参数字典（去掉判别字段与空值）。"""
     data = task.model_dump(mode="json", exclude={"task_type"}, exclude_none=True)

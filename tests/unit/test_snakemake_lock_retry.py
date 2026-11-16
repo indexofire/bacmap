@@ -12,7 +12,7 @@ class _FakeRunner:
         self._results = iter(results)
         self.calls = 0
 
-    def run(self, targets=None, cores=None, config_overrides=None, timeout=None):
+    def run(self, targets=None, cores=None, config_overrides=None, timeout=None, env_overrides=None):
         self.calls += 1
         return next(self._results)
 

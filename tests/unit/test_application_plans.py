@@ -110,10 +110,11 @@ class TestParams:
             MineParams(objective="x", script="x" * 40000)
 
     def test_engine_params_shape(self):
-        assert engine_params(_analyze("A", "B")) == {"samples": ["A", "B"]}
+        assert engine_params(_analyze("A", "B")) == {"samples": ["A", "B"], "annotation": True}
         assert engine_params(AnalyzeParams(fastq_dir="/r", species="SAL")) == {
             "fastq_dir": "/r",
             "species": "SAL",
+            "annotation": True,
         }
         assert engine_params(CurateParams(scope=CurateScope(pathogen="SAL"))) == {
             "scope": {"pathogen": "SAL"}
@@ -284,7 +285,7 @@ class TestInputFingerprint:
         d = self._dir(tmp_path)
         rec = service.create([AnalyzeParams(fasta_dir=str(d), species="VPA")], "", "harness")
         assert service.confirm(rec.plan_id, 1, rec.plan_hash, "cli").state is PlanState.SUBMITTED
-        assert engine.calls[0][1] == {"fasta_dir": str(d), "species": "VPA"}
+        assert engine.calls[0][1] == {"fasta_dir": str(d), "species": "VPA", "annotation": True}
 
 
 class TestOpenPathPlans:

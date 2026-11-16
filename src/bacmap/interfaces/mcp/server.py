@@ -116,6 +116,7 @@ def build_server(engine: Any = None, profile: ProfileSpec | None = None) -> MCPS
 
         start_task_notifier(engine.home)
         _register_task_tools(server, engine, profile)
+        _register_database_tool(server, engine, profile)
         _register_task_control_tools(server, engine, profile)
         _register_record_tool(server, engine, profile)
         _register_plan_tools(server, engine, profile.actor)
@@ -196,6 +197,7 @@ def _register_task_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -
         samples: list[str] | None = None,
         scope: dict[str, Any] | None = None,
         callback_url: str = "",
+        annotation: bool | None = None,
     ) -> str:
         try:
             tt = TaskType(task_type)
@@ -223,6 +225,8 @@ def _register_task_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -
             params["samples"] = samples
         if scope:
             params["scope"] = scope
+        if annotation is not None and tt is TaskType.ANALYZE:
+            params["annotation"] = bool(annotation)
         if callback_url:
             from bacmap.tasks.notifications import validate_callback_url
 
@@ -390,7 +394,9 @@ def _register_capabilities(server: MCPServer, profile: ProfileSpec) -> None:
                 "api": "mcp",
                 "profile": profile.profile.value,
                 "max_data_class": profile.max_data_class.name,
-                "plannable_task_types": ["analyze", "curate", "mine", "write", "research"],
+                "plannable_task_types": [
+                    "analyze", "reanalyze", "curate", "mine", "write", "research"
+                ],
                 "recommended_write_path": (
                     "bacmap_create_plan -> user confirms in bacmap CLI/Web -> "
                     "bacmap_get_plan -> bacmap_task_status"
@@ -625,6 +631,36 @@ def _gate_summary(result: dict[str, Any], profile: ProfileSpec) -> dict[str, Any
         counts[v] = counts.get(v, 0) + 1
     return {"gate_counts": counts}
 
+
+def _register_database_tool(server: MCPServer, engine: Any, profile: ProfileSpec) -> None:
+    """Read-only database preflight for agent planning (D1; no sample paths)."""
+    from pathlib import Path
+
+    if not profile.allows(DataClass.D1):
+        return
+
+    @server.tool(
+        name="bacmap_database_status",
+        description=(
+            "Read-only preflight of local databases/references required by an analyze run. "
+            "Returns missing resource names and exact install commands; never downloads. D1."
+        ),
+    )
+    def database_status(samples: list[str], annotation: bool = True) -> str:
+        from bacmap.core.pipeline.resources import preflight_resources
+
+        report = preflight_resources(Path(engine.home), list(samples), annotation=annotation)
+        payload = {
+            "ok": report.ok,
+            "missing": [
+                {"name": item.name, "kind": item.kind, "install": item.install}
+                for item in report.missing
+            ],
+            "checked": [item.name for item in report.checked],
+            "skipped": [item.name for item in report.skipped],
+            "warning": report.warning,
+        }
+        return json.dumps(payload, ensure_ascii=False)
 
 def _register_task_control_tools(server: MCPServer, engine: Any, profile: ProfileSpec) -> None:  # noqa: C901
     from bacmap.tasks.spec import TaskId

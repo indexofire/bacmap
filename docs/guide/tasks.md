@@ -66,6 +66,25 @@ bacmap task submit --type analyze --fasta-dir /data/genomes
 bacmap task submit --type analyze --fastq-dir /data/run42 --species Salmonella
 ```
 
+Before the pipeline starts, bacmap runs a read-only database preflight
+(`bacmap database status`) and fails fast with install commands when a required
+Bakta/eggNOG, gmlst scheme, gspec database or SNP reference is missing. Nothing is
+downloaded implicitly. For a faster run without annotation:
+
+```bash
+bacmap task submit --type analyze --samples SAM-TYP-001 --no-annotation
+```
+
+Existing runs can be extended without rerunning the whole pipeline. This creates a new
+immutable run and hardlinks unchanged artifacts:
+
+```bash
+bacmap task submit --type reanalyze --samples SAM-TYP-001 --steps mlst
+```
+
+Allowed stages are `mlst`, `amr` and `annotation`; the base run defaults to the newest run
+shared by all requested samples. `--base-run <run_id>` pins it.
+
 As an MCP plan:
 
 ```json
