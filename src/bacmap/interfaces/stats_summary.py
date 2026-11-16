@@ -200,6 +200,7 @@ def gather_stats(home: str | Path) -> dict[str, Any]:
         out["gom"] = {**info, "genome_objects": 0, "isolates": 0, "amr_genes": 0}
         out["strains"] = {
             "total": 0,
+            "registered": 0,
             "species": [],
             "serotypes": [],
             "mlst": [],
@@ -217,10 +218,16 @@ def gather_stats(home: str | Path) -> dict[str, Any]:
                 "total": _count(conn, "SELECT COUNT(*) FROM lab_results"),
                 "strains": _count(conn, "SELECT COUNT(DISTINCT strain_id) FROM lab_results"),
             }
+            # 已登记菌株（isolates）与已入库/已分析菌株（strain_genotype_index）
+            # 是两个口径；Dashboard 必须显式区分，避免把“已登记未分析”误读为丢失。
+            out["strains"]["registered"] = _count(
+                conn, "SELECT COUNT(*) FROM isolates"
+            ) or 0
         finally:
             conn.close()
     else:
         out["lab_results"] = {**info, "total": 0, "strains": 0}
+        out["strains"]["registered"] = 0
 
     knowledge_db = root / "data" / "knowledge.sqlite"
     info = _file_info(knowledge_db)

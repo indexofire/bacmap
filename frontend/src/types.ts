@@ -382,6 +382,7 @@ export interface DatabaseStats {
   gom: { genome_objects: number; isolates: number; amr_genes: number; [key: string]: unknown }
   strains: {
     total: number
+    registered?: number
     species: CountItem[]
     serotypes: CountItem[]
     mlst: CountItem[]

@@ -159,10 +159,10 @@ const dbKpis = computed(() => {
   const s = stats.value
   return [
     {
-      label: '菌株总数',
+      label: '已分析菌株',
       value: s ? s.strains.total : '—',
       icon: 'records',
-      foot: 'strain_genotype_index',
+      foot: `已登记 ${s?.strains.registered ?? '—'} · strain_genotype_index`,
       to: '/samples',
     },
     {
@@ -671,7 +671,7 @@ watch([statusItems, trend, resolvedTheme], () => {
       <section class="section">
         <div class="section__head">
           <h2 id="species-panel-title" class="section__title">物种与型别分布</h2>
-          <span class="section__hint">按物种分层；全库混合的 ST/血清型/耐药无意义</span>
+          <span class="section__hint">按已入库菌株分层；已登记未分析的样本不进入型别统计</span>
         </div>
         <section v-if="speciesList.length" class="species-panel" aria-labelledby="species-panel-title">
           <div class="species-tabs" role="tablist" aria-label="按物种查看型别分布">

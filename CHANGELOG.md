@@ -5,6 +5,17 @@
 
 ## [Unreleased]
 
+### Dashboard 菌株统计口径（v1.10.40）
+
+- `/api/v1/stats` 新增 `strains.registered`（`data/bacmap.sqlite` 的 `isolates` 计数），
+  与 `strains.total`（`gom.sqlite` 的 `strain_genotype_index`）明确区分：
+  前者是"已登记"，后者是"已分析/已入库"。
+- Dashboard KPI 改为「已分析菌株」，脚注显示「已登记 N · strain_genotype_index」；
+  物种/型别面板提示"按已入库菌株分层，已登记未分析的样本不进入型别统计"。
+- `bacmap results reindex` 可回填历史 final summary，把"有结果但未入库"的样本补进
+  `strain_genotype_index`（本机实测 449 个 summary 全部回填）。
+- 测试：扩展现有 `test_stats_species`（不新增用例），基线保持 2340。
+
 ### partial reanalyze：在既有 run 上补跑指定阶段（v1.10.39）
 
 - 新增第七类任务 `reanalyze`（计划/CLI）：`samples + steps + base_run_id(optional)`。
@@ -16,7 +27,6 @@
 - 测试：新增 base run 解析、硬链接快照、阶段失效、目标、运行记录溯源、参数/计划注册
   与工作流编排 9 个测试；基线 2331 → 2340。
 
-### 数据库预检与按任务关闭注释（v1.10.38）
 ### 数据库预检与按任务关闭注释（v1.10.38）
 
 - `AnalyzeParams.annotation`（默认 true）与 CLI `--annotation/--no-annotation`：按任务关闭

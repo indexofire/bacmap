@@ -36,10 +36,22 @@ def _gom(tmp_path: Path) -> None:
     conn.close()
 
 
+def _data(tmp_path: Path) -> None:
+    (tmp_path / "data").mkdir()
+    conn = sqlite3.connect(tmp_path / "data" / "bacmap.sqlite")
+    conn.execute("CREATE TABLE isolates (isolate_id TEXT PRIMARY KEY)")
+    conn.executemany(
+        "INSERT INTO isolates VALUES (?)", [("I1",), ("I2",), ("I3",), ("I4",)]
+    )
+    conn.commit()
+    conn.close()
+
+
 def test_species_breakdown_groups_mlst_serotype_amr(tmp_path: Path):
     from bacmap.interfaces.stats_summary import gather_stats
 
     _gom(tmp_path)
+    _data(tmp_path)
     stats = gather_stats(tmp_path)
     by_species = {group["name"]: group for group in stats["strains"]["by_species"]}
     assert by_species["Salmonella"]["count"] == 2
@@ -52,3 +64,6 @@ def test_species_breakdown_groups_mlst_serotype_amr(tmp_path: Path):
     ]
     # 全库字段保留（CLI/兼容）
     assert stats["strains"]["species"][0]["name"] == "Salmonella"
+    # v1.10.40：已分析/已入库（strain_genotype_index）与已登记（isolates）分开口径
+    assert stats["strains"]["total"] == 3
+    assert stats["strains"]["registered"] == 4

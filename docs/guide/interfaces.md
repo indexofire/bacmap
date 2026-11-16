@@ -73,6 +73,12 @@ Data list pages (tasks, sequencing data, runs, GOM, specimens, isolates, records
 the same server-side pagination controls (page size, page x/y, total). The records page lists all
 record tasks with paging instead of only the latest ten.
 
+Strain counts use two explicit measures: **analyzed strains** is `strains.total` from
+`strain_genotype_index` (the source of the species/typing breakdown), while **registered
+strains** is `strains.registered` (the `isolates` table). A registered sample only enters
+the typing stats after an analyze run has produced and ingested a final summary; run
+`bacmap results reindex` to backfill historical summaries.
+
 The dashboard degrades gracefully when `/api/v1/stats` fails: tasks still load and database
 statistics show an unavailable message instead of zeroes.
 

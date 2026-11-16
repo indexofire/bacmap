@@ -66,6 +66,11 @@ Bakta/eggNOG 注释与 COG 功能分类（有注释数据时）、副溶血弧�
 数据列表页（任务、测序数据、运行记录、GOM、样本、菌株、数据记录、检索）统一使用服务端分页
 （每页条数、第 x/y 页、总数）；「数据记录」页分页列出全部 record 任务，不再只显示最近 10 条。
 
+菌株计数区分两个口径：**已分析菌株**是 `strains.total`（来自 `strain_genotype_index`，
+也是物种/型别分布的数据源），**已登记菌株**是 `strains.registered`（`isolates` 表）。
+已登记样本要等 analyze 产出并入库 final summary 后才进入型别统计；历史结果可用
+`bacmap results reindex` 回填。
+
 仪表盘对 `/api/v1/stats` 失败做降级：任务区照常加载，数据库统计显示不可用提示而不是全 0。
 
 任务详情页在非终态时每两秒轮询 `/api/v1/tasks/{id}`。所有资源（CSS、JS、图标、favicon）
