@@ -177,6 +177,61 @@ def test_package_page_and_zip(web):
     assert "strobe_checklist.json" in names
 
 
+def _raw_get_status(app, raw_path: str) -> int:
+    import anyio
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": raw_path,
+        "raw_path": raw_path.encode(),
+        "query_string": b"",
+        "root_path": "",
+        "headers": [(b"host", b"testserver")],
+        "client": ("127.0.0.1", 50000),
+        "server": ("testserver", 80),
+    }
+    sent: list[dict] = []
+
+    async def receive() -> dict:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    anyio.run(app, scope, receive, send)
+    return next(m["status"] for m in sent if m["type"] == "http.response.start")
+
+
+@pytest.mark.parametrize("route", ["package", "package.zip"])
+def test_package_routes_reject_traversal_study_id(web, route):
+    client, _, _, home = web
+    research = home / "research"
+    packages = research / "packages"
+    packages.mkdir(parents=True, exist_ok=True)
+    (packages / "keep.txt").write_text("keep", encoding="utf-8")
+    for segment in ("%2e%2e", "%2e", "..%2fpackages", "%2e%2e%5c%2e%2e"):
+        resp = client.get(f"/research/studies/{segment}/{route}")
+        assert resp.status_code in {400, 404}, segment
+    assert _raw_get_status(client.app, f"/research/studies/./{route}") in {400, 404}
+    assert _raw_get_status(client.app, f"/research/studies/../{route}") in {400, 404}
+    assert research.is_dir()
+    assert (packages / "keep.txt").is_file()
+
+
+def test_package_zip_unknown_study_returns_404_without_deleting(web):
+    client, _, _, home = web
+    stale = home / "research" / "packages" / "study-missing"
+    stale.mkdir(parents=True)
+    (stale / "keep.txt").write_text("keep", encoding="utf-8")
+    resp = client.get("/research/studies/study-missing/package.zip")
+    assert resp.status_code == 404
+    assert (stale / "keep.txt").is_file()
+
+
 def test_web_session_create_links_provenance(web):
     client, _, study_id, _ = web
     response = client.post(
