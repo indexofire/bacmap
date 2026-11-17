@@ -1,58 +1,48 @@
-import * as THREE from './vendor/three.module.js';
-import { createAnalysisFramework } from './framework/analysis-framework.js';
-import { assemblyView } from './views/assembly-view.js';
-import { phyloView } from './views/phylo-view.js';
-import { mstView } from './views/mst-view.js';
-import { circularAnnotationView } from './views/circular-annotation-view.js';
+import { mountGvixb } from './gvixb.js';
 
 const mount = document.getElementById('app');
-const canvas = document.getElementById('scene');
-// dev/preview-style overrides: ?view=phylo&endpoint=/api/v1/gvixb/... (same-origin only)
+if (!mount) throw new Error('gvixb: 缺少 #app 挂载容器');
+
+// Dev/preview overrides. The host route normally sets data-view / data-endpoint
+// server-side; these query parameters only replace those attributes and are
+// validated by mountGvixb (same-origin endpoint, registered view).
 const params = new URLSearchParams(location.search);
 const queryView = params.get('view');
-if (queryView && ['assembly', 'circle', 'phylo', 'mst'].includes(queryView)) {
-  mount.dataset.view = queryView;
-}
-const queryEndpoint = params.get('endpoint') || '';
-if (queryEndpoint.startsWith('/api/v1/gvixb/') || queryEndpoint.startsWith('/gvixb/demo/data/')) {
-  mount.dataset.endpoint = queryEndpoint;
-}
-const definitions = {
-  assembly: assemblyView, phylo: phyloView, mst: mstView, circle: circularAnnotationView,
-};
-const definition = definitions[mount.dataset.view];
-if (!definition) throw new Error(`未知 gvixb 视图：${mount.dataset.view}`);
+if (queryView) mount.dataset.view = queryView;
+const queryEndpoint = params.get('endpoint');
+if (queryEndpoint) mount.dataset.endpoint = queryEndpoint;
 
-// One result, one endpoint. The bacmap route—not a client-side demo selector—sets it.
-const selectedView = { ...definition, dataUrl: mount.dataset.endpoint };
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-renderer.setClearColor(0x05070d, 1);
+let instance = null;
+try {
+  instance = mountGvixb(mount, {
+    view: mount.dataset.view,
+    endpoint: mount.dataset.endpoint,
+  });
+} catch (error) {
+  console.error(error);
+  const stats = document.getElementById('analysis-stats');
+  if (stats) {
+    stats.innerHTML = '';
+    const box = document.createElement('div');
+    box.className = 'error-box';
+    box.textContent = `视图加载失败：${error.message}`;
+    stats.append(box);
+  }
+}
 
-const framework = createAnalysisFramework({ renderer, canvas, views: [selectedView] });
 document.getElementById('gvixb-view-switch')?.addEventListener('change', event => {
   const target = event.target;
   if (target instanceof HTMLSelectElement && target.value) location.href = target.value;
 });
-const clock = new THREE.Clock();
 
-function resize() {
-  const width = window.innerWidth, height = window.innerHeight;
-  renderer.setSize(width, height);
-  framework.resize();
+if (instance) {
+  // Read-only diagnostics for local integration tests and support.
+  window.__gvixb = {
+    debug: () => instance.framework.debug(),
+    pickAt: (x, y) => {
+      const payload = instance.framework.pickAt(x, y);
+      return payload ? { id: payload.id } : null;
+    },
+    destroy: () => instance.destroy(),
+  };
 }
-window.addEventListener('resize', resize);
-resize();
-framework.activate(selectedView.id);
-
-function animate() {
-  requestAnimationFrame(animate);
-  framework.tick(clock.getDelta());
-}
-animate();
-
-// Read-only diagnostics for local integration tests and support.
-window.__gvixb = {
-  debug: () => framework.debug(),
-  pickAt: (x, y) => { const payload = framework.pickAt(x, y); return payload ? { id: payload.id } : null; },
-};

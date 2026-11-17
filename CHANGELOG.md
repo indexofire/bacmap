@@ -5,6 +5,17 @@
 
 ## [Unreleased]
 
+### gvixb 运行时同步（v1.10.45）
+
+- 同步 gvixb `runtime/` 发布包：新增 `mountGvixb(root, options)` 公共入口、默认外壳 DOM
+  端口、单一视图注册表，以及挂载前的 schema 结构校验；静态包新增 `gvixb.js`、`shell.js`、
+  `contracts/`、`views/index.js`，并清理已废弃的 `preview.html`。
+- `_asset_version()` 优先读取 `gvixb/manifest.json` 的 `bundleHash`（覆盖全部发布文件），
+  manifest 缺失或损坏时回退到整棵静态树的 mtime/size 哈希；修复只改 `views/mst-view.js`
+  等文件时 `/gvixb-assets/<version>/` 不失效、浏览器继续用旧模块的问题。
+- 宿主自有 `gvixb/demo/` 不参与同步镜像，保留不变。
+- 测试基线不变 2346（本改动只同步前端静态资源与版本串解析，未新增行为测试）。
+
 ### 样本详情内嵌完整报告（v1.10.44）
 
 - 样本详情新增「结果详情 / 完整报告」页签；「查看报告」不再新开标签，直接在当前页面

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -39,17 +40,28 @@ def run_visualizations(engine: Any, run_id: str) -> list[service.GvixbLink]:
 
 
 def _asset_version() -> str:
-    """静态 gvixb 资源的版本串：升级后 URL 变化，绕过旧 CSS/JS 缓存。"""
+    """静态 gvixb 资源的版本串：升级后 URL 变化，绕过旧 CSS/JS 缓存。
+
+    优先使用 gvixb 发布时生成的 manifest.bundleHash（覆盖 runtime/ 下全部文件）；
+    manifest 缺失或损坏时回退到整棵静态树的 mtime/size 哈希。
+    """
     base = STATIC_DIR / "gvixb"
+    manifest = base / "manifest.json"
+    if manifest.is_file():
+        try:
+            data = json.loads(manifest.read_text())
+        except (OSError, ValueError):
+            data = {}
+        bundle_hash = data.get("bundleHash") if isinstance(data, dict) else None
+        if isinstance(bundle_hash, str) and len(bundle_hash) >= 12:
+            return bundle_hash[:12]
+
     parts: list[str] = []
-    for rel in (
-        "gvixb.css", "gvixb-shell.css", "gvixb-app.js",
-        "views/circular-annotation-view.js", "framework/analysis-framework.js",
-    ):
-        path = base / rel
-        if path.is_file():
-            stat = path.stat()
-            parts.append(f"{rel}:{stat.st_mtime_ns}:{stat.st_size}")
+    for path in sorted(base.rglob("*")):
+        if not path.is_file():
+            continue
+        stat = path.stat()
+        parts.append(f"{path.relative_to(base)}:{stat.st_mtime_ns}:{stat.st_size}")
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:12]
 
 

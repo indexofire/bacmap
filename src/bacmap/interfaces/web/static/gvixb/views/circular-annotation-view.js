@@ -838,6 +838,7 @@ function createDraftView({ root, data, host, registerPickable, contigs }) {
 
 export const circularAnnotationView = {
   id: 'circle',
+  schema: 'gvixb.annotated-genome/v1',
   title: '3D 注释圈图',
   subtitle: 'BAKTA + EGGNOG CIRCULAR MAP',
   description: '由 Bakta GFF3 提供基因坐标，eggNOG-mapper 提供 COG/EC/KEGG/PFAM 功能注释；CARD/VFDB 命中按坐标叠加。声明为 circular 的复制子按闭合圈渲染，线性 contig 仅在显式开启时使用伪环布局。',

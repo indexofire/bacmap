@@ -1,16 +1,30 @@
 import { SceneHost } from './scene-host.js';
 import { escapeHtml } from './primitives.js';
-import { assemblyView } from '../views/assembly-view.js';
-import { phyloView } from '../views/phylo-view.js';
-import { mstView } from '../views/mst-view.js';
+import { validateData } from '../contracts/schemas.js';
+import { VIEWS } from '../views/index.js';
 
-export const ANALYSIS_VIEWS = [assemblyView, phyloView, mstView];
+export const ANALYSIS_VIEWS = VIEWS;
 
-/** UI composition + plugin registry. New views only need one definition object. */
-export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIEWS }) {
+/**
+ * UI composition + plugin registry.
+ *
+ * The framework never touches global DOM state directly. The host (or the
+ * default shell in `shell.js`) supplies a UI port:
+ *
+ *   { elements: { [elementId]: HTMLElement | null } }
+ *
+ * New views only need one definition object.
+ */
+export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIEWS, ui }) {
+  const elements = ui?.elements;
+  if (!elements || typeof elements !== 'object') {
+    throw new TypeError('createAnalysisFramework: a ui port with an elements map is required');
+  }
   const byId = new Map(views.map(view => [view.id, view]));
   const cache = new Map();
-  const $ = id => document.getElementById(id);
+  const $ = id => elements[id] || null;
+  const setHtml = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
+  const setText = (id, text) => { const el = $(id); if (el) el.textContent = text; };
   const tooltip = $('tooltip');
   let activeDefinition = null;
   let token = 0;
@@ -18,6 +32,7 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
   const host = new SceneHost({
     renderer, canvas,
     onHover: (payload, event) => {
+      if (!tooltip) return;
       tooltip.style.display = 'none';
       host.view?.hover?.(payload);
       if (!payload || !event || !host.view) return;
@@ -29,25 +44,25 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
       tooltip.style.top = `${Math.min(event.clientY + 14, window.innerHeight - 100)}px`;
     },
     onSelect: payload => {
-      const body = $('analysis-body');
       if (!payload || !host.view) {
         renderEmptyInspector();
-        $('dock-sel').textContent = '—';
+        setText('dock-sel', '—');
         return;
       }
-      body.innerHTML = host.view.inspect?.(payload) || '<p class="empty">该对象没有详情。</p>';
-      $('analysis-panel').classList.remove('empty');
-      $('dock-sel').textContent = host.view.selectionLabel?.(payload) || 'Selected';
+      const body = $('analysis-body');
+      if (body) body.innerHTML = host.view.inspect?.(payload) || '<p class="empty">该对象没有详情。</p>';
+      $('analysis-panel')?.classList.remove('empty');
+      setText('dock-sel', host.view.selectionLabel?.(payload) || 'Selected');
     },
-    onReadout: ({ zoom }) => { $('dock-zoom').textContent = zoom; },
+    onReadout: ({ zoom }) => setText('dock-zoom', zoom),
   });
 
   function renderEmptyInspector() {
-    $('analysis-body').innerHTML = `<p class="empty">点击节点、分支或同源区块查看详情。<br>
+    setHtml('analysis-body', `<p class="empty">点击节点、分支或同源区块查看详情。<br>
       拖拽旋转 · 滚轮缩放 · 右键平移 · <span class="k">双击</span> 聚焦</p>
       <div class="sec-label">科学表示原则</div>
-      <p class="detail-footnote">坐标和拓扑由数据决定。3D 深度、材质与光晕仅用于视觉分层，不作为额外的统计证据。</p>`;
-    $('analysis-panel').classList.add('empty');
+      <p class="detail-footnote">坐标和拓扑由数据决定。3D 深度、材质与光晕仅用于视觉分层，不作为额外的统计证据。</p>`);
+    $('analysis-panel')?.classList.add('empty');
   }
 
   function renderDescription(definition) {
@@ -58,26 +73,38 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
   }
 
   function renderLoading(definition) {
-    $('analysis-kicker').textContent = definition.subtitle;
-    $('analysis-title').textContent = definition.title;
+    setText('analysis-kicker', definition.subtitle);
+    setText('analysis-title', definition.title);
     renderDescription(definition);
-    $('analysis-stats').innerHTML = '<div class="loading-line">正在加载本地数据…</div>';
-    if ($('analysis-lists')) $('analysis-lists').innerHTML = '';
-    $('analysis-controls').innerHTML = '';
-    $('analysis-source').textContent = '';
-    $('analysis-head').textContent = `${definition.title} · Selection`;
+    setHtml('analysis-stats', '<div class="loading-line">正在加载本地数据…</div>');
+    setHtml('analysis-lists', '');
+    setHtml('analysis-controls', '');
+    setText('analysis-source', '');
+    setText('analysis-head', `${definition.title} · Selection`);
     renderEmptyInspector();
   }
 
-  function renderSidebar(definition, data) {
-    $('analysis-kicker').textContent = definition.subtitle;
-    $('analysis-title').textContent = definition.title;
-    renderDescription(definition);
-    $('analysis-stats').innerHTML = (host.view?.stats?.() || []).map(stat => `
-      <div class="analysis-stat"><span>${escapeHtml(stat.label)}</span><b>${escapeHtml(stat.value)}</b></div>`).join('');
-    const controls = typeof definition.controls === 'function' ? definition.controls(data) : (definition.controls || []);
+  function bindControls(controls) {
+    const controlsEl = $('analysis-controls');
+    if (!controlsEl) return;
+    controlsEl.querySelectorAll('input,select').forEach(input => {
+      input.addEventListener('input', () => {
+        const value = input.type === 'checkbox'
+          ? input.checked
+          : input.type === 'select-one' || input.type === 'select-multiple'
+            ? input.value
+            : Number(input.value);
+        const readout = controlsEl.querySelector(`[data-value="${input.dataset.key}"]`);
+        const definitionControl = controls.find(control => control.key === input.dataset.key);
+        if (readout) readout.textContent = `${value}${definitionControl?.unit || ''}`;
+        host.view?.setOption?.(input.dataset.key, value);
+      });
+    });
+  }
+
+  function renderControls(controls) {
     let groupIndex = -1;
-    $('analysis-controls').innerHTML = controls.map(control => {
+    setHtml('analysis-controls', controls.map(control => {
       if (control.type === 'section') {
         groupIndex += 1;
         return `${groupIndex > 0 ? '</details>' : ''}<details class="ctl-group"${groupIndex === 0 ? ' open' : ''}>
@@ -99,25 +126,22 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
           <select data-key="${escapeHtml(control.key)}">${options}</select></label>`;
       }
       return '';
-    }).join('') + (groupIndex >= 0 ? '</details>' : '');
-    $('analysis-source').textContent = data.source || '本地数据';
-    $('crumb-sub').textContent = `ANALYSIS // ${definition.subtitle} · ${data.demo ? 'DEMO DATA' : 'LOCAL DATA'}`;
-    $('analysis-head').textContent = `${definition.title} · Selection`;
-    $('btn-analysis-auto').classList.toggle('on', host.autoRotateDesired);
+    }).join('') + (groupIndex >= 0 ? '</details>' : ''));
+    bindControls(controls);
+  }
 
-    $('analysis-controls').querySelectorAll('input,select').forEach(input => {
-      input.addEventListener('input', () => {
-        const value = input.type === 'checkbox'
-          ? input.checked
-          : input.type === 'select-one' || input.type === 'select-multiple'
-            ? input.value
-            : Number(input.value);
-        const readout = $('analysis-controls').querySelector(`[data-value="${input.dataset.key}"]`);
-        const definitionControl = controls.find(control => control.key === input.dataset.key);
-        if (readout) readout.textContent = `${value}${definitionControl?.unit || ''}`;
-        host.view?.setOption?.(input.dataset.key, value);
-      });
-    });
+  function renderSidebar(definition, data) {
+    setText('analysis-kicker', definition.subtitle);
+    setText('analysis-title', definition.title);
+    renderDescription(definition);
+    setHtml('analysis-stats', (host.view?.stats?.() || []).map(stat => `
+      <div class="analysis-stat"><span>${escapeHtml(stat.label)}</span><b>${escapeHtml(stat.value)}</b></div>`).join(''));
+    const controls = typeof definition.controls === 'function' ? definition.controls(data) : (definition.controls || []);
+    renderControls(controls);
+    setText('analysis-source', data.source || '本地数据');
+    setText('crumb-sub', `ANALYSIS // ${definition.subtitle} · ${data.demo ? 'DEMO DATA' : 'LOCAL DATA'}`);
+    setText('analysis-head', `${definition.title} · Selection`);
+    $('btn-analysis-auto')?.classList.toggle('on', host.autoRotateDesired);
 
     // Optional view-owned list blocks (object list, searchable site list,
     // interactive legend). The view manages this container; it is cleared on
@@ -134,8 +158,7 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
     if (!definition) throw new Error(`未注册的可视化视图：${id}`);
     const currentToken = ++token;
     activeDefinition = definition;
-    document.title = `bacmap · ${definition.title}`;
-    $('crumb-sub').textContent = `ANALYSIS // ${definition.subtitle} · DEMO DATA`;
+    setText('crumb-sub', `ANALYSIS // ${definition.subtitle} · DEMO DATA`);
 
     // Rebuild on entry so the controls and scene options always share state.
     host.clearView();
@@ -149,17 +172,24 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
         cache.set(id, await response.json());
       }
       if (currentToken !== token) return;
-      await host.mount(definition, cache.get(id));
+      const data = cache.get(id);
+      if (definition.schema) {
+        const validation = validateData(definition.schema, data);
+        if (!validation.ok) {
+          throw new Error(`${definition.schema} 数据校验失败：${validation.errors.slice(0, 3).join('；')}`);
+        }
+      }
+      await host.mount(definition, data);
       if (currentToken !== token) return;
-      renderSidebar(definition, cache.get(id));
+      renderSidebar(definition, data);
       renderEmptyInspector();
       host.resize();
     } catch (error) {
       if (currentToken !== token) return;
       console.error(error);
-      $('analysis-stats').innerHTML = `<div class="error-box">视图加载失败<br>${escapeHtml(error.message)}</div>`;
-      if ($('analysis-lists')) $('analysis-lists').innerHTML = '';
-      $('analysis-controls').innerHTML = '';
+      setHtml('analysis-stats', `<div class="error-box">视图加载失败<br>${escapeHtml(error.message)}</div>`);
+      setHtml('analysis-lists', '');
+      setHtml('analysis-controls', '');
     }
   }
 
@@ -167,23 +197,23 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
     token++;
     activeDefinition = null;
     host.deactivate();
-    tooltip.style.display = 'none';
+    if (tooltip) tooltip.style.display = 'none';
   }
 
-  $('btn-analysis-reset').addEventListener('click', () => host.resetCamera());
-  $('btn-analysis-auto').addEventListener('click', event => {
+  $('btn-analysis-reset')?.addEventListener('click', () => host.resetCamera());
+  $('btn-analysis-auto')?.addEventListener('click', event => {
     host.setAutoRotate(!host.autoRotateDesired);
     event.currentTarget.classList.toggle('on', host.autoRotateDesired);
   });
-  $('btn-analysis-export').addEventListener('click', () => {
-    if (host.view && activeDefinition) host.exportPng(`bacmap-${activeDefinition.id}.png`);
+  $('btn-analysis-export')?.addEventListener('click', () => {
+    if (host.view && activeDefinition) host.exportPng(`gvixb-${activeDefinition.id}.png`);
   });
 
   return {
     activate,
     deactivate,
     tick: dt => host.tick(dt),
-    resize: () => host.resize(),
+    resize: (width, height) => host.resize(width, height),
     exportPng: () => host.exportPng(),
     pickAt: (x, y) => host.pick(x, y),
     get active() { return host.active; },
@@ -196,7 +226,7 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
       rootNames: host.root?.children.map(child => `${child.name || child.type}:${child.children.length}`) || [],
       viewDebug: host.view?.debug?.() || null,
       camera: host.camera.position.toArray(),
-      selected: $('dock-sel').textContent,
+      selected: $('dock-sel')?.textContent || '',
     }),
   };
 }

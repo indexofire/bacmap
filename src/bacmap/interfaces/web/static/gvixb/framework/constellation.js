@@ -483,7 +483,8 @@ export function createConstellation({
         <div class="blk-head"><span class="t">${escapeHtml(legendTitle)}</span><span class="n">${layers.size}</span></div>
         <div data-role="decks"></div>
         <p class="gene-note">${escapeHtml(legendNote ?? '纵向高度只表示分组归属，不表示数值。点击行可隐藏 / 显示该层。')}</p>`;
-      document.body.appendChild(floatEl);
+      // Keep the legend inside the host mount instead of leaking to <body>.
+      (el.closest('#app') || el.closest('[data-gvixb]') || el.parentElement || el).appendChild(floatEl);
     }
     el.innerHTML = `
       <div class="blk side-info">

@@ -1,21 +1,79 @@
 {
   "name": "gvixb",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local 3D bacterial genome visualization framework",
   "entry": "gvixb-app.js",
+  "api": "gvixb.js",
+  "shell": "shell.js",
   "mountId": "app",
   "canvasId": "scene",
   "tooltipId": "tooltip",
   "views": [
-    { "id": "assembly", "source": "views/assembly-view.js", "description": "Draft assembly circle and single-contig linear focus view" },
-    { "id": "circle", "source": "views/circular-annotation-view.js", "description": "Bakta/eggNOG annotated circular genome" },
-    { "id": "phylo", "source": "views/phylo-view.js", "description": "Newick phylogram" },
-    { "id": "mst", "source": "views/mst-view.js", "description": "Minimum spanning tree" },
-    { "id": "synteny", "source": "views/synteny-view.js", "description": "Comparative synteny blocks" }
+    {
+      "id": "assembly",
+      "schema": "gvixb.assembly/v1",
+      "source": "views/assembly-view.js",
+      "description": "Draft assembly circle and single-contig linear focus view",
+      "sha256": "80521b2d897f94f7d3dc83f99e724dd59da148c02c4b7a0483459c026876dbf8"
+    },
+    {
+      "id": "circle",
+      "schema": "gvixb.annotated-genome/v1",
+      "source": "views/circular-annotation-view.js",
+      "description": "Bakta/eggNOG annotated circular genome",
+      "sha256": "a632e0eddb8793836ec10ce2a612b8240688673aaa161e2d125d987c61ae589f"
+    },
+    {
+      "id": "phylo",
+      "schema": "gvixb.phylogeny/v1",
+      "source": "views/phylo-view.js",
+      "description": "Newick phylogram",
+      "sha256": "556dc5a6d8e171a85a1bbce9b3738d987d827cddef5987ba535ce9ead8056760"
+    },
+    {
+      "id": "mst",
+      "schema": "gvixb.mst/v1",
+      "source": "views/mst-view.js",
+      "description": "Minimum spanning tree",
+      "sha256": "3be0ba46bc2030bb6aeaa11ce90defdd84ba9824bff24e906ba4471cd39b91bc"
+    }
   ],
   "license": "UNLICENSED",
   "runtime": {
     "externalNetwork": false,
     "threeJs": "0.180"
+  },
+  "bundleHash": "6f46f65a7f0530b27dffbdb15f87bc7bad85b0ae9b5ed11f8c4fe176fe25ff7f",
+  "files": {
+    "contracts/schemas.js": "bb2c96d446b14f1434b3bc2253d191db9c2ef7193ec9047540b77e6f5515c742",
+    "framework/algorithms.js": "f385667ed9dd057d9e0adba5a2a579d627e525caf42f78c67bb190b1edd1f23a",
+    "framework/analysis-framework.js": "0d535e3cf9b4777ab652155b32709bf7e101313494f385b298d170ff7ba40c97",
+    "framework/constellation.js": "750ed308e7812a50acda581960e09686cd7ac15d2879fd07a1dd36b8557a6ed9",
+    "framework/encodings.js": "091484435b6782f529db3d066d7c9b50ab573b104c4239fde9a54b3a66329e22",
+    "framework/primitives.js": "b9f6a673458fb5763e88395686ba7a05073bd84956a589d4de48d369c2c75d39",
+    "framework/scene-host.js": "bcffe6f7d1f3258d975d6267bea564c1c225265be5855fe5b018f0a70f80cb7f",
+    "gvixb-app.js": "fb575c4d92ca9fb7038ef100416735ccdedfc0ec46c37189f658c668acbdc211",
+    "gvixb-shell.css": "9da4b3b54960b151b023a6dbc6e1757547487239f635cca4033c114deae67ac5",
+    "gvixb.css": "178a3d69ba05c20745c6b32e1d162c39c54c06ab1cafde8762e6debb4f3c3f79",
+    "gvixb.js": "685210d5cd573241255962e2789cfdf67b053363260bfc2eb097996a6a433828",
+    "shell.js": "419e863d9e596e0472a81d78c3ea5dd429ae4c36a49cf5979f3b70b8611d7d1c",
+    "vendor/OrbitControls.js": "06864a0fcb647730bfbc690b6c25a121199d716a3e299a40158509cbd247c3bf",
+    "vendor/postprocessing/EffectComposer.js": "a982594e92f174a55c0ab004072d3449849974ffc9775faec1d88e22e93976c7",
+    "vendor/postprocessing/MaskPass.js": "7cd08eee9d5d6f5578beaddbdcbe9c384f6873810af27f22ab7db3ceeb127aa3",
+    "vendor/postprocessing/OutputPass.js": "0ae5c229778cea827a9080f0f6508c0e1f7e0e63bbeddbcb16ed3e50feeb6666",
+    "vendor/postprocessing/Pass.js": "ae67b4e65ff3a027a4b102e6b7e0530559c9f36ebdf437017386487cdbea0762",
+    "vendor/postprocessing/RenderPass.js": "cbd84eb89a2a2e8ab008b18cfce3125911d4a98c9cfe186f501f512608126d04",
+    "vendor/postprocessing/ShaderPass.js": "e295baa7b264428723782b1bdbb4ea8fdd77dd68b007a0f6f9ba79281fc45276",
+    "vendor/postprocessing/UnrealBloomPass.js": "351dfa6d817aad100d79d4654ac2b4f351c2084ffd6bfc745a21a327fc1e2461",
+    "vendor/shaders/CopyShader.js": "a33057d5ac91c43304c186ac0e8816e62bb2ed471d3a00ff3018dfd5c0389718",
+    "vendor/shaders/LuminosityHighPassShader.js": "f9567b919f23d10dfaa8970d20d52bfe504dcbeea39f8b03db7ed358fb32c0bf",
+    "vendor/shaders/OutputShader.js": "353479f77a8d7e2629d49ccac9fc2f5dbfdda5442e0adf867b00377a2fcb0cb2",
+    "vendor/three.core.min.js": "61ba0df005b05991361d040d8ff670e1aadfd0ce7aeebd1fdb0725957a8957de",
+    "vendor/three.module.js": "e2b5ee6bccd38fd6d8a2428546b83c5f2426d84b152ef82be8055556e3b40eb6",
+    "views/assembly-view.js": "80521b2d897f94f7d3dc83f99e724dd59da148c02c4b7a0483459c026876dbf8",
+    "views/circular-annotation-view.js": "a632e0eddb8793836ec10ce2a612b8240688673aaa161e2d125d987c61ae589f",
+    "views/index.js": "273298cdbf8f0bbd5f997a9673f5f0b51bfff924a735102a396c20af430703df",
+    "views/mst-view.js": "3be0ba46bc2030bb6aeaa11ce90defdd84ba9824bff24e906ba4471cd39b91bc",
+    "views/phylo-view.js": "556dc5a6d8e171a85a1bbce9b3738d987d827cddef5987ba535ce9ead8056760"
   }
 }

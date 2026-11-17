@@ -326,7 +326,7 @@ export class SceneHost {
     this.onReadout({ zoom: `${(24 / Math.max(0.001, distance)).toFixed(1)}×` });
   }
 
-  exportPng(filename = 'bacmap-3d.png') {
+  exportPng(filename = 'gvixb-3d.png') {
     this.composer.render();
     const link = document.createElement('a');
     link.download = filename;

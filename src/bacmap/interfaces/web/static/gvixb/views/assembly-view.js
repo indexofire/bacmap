@@ -132,6 +132,7 @@ function makeGeneMaterial() {
 /** Draft assembly atlas: the bacterial-genome default is a draft circular layout. */
 export const assemblyView = {
   id: 'assembly',
+  schema: 'gvixb.assembly/v1',
   title: '3D 基因组圈图',
   subtitle: 'DRAFT CIRCULAR GENOME ATLAS',
   description: '按细菌基因组常见方式，将 ≥10 kb contigs 从大到小排列成 draft 圈图；这是布局方式，不声明 contigs 已闭合。可切换到线性视图，并从全部 contig 列表选择一个 contig 居中查看。',

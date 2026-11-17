@@ -50,6 +50,7 @@ function readGraph(data) {
 
 export const mstView = {
   id: 'mst',
+  schema: 'gvixb.mst/v1',
   dockLabel: 'MST',
   title: '3D 最小生成树',
   subtitle: 'MLST MINIMUM SPANNING TREE',

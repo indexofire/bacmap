@@ -17,6 +17,7 @@ const leafRecords = data => {
 
 export const phyloView = {
   id: 'phylo',
+  schema: 'gvixb.phylogeny/v1',
   dockLabel: 'Phylo',
   title: '3D 进化树',
   subtitle: 'PHYLOGENETIC ATLAS',
