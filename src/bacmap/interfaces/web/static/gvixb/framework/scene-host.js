@@ -272,6 +272,9 @@ export class SceneHost {
 
   setCamera(position, target = new THREE.Vector3()) {
     this.cameraAnim = null;
+    // kill any pending damped inertia — setCamera means "exactly here"
+    this.controls._sphericalDelta?.set?.(0, 0, 0);
+    this.controls._panOffset?.set?.(0, 0, 0);
     this.camera.position.copy(position);
     this.controls.target.copy(target);
     this.camera.lookAt(target);

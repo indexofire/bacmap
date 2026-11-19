@@ -47,7 +47,7 @@ MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小�
 - **多种界面** — `/console/` 的 Vue 3 控制台（暗色/浅色/灰色主题、图表、审批）、CLI、TUI、
   JSON API `/api/v1`、MCP（stdio / Streamable HTTP）。
 - **gvixb 集成** — 从控制台的样本、运行和 GOM 页面直接打开线性组装、Bakta/eggNOG 注释圈图、
-  SNP/cgMLST 树及 gmlst 原始 MST；全部资源本地化，历史结果严格按运行读取。
+  SNP 进化树及 gmlst 原始 MST；全部资源本地化，历史结果严格按运行读取。
 
 ## 快速开始
 

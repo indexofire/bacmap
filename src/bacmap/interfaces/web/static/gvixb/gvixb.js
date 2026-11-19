@@ -4,12 +4,16 @@ import { createShellPort } from './shell.js';
 
 export { ANALYSIS_VIEWS };
 
+// Canvases whose WebGL context was force-lost by destroy(); a remount on the
+// same element must swap in a fresh canvas.
+const RETIRED_CANVASES = new WeakSet();
+
 /**
  * Mount one gvixb view into a host-owned element.
  *
  *   const instance = mountGvixb(root, {
  *     view: 'mst',
- *     endpoint: '/api/result/mst.json',
+ *     endpoint: '/api/result/mst.json',  // or `data: <json object>`
  *   });
  *   instance.ready.then(() => ...);
  *   instance.destroy();
@@ -22,25 +26,29 @@ export { ANALYSIS_VIEWS };
 export function mountGvixb(root, {
   view,
   endpoint,
+  data,
   views = ANALYSIS_VIEWS,
   shell = true,
 } = {}) {
-  if (!root || !root.ownerDocument) {
-    throw new TypeError('mountGvixb: root must be a DOM element');
-  }
   const definition = views.find(item => item.id === view);
   if (!definition) {
     throw new Error(`未注册的可视化视图：${view}`);
   }
-  if (!endpoint) {
-    throw new Error('mountGvixb: endpoint is required');
+  if ((endpoint == null) === (data == null)) {
+    throw new Error('mountGvixb: exactly one of endpoint or data is required');
+  }
+  if (!root || !root.ownerDocument) {
+    throw new TypeError('mountGvixb: root must be a DOM element');
   }
 
   const document = root.ownerDocument;
   const window = document.defaultView;
-  const url = new URL(endpoint, document.baseURI);
-  if (window && url.origin !== window.location.origin) {
-    throw new Error('mountGvixb: endpoint must be same-origin');
+  let url = null;
+  if (endpoint != null) {
+    url = new URL(endpoint, document.baseURI);
+    if (window && url.origin !== window.location.origin) {
+      throw new Error('mountGvixb: endpoint must be same-origin');
+    }
   }
 
   let canvas = root.querySelector('canvas#scene') || root.querySelector('canvas');
@@ -50,6 +58,16 @@ export function mountGvixb(root, {
     canvas.id = 'scene';
     canvas.setAttribute('aria-label', 'gvixb 3D 可视化画布');
     root.prepend(canvas);
+  } else {
+    // A canvas whose GL context was lost (e.g. a previous instance's
+    // destroy() → forceContextLoss) can never render again — swap in a clone.
+    // Probing with getContext() would create a context with default
+    // attributes on a fresh host canvas, so only retired canvases are swapped.
+    if (RETIRED_CANVASES.has(canvas)) {
+      const fresh = canvas.cloneNode(false);
+      canvas.replaceWith(fresh);
+      canvas = fresh;
+    }
   }
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -57,7 +75,9 @@ export function mountGvixb(root, {
   renderer.setClearColor(0x05070d, 1);
 
   const ui = shell ? createShellPort(root) : { root, elements: {}, missing: [] };
-  const selectedView = { ...definition, dataUrl: url.href };
+  const selectedView = { ...definition };
+  if (url) selectedView.dataUrl = url.href;
+  else selectedView.data = data;
   const framework = createAnalysisFramework({
     renderer, canvas, views: [selectedView], ui,
   });
@@ -103,6 +123,9 @@ export function mountGvixb(root, {
     view: definition,
     ready,
     resize,
+    getViewState: () => framework.getViewState(),
+    applyViewState: state => framework.applyViewState(state),
+    onViewStateChange: cb => framework.onViewStateChange(cb),
     destroy() {
       if (destroyed) return;
       destroyed = true;
@@ -112,6 +135,7 @@ export function mountGvixb(root, {
       framework.deactivate();
       renderer.dispose();
       renderer.forceContextLoss?.();
+      RETIRED_CANVASES.add(canvas);
       if (createdCanvas) canvas.remove();
     },
   };

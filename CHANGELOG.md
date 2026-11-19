@@ -5,6 +5,35 @@
 
 ## [Unreleased]
 
+### 物种登记：marker 未命中后升档 + 跳过项上报（v1.10.47）
+
+- `register_fastas` 的自动识别由"单档 marker"改为**可升档**：marker 判不出时补一档 ANI
+  （跨版本别名 `ani`/`panel` 自动适配），仍判不出才跳过。单档未命中不再等于丢样本。
+- 新增 `SpeciesCall`（`code`/`method`/`attempts`）与 `detect_species_call()`；`detect_species()`
+  保持原签名以兼容既有调用方。`attempts` 记录逐档结论，含失败原因与 ANI 命中
+  （如 `ani 99.14, af 91.89`）——"该档没命中"和"该档根本没跑起来"从此可区分。
+- **跳过项无条件上报**：登记阶段被跳过的文件（文件名 + 原因）写入运行日志并追加一条
+  `task.step` 事件（D1：只记文件名，不含本机绝对路径）。此前只有"全部样本都失败"才会
+  提到 skipped，部分失败从日志到事件到结果页全静默——28 个 FASTA 只登记 24 株就是这么发生的。
+- 修复 `_gside_species_name`：ANI/mash/sourmash 走 `MethodEnvelope`，物种嵌在
+  `methods.<mode>.result.species`，旧实现只看顶层，会把所有非 marker 档的判定读成 Unknown。
+- 测试：`test_resource_preflight.py` 6 个、`test_cli_fasta_dir.py` 3 个（合计 9 个新用例）。
+
+### 预检识别「未声明的分型方案」（v1.10.46）
+
+- `PreflightReport` 新增 `decisions`：当 gmlst catalog 里存在该物种的 MLST/cgMLST 方案，但
+  registry 与 `tool_selection.yaml` 都没有声明时，逐项列出（含 `gmlst scheme download <scheme>`；
+  已缓存但未声明时改为提示 `bacmap selection select`）。
+- 这类缺口**不触发 fail-fast**（不跑 MLST 可能是刻意选择），但此前会让 `typing_mlst` 静默写
+  `NO_SCHEME`，结果与「本物种没有 MLST」完全无法区分——CAM/CDI 一批 28 株就是这样静默空的。
+- 仅在物种一个分型方案都没声明时才读取 gmlst 目录（避免每次预检都拉子进程）；目录不可用时静默降级。
+- `bacmap database status`（文本与 `--json`）、MCP `bacmap_database_status`（`decisions` 字段）与
+  analyze/reanalyze 预检日志均透出这些待决项；任务本身仍照常运行。
+- `scheme_matches_species` 由私有函数提升为公开（保留 `_scheme_matches_species` 别名）；候选过滤
+  排除上游 `non-<species>` 方案（Campylobacter 的 9 个 non-jejuni/coli 方案 organism 字段同为属名，
+  只靠标签会误命中）。
+- 测试：`tests/unit/test_resource_preflight.py` 新增 5 个用例，基线 2346 → 2351。
+
 ### gvixb 运行时同步（v1.10.45）
 
 - 同步 gvixb `runtime/` 发布包：新增 `mountGvixb(root, options)` 公共入口、默认外壳 DOM

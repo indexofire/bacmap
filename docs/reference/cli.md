@@ -446,6 +446,13 @@ Read-only preflight for an analyze run: Bakta/eggNOG (unless disabled), AMRFinde
 gmlst schemes, gspec databases and SNP reference genomes. It never downloads; missing
 resources are printed with the exact install command and the exit code is `1`.
 
+Besides `missing`, the output carries `decisions` (v1.10.46): typing schemes the catalog
+has for these species but that were never declared in the registry or `tool_selection.yaml`.
+Such a gap does **not** fail the task (skipping MLST may be deliberate), but it must be
+visible — otherwise the step is written as `NO_SCHEME` and becomes indistinguishable from
+"this species has no MLST". Each item carries its `gmlst scheme download` command, and a
+`bacmap selection select` hint when the scheme is cached but still undeclared.
+
 ## `bacmap doctor`
 
 ```text

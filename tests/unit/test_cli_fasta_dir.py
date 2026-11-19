@@ -217,3 +217,61 @@ class TestCliSubmitDelegatesRegistration:
         monkeypatch.setenv("BACMAP_LANG", "zh")
         with pytest.raises(SystemExit, match="目录不存在"):
             self._run(monkeypatch, tmp_path, ["--fasta-dir", str(tmp_path / "nope")])
+
+
+class TestSpeciesTierFallback:
+    """v1.10.47：marker 未命中时补一档 ANI，且跳过原因可追溯。"""
+
+    def test_marker_unknown_falls_back_to_ani(self, tmp_path, monkeypatch):
+        import bacmap.workflow.samples_registry as sr
+
+        calls: list[list[str]] = []
+
+        class _P:
+            def __init__(self, species: str) -> None:
+                self.returncode = 0
+                self.stdout = json.dumps({"methods": {"x": {"species": species}}})
+
+        def _run(cmd, *a, **k):
+            calls.append(cmd)
+            # marker 档判不出，ani 档判出 CDI
+            if cmd[-1] == "marker":
+                return _P("Unknown")
+            return _P("Clostridioides_difficile")
+
+        monkeypatch.setattr(sr.subprocess, "run", _run)
+        call = sr.detect_species_call(tmp_path / "x.fna")
+        assert call.code == "CDI"
+        assert call.method == "ani"
+        assert [a["mode"] for a in call.attempts] == ["marker", "ani"]
+        assert ["gside", "species", str(tmp_path / "x.fna"), "--mode", "ani"] in calls
+
+    def test_all_tiers_unknown_returns_empty_with_attempts(self, tmp_path, monkeypatch):
+        import bacmap.workflow.samples_registry as sr
+
+        class _P:
+            returncode = 0
+            stdout = json.dumps({"methods": {"x": {"species": "Unknown"}}})
+
+        monkeypatch.setattr(sr.subprocess, "run", lambda *a, **k: _P())
+        call = sr.detect_species_call(tmp_path / "x.fna")
+        assert call.code == ""
+        assert call.tried() == "marker、ani"
+
+    def test_register_fasta_dir_records_skip_reason_tiers(self, tmp_path, monkeypatch):
+        import bacmap.workflow.samples_registry as sr
+
+        d = tmp_path / "data"
+        d.mkdir()
+        (d / "a.fna").write_text(">c\nACGT\n")
+        (d / "b.fna").write_text(">c\nACGT\n")
+
+        class _P:
+            returncode = 0
+            stdout = json.dumps({"methods": {"x": {"species": "Unknown"}}})
+
+        monkeypatch.setattr(sr.subprocess, "run", lambda *a, **k: _P())
+        reg = sr.register_fastas(tmp_path / "home", d, "")
+        assert reg["samples"] == []
+        assert len(reg["skipped"]) == 2
+        assert reg["skipped"][0]["reason"] == "物种未识别（marker=Unknown；ani=Unknown）"

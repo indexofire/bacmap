@@ -27,7 +27,7 @@ import sqlite3
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from dbos import DBOS
 
@@ -188,12 +188,21 @@ def _cohort_targets(deployed: Path, params: dict[str, Any], run_dir: Path) -> li
 
     from bacmap.core.pathogen_registry import get_workflow_tables, resolve_species
 
-    codes = {resolve_species(species.get(str(s), "")) for s in samples}
-    codes.discard(None)
+    # 按样本（不是按去重后的物种码）计数：同组 2 株必须算 2。
+    run_codes = [
+        code
+        for code in (resolve_species(species.get(str(s), "")) for s in samples)
+        if code
+    ]
     targets: list[str] = []
     if cfg.get("cgmlst", {}).get("run_cgmlst_cohort"):
         for group, spec in get_workflow_tables().cgmlst_species_groups.items():
-            if set(spec.get("species") or []) & codes:
+            group_species = set(spec.get("species") or [])
+            members = [code for code in run_codes if code in group_species]
+            # 与 cgmlst.smk:222-235 / snp.smk 的“≥2 样本”门保持一致：单株组不构成
+            # cohort，Snakemake 侧会跳过该组（_CGMLST_GROUP_SCHEMES 无此键），
+            # 若这里仍请求目标就会在 DAG 构建期抛 KeyError(group)。
+            if len(members) >= 2:
                 targets.append(str(Path(run_dir) / "cgmlst" / group / "cgmlst_summary.json"))
     return targets
 
@@ -787,6 +796,44 @@ def _step_gate_audit(home_s: str, task_id: str, gate_result: dict[str, Any]) -> 
 # ---------------------------------------------------------------------------
 
 
+def _report_skipped_inputs(params: dict[str, Any], skipped: list[dict[str, str]]) -> None:
+    """把登记阶段被跳过的文件写进日志与任务事件（v1.10.47）。
+
+    此前只有"全部样本都失败"才会提到 skipped，部分失败从日志到事件到结果页全静默，
+    导致 28 个 FASTA 只登记 24 株而无人知晓。事件流是 D1：只记文件名与原因，
+    不写本机绝对路径。
+    """
+    if not skipped:
+        return
+    names = ", ".join(Path(str(item.get("file", ""))).name for item in skipped)
+    logger.warning("input registration skipped %d file(s): %s", len(skipped), names)
+    task_id = str(params.get("task_id") or "")
+    home_raw = str(params.get("home") or "")
+    if not task_id or not home_raw:
+        return
+    payload = {
+        "step": "register_inputs",
+        "skipped": [
+            {
+                "file": Path(str(item.get("file", ""))).name,
+                "reason": str(item.get("reason", "")),
+            }
+            for item in skipped
+        ],
+    }
+    try:
+        from bacmap.tasks.events import EventLog, EventType
+
+        EventLog(Path(home_raw) / "tasks.sqlite").append(
+            EventType.TASK_STEP,
+            task_id=task_id,
+            actor="engine",
+            payload=cast("dict[str, Any]", payload),
+        )
+    except Exception:  # 展示信息：记录失败不得影响分析
+        logger.warning("cannot record skipped inputs for %s", task_id, exc_info=True)
+
+
 @DBOS.step()
 def _step_register_inputs(params: dict[str, Any]) -> dict[str, Any]:
     """目录直入登记（v1.4.38/39）：``fasta_dir``（物种逐株 gside 自动识别）或
@@ -798,8 +845,11 @@ def _step_register_inputs(params: dict[str, Any]) -> dict[str, Any]:
     home = Path(params["home"])
     species = str(params.get("species") or "")
     if params.get("fasta_dir"):
-        return register_fastas(home, Path(str(params["fasta_dir"])).expanduser(), species)
-    return register_fastqs_dir(home, Path(str(params["fastq_dir"])).expanduser(), species)
+        reg = register_fastas(home, Path(str(params["fasta_dir"])).expanduser(), species)
+    else:
+        reg = register_fastqs_dir(home, Path(str(params["fastq_dir"])).expanduser(), species)
+    _report_skipped_inputs(params, list(reg.get("skipped") or []))
+    return reg
 
 
 def _task_state_cancelled(task_id: str, home_s: str) -> bool:
@@ -897,6 +947,12 @@ def analyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
         }
         _step_mark_terminal(params, failed)
         return failed
+    if preflight is not None and preflight.decisions:
+        # 不失败（不装 MLST 可能是刻意选择），但必须进日志：否则该步静默写 N/A。
+        logger.warning(
+            "typing schemes available but not enabled: %s",
+            ", ".join(item.name for item in preflight.decisions),
+        )
 
     rc = _step_run(params)
     params = {
@@ -1679,6 +1735,11 @@ def reanalyze_workflow(params: dict[str, Any]) -> dict[str, Any]:
         }
         _step_mark_terminal(params, failed)
         return failed
+    if preflight is not None and preflight.decisions:
+        logger.warning(
+            "typing schemes available but not enabled (reanalyze): %s",
+            ", ".join(item.name for item in preflight.decisions),
+        )
 
     try:
         prepared = _step_prepare_reanalysis(params)

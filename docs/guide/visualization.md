@@ -77,6 +77,30 @@ cd <gvixb-project>
 python3 scripts/sync-bacmap.py --bacmap /path/to/bacmap
 ```
 
+## SNP tree payload (`gvixb.phylogeny/v2`)
+
+`/api/v1/gvixb/runs/{run_id}/tree/snp/{group}` emits the gvixb phylogeny v2
+contract: the IQ-TREE Newick (declared `unrooted`, `inferred`), `SH-aLRT/UFBoot`
+support annotations when the ≥4-sample bootstrap ran, per-sample metadata,
+presence/absence matrices and a compressed pairwise-SNP distance triangle.
+
+- **Metadata whitelist** — only epidemiological strain fields are emitted:
+  `isolation_date`/`collection_date` (ISO precision preserved: `YYYY`,
+  `YYYY-MM`, `YYYY-MM-DD`), `province`/`city`/`district`, `sample_source`/
+  `sample_type`/`food_category`/`food_name` and `outbreak_id`, plus `ST` and
+  `serotype` from the per-sample report. All D4 identifying fields
+  (`patient_*`, `onset_date`, `hospital`, `submit_date`, `cluster_note`, …)
+  and `extra` are never sent to the browser.
+- **Matrices** — `amr` (CARD), `vf` (VFDB) and `plasmidfinder` gene presence
+  matrices: `1` present, `0` screened-but-absent, `null` when a sample has no
+  screen result. A matrix is omitted entirely if no sample was screened.
+- **Distances** — upper-triangle SNP differences (`null` for missing pairs).
+- **cgMLST** — the tree endpoint is withdrawn for cgMLST cohorts: the
+  cgMLST "Newick" is an MST serialised as a tree (aggregated labels, samples
+  on internal nodes), not a phylogeny. The HTML page redirects (307) to the
+  MST view and the API returns 410; use
+  `/api/v1/gvixb/runs/{run_id}/mst/{group}` instead.
+
 ## API endpoints
 
 See [HTTP API](../reference/api.md) for the complete `/api/v1/gvixb/...` endpoint list.

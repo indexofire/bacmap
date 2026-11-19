@@ -25,10 +25,14 @@
     },
     {
       "id": "phylo",
-      "schema": "gvixb.phylogeny/v1",
+      "schema": "gvixb.phylogeny/v2",
+      "acceptsSchemas": [
+        "gvixb.phylogeny/v1",
+        "gvixb.phylogeny/v2"
+      ],
       "source": "views/phylo-view.js",
       "description": "Newick phylogram",
-      "sha256": "556dc5a6d8e171a85a1bbce9b3738d987d827cddef5987ba535ce9ead8056760"
+      "sha256": "baf0913c6677f982b14a9f89ecb1c80080c7cae553c197f9f4813bfcd7e14c3a"
     },
     {
       "id": "mst",
@@ -43,19 +47,22 @@
     "externalNetwork": false,
     "threeJs": "0.180"
   },
-  "bundleHash": "6f46f65a7f0530b27dffbdb15f87bc7bad85b0ae9b5ed11f8c4fe176fe25ff7f",
+  "bundleHash": "47d2ccba0d479d4cb9ae0977f934042c3609797a805ff408057006b5ccfa6d55",
   "files": {
-    "contracts/schemas.js": "bb2c96d446b14f1434b3bc2253d191db9c2ef7193ec9047540b77e6f5515c742",
-    "framework/algorithms.js": "f385667ed9dd057d9e0adba5a2a579d627e525caf42f78c67bb190b1edd1f23a",
-    "framework/analysis-framework.js": "0d535e3cf9b4777ab652155b32709bf7e101313494f385b298d170ff7ba40c97",
-    "framework/constellation.js": "750ed308e7812a50acda581960e09686cd7ac15d2879fd07a1dd36b8557a6ed9",
-    "framework/encodings.js": "091484435b6782f529db3d066d7c9b50ab573b104c4239fde9a54b3a66329e22",
+    "contracts/phylogeny.js": "5a86fa3865fa68fe6cc81ba9e3a066d13f37964a10baf361ee38b2231cb085fa",
+    "contracts/schemas.js": "982b1a379c0bd76c21827ef8ebad62d949a36fddd46715bbfcd5baaeced80d61",
+    "framework/algorithms.js": "a192997b1c80e11f39d74297db622942f760caf835db918828e2bc5cef25a459",
+    "framework/analysis-framework.js": "ac6bbf9350b9c9c117995a00736df855a2841c0d611d7bc6a120544cc92d6f7f",
+    "framework/constellation.js": "e91d9e153cce056c8d679a44ebf824c0037a38ff2fea28b798d031b813502f68",
+    "framework/encodings.js": "c2084c524c14df561a929cdcb85641f5e2f95b2ab5818e1f0df9151175b9cf46",
+    "framework/epi.js": "8f6377b9148cda79bd6a5cced8d813feca52b81f8fe80bc48ecd310f184f68be",
     "framework/primitives.js": "b9f6a673458fb5763e88395686ba7a05073bd84956a589d4de48d369c2c75d39",
-    "framework/scene-host.js": "bcffe6f7d1f3258d975d6267bea564c1c225265be5855fe5b018f0a70f80cb7f",
+    "framework/rings.js": "0b0f54823025e6e973b30c67787a4b09ad0d866c4f3a85d955d3541b019853cd",
+    "framework/scene-host.js": "f773343608ca24f7e18a36181095d32e3c2dc3777929763c4a28ca0f28834a3b",
     "gvixb-app.js": "fb575c4d92ca9fb7038ef100416735ccdedfc0ec46c37189f658c668acbdc211",
     "gvixb-shell.css": "9da4b3b54960b151b023a6dbc6e1757547487239f635cca4033c114deae67ac5",
-    "gvixb.css": "178a3d69ba05c20745c6b32e1d162c39c54c06ab1cafde8762e6debb4f3c3f79",
-    "gvixb.js": "685210d5cd573241255962e2789cfdf67b053363260bfc2eb097996a6a433828",
+    "gvixb.css": "dd40befb18a9a53630f2c7cf634238052b2a09760d2d450a7e55f3ff0cc5ef73",
+    "gvixb.js": "51d50b50395454cf28ffce900aa4c4e95d51212f31bcdbd9eb6c7c41a03b35e9",
     "shell.js": "419e863d9e596e0472a81d78c3ea5dd429ae4c36a49cf5979f3b70b8611d7d1c",
     "vendor/OrbitControls.js": "06864a0fcb647730bfbc690b6c25a121199d716a3e299a40158509cbd247c3bf",
     "vendor/postprocessing/EffectComposer.js": "a982594e92f174a55c0ab004072d3449849974ffc9775faec1d88e22e93976c7",
@@ -74,6 +81,6 @@
     "views/circular-annotation-view.js": "a632e0eddb8793836ec10ce2a612b8240688673aaa161e2d125d987c61ae589f",
     "views/index.js": "273298cdbf8f0bbd5f997a9673f5f0b51bfff924a735102a396c20af430703df",
     "views/mst-view.js": "3be0ba46bc2030bb6aeaa11ce90defdd84ba9824bff24e906ba4471cd39b91bc",
-    "views/phylo-view.js": "556dc5a6d8e171a85a1bbce9b3738d987d827cddef5987ba535ce9ead8056760"
+    "views/phylo-view.js": "baf0913c6677f982b14a9f89ecb1c80080c7cae553c197f9f4813bfcd7e14c3a"
   }
 }

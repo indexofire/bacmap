@@ -53,7 +53,7 @@ fallback and operations surface.
 - **Interfaces** — Vue 3 console at `/console/` (dark / light / gray themes, charts, approvals),
   CLI, TUI, JSON API `/api/v1`, MCP (stdio / Streamable HTTP).
 - **gvixb integration** — result-launched linear assemblies, annotated Bakta/eggNOG circles,
-  SNP/cgMLST trees and original gmlst MSTs from the console's sample, run and GOM pages, with
+  SNP phylogenies and original gmlst MSTs from the console's sample, run and GOM pages, with
   local assets and run-scoped reads.
 
 ## Quick start

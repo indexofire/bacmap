@@ -643,7 +643,11 @@ def _register_database_tool(server: MCPServer, engine: Any, profile: ProfileSpec
         name="bacmap_database_status",
         description=(
             "Read-only preflight of local databases/references required by an analyze run. "
-            "Returns missing resource names and exact install commands; never downloads. D1."
+            "Returns missing resource names and exact install commands; never downloads. "
+            "'decisions' lists typing schemes the catalog has for these species but the "
+            "species never declared (that step would silently write N/A) — surface them to "
+            "the user and ask whether to download/enable; cached=true means it is already "
+            "downloaded and only needs `bacmap selection select`. D1."
         ),
     )
     def database_status(samples: list[str], annotation: bool = True) -> str:
@@ -658,6 +662,16 @@ def _register_database_tool(server: MCPServer, engine: Any, profile: ProfileSpec
             ],
             "checked": [item.name for item in report.checked],
             "skipped": [item.name for item in report.skipped],
+            "decisions": [
+                {
+                    "name": item.name,
+                    "kind": item.kind,
+                    "install": item.install,
+                    "cached": item.present,
+                    "detail": item.detail,
+                }
+                for item in report.decisions
+            ],
             "warning": report.warning,
         }
         return json.dumps(payload, ensure_ascii=False)

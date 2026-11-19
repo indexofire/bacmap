@@ -28,6 +28,12 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
   const tooltip = $('tooltip');
   let activeDefinition = null;
   let token = 0;
+  const viewStateListeners = new Set();
+  const controlValues = {};
+  let currentControls = [];
+  const notifyViewStateChange = () => viewStateListeners.forEach(cb => {
+    try { cb(getViewState()); } catch (error) { console.error(error); }
+  });
 
   const host = new SceneHost({
     renderer, canvas,
@@ -56,6 +62,18 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
     },
     onReadout: ({ zoom }) => setText('dock-zoom', zoom),
   });
+
+  host.notifyStateChange = notifyViewStateChange;
+  // set a control through the same path as user input (DOM + setOption + notify)
+  host.setControl = (key, value) => {
+    const input = $('analysis-controls')?.querySelector(`[data-key="${key}"]`);
+    if (!input) return false;
+    if (input.type === 'checkbox') input.checked = !!value;
+    else input.value = String(value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  };
+  host.controls?.addEventListener?.('end', notifyViewStateChange);
 
   function renderEmptyInspector() {
     setHtml('analysis-body', `<p class="empty">点击节点、分支或同源区块查看详情。<br>
@@ -97,12 +115,16 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
         const readout = controlsEl.querySelector(`[data-value="${input.dataset.key}"]`);
         const definitionControl = controls.find(control => control.key === input.dataset.key);
         if (readout) readout.textContent = `${value}${definitionControl?.unit || ''}`;
+        controlValues[input.dataset.key] = value;
         host.view?.setOption?.(input.dataset.key, value);
+        notifyViewStateChange();
       });
     });
   }
 
   function renderControls(controls) {
+    currentControls = controls;
+    for (const control of controls) if (control.key !== undefined) controlValues[control.key] = control.value;
     let groupIndex = -1;
     setHtml('analysis-controls', controls.map(control => {
       if (control.type === 'section') {
@@ -167,16 +189,23 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
     renderLoading(definition);
     try {
       if (!cache.has(id)) {
-        const response = await fetch(definition.dataUrl);
-        if (!response.ok) throw new Error(`HTTP ${response.status} · ${definition.dataUrl}`);
-        cache.set(id, await response.json());
+        if (definition.data !== undefined) {
+          cache.set(id, definition.data);
+        } else {
+          const response = await fetch(definition.dataUrl);
+          if (!response.ok) throw new Error(`HTTP ${response.status} · ${definition.dataUrl}`);
+          cache.set(id, await response.json());
+        }
       }
       if (currentToken !== token) return;
       const data = cache.get(id);
-      if (definition.schema) {
-        const validation = validateData(definition.schema, data);
+      const schema = definition.acceptsSchemas?.includes(data?.schema)
+        ? data.schema
+        : definition.schema;
+      if (schema) {
+        const validation = validateData(schema, data);
         if (!validation.ok) {
-          throw new Error(`${definition.schema} 数据校验失败：${validation.errors.slice(0, 3).join('；')}`);
+          throw new Error(`${schema} 数据校验失败：${validation.errors.slice(0, 3).join('；')}`);
         }
       }
       await host.mount(definition, data);
@@ -209,9 +238,71 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
     if (host.view && activeDefinition) host.exportPng(`gvixb-${activeDefinition.id}.png`);
   });
 
+  function getViewState() {
+    if (!activeDefinition || !host.view) return null;
+    return {
+      version: 1,
+      view: activeDefinition.id,
+      controls: { ...controlValues },
+      plugin: host.view.getState?.() ?? null,
+      camera: {
+        position: host.camera.position.toArray(),
+        target: host.controls.target.toArray(),
+      },
+    };
+  }
+
+  function applyViewState(state) {
+    const warnings = [];
+    if (!state || state.view !== activeDefinition?.id || !host.view) return warnings;
+    const saved = state.controls || {};
+    // Apply in control-definition order so dependent rebuilds settle correctly.
+    for (const control of currentControls) {
+      const key = control.key;
+      if (key === undefined || !(key in saved)) continue;
+      const value = saved[key];
+      const changed = value !== controlValues[key];
+      controlValues[key] = value;
+      const input = $('analysis-controls')?.querySelector(`[data-key="${key}"]`);
+      if (input) {
+        if (input.type === 'checkbox') input.checked = !!value;
+        else input.value = value;
+        const readout = input.closest('label')?.querySelector(`[data-value="${key}"]`)
+          || $('analysis-controls').querySelector(`[data-value="${key}"]`);
+        if (readout) readout.textContent = `${value}${control.unit || ''}`;
+      }
+      // Only re-issue setOption for values that differ from the current state:
+      // unchanged defaults must not trigger side effects (e.g. rotate → autoRotate).
+      if (changed) host.view.setOption?.(key, value);
+    }
+    if (state.plugin) {
+      try {
+        const pluginWarnings = host.view.setState?.(state.plugin);
+        if (Array.isArray(pluginWarnings)) warnings.push(...pluginWarnings);
+      } catch (error) {
+        warnings.push(`插件状态恢复失败：${error.message}`);
+      }
+    }
+    if (Array.isArray(state.camera?.position)) {
+      const [x, y, z] = state.camera.position;
+      const target = state.camera.target || [0, 0, 0];
+      host.setCamera(host.camera.position.clone().set(x, y, z), host.controls.target.clone().set(target[0], target[1], target[2]));
+    }
+    notifyViewStateChange();
+    return warnings;
+  }
+
+  function onViewStateChange(cb) {
+    viewStateListeners.add(cb);
+    return () => viewStateListeners.delete(cb);
+  }
+
   return {
     activate,
     deactivate,
+    getViewState,
+    applyViewState,
+    onViewStateChange,
     tick: dt => host.tick(dt),
     resize: (width, height) => host.resize(width, height),
     exportPng: () => host.exportPng(),
@@ -226,6 +317,7 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
       rootNames: host.root?.children.map(child => `${child.name || child.type}:${child.children.length}`) || [],
       viewDebug: host.view?.debug?.() || null,
       camera: host.camera.position.toArray(),
+      autoRotate: host.autoRotateDesired,
       selected: $('dock-sel')?.textContent || '',
     }),
   };

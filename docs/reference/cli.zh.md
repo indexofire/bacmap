@@ -436,6 +436,12 @@ bacmap database status [--samples IDS] [--annotation|--no-annotation] [--home H]
 analyze 的只读数据库预检：Bakta/eggNOG（可关闭）、AMRFinderPlus、gmlst scheme、gspec 库与
 SNP 参考基因组。它不会下载；缺库时打印安装命令并以退出码 `1` 结束。
 
+除 `missing` 之外，输出还包含 `decisions`（v1.10.46）：它列出「catalog 里有、但本物种在
+registry/`tool_selection.yaml` 里从没声明」的分型方案。这类缺口**不会**让任务失败（不跑 MLST
+可能是刻意选择），但必须让人看见——否则该步骤会写成 `NO_SCHEME`，结果里和「本物种没有 MLST」
+完全无法区分。每项都带 `gmlst scheme download` 命令，以及「已缓存但未声明」时改用
+`bacmap selection select` 的提示。
+
 ## `bacmap doctor`
 
 ```text

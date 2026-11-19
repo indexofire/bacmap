@@ -77,7 +77,7 @@ List endpoints accept `offset`/`limit` and return `{items, total, offset, limit}
 | GET | `/api/v1/gvixb/samples/{dataset}/genome` | latest-result draft assembly payload |
 | GET | `/api/v1/gvixb/runs/{run_id}/annotated-genome/{dataset}` | historical Bakta/eggNOG circle payload |
 | GET | `/api/v1/gvixb/samples/{dataset}/annotated-genome` | latest-result circle payload |
-| GET | `/api/v1/gvixb/runs/{run_id}/tree/{snp\|cgmlst}/{group}` | tree payload |
+| GET | `/api/v1/gvixb/runs/{run_id}/tree/{snp}/{group}` | SNP tree payload (`gvixb.phylogeny/v2`); `cgmlst` returns 410 (use the MST endpoint — the cgMLST Newick is an MST serialised as Newick, not a phylogeny) |
 | GET | `/api/v1/gvixb/runs/{run_id}/mst/{group}` | gmlst MST payload enriched with loci and per-sample ST/scheme from `cgmlst_profiles.tsv` |
 
 ## 3. Examples

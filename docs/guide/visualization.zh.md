@@ -75,6 +75,27 @@ cd <gvixb-project>
 python3 scripts/sync-bacmap.py --bacmap /path/to/bacmap
 ```
 
+## SNP 进化树载荷（`gvixb.phylogeny/v2`）
+
+`/api/v1/gvixb/runs/{run_id}/tree/snp/{group}` 输出 gvixb phylogeny v2 契约：
+IQ-TREE Newick（声明为 `unrooted`、`inferred`）、≥4 样本组跑了自举时的
+`SH-aLRT/UFBoot` 支持值、逐样本元数据、基因有/无矩阵与压缩上三角 SNP 距离。
+
+- **元数据白名单**——只放行流行病学字段：`isolation_date`/`collection_date`
+  （保留 ISO 精度：`YYYY`、`YYYY-MM`、`YYYY-MM-DD`）、`province`/`city`/
+  `district`、`sample_source`/`sample_type`/`food_category`/`food_name`、
+  `outbreak_id`，以及来自单样本报告的 `ST`、`serotype`。所有 D4 身份字段
+  （`patient_*`、`onset_date`、`hospital`、`submit_date`、`cluster_note` 等）
+  与 `extra` 永不发送到浏览器。
+- **矩阵**——`amr`（CARD）、`vf`（VFDB）、`plasmidfinder` 基因存在矩阵：
+  `1` 检出、`0` 筛查但未命中、样本没有筛查结果时为 `null`；全部样本都未
+  筛查的矩阵整体省略。
+- **距离**——上三角 SNP 差异（缺失对为 `null`）。
+- **cgMLST**——cgMLST 队列的进化树端点已撤下：其 "Newick" 是把 MST 序列化
+  成树（聚合标签、内部节点带样本），并非系统发育树。HTML 页面 307 重定向到
+  MST 视图，API 返回 410；请改用
+  `/api/v1/gvixb/runs/{run_id}/mst/{group}`。
+
 ## API 端点
 
 完整的 `/api/v1/gvixb/...` 端点见 [HTTP API](../reference/api.zh.md)。

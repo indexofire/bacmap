@@ -7,8 +7,8 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from bacmap.interfaces import gvixb as service
@@ -22,6 +22,8 @@ def _call(factory: Callable[[], Any]) -> Any:
         raise HTTPException(404, str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(400, str(exc)) from exc
+    except service.TreeCohortRemovedError as exc:
+        raise HTTPException(410, str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(409, str(exc)) from exc
     except ValueError as exc:
@@ -63,6 +65,36 @@ def _asset_version() -> str:
         stat = path.stat()
         parts.append(f"{path.relative_to(base)}:{stat.st_mtime_ns}:{stat.st_size}")
     return hashlib.sha256("|".join(parts).encode()).hexdigest()[:12]
+
+
+def _removed_tree_redirect(
+    engine: Any, run_id: str, cohort: str, group: str
+) -> RedirectResponse | None:
+    """cgMLST 树入口已撤下：run/group 校验通过后返回 307 到 MST 页。"""
+    if cohort != "cgmlst":
+        return None
+    try:
+        _call(lambda: service.tree_payload(engine, run_id, cohort, group))
+    except HTTPException as exc:
+        if exc.status_code == 410:
+            return RedirectResponse(
+                f"/gvixb/runs/{run_id}/mst/{group}", status_code=307
+            )
+        raise
+    return None
+
+
+def _run_tree_link(
+    engine: Any, run_id: str, cohort: str, group: str
+) -> service.GvixbLink | RedirectResponse:
+    url = f"/gvixb/runs/{run_id}/tree/{cohort}/{group}"
+    try:
+        return _run_link(engine, run_id, url)
+    except HTTPException:
+        redirect = _removed_tree_redirect(engine, run_id, cohort, group)
+        if redirect is not None:
+            return redirect
+        raise
 
 
 def _switcher_views(
@@ -170,9 +202,13 @@ def build_gvixb_routes(
         )
 
     @app.get("/gvixb/runs/{run_id}/tree/{cohort}/{group}", response_class=HTMLResponse)
-    def run_tree(request: Request, run_id: str, cohort: str, group: str) -> HTMLResponse:
-        url = f"/gvixb/runs/{run_id}/tree/{cohort}/{group}"
-        link = _run_link(engine, run_id, url)
+    def run_tree(
+        request: Request, run_id: str, cohort: str, group: str
+    ) -> Response:
+        resolved = _run_tree_link(engine, run_id, cohort, group)
+        if isinstance(resolved, RedirectResponse):
+            return resolved
+        link = resolved
         return render(
             request, link, "phylo", f"3D 进化树 · {group}",
             f"/console/runs/{run_id}", "返回运行记录",
@@ -227,9 +263,10 @@ def _build_gvixb_api_routes(app: FastAPI, engine: Any) -> None:
 
     @app.get(
         "/api/v1/gvixb/runs/{run_id}/tree/{cohort}/{group}",
-        response_model=service.TreePayload,
+        response_model=service.TreePayloadV2,
+        response_model_exclude_none=True,
     )
-    def run_tree_data(run_id: str, cohort: str, group: str) -> service.TreePayload:
+    def run_tree_data(run_id: str, cohort: str, group: str) -> service.TreePayloadV2:
         return _call(lambda: service.tree_payload(engine, run_id, cohort, group))
 
     @app.get(

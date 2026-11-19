@@ -26,8 +26,17 @@ import yaml
 
 from bacmap.core.pathogen_registry import PathogenRegistry, load_registry
 from bacmap.core.tool_selection import ToolSelection, load_selection
+from bacmap.core.tool_selection_validate import GmlstScheme, scheme_matches_species
 
 _TRUTHY_OFF = {"0", "false", "no", "off"}
+
+# 分型类 scheme 的 scheme_type；wgmlst 也走同一条 gmlst 缓存。
+_TYPING_SCHEME_TYPES = ("mlst", "cgmlst", "wgmlst")
+
+# 上游 catalog 把"非本种"方案也挂在同一属名 organism 下
+# （Campylobacter 的 9 个 non-jejuni/coli 方案 organism 全是
+# "Campylobacter non-jejuni/coli"），仅靠标签 token 会误命中，需要显式排除。
+_NEGATED_SPECIES = re.compile(r"\bnon\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -56,11 +65,17 @@ class ResourceStatus:
 
 @dataclass(frozen=True)
 class PreflightReport:
-    """预检报告：``ok=False`` 时任务必须 fail-fast。"""
+    """预检报告：``ok=False`` 时任务必须 fail-fast。
+
+    ``decisions`` 是"可以装、但没启用"的可选项（v1.10.46）：它们不会让任务失败
+    （本物种不跑 MLST 可能是刻意选择），但必须让人看见——否则该步骤会写成
+    ``NO_SCHEME`` 并静默出 N/A，看上去和"本物种没有 MLST"完全一样。
+    """
 
     ok: bool
     checked: tuple[ResourceStatus, ...] = field(default_factory=tuple)
     skipped: tuple[ResourceStatus, ...] = field(default_factory=tuple)
+    decisions: tuple[ResourceStatus, ...] = field(default_factory=tuple)
     warning: str = ""
 
     @property
@@ -73,6 +88,7 @@ class PreflightReport:
             "missing": [item.as_dict() for item in self.missing],
             "checked": [item.as_dict() for item in self.checked],
             "skipped": [item.as_dict() for item in self.skipped],
+            "decisions": [item.as_dict() for item in self.decisions],
             "warning": self.warning,
         }
 
@@ -84,6 +100,17 @@ class PreflightReport:
             lines.append(f"- {item.name} ({item.kind}) → {item.install}")
         if self.warning:
             lines.append(self.warning)
+        return "\n".join(lines)
+
+    def decision_message(self) -> str:
+        """人可读的"可装未启用"清单；空字符串表示没有待决项。"""
+        if not self.decisions:
+            return ""
+        lines = ["typing schemes available but not enabled:"]
+        for item in self.decisions:
+            lines.append(f"- {item.name} ({item.kind}) → {item.install}")
+            if item.detail:
+                lines.append(f"  {item.detail}")
         return "\n".join(lines)
 
 
@@ -213,6 +240,54 @@ def _status(
     )
 
 
+def _gmlst_catalog_snapshot() -> dict[str, GmlstScheme]:
+    """实时 gmlst 目录（name → scheme）；gmlst 不可用时返回 ``{}``。
+
+    延迟导入：``bacmap.tools.tool_catalog`` 依赖 core，模块级导入会成环。
+    只读本地 catalog 文件（``gmlst scheme list``），无网络、无下载。
+    """
+    try:
+        from bacmap.tools.tool_catalog import fetch_gmlst_schemes
+    except Exception:  # pragma: no cover - 依赖缺失时静默降级
+        return {}
+    try:
+        return fetch_gmlst_schemes()
+    except Exception:  # pragma: no cover - subprocess/解析失败不应打断预检
+        return {}
+
+
+def _species_labels(registry: PathogenRegistry, code: str | None) -> list[str]:
+    """物种码 → gside 标签（用于和 catalog 的 organism 字段做启发式匹配）。"""
+    if not code:
+        return []
+    spec = registry.pathogens.get(code)
+    return list(spec.gside_labels) if spec is not None else []
+
+
+def _typing_scheme_candidates(
+    catalog: Mapping[str, GmlstScheme],
+    labels: list[str],
+    *,
+    modes: tuple[str, ...] = _TYPING_SCHEME_TYPES,
+) -> list[GmlstScheme]:
+    """catalog 中"看起来属于该物种"的分型方案（启发式，仅供参考）。
+
+    候选只用于"告诉你上游有这些方案"，绝不自动选中——真正的启用仍要人经
+    ``bacmap selection select`` 写入 overlay。
+    """
+    wanted = {mode.lower() for mode in modes}
+    found: list[GmlstScheme] = []
+    for entry in catalog.values():
+        if entry.scheme_type.lower() not in wanted:
+            continue
+        if not scheme_matches_species(entry, labels):
+            continue
+        if _NEGATED_SPECIES.search(f"{entry.organism} {entry.display_name}"):
+            continue
+        found.append(entry)
+    return sorted(found, key=lambda item: (item.scheme_type, item.name))
+
+
 def preflight_resources(  # noqa: C901
     home: Path,
     samples: list[str],
@@ -223,8 +298,14 @@ def preflight_resources(  # noqa: C901
     registry: PathogenRegistry | None = None,
     selection: ToolSelection | None = None,
     stages: set[str] | None = None,
+    gmlst_catalog: Mapping[str, GmlstScheme] | None = None,
 ) -> PreflightReport:
-    """检查本次 analyze 所需的本地资源；只读、无网络、无副作用。"""
+    """检查本次 analyze 所需的本地资源；只读、无网络、无副作用。
+
+    ``gmlst_catalog``（v1.10.46）用于反向检查"catalog 里有方案、但本物种没声明"：
+    这种缺口既不算缺失（没声明 = 没要求）也不失败，但会让 MLST 静默写成
+    ``NO_SCHEME``，所以以 ``decisions`` 单独列出。省略时按需读取 gmlst 目录。
+    """
     home = Path(home)
     env = dict(os.environ) if env is None else dict(env)
     config = workflow_config(home) if config is None else dict(config or {})
@@ -239,6 +320,10 @@ def preflight_resources(  # noqa: C901
 
     checked: list[ResourceStatus] = []
     skipped: list[ResourceStatus] = []
+    # scheme → 聚合后的待决项；多株、多种共用同一 scheme 时也只报一次
+    # （C. jejuni / C. coli 共用 campylobacter_10，按物种重复会刷屏）。
+    pending: dict[str, dict[str, Any]] = {}
+    catalog: Mapping[str, GmlstScheme] | None = gmlst_catalog
 
     def wants(stage: str) -> bool:
         return stages is None or stage in stages
@@ -317,11 +402,31 @@ def preflight_resources(  # noqa: C901
         for database in ("vfdb", "card", "plasmidfinder"):
             require_gspec(database, all_samples)
 
+    typing_wanted = wants("mlst") or wants("cgmlst")
+
+    def note_undeclared(sample: str, code: str | None, labels: list[str]) -> None:
+        """记录"catalog 有、但本物种没声明"的分型方案（每 scheme 只记一次）。"""
+        nonlocal catalog
+        if catalog is None:
+            catalog = _gmlst_catalog_snapshot()
+        for entry in _typing_scheme_candidates(catalog, labels):
+            item = pending.get(entry.name)
+            if item is None:
+                pending[entry.name] = {
+                    "entry": entry,
+                    "cached": _gmlst_scheme_path(entry.name, roots) is not None,
+                    "samples": {sample},
+                    "codes": {code or ""},
+                }
+            else:
+                item["samples"].add(sample)
+                item["codes"].add(code or "")
+
     for sample, row in sorted(rows.items()):
         code = registry.resolve(row.get("species", ""))
 
         plan = selection.effective_gmlst(code, sample=sample, registry=registry)
-        if wants("mlst") or wants("cgmlst"):
+        if typing_wanted:
             modes = [mode for mode in plan.modes if mode in {"mlst", "cgmlst", "wgmlst"}]
         else:
             modes = []
@@ -337,6 +442,13 @@ def preflight_resources(  # noqa: C901
                 present=scheme_path is not None,
                 detail="expects <cache>/<provider>/<scheme>/.meta.json",
             ))
+
+        # 反向检查（v1.10.46）：本物种一个分型方案都没声明，但上游 catalog 里
+        # 明明有 → 不失败，但必须让人看见，否则该步会静默写成 NO_SCHEME。
+        if typing_wanted and not modes:
+            labels = _species_labels(registry, code)
+            if labels:
+                note_undeclared(sample, code, labels)
 
         if wants("gspec"):
             databases = selection.effective_gspec_databases(
@@ -371,8 +483,33 @@ def preflight_resources(  # noqa: C901
             present=reference.is_file(),
         ))
 
+    decisions: list[ResourceStatus] = []
+    for scheme, item in sorted(pending.items()):
+        entry = item["entry"]
+        cached = bool(item["cached"])
+        owners = "、".join(sorted(code for code in item["codes"] if code)) or "本物种"
+        if cached:
+            detail = (
+                f"catalog 有 {entry.scheme_type} scheme 且已缓存，但 {owners} 未声明 → "
+                "该步骤会写 N/A；用 bacmap selection select 启用"
+            )
+        else:
+            detail = (
+                f"catalog 有 {entry.scheme_type} scheme，但 {owners} 未声明也未缓存 → "
+                "该步骤会写 N/A；下载后仍需用 bacmap selection select 启用"
+            )
+        decisions.append(_status(
+            name=f"gmlst:{scheme}", kind="typing_scheme",
+            path=_gmlst_scheme_path(scheme, roots) or Path("-"),
+            required_by=tuple(sorted(item["samples"])),
+            install=f"gmlst scheme download {scheme}",
+            present=cached,
+            detail=detail,
+        ))
+
     return PreflightReport(
         ok=all(item.present for item in checked),
         checked=tuple(checked),
         skipped=tuple(skipped),
+        decisions=tuple(decisions),
     )

@@ -554,3 +554,21 @@
 
 /* keep the sidebar blocks (search, categories, legend) visible: sites scroll internally */
 .blk.grow #gene-list { max-height: 240px; overflow-y: auto; }
+
+/* data rings block */
+.ring-dim { margin-left: 6px; color: var(--text-4); font: 500 9px var(--font-mono); }
+.ring-col-list { max-height: 150px; overflow-y: auto; margin: 4px 0 2px; }
+.ring-col-list::-webkit-scrollbar { width: 6px; }
+.ring-col-list::-webkit-scrollbar-thumb { background: rgba(120,160,255,0.2); border-radius: 3px; }
+.ring-col-name {
+  flex: 1; min-width: 0; text-align: left; border: 0; background: transparent;
+  color: var(--text-2); font: 500 10px var(--font-mono); cursor: pointer; padding: 1px 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ring-col-name:hover { color: #fff; }
+.ring-col-name.on { color: var(--accent-2); }
+.ring-field-row button {
+  border: 0; background: transparent; color: var(--text-4); font-size: 12px;
+  cursor: pointer; padding: 0 4px; line-height: 1;
+}
+.ring-field-row button:hover { color: #ff8f6b; }

@@ -686,3 +686,259 @@ export function forceLayout3D(nodes, edges, { iterations = 300, radius = 9, repu
 }
 
 export const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+/** Deep copy of a raw Newick tree ({ name, length, children, support? }). */
+export function cloneTree(node) {
+  const copy = { name: node.name || '', length: node.length || 0, children: [] };
+  if (node.support !== undefined) copy.support = node.support;
+  if (node.rootSplitTwin) copy.rootSplitTwin = true;
+  copy.children = (node.children || []).map(cloneTree);
+  return copy;
+}
+
+/**
+ * Attach parsed support values to a copy of the raw tree. With `support`
+ * declared, every internal non-root node's label is split on '/' into
+ * `node.support = { values, labels, raw }` and `node.name` is cleared;
+ * non-numeric parts become null. Without `support`, nodes are untouched.
+ * Leaves never receive support values.
+ */
+export function annotateSupport(raw, support) {
+  const copy = cloneTree(raw);
+  if (!support || !Array.isArray(support.labels) || !support.labels.length) return copy;
+  (function walk(node, isRoot) {
+    if (node.children.length) {
+      if (!isRoot && node.name) {
+        const parts = node.name.split('/');
+        node.support = {
+          values: parts.map(part => {
+            const value = Number(part);
+            return part !== '' && Number.isFinite(value) ? value : null;
+          }),
+          labels: support.labels,
+          raw: node.name,
+        };
+        node.name = '';
+      }
+      node.children.forEach(child => walk(child, false));
+    }
+  })(copy, true);
+  return copy;
+}
+
+/**
+ * Path of child indices from the root to the node at `dfsIndex` in DFS
+ * pre-order — the same order `layoutPhylogeny` uses for node ids, so a layout
+ * node's `id` maps directly to a reroot path. Returns [] for the root.
+ */
+export function nodePath(raw, dfsIndex) {
+  let cursor = -1;
+  let found = null;
+  (function walk(node, trail) {
+    if (found) return;
+    cursor += 1;
+    if (cursor === dfsIndex) { found = trail; return; }
+    node.children.forEach((child, i) => walk(child, [...trail, i]));
+  })(raw, []);
+  if (!found) throw new Error(`nodePath：DFS 序号 ${dfsIndex} 超出节点范围`);
+  return found;
+}
+
+/**
+ * Re-root the tree on the branch above the node reached by `path` (child
+ * indices from the current root; [] — the root itself — is rejected). The new
+ * root is inserted at fraction `t` along that branch: `t * L` towards the
+ * target node, `(1 - t) * L` towards the rest. Edges along the path are
+ * reversed and branch attributes (`length`, `support`) travel with the
+ * branch, not the node. A degree-2 old root is suppressed by merging its two
+ * incident branches (lengths summed; both merged halves describe the same
+ * bipartition, so the non-null support is kept, preferring the path side
+ * stored on the suppressed node). Both halves of the new root branch carry
+ * the same support object; the far half is flagged `rootSplitTwin` so views
+ * can label it once. The input is never mutated.
+ */
+export function rerootTree(raw, path, t = 0.5) {
+  if (!Array.isArray(path) || !path.length) throw new Error('rerootTree：不能对当前根节点改根（path 为空）');
+  const fraction = Number(t);
+  if (!Number.isFinite(fraction) || fraction < 0 || fraction > 1) {
+    throw new Error('rerootTree：t 必须是 [0,1] 内的数字');
+  }
+  const root = cloneTree(raw);
+  // only the far half of the NEW root branch may stay flagged: clear stale
+  // twin marks left over from a previous reroot
+  (function clearTwins(node) { delete node.rootSplitTwin; node.children.forEach(clearTwins); })(root);
+
+  const chain = [root];
+  for (const index of path) {
+    const next = chain[chain.length - 1].children[index];
+    if (!next) throw new Error(`rerootTree：path ${JSON.stringify(path)} 超出树的范围`);
+    chain.push(next);
+  }
+  const target = chain[chain.length - 1];
+  const splitLength = target.length || 0;
+  const splitSupport = target.support;
+
+  // Reverse edges m_j -> m_{j+1} for j = 0..k-2 (the last edge is split, not
+  // reversed): m_{j+1} adopts m_j, and the branch attributes that were stored
+  // on the child move onto the new child (the old parent).
+  for (let j = 0; j < chain.length - 2; j++) {
+    const parent = chain[j];
+    const child = chain[j + 1];
+    const length = child.length;
+    const support = child.support;
+    child.children.push(parent);
+    parent.children = parent.children.filter(node => node !== child);
+    parent.length = length;
+    if (support !== undefined) parent.support = support;
+    else delete parent.support;
+  }
+
+  // Split the last edge: the new root sits between `target` and its old parent.
+  const parent = chain[chain.length - 2];
+  parent.children = parent.children.filter(node => node !== target);
+  const newRoot = { name: '', length: 0, children: [target, parent] };
+  target.length = splitLength * fraction;
+  parent.length = splitLength * (1 - fraction);
+  if (splitSupport !== undefined) parent.support = splitSupport;
+  else delete parent.support;
+  parent.rootSplitTwin = true;
+
+  // Suppress a degree-2 old root: its remaining child takes over the merged
+  // branch. The two merged branches describe the same bipartition, so keep
+  // whichever support is non-null, preferring the path side (the attribute
+  // stored on the suppressed node itself).
+  const oldRoot = chain[0];
+  if (oldRoot.children.length === 1) {
+    const survivor = oldRoot.children[0];
+    // old root's new parent: the first reversed node for longer paths,
+    // otherwise the new root itself (path length 1).
+    const holder = chain.length > 2 ? chain[1] : newRoot;
+    survivor.length = (survivor.length || 0) + (oldRoot.length || 0);
+    const informative = support => !!support?.values?.some(value => value !== null);
+    if (informative(oldRoot.support) || !informative(survivor.support)) {
+      if (oldRoot.support !== undefined) survivor.support = oldRoot.support;
+    }
+    if (oldRoot.rootSplitTwin) survivor.rootSplitTwin = true;
+    holder.children = holder.children.map(node => (node === oldRoot ? survivor : node));
+  }
+  return newRoot;
+}
+
+/**
+ * Midpoint root: place the root at the midpoint of the tree's diameter (the
+ * longest patristic leaf-to-leaf path). Returns { tree, path, t } — tree is
+ * the already-rerooted copy, and path/t reproduce it via `rerootTree`.
+ * Endpoint ties are broken by DFS leaf order, so the result is deterministic.
+ * Throws when the tree has no usable branch lengths (a pure cladogram).
+ */
+export function midpointRoot(raw) {
+  const nodes = [];
+  const adjacency = [];
+  (function walk(node, parentIndex) {
+    const index = nodes.length;
+    nodes.push(node);
+    adjacency.push([]);
+    if (parentIndex >= 0) {
+      const w = Math.max(0, Number(node.length) || 0);
+      adjacency[parentIndex].push([index, w]);
+      adjacency[index].push([parentIndex, w]);
+    }
+    node.children.forEach(child => walk(child, index));
+  })(raw, -1);
+
+  const totalLength = adjacency.flat().reduce((sum, [, w]) => sum + w, 0) / 2;
+  if (!(totalLength > 0)) {
+    throw new Error('Midpoint 根需要分支长度：该树没有可用分支长度（cladogram），无法计算根距');
+  }
+  const isLeaf = nodes.map(node => !node.children.length);
+  // DFS leaf order = order of first appearance in `nodes` (built in DFS).
+  const leafRank = new Map();
+  {
+    let rank = 0;
+    nodes.forEach((node, i) => { if (isLeaf[i]) leafRank.set(i, rank++); });
+  }
+
+  const farthest = start => {
+    const dist = new Array(nodes.length).fill(Infinity);
+    const parent = new Array(nodes.length).fill(-1);
+    dist[start] = 0;
+    const order = [start];
+    for (let k = 0; k < order.length; k++) {
+      const u = order[k];
+      for (const [v, w] of adjacency[u]) {
+        if (dist[v] !== Infinity) continue;
+        dist[v] = dist[u] + w;
+        parent[v] = u;
+        order.push(v);
+      }
+    }
+    let best = -1;
+    for (let i = 0; i < nodes.length; i++) {
+      if (!isLeaf[i] || dist[i] === Infinity) continue;
+      if (best < 0 || dist[i] > dist[best] + 1e-12
+        || (Math.abs(dist[i] - dist[best]) <= 1e-12 && leafRank.get(i) < leafRank.get(best))) best = i;
+    }
+    return { best, dist, parent };
+  };
+
+  const a = farthest(nodes.findIndex((_, i) => isLeaf[i])).best;
+  const { best: b, dist: distA, parent } = farthest(a);
+  const half = distA[b] / 2;
+
+  // Walk b -> a; the edge where the travelled distance crosses `half` holds
+  // the midpoint. `bSide` is the endpoint nearer b, `aSide` nearer a.
+  let bSide = b;
+  let aSide = -1;
+  let travelled = 0;
+  while (true) {
+    const up = parent[bSide];
+    if (up < 0) throw new Error('Midpoint 根定位失败：直径路径未覆盖中点');
+    const w = adjacency[bSide].find(([v]) => v === up)[1];
+    if (travelled + w >= half - 1e-12) { aSide = up; break; }
+    travelled += w;
+    bSide = up;
+  }
+  const w = adjacency[bSide].find(([v]) => v === aSide)[1];
+  const distFromBSide = Math.min(w, Math.max(0, half - travelled));
+
+  // The reroot target is the *child* endpoint of the midpoint edge in the
+  // current rooting; t measures the split position from that child.
+  const aIsChild = nodes[bSide].children.includes(nodes[aSide]);
+  const target = aIsChild ? nodes[aSide] : nodes[bSide];
+  const tEdge = w > 0 ? (aIsChild ? w - distFromBSide : distFromBSide) / w : 0;
+
+  // DFS child-index path to `target`.
+  let path = null;
+  (function walk(node, trail) {
+    if (path) return;
+    if (node === target) { path = trail; return; }
+    node.children.forEach((child, i) => walk(child, [...trail, i]));
+  })(raw, []);
+  if (!path || !path.length) throw new Error('Midpoint 根定位失败：中点落在当前根上，无法表达');
+  return { tree: rerootTree(raw, path, tEdge), path, t: tEdge };
+}
+
+/**
+ * Replay a list of recorded reroot operations from the ORIGINAL tree.
+ * Each op is { path, t, method }. Replay stops at the first invalid op and
+ * reports a warning — the returned tree is the last good state.
+ */
+export function replayRootOps(raw, ops = []) {
+  const warnings = [];
+  let current = raw;
+  let applied = 0;
+  for (const [i, op] of (ops || []).entries()) {
+    if (!op || !Array.isArray(op.path)) {
+      warnings.push(`改根重放中止：第 ${i + 1} 步缺少 path`);
+      break;
+    }
+    try {
+      current = rerootTree(current, op.path, op.t ?? 0.5);
+      applied += 1;
+    } catch (error) {
+      warnings.push(`改根重放中止于第 ${i + 1} 步（${op.method || 'user'}）：${error.message}`);
+      break;
+    }
+  }
+  return { tree: current, warnings, applied };
+}

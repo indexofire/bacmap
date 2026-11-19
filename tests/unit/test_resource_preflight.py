@@ -134,3 +134,181 @@ def test_analyze_fails_fast_before_snakemake_when_database_missing(tmp_path: Pat
         assert "gmlst scheme download" in (status.message or "")
     finally:
         eng.shutdown_dbos()
+
+
+# ---- v1.10.39：catalog 有、但本物种没声明的分型方案 ----------------------
+
+
+def _home_with(tmp_path: Path, rows: str) -> Path:
+    home = tmp_path / "home"
+    cfg = home / "workflows" / "bacmap" / "config"
+    cfg.mkdir(parents=True)
+    (cfg / "samples.tsv").write_text(
+        "sample\tspecies\tR1\tR2\tlongread\tassembly\tisolate\tplatform"
+        "\tchecksum\tspecimen\n" + rows,
+        encoding="utf-8",
+    )
+    (cfg / "config.yaml").write_text("tools:\n  annotation:\n    enabled: false\n")
+    return home
+
+
+def _catalog() -> dict[str, object]:
+    from bacmap.core.tool_selection_validate import GmlstScheme
+
+    def scheme(name: str, organism: str, scheme_type: str = "mlst", loci: int = 7):
+        return GmlstScheme(
+            name=name, organism=organism, scheme_type=scheme_type,
+            n_loci=loci, provider="pubmlst", display_name=name,
+        )
+
+    return {
+        # 同属的"非本种"方案：organism 同样是 Campylobacter ...，必须被排除。
+        "campylobacter_1": scheme("campylobacter_1", "Campylobacter non-jejuni/coli"),
+        "campylobacter_10": scheme("campylobacter_10", "Campylobacter jejuni/coli"),
+        "campylobacter_11": scheme(
+            "campylobacter_11", "Campylobacter jejuni/coli", "cgmlst", 1343
+        ),
+        "cdifficile_1": scheme("cdifficile_1", "Clostridioides difficile"),
+    }
+
+
+def _resources(home: Path) -> tuple[Path, Path]:
+    amr = home / "data" / "db" / "amrfinderplus" / "2026-01-01"
+    amr.mkdir(parents=True)
+    (amr / "AMR_CDS.fa").write_text(">x\nACGT\n")
+    gspec = home / "gspec"
+    for name in ("vfdb", "card", "plasmidfinder"):
+        (gspec / name).mkdir(parents=True)
+        (gspec / name / "records.jsonl").write_text("")
+    gmlst = home / "gmlst"
+    gmlst.mkdir()
+    return gspec, gmlst
+
+
+def test_undeclared_scheme_becomes_decision_not_failure(tmp_path: Path):
+    """CJE 没有任何分型声明：ok 仍为 True，但必须出现在 decisions 里。"""
+    home = _home_with(
+        tmp_path, "CJE1\tCJE\t\t\t\t/home/cje.fna\tCJE1\tunknown\t\t\n"
+    )
+    gspec, gmlst = _resources(home)
+    report = preflight_resources(
+        home, ["CJE1"], annotation=False, config={},
+        env={"GSPEC_DATADIR": str(gspec), "GMLST_CACHE_DIR": str(gmlst)},
+        gmlst_catalog=_catalog(),  # type: ignore[arg-type]
+    )
+    assert report.ok
+    assert report.missing == ()
+    names = [item.name for item in report.decisions]
+    assert "gmlst:campylobacter_10" in names
+    # cgMLST 也是该物种的可用方案
+    assert "gmlst:campylobacter_11" in names
+    # non-jejuni/coli 方案不得混进来
+    assert "gmlst:campylobacter_1" not in names
+    decision = {item.name: item for item in report.decisions}["gmlst:campylobacter_10"]
+    assert decision.present is False
+    assert decision.install == "gmlst scheme download campylobacter_10"
+    assert "not enabled" in report.decision_message()
+    # 待决项不是缺失项：不能触发 fail-fast
+    assert report.failure_message() == ""
+
+
+def test_decision_for_c_difficile(tmp_path: Path):
+    home = _home_with(
+        tmp_path, "CDI1\tCDI\t\t\t\t/home/cdi.fna\tCDI1\tunknown\t\t\n"
+    )
+    gspec, gmlst = _resources(home)
+    report = preflight_resources(
+        home, ["CDI1"], annotation=False, config={},
+        env={"GSPEC_DATADIR": str(gspec), "GMLST_CACHE_DIR": str(gmlst)},
+        gmlst_catalog=_catalog(),  # type: ignore[arg-type]
+    )
+    assert report.ok
+    assert [item.name for item in report.decisions] == ["gmlst:cdifficile_1"]
+
+
+def test_cached_but_undeclared_says_enable_not_download(tmp_path: Path):
+    """下了但没声明 → 仍要报出来，且文案指向 selection 而不是下载。"""
+    home = _home_with(
+        tmp_path, "CJE1\tCJE\t\t\t\t/home/cje.fna\tCJE1\tunknown\t\t\n"
+    )
+    gspec, gmlst = _resources(home)
+    target = gmlst / "pubmlst" / "campylobacter_10"
+    target.mkdir(parents=True)
+    (target / ".meta.json").write_text("{}")
+    report = preflight_resources(
+        home, ["CJE1"], annotation=False, config={},
+        env={"GSPEC_DATADIR": str(gspec), "GMLST_CACHE_DIR": str(gmlst)},
+        gmlst_catalog=_catalog(),  # type: ignore[arg-type]
+    )
+    decision = {item.name: item for item in report.decisions}["gmlst:campylobacter_10"]
+    assert decision.present is True
+    assert "bacmap selection select" in decision.detail
+
+
+def test_declared_scheme_is_checked_not_decided(tmp_path: Path):
+    from bacmap.core.tool_selection import ToolSelection
+
+    home = _home_with(
+        tmp_path, "CJE1\tCJE\t\t\t\t/home/cje.fna\tCJE1\tunknown\t\t\n"
+    )
+    gspec, gmlst = _resources(home)
+    target = gmlst / "pubmlst" / "campylobacter_10"
+    target.mkdir(parents=True)
+    (target / ".meta.json").write_text("{}")
+    selection = ToolSelection.model_validate({
+        "schema": "bacmap.tool_selection/1",
+        "species": {
+            "CJE": {
+                "gmlst": {
+                    "mode": "replace",
+                    "modes": ["mlst"],
+                    "schemes": {"mlst": "campylobacter_10"},
+                }
+            }
+        },
+    })
+    report = preflight_resources(
+        home, ["CJE1"], annotation=False, config={},
+        env={"GSPEC_DATADIR": str(gspec), "GMLST_CACHE_DIR": str(gmlst)},
+        selection=selection,
+        gmlst_catalog=_catalog(),  # type: ignore[arg-type]
+    )
+    assert report.ok
+    assert "gmlst:campylobacter_10" in {item.name for item in report.checked}
+    assert report.decisions == ()
+
+
+def test_undeclared_decision_carries_samples(tmp_path: Path):
+    home = _home_with(
+        tmp_path,
+        "CJE1\tCJE\t\t\t\t/home/cje1.fna\tCJE1\tunknown\t\t\n"
+        "CJE2\tCJE\t\t\t\t/home/cje2.fna\tCJE2\tunknown\t\t\n",
+    )
+    gspec, gmlst = _resources(home)
+    report = preflight_resources(
+        home, ["CJE1", "CJE2"], annotation=False, config={},
+        env={"GSPEC_DATADIR": str(gspec), "GMLST_CACHE_DIR": str(gmlst)},
+        gmlst_catalog=_catalog(),  # type: ignore[arg-type]
+    )
+    decision = {item.name: item for item in report.decisions}["gmlst:campylobacter_10"]
+    assert decision.required_by == ("CJE1", "CJE2")
+
+
+def test_shared_scheme_reported_once_for_two_species(tmp_path: Path):
+    """C. jejuni 与 C. coli 共用 campylobacter_10 → 只报一条，样本合并。"""
+    home = _home_with(
+        tmp_path,
+        "CJE1\tCJE\t\t\t\t/home/cje1.fna\tCJE1\tunknown\t\t\n"
+        "CCO1\tCCO\t\t\t\t/home/cco1.fna\tCCO1\tunknown\t\t\n",
+    )
+    gspec, gmlst = _resources(home)
+    report = preflight_resources(
+        home, ["CJE1", "CCO1"], annotation=False, config={},
+        env={"GSPEC_DATADIR": str(gspec), "GMLST_CACHE_DIR": str(gmlst)},
+        gmlst_catalog=_catalog(),  # type: ignore[arg-type]
+    )
+    names = [item.name for item in report.decisions]
+    assert names.count("gmlst:campylobacter_10") == 1
+    decision = {item.name: item for item in report.decisions}["gmlst:campylobacter_10"]
+    assert decision.required_by == ("CCO1", "CJE1")
+    assert "CCO" in decision.detail and "CJE" in decision.detail

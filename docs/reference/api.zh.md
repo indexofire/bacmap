@@ -77,7 +77,7 @@ Origin: http://127.0.0.1:8800
 | GET | `/api/v1/gvixb/samples/{dataset}/genome` | 最新结果 draft assembly 数据 |
 | GET | `/api/v1/gvixb/runs/{run_id}/annotated-genome/{dataset}` | 历史运行 Bakta/eggNOG 圈图数据 |
 | GET | `/api/v1/gvixb/samples/{dataset}/annotated-genome` | 最新结果圈图数据 |
-| GET | `/api/v1/gvixb/runs/{run_id}/tree/{snp\|cgmlst}/{group}` | 进化树数据 |
+| GET | `/api/v1/gvixb/runs/{run_id}/tree/{snp}/{group}` | SNP 进化树载荷（`gvixb.phylogeny/v2`）；`cgmlst` 返回 410（请改用 MST 端点——cgMLST 的 Newick 是 MST 序列化结果，并非系统发育树） |
 | GET | `/api/v1/gvixb/runs/{run_id}/mst/{group}` | gmlst MST 数据（由 `cgmlst_profiles.tsv` 补充位点名与样本 ST/scheme 元数据） |
 
 ## 3. 示例

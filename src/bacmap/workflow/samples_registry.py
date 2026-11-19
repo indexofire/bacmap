@@ -15,6 +15,7 @@ import hashlib
 import json
 import re
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -126,34 +127,128 @@ def _gside_species_name(verdict: dict[str, Any]) -> str:
         if name:
             return name
     for m in (verdict.get("methods") or {}).values():
-        if isinstance(m, dict):
-            name = str(m.get("species") or "").strip()
+        if not isinstance(m, dict):
+            continue
+        name = str(m.get("species") or "").strip()
+        if name:
+            return name
+        # ANI/mash/sourmash 走 MethodEnvelope：物种嵌在 result 里
+        # （{"method": "panel", "result": {"species": ...}}），只看顶层会漏。
+        nested = m.get("result")
+        if isinstance(nested, dict):
+            name = str(nested.get("species") or "").strip()
             if name:
                 return name
     return ""
 
 
-def detect_species(fasta: Path, timeout: int = 120) -> str:
-    """gside marker 档识别单株 → 三字母物种码；失败/未识别返回空串。"""
+# 登记阶段的物种鉴定档位（v1.10.47）：marker 便宜但只认预设靶基因，对"表型基因
+# 做物种标签"的种（如 CDI 的 tcdA/tcdB）会漏；漏了就补一档 ANI 再判，仍判不出
+# 才跳过——绝不因为单档未命中就丢样本。
+# 值是该档位在不同 gside 版本里的 CLI 名称（0.2.3 用 panel，0.2.4 起用 ani）。
+_SPECIES_TIERS: dict[str, tuple[str, ...]] = {
+    "marker": ("marker",),
+    "ani": ("ani", "panel"),
+}
+
+
+@dataclass(frozen=True)
+class SpeciesCall:
+    """单株物种判定结果：``code`` 为空表示全部档位都未识别。"""
+
+    code: str = ""
+    method: str = ""
+    attempts: tuple[dict[str, str], ...] = ()
+
+    def tried(self) -> str:
+        return "、".join(item.get("mode", "") for item in self.attempts)
+
+    def summary(self) -> str:
+        """逐档结论（含失败原因/ANI 命中），用于跳过原因与日志。"""
+        parts: list[str] = []
+        for item in self.attempts:
+            text = f"{item.get('mode', '')}={item.get('species', '')}"
+            extra: list[str] = []
+            if item.get("error"):
+                extra.append(f"error {item['error'][:60]}")
+            if item.get("ani"):
+                extra.append(f"ani {item['ani']}")
+            if item.get("af"):
+                extra.append(f"af {item['af']}")
+            if extra:
+                text += "(" + ", ".join(extra) + ")"
+            parts.append(text)
+        return "；".join(parts)
+
+
+def _gside_verdict(
+    fasta: Path, mode: str, timeout: int
+) -> tuple[str, bool, dict[str, Any]]:
+    """跑一档 gside → ``(物种名, 档位是否被接受)``。
+
+    ``ran`` 为 False 表示该档位名不被本机 gside 接受（跨版本别名）或调用本身失败，
+    调用方应改用下一个别名；``ran`` 为 True 但名字为空表示"这一档确实判不出"。
+    """
     try:
         proc = subprocess.run(
-            ["gside", "species", str(fasta), "--mode", "marker"],
+            ["gside", "species", str(fasta), "--mode", mode],
             capture_output=True,
             text=True,
             timeout=timeout,
         )
     except (OSError, subprocess.TimeoutExpired):
-        return ""
+        return "", False, {}
     if proc.returncode != 0:
-        return ""
+        return "", False, {}
     try:
         verdict = json.loads(proc.stdout)
     except ValueError:
-        return ""
-    name = _gside_species_name(verdict if isinstance(verdict, dict) else {})
+        return "", False, {}
+    if not isinstance(verdict, dict):
+        return "", False, {}
+    entry = (verdict.get("methods") or {}).get(mode) or {}
+    name = _gside_species_name(verdict)
     if not name or name.lower() == "unknown":
-        return ""
-    return species_code(name) or ""
+        return "", True, entry if isinstance(entry, dict) else {}
+    return name, True, entry if isinstance(entry, dict) else {}
+
+
+def detect_species_call(
+    fasta: Path, *, tiers: tuple[str, ...] = ("marker", "ani"), timeout: int = 120
+) -> SpeciesCall:
+    """按 ``tiers`` 逐档识别物种，返回命中的档位与全部尝试记录。"""
+    attempts: list[dict[str, str]] = []
+    for tier in tiers:
+        for mode in _SPECIES_TIERS.get(tier, (tier,)):
+            name, ran, raw_entry = _gside_verdict(fasta, mode, timeout)
+            if not ran:
+                # 档位名不被本机接受（0.2.3 叫 panel，0.2.4 起叫 ani）：换别名。
+                attempts.append({"mode": mode, "species": "unsupported"})
+                continue
+            entry: dict[str, Any] = raw_entry
+            attempt: dict[str, str] = {"mode": mode, "species": name or "Unknown"}
+            # 单法失败/未过阈值的原因必须留痕：否则"该档没命中"和"该档根本没跑起来"
+            # 在结果里长得一模一样。
+            nested = entry.get("result")
+            result: dict[str, Any] = nested if isinstance(nested, dict) else entry
+            if entry.get("error"):
+                attempt["error"] = str(entry["error"])[:160]
+            elif result.get("ani") is not None:
+                attempt["ani"] = f"{float(result['ani']):.2f}"
+                if result.get("aligned_fraction") is not None:
+                    attempt["af"] = f"{float(result['aligned_fraction']):.2f}"
+            attempts.append(attempt)
+            code = species_code(name) if name else ""
+            if code:
+                return SpeciesCall(code=code, method=mode, attempts=tuple(attempts))
+            # 本档判不出 → 升下一档（gside 认得但 bacmap 无对应码也视为未命中）。
+            break
+    return SpeciesCall(attempts=tuple(attempts))
+
+
+def detect_species(fasta: Path, timeout: int = 120) -> str:
+    """gside 识别单株 → 三字母物种码；失败/未识别返回空串（兼容旧调用方）。"""
+    return detect_species_call(fasta, timeout=timeout).code
 
 
 def _load_table(home: Path) -> tuple[Path, list[str], list[list[str]]]:
@@ -600,6 +695,7 @@ def register_fastas(
 
     samples: list[str] = []
     detected: dict[str, str] = {}
+    methods: dict[str, str] = {}
     skipped: list[dict[str, str]] = []
     added = 0
     for fa in files:
@@ -620,11 +716,18 @@ def register_fastas(
             )
             samples.append(sid)
             continue
-        code = species or detect_species(fa)
-        if not code:
-            skipped.append({"file": str(fa), "reason": "物种未识别（gside Unknown/失败）"})
+        call = SpeciesCall(code=species, method="explicit") if species else detect_species_call(fa)
+        if not call.code:
+            reason = (
+                f"物种未识别（{call.summary()}）"
+                if call.attempts
+                else "物种未识别（gside 不可用）"
+            )
+            skipped.append({"file": str(fa), "reason": reason})
             continue
+        code = call.code
         detected[sid] = code
+        methods[sid] = call.method
         record = {
             "sample": sid,
             "species": code,
@@ -648,6 +751,7 @@ def register_fastas(
         "reused": len(samples) - added,
         "skipped": skipped,
         "detected": detected,
+        "detected_methods": methods,
         "samples_tsv": str(tsv),
     }
 

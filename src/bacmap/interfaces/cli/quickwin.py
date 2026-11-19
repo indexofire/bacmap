@@ -143,6 +143,13 @@ def run_database_status(args: argparse.Namespace) -> None:
             print(f"  [{mark:<7}] {item.name:<28} {item.path}")
         for item in report.skipped:
             print(T(f"  [SKIP   ] {item.name}: {item.detail}", f"  [跳过   ] {item.name}：{item.detail}"))
+        if report.decisions:
+            print(T("  typing schemes available but not enabled:", "  有可用但未启用的分型方案："))
+            for item in report.decisions:
+                mark = "cached" if item.present else "remote"
+                print(f"  [{mark:<7}] {item.name:<28} {item.install}")
+                if item.detail:
+                    print(f"            {item.detail}")
         if report.warning:
             print(report.warning)
         if not report.ok:

@@ -69,7 +69,13 @@ bacmap task submit --type analyze --fastq-dir /data/run42 --species Salmonella
 Before the pipeline starts, bacmap runs a read-only database preflight
 (`bacmap database status`) and fails fast with install commands when a required
 Bakta/eggNOG, gmlst scheme, gspec database or SNP reference is missing. Nothing is
-downloaded implicitly. For a faster run without annotation:
+downloaded implicitly.
+
+The preflight also reports a gap that is not a "missing" resource (v1.10.46): the
+catalog has MLST/cgMLST schemes for a species, but neither the registry nor
+`tool_selection.yaml` declares them. That does not fail, yet the step is silently
+written as `NO_SCHEME`, so it is surfaced separately as `decisions` — act on it by
+downloading and declaring a scheme, or by explicitly accepting no typing result. For a faster run without annotation:
 
 ```bash
 bacmap task submit --type analyze --samples SAM-TYP-001 --no-annotation

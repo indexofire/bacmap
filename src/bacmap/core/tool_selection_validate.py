@@ -671,8 +671,13 @@ def _gmlst_options(
     ]
 
 
-def _scheme_matches_species(entry: GmlstScheme, labels: list[str]) -> bool:
-    """Cheap organism filter: every long label token appears in the organism."""
+def scheme_matches_species(entry: GmlstScheme, labels: list[str]) -> bool:
+    """Cheap organism filter: every long label token appears in the organism.
+
+    Heuristic only — upstream catalogs put genus-level organism strings on
+    sub-species schemes (``Campylobacter non-jejuni/coli``), so a match means
+    "plausibly related", never "this scheme is the right one for the species".
+    """
     organism = re.sub(r"[^a-z0-9]+", " ", entry.organism.lower())
     tokens: set[str] = set()
     for label in labels:
@@ -680,6 +685,10 @@ def _scheme_matches_species(entry: GmlstScheme, labels: list[str]) -> bool:
             if len(token) >= 4:
                 tokens.add(token)
     return bool(tokens) and all(token in organism for token in tokens)
+
+
+# Backward-compatible private alias (call sites predate the public rename).
+_scheme_matches_species = scheme_matches_species
 
 
 def _plan_option(plan: GmlstPlan) -> GmlstPlanOption:

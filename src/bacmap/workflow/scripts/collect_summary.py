@@ -140,7 +140,7 @@ if _meaningful(_st["o_antigen"]) and (_h1 or _h2):
     _st["antigen_formula"] = f"{_st['o_antigen']}:{_h1 or '-'}:{_h2 or '-'}"
     _st["antigen_kind"] = "O:H1:H2"
 if sistr_path is None:
-    # v1.10.24：沙门菌已迁移到 gspec sen_sero_sistr——不再因无 SISTR 报
+    # v1.10.24：沙门菌已迁移到 gspec sen_sero——不再因无 SISTR 报
     # not_applicable；血清型从 gspec typing 的 schemes 取（下方统一入口）。
     pass
 
@@ -276,21 +276,21 @@ else:
         "reason": "DEC 致病型 / 志贺菌血清型仅适用于大肠埃希菌与志贺菌",
     }
 
-# v1.10.24：沙门菌血清型经 gspec sen_sero_sistr（serotype/2 schema）。
-# _salmonella_gspec 来自 gspec typing 的 databases.sen_sero_sistr.schemes。
-_salmonella_gspec_entry = gspec_tp["databases"].get("sen_sero_sistr")
+# v1.10.24：沙门菌血清型经 gspec sen_sero（serotype/2 schema）。
+# _salmonella_gspec 来自 gspec typing 的 databases.sen_sero.schemes。
+_salmonella_gspec_entry = gspec_tp["databases"].get("sen_sero")
 if isinstance(_salmonella_gspec_entry, dict) and _salmonella_gspec_entry.get("schemes"):
     _sal_schemes = _salmonella_gspec_entry["schemes"]
     _sal_serotype = str(_sal_schemes.get("serotype", "") or "").strip()
     if _sal_serotype:
         summary["steps"]["serotype"]["value"] = _sal_serotype
-        summary["steps"]["serotype"]["method"] = "gspec sen_sero_sistr"
+        summary["steps"]["serotype"]["method"] = "gspec sen_sero"
         summary["steps"]["dec"]["shigella_serotype"] = _sal_serotype
         summary["steps"]["dec"]["primary_serotype"] = _sal_serotype
-        summary["steps"]["dec"]["serotype_method"] = "gspec sen_sero_sistr"
+        summary["steps"]["dec"]["serotype_method"] = "gspec sen_sero"
     else:
         summary["steps"]["serotype"]["value"] = "N/A"
-        summary["steps"]["serotype"]["method"] = "gspec sen_sero_sistr"
+        summary["steps"]["serotype"]["method"] = "gspec sen_sero"
         summary["steps"]["serotype"]["sistr_status"] = str(
             _salmonella_gspec_entry.get("status", "unknown")
         )

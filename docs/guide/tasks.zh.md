@@ -65,8 +65,13 @@ bacmap task submit --type analyze --fastq-dir /data/run42 --species Salmonella
 ```
 
 管线启动前会执行只读数据库预检（`bacmap database status`）；缺 Bakta/eggNOG、gmlst scheme、
-gspec 库或 SNP 参考基因组时立即失败并给出安装命令，不会隐式下载。需要更快出结果时可关闭
-注释：
+gspec 库或 SNP 参考基因组时立即失败并给出安装命令，不会隐式下载。
+
+预检还会报出一类"不算缺失"的缺口（v1.10.46）：catalog 里明明有该物种的 MLST/cgMLST 方案，
+但 registry 和 `tool_selection.yaml` 都没声明。它不会失败，但该步骤会静默写成 `NO_SCHEME`，
+所以以 `decisions` 单独列出——看到它就说明要么下载并声明，要么明确接受这一步没有结果。
+
+需要更快出结果时可关闭注释：
 
 ```bash
 bacmap task submit --type analyze --samples SAM-TYP-001 --no-annotation

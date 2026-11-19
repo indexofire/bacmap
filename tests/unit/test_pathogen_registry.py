@@ -38,7 +38,7 @@ GOLDEN_AMRFINDER_ORGANISMS = {
     # V.parahaemolyticus 故意缺席：AMRFinderPlus 无其策展库 → 不传 -O。
 }
 GOLDEN_GSPEC_SCREENS = {
-    "SAL": ["sen_sero_sistr"],  # v1.10.24：沙门菌血清型迁移到 gspec
+    "SAL": ["sen_sero"],  # v1.10.24：沙门菌血清型迁移到 gspec
     "SHI": ["shi_sero"],
     "ECO": ["eco_dec", "ecoh"],
     "VPA": ["vpa_vf", "vpa_ok", "vpa_pai"],
@@ -210,7 +210,7 @@ class TestResolveDualAccept:
         assert gspec_screens_for("E.coli") == ["eco_dec", "ecoh"]
         assert gspec_screens_for("Shigella") == ["shi_sero"]
         assert gspec_screens_for("Listeria_monocytogenes") == ["lmo_sero"]
-        assert gspec_screens_for("Salmonella") == ["sen_sero_sistr"]  # v1.10.24
+        assert gspec_screens_for("Salmonella") == ["sen_sero"]  # v1.10.24
         assert gspec_screens_for("Unknown") == []
 
 

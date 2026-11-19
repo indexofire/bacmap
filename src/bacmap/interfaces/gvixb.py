@@ -17,7 +17,7 @@ from urllib.parse import unquote
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from bacmap.core.utils import parse_abricate_tsv, parse_gspec_report
+from bacmap.core.utils import parse_abricate_tsv, parse_gspec_report, parse_mlst
 from bacmap.interfaces.views import run_detail
 from bacmap.store.results_layout import run_results_dir
 from bacmap.tasks.spec import TaskId, TaskState, TaskType
@@ -34,6 +34,16 @@ _MAX_ANNOTATED_FEATURES = 20_000
 _TRACK_WINDOW = 1_000
 _READ_CHUNK = 1 << 20
 _GFF_KINDS = {"CDS", "tRNA", "rRNA", "tmRNA", "ncRNA", "sorf", "pseudogene"}
+
+# gvixb.phylogeny/v2 SNP 树元数据白名单：只放行流行病学字段；直接身份字段
+# （patient_*、symptoms、onset_date、hospital 等 D4 键）永不进入载荷。
+_TREE_STRAIN_META_KEYS = frozenset({
+    "isolation_date", "collection_date", "province", "city", "district",
+    "sample_source", "sample_type", "food_category", "food_name", "outbreak_id",
+})
+_TREE_META_MISSING = {"", "N/A", "-", "NA"}
+_TREE_DATE_RE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
+_TREE_SUPPORT_RE = re.compile(r"\)(\d+(?:\.\d+)?)/(\d+(?:\.\d+)?)")
 
 
 class GvixbModel(BaseModel):
@@ -102,22 +112,75 @@ class AssemblyPayload(GvixbModel):
     features: list[AssemblyFeature]
 
 
-class TreePayload(GvixbModel):
-    schema_id: Literal["gvixb.phylogeny/v1"] = Field(default="gvixb.phylogeny/v1", alias="schema")
-    demo: Literal[False] = False
-    source: str
-    run_id: str
-    cohort: Literal["snp", "cgmlst"]
-    group: str
-    organism: str
+class TreeRoot(GvixbModel):
+    status: Literal["rooted", "unrooted", "unknown"]
+    method: Literal["outgroup", "midpoint", "dated", "inference"] | None = None
+    outgroup: list[str] | None = None
+
+
+class TreeBranchLength(GvixbModel):
+    unit: Literal[
+        "substitutions_per_site", "snp", "allele_differences", "years", "none", "unknown"
+    ]
+    label: str | None = None
+    alignment_sites: int | None = None
+
+
+class TreeSupport(GvixbModel):
+    labels: list[str]
+    scale: Literal[1, 100]
+
+
+class TreeSpec(GvixbModel):
     newick: str
-    distanceLabel: str
-    metadata: dict[str, dict[str, Any]] = {}
+    kind: Literal["inferred", "mst_derived"]
+    method: str | None = None
+    root: TreeRoot
+    branch_length: TreeBranchLength
+    support: TreeSupport | None = None
+
+
+class TreeField(GvixbModel):
+    key: str
+    type: Literal["categorical", "numeric", "date", "text"]
+    label: str | None = None
+    unit: str | None = None
+    role: Literal["time", "place", "source", "cluster"] | None = None
+    primary: bool | None = None
+    parent: str | None = None
+
+
+class TreeMatrixColumn(GvixbModel):
+    id: str
+    label: str | None = None
+    group: str | None = None
+
+
+class TreeMatrix(GvixbModel):
+    id: str
+    label: str | None = None
+    columns: list[TreeMatrixColumn]
+    rows: dict[str, list[int | None]]
+
+
+class TreeDistances(GvixbModel):
+    unit: Literal["snp", "allele_differences", "other"]
+    label: str | None = None
     samples: list[str]
-    n_snp_sites: int | None = None
-    n_loci: int | None = None
-    scheme: str = ""
-    missing_rate: float | None = None
+    values: list[float | None]
+
+
+class TreePayloadV2(GvixbModel):
+    schema_id: Literal["gvixb.phylogeny/v2"] = Field(default="gvixb.phylogeny/v2", alias="schema")
+    demo: Literal[False] = False
+    title: str = ""
+    source: str
+    summary: dict[str, Any] = {}
+    tree: TreeSpec
+    fields: list[TreeField] = []
+    metadata: dict[str, dict[str, Any]] = {}
+    matrices: list[TreeMatrix] = []
+    distances: TreeDistances | None = None
 
 
 class MstMember(GvixbModel):
@@ -415,11 +478,12 @@ def _sample_relative(scope: _Scope, sample_id: str, suffix: Path) -> Path:
     return Path(sample_id) / suffix if scope.kind == "run" else suffix
 
 
-def _screen_rows(scope: _Scope, sample_id: str, kind: str) -> list[dict[str, str]]:
+def _screen_rows_or_none(scope: _Scope, sample_id: str, kind: str) -> list[dict[str, str]] | None:
     """一个库的基因筛查行：gspec screen JSON（v1.10.19+）优先，旧 abricate TSV 回退。
 
     行结构统一映射为 abricate 列名（见 ``parse_gspec_report``），两个布局的
     消费逻辑完全一致；候选文件都经过 ``_artifact`` 的运行目录边界检查。
+    未检出（无任何候选文件）返回 None——与"检测了但没有命中"的空列表区分。
     """
     candidates = (
         Path("gspec") / f"{kind}.json",
@@ -439,7 +503,11 @@ def _screen_rows(scope: _Scope, sample_id: str, kind: str) -> list[dict[str, str
                 return rows
             continue
         return parse_abricate_tsv(text)
-    return []
+    return None
+
+
+def _screen_rows(scope: _Scope, sample_id: str, kind: str) -> list[dict[str, str]]:
+    return _screen_rows_or_none(scope, sample_id, kind) or []
 
 
 def _screen_features(
@@ -526,33 +594,224 @@ def _assembly_payload(scope: _Scope, sample_id: str) -> AssemblyPayload:
     )
 
 
-def tree_payload(engine: Any, run_id: str, cohort: str, group: str) -> TreePayload:
+class TreeCohortRemovedError(Exception):
+    """该队列的进化树视图已撤下（cgMLST Newick 是 MST 序列化结果，非系统发育树）。"""
+
+
+def tree_payload(engine: Any, run_id: str, cohort: str, group: str) -> TreePayloadV2:
     scope, _ = _run_scope(engine, run_id)
     if cohort not in ("snp", "cgmlst") or not _GROUP_RE.fullmatch(group):
         raise PermissionError("非法队列类型或分组")
-    cohort_kind: Literal["snp", "cgmlst"] = "snp" if cohort == "snp" else "cgmlst"
-    summary = _read_json(scope, Path(cohort_kind) / group / f"{cohort_kind}_summary.json")
+    if cohort == "cgmlst":
+        raise TreeCohortRemovedError(
+            f"cgMLST 队列不再提供进化树视图，请使用 MST：/api/v1/gvixb/runs/{run_id}/mst/{group}"
+        )
+    return _snp_tree_payload(scope, Path(engine.home), run_id, group)
+
+
+def _tree_meta_value(value: Any) -> str:
+    text = str(value).strip() if value is not None else ""
+    return "" if text in _TREE_META_MISSING else text
+
+
+def _tree_date(value: Any) -> str:
+    text = _tree_meta_value(value).replace("/", "-")
+    return text if _TREE_DATE_RE.fullmatch(text) else ""
+
+
+def _snp_sample_meta(
+    meta_svc: Any, library_isolate: dict[str, str], scope: _Scope, sample: str
+) -> dict[str, Any]:
+    record: dict[str, Any] = {}
+    summary = _read_json(
+        scope, _sample_relative(scope, sample, Path("report") / f"{sample}_summary.json"),
+        required=False,
+    )
+    steps = (summary or {}).get("steps", {}) if isinstance(summary, dict) else {}
+    st = parse_mlst(steps.get("mlst")).get("st")
+    if _tree_meta_value(st):
+        record["ST"] = _tree_meta_value(st)
+    serotype = steps.get("serotype")
+    serotype_value = serotype.get("value") if isinstance(serotype, dict) else serotype
+    if _tree_meta_value(serotype_value):
+        record["serotype"] = _tree_meta_value(serotype_value)
+    isolate_id = library_isolate.get(sample) or sample
+    meta = meta_svc.get(isolate_id) if meta_svc is not None else None
+    if meta is not None:
+        for key in ("isolation_date", "collection_date"):
+            date = _tree_date(getattr(meta, key, ""))
+            if date:
+                record[key] = date
+        for key in _TREE_STRAIN_META_KEYS - {"isolation_date", "collection_date"}:
+            value = _tree_meta_value(getattr(meta, key, ""))
+            if value:
+                record[key] = value
+    return record
+
+
+def _snp_fields(metadata: dict[str, dict[str, Any]]) -> list[TreeField]:
+    present = {key for record in metadata.values() for key in record}
+
+    def field(
+        key: str,
+        type_: Literal["categorical", "numeric", "date", "text"],
+        label: str,
+        *,
+        role: Literal["time", "place", "source", "cluster"] | None = None,
+        primary: bool = False,
+        parent: str | None = None,
+    ) -> TreeField | None:
+        if key not in present:
+            return None
+        if parent is not None and parent not in present:
+            parent = None
+        return TreeField(
+            key=key, type=type_, label=label, role=role,
+            primary=True if primary else None, parent=parent,
+        )
+
+    declared = [
+        field("isolation_date", "date", "分离日期", role="time", primary=True),
+        field("collection_date", "date", "采样日期", role="time",
+              primary="isolation_date" not in present),
+        field("province", "categorical", "省份", role="place"),
+        field("city", "categorical", "城市", role="place", parent="province"),
+        field("district", "categorical", "区县", role="place", parent="city"),
+        field("sample_source", "categorical", "样本来源", role="source"),
+        field("sample_type", "categorical", "样本类型", role="source"),
+        field("food_category", "categorical", "食品类别", role="source", parent="sample_source"),
+        field("food_name", "categorical", "食品名称", role="source", parent="food_category"),
+        field("outbreak_id", "categorical", "暴发事件", role="cluster"),
+        field("ST", "categorical", "ST"),
+        field("serotype", "categorical", "血清型"),
+    ]
+    return [f for f in declared if f is not None]
+
+
+_TREE_MATRIX_SPECS = (
+    ("amr", "card", "AMR 基因（CARD）"),
+    ("vf", "vfdb", "毒力基因（VFDB）"),
+    ("plasmid", "plasmidfinder", "质粒复制子（PlasmidFinder）"),
+)
+
+
+def _snp_matrices(scope: _Scope, samples: list[str]) -> list[TreeMatrix]:
+    matrices: list[TreeMatrix] = []
+    for matrix_id, kind, label in _TREE_MATRIX_SPECS:
+        rows_by_sample = {s: _screen_rows_or_none(scope, s, kind) for s in samples}
+        if all(rows is None for rows in rows_by_sample.values()):
+            continue
+        genes = sorted({
+            row["GENE"]
+            for rows in rows_by_sample.values() if rows
+            for row in rows if row.get("GENE")
+        })
+        groups: dict[str, str] = {}
+        if kind == "card":
+            for rows in rows_by_sample.values():
+                for row in rows or []:
+                    gene = row.get("GENE", "")
+                    resistance = row.get("RESISTANCE", "")
+                    if gene and resistance and gene not in groups:
+                        groups[gene] = re.split(r"[;,]", resistance)[0].strip()
+        columns = [
+            TreeMatrixColumn(id=gene, group=groups.get(gene) or None) for gene in genes
+        ]
+        rows_out: dict[str, list[int | None]] = {}
+        for s, rows in rows_by_sample.items():
+            if rows is None:
+                rows_out[s] = [None] * len(genes)
+                continue
+            hits = {row.get("GENE") for row in rows}
+            rows_out[s] = [1 if gene in hits else 0 for gene in genes]
+        matrices.append(TreeMatrix(id=matrix_id, label=label, columns=columns, rows=rows_out))
+    return matrices
+
+
+def _snp_tree_payload(scope: _Scope, home: Path, run_id: str, group: str) -> TreePayloadV2:
+    summary = _read_json(scope, Path("snp") / group / "snp_summary.json")
     if summary is None:
         raise FileNotFoundError("队列汇总不存在")
     newick = summary.get("tree_newick")
     if not isinstance(newick, str) or not newick.strip():
         raise ValueError("队列结果不含 Newick 树")
     samples = [str(value) for value in summary.get("samples", []) if value is not None]
-    metadata = dict(_profiles_meta(scope, group)[1]) if cohort_kind == "cgmlst" else {}
-    return TreePayload(
-        source=f"bacmap 运行 {run_id} · {cohort} 队列结果",
-        run_id=run_id,
-        cohort=cohort_kind,
-        group=group,
-        organism=str(summary.get("organism") or ""),
-        newick=newick,
-        distanceLabel="SNP 分支长度" if cohort == "snp" else "MST 转换树的分支长度",
+
+    support = (
+        TreeSupport(labels=["SH-aLRT", "UFBoot"], scale=100)
+        if _TREE_SUPPORT_RE.search(newick)
+        else None
+    )
+    method = "IQ-TREE · GTR · 核心 SNP 比对" + (" · SH-aLRT/UFBoot ×1000" if support else "")
+    n_snp_sites = _optional_int(summary.get("n_snp_sites"))
+    summary_out: dict[str, Any] = {"n_samples": len(samples)}
+    for key, value in (
+        ("organism", summary.get("organism")),
+        ("n_snp_sites", n_snp_sites),
+        ("missing_rate", _optional_float_value(summary.get("missing_rate"))),
+    ):
+        if value is not None:
+            summary_out[key] = value
+
+    # library → isolate → strain_metadata（白名单字段；DB 缺失时静默跳过）。
+    from bacmap.workflow.samples_registry import list_libraries
+
+    library_isolate = {
+        str(row.get("sample") or ""): str(row.get("isolate") or "")
+        for row in list_libraries(home)
+    }
+    db = home / "data" / "bacmap.sqlite"
+    meta_svc = None
+    if db.is_file():
+        from bacmap.store.strain_metadata import StrainMetadataService
+
+        meta_svc = StrainMetadataService(db)
+    try:
+        metadata = {
+            sample: _snp_sample_meta(meta_svc, library_isolate, scope, sample)
+            for sample in samples
+        }
+    finally:
+        if meta_svc is not None:
+            meta_svc.close()
+    metadata = {s: record for s, record in metadata.items() if record}
+
+    pairwise = summary.get("pairwise_distances")
+    distances = None
+    if isinstance(pairwise, dict) and pairwise:
+        values: list[float | None] = []
+        for i, a in enumerate(samples):
+            for b in samples[i + 1:]:
+                value = pairwise.get(f"{a}|{b}", pairwise.get(f"{b}|{a}"))
+                values.append(float(value) if isinstance(value, (int, float)) else None)
+        distances = TreeDistances(
+            unit="snp",
+            label="核心 SNP 差异（两两比较，跳过 N 位点）",
+            samples=samples,
+            values=values,
+        )
+
+    organism = str(summary.get("organism") or "")
+    return TreePayloadV2(
+        title=f"{organism or group} 核心 SNP 树 · {group}",
+        source=f"bacmap 运行 {run_id} · snp 队列",
+        summary=summary_out,
+        tree=TreeSpec(
+            newick=newick,
+            kind="inferred",
+            method=method,
+            root=TreeRoot(status="unrooted"),
+            branch_length=TreeBranchLength(
+                unit="substitutions_per_site",
+                label="替换数 / 位点（核心 SNP 比对）",
+                alignment_sites=n_snp_sites,
+            ),
+            support=support,
+        ),
+        fields=_snp_fields(metadata),
         metadata=metadata,
-        samples=samples,
-        n_snp_sites=_optional_int(summary.get("n_snp_sites")),
-        n_loci=_optional_int(summary.get("n_loci")),
-        scheme=str(summary.get("scheme") or ""),
-        missing_rate=_optional_float_value(summary.get("missing_rate")),
+        matrices=_snp_matrices(scope, samples),
+        distances=distances,
     )
 
 
@@ -1145,28 +1404,32 @@ def run_visualizations(engine: Any, run_id: str) -> list[GvixbLink]:
                     data_url=f"/api/v1/gvixb/runs/{run_id}/annotated-genome/{sample}",
                 )
             )
-    for cohort in ("snp", "cgmlst"):
-        base = scope.root / cohort
-        if not base.is_dir():
-            continue
-        for directory in sorted(base.iterdir()):
+    snp_base = scope.root / "snp"
+    if snp_base.is_dir():
+        for directory in sorted(snp_base.iterdir()):
             group = directory.name
             if not directory.is_dir() or not _GROUP_RE.fullmatch(group):
                 continue
-            if _artifact(scope, Path(cohort) / group / f"{cohort}_summary.json") is not None:
+            if _artifact(scope, Path("snp") / group / "snp_summary.json") is not None:
                 views.append(
                     GvixbLink(
-                        id=f"tree:{cohort}:{group}",
+                        id=f"tree:snp:{group}",
                         kind="tree",
-                        label=f"3D {'SNP' if cohort == 'snp' else 'cgMLST'} 树 · {group}",
-                        context=f"{cohort} / {group}",
-                        url=f"/gvixb/runs/{run_id}/tree/{cohort}/{group}",
-                        data_url=f"/api/v1/gvixb/runs/{run_id}/tree/{cohort}/{group}",
+                        label=f"3D SNP 树 · {group}",
+                        context=f"snp / {group}",
+                        url=f"/gvixb/runs/{run_id}/tree/snp/{group}",
+                        data_url=f"/api/v1/gvixb/runs/{run_id}/tree/snp/{group}",
                     )
                 )
-            if cohort == "cgmlst" and _artifact(
-                scope, Path(cohort) / group / "mst_payload.json"
-            ) is not None:
+    # cgMLST 只暴露 MST 视图：其 Newick 是 MST 序列化结果（聚合标签、内部节点
+    # 带样本），不是系统发育树。
+    cgmlst_base = scope.root / "cgmlst"
+    if cgmlst_base.is_dir():
+        for directory in sorted(cgmlst_base.iterdir()):
+            group = directory.name
+            if not directory.is_dir() or not _GROUP_RE.fullmatch(group):
+                continue
+            if _artifact(scope, Path("cgmlst") / group / "mst_payload.json") is not None:
                 views.append(
                     GvixbLink(
                         id=f"mst:{group}",
@@ -1215,7 +1478,7 @@ def gom_visualizations(engine: Any, obj: dict[str, Any]) -> list[GvixbLink]:
         wanted = {f"tree:snp:{payload.get('group')}"}
     elif analysis_type == "cgmlst_cohort":
         group = payload.get("group")
-        return [view for view in views if view.id in {f"tree:cgmlst:{group}", f"mst:{group}"}]
+        return [view for view in views if view.id == f"mst:{group}"]
     else:
         return []
     return [view for view in views if view.id in wanted]

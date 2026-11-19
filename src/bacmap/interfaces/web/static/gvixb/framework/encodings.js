@@ -80,7 +80,7 @@ export function metadataFieldOptions(records) {
 }
 
 /** Height-mode select options, built only from fields actually present. */
-export function heightModeOptions(fields, structureLabel, { treeModes = false } = {}) {
+export function heightModeOptions(fields, structureLabel, { treeModes = false, fieldLabel = key => key } = {}) {
   return [
     { value: 'flat', label: '平面（无高度）' },
     { value: 'structure', label: `结构距离：${structureLabel}` },
@@ -88,9 +88,9 @@ export function heightModeOptions(fields, structureLabel, { treeModes = false } 
       { value: 'cone', label: '锥形展开（3D 分支扇区）' },
       { value: 'canopy', label: '枢纽高度（树介数）' },
     ] : []),
-    ...fields.categorical.map(key => ({ value: `spread:${key}`, label: `分层 + 层内展开：${key}` })),
-    ...fields.categorical.map(key => ({ value: `deck:${key}`, label: `分层：${key}` })),
-    ...fields.numeric.map(key => ({ value: `num:${key}`, label: `数值：${key}` })),
+    ...fields.categorical.map(key => ({ value: `spread:${key}`, label: `分层 + 层内展开：${fieldLabel(key)}` })),
+    ...fields.categorical.map(key => ({ value: `deck:${key}`, label: `分层：${fieldLabel(key)}` })),
+    ...fields.numeric.map(key => ({ value: `num:${key}`, label: `数值：${fieldLabel(key)}` })),
   ];
 }
 

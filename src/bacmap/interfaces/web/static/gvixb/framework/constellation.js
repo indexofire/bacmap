@@ -54,6 +54,12 @@ export function createConstellation({
   const layerVisible = key => !hiddenLayers.has(key);
   const nodeVisible = i => layerVisible(nodes[i].layer);
   let edgeFilter = null;
+  let emphasisFn = null;
+  const emphasised = i => !emphasisFn || emphasisFn(i);
+  const outlineGroup = new THREE.Group();
+  outlineGroup.name = 'cluster-outlines';
+  overlay.add(outlineGroup);
+  let outlineRings = [];
   const edgeVisible = i => nodeVisible(edges[i].source) && nodeVisible(edges[i].target)
     && (!edgeFilter || edgeFilter(edges[i]));
   const edgeDashed = i => dashedEdgePredicate?.(edges[i], i) === true;
@@ -120,7 +126,9 @@ export function createConstellation({
       const [ca, cb] = Array.isArray(pair) ? pair : [pair, pair];
       tmpA.set(ca); tmpB.set(cb);
       const dashed = dashedEdgePredicate?.(edge, i) === true;
-      const alpha = edgeVisible(i) && !dashed ? edgeAlpha * density : 0;
+      const alpha = edgeVisible(i) && !dashed
+        ? edgeAlpha * density * ((!emphasised(edge.source) && !emphasised(edge.target)) ? 0.15 : 1)
+        : 0;
       edgeColors.set([tmpA.r, tmpA.g, tmpA.b, alpha, tmpB.r, tmpB.g, tmpB.b, alpha], i * 8);
     });
     edgeGeometry.getAttribute('color').needsUpdate = true;
@@ -570,8 +578,9 @@ export function createConstellation({
         deck.pill.material.opacity = edgeT;
       }
       const labelT = clamp((elapsed - LABEL_T0) / LABEL_DUR, 0, 1);
-      for (const label of nodeLabels) if (label) label.material.opacity = labelT;
+      for (const [i, label] of nodeLabels.entries()) if (label) label.material.opacity = labelT * (emphasised(i) ? 1 : 0.15);
       for (const label of edgeLabels) if (label) label.material.opacity = labelT;
+      for (const [i, dot] of dots.entries()) dot.material.opacity = emphasised(i) ? 1 : 0.15;
       if (elapsed >= INTRO_END) {
         introDone = true;
         dots.forEach((dot, i) => dot.scale.setScalar(dotScale(i)));
@@ -586,14 +595,23 @@ export function createConstellation({
       for (let i = 0; i < dots.length; i++) {
         const d = host.camera.position.distanceTo(nodes[i].position);
         const rel = d / ref;
-        dots[i].material.opacity = clamp(1.5 - rel * 0.78, 0.22, 1);
+        const fade = emphasised(i) ? 1 : 0.15;
+        dots[i].material.opacity = clamp(1.5 - rel * 0.78, 0.22, 1) * fade;
         dots[i].scale.setScalar(dotScale(i) * Math.pow(ref / Math.max(d, 1e-3), 0.5));
         const label = nodeLabels[i];
-        if (label) label.material.opacity = clamp(1.3 - rel * 0.55, 0.3, 1);
+        if (label) label.material.opacity = clamp(1.3 - rel * 0.55, 0.3, 1) * fade;
       }
     }
     updateBurst(dt);
 
+    for (const ring2 of outlineRings) {
+      const i = ring2.userData.nodeIndex;
+      ring2.visible = nodeVisible(i);
+      if (!ring2.visible) continue;
+      const dist = host.camera.position.distanceTo(ring2.position);
+      ring2.scale.setScalar(Math.max(nodes[i].size * sizeMul * 1.7, dist * 0.05));
+      ring2.material.opacity = emphasised(i) ? 0.95 : 0.15;
+    }
     // marks keep a roughly constant on-screen size
     if (ring.visible && selectedNode >= 0) {
       const dist = host.camera.position.distanceTo(ring.position);
@@ -645,6 +663,32 @@ export function createConstellation({
       if (introDone) dots.forEach((dot, i) => dot.scale.setScalar(dotScale(i)));
     },
     recolorEdges: fn => { edgeColorFn = fn; writeEdgeColors(); },
+    // fn(i) → bool: de-emphasised nodes/labels dim to 15 %, edges whose both
+    // endpoints are dimmed dim too; positions and picking are unchanged.
+    // null → everything emphasised. Display-only, no inference.
+    setEmphasis: fn => { emphasisFn = typeof fn === 'function' ? fn : null; writeEdgeColors(); },
+    // colors[i] = CSS colour | null → one outline ring sprite per outlined
+    // node (constant-ish on-screen size); rings follow layer visibility and
+    // dim with their dot's emphasis. null clears; replaces previous outlines.
+    setOutlines: colors => {
+      for (const sprite of outlineRings) {
+        outlineGroup.remove(sprite);
+        sprite.material.dispose();
+      }
+      outlineRings = [];
+      if (!Array.isArray(colors)) return;
+      colors.forEach((colour, i) => {
+        if (!colour || !nodes[i]) return;
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: ringTexture, color: colour, transparent: true, depthWrite: false, depthTest: false,
+        }));
+        sprite.renderOrder = 19;
+        sprite.position.copy(nodes[i].position);
+        sprite.userData.nodeIndex = i;
+        outlineGroup.add(sprite);
+        outlineRings.push(sprite);
+      });
+    },
     mountSidebar,
     update,
     dispose: () => {
@@ -659,6 +703,7 @@ export function createConstellation({
     debug: () => ({
       nodes: nodes.length, edges: edges.length, decks: decks.size,
       hiddenLayers: [...hiddenLayers], selectedNode, selectedEdge, labelsOn, edgeLabelsOn,
+      outlines: outlineRings.length, deemphasised: emphasisFn ? dots.filter((_, i) => !emphasised(i)).length : 0,
     }),
   };
 }

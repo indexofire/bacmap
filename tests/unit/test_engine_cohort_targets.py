@@ -49,6 +49,26 @@ def test_unknown_species_yields_no_target(tmp_path):
     assert _cohort_targets(deployed, {"samples": ["X1"]}, tmp_path / "run") == []
 
 
+def test_single_sample_group_yields_no_target(tmp_path):
+    """单株不构成 cohort：Snakemake 侧会跳过该组，这里也不能请求目标。
+
+    回归：SHI 单株（属 ecoli 组）在 run_cgmlst_cohort 开启时曾被塞进
+    cgmlst/ecoli/cgmlst_summary.json，DAG 构建期抛 KeyError: 'ecoli'。
+    """
+    deployed = _deployed(
+        tmp_path,
+        [
+            "SHI1\tSHI\t\t\t/a/SHI1.fna",
+            "CPE1\tCPE\t\t\t/a/CPE1.fna",
+            "CPE2\tCPE\t\t\t/a/CPE2.fna",
+        ],
+    )
+    assert _cohort_targets(deployed, {"samples": ["SHI1"]}, tmp_path / "run") == []
+    # 同一次运行里成组的物种仍照常进 DAG。
+    got = _cohort_targets(deployed, {"samples": ["SHI1", "CPE1", "CPE2"]}, tmp_path / "run")
+    assert got == [str(tmp_path / "run" / "cgmlst" / "cpe" / "cgmlst_summary.json")]
+
+
 def test_empty_samples_yields_no_target(tmp_path):
     deployed = _deployed(tmp_path, ["CPE1\tCPE\t\t\t/a/CPE1.fna"])
     assert _cohort_targets(deployed, {}, tmp_path / "run") == []

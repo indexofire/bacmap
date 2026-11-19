@@ -183,8 +183,9 @@ class TestGvixbPayloads:
         _, client, run, _ = seeded
         tree = client.get(f"/api/v1/gvixb/runs/{run.run_id}/tree/snp/vpara")
         assert tree.status_code == 200
-        assert tree.json()["newick"] == "(S1:0.1,S2:0.2)root;"
-        assert tree.json()["n_snp_sites"] == 42
+        assert tree.json()["schema"] == "gvixb.phylogeny/v2"
+        assert tree.json()["tree"]["newick"] == "(S1:0.1,S2:0.2)root;"
+        assert tree.json()["summary"]["n_snp_sites"] == 42
         mst = client.get(f"/api/v1/gvixb/runs/{run.run_id}/mst/vpara")
         assert mst.status_code == 200
         nodes = mst.json()["nodes"]
@@ -211,7 +212,7 @@ class TestGvixbPayloads:
         _, client, run, _ = seeded
         data = client.get(f"/api/v1/gvixb/runs/{run.run_id}/manifest").json()
         assert {view["id"] for view in data["views"]} == {
-            "genome:S1", "circle:S1", "tree:snp:vpara", "tree:cgmlst:vpara", "mst:vpara"
+            "genome:S1", "circle:S1", "tree:snp:vpara", "mst:vpara"
         }
 
 
@@ -384,3 +385,180 @@ def test_gvixb_demo_route_and_no_cache(seeded):
     asset = client.get("/static/gvixb/views/circular-annotation-view.js")
     assert asset.status_code == 200
     assert asset.headers["cache-control"] == "no-cache, must-revalidate"
+
+
+class TestSnpTreeV2:
+    def _v2_snp(self, root: Path, newick: str | None = None, **overrides) -> None:
+        summary = {
+            "tree_newick": newick or "((S1:0.1,S2:0.2)95/98:0.05,S3:0.3);",
+            "samples": ["S1", "S2", "S3"],
+            "n_snp_sites": 42,
+            "group": "vpara",
+            "organism": "Vibrio parahaemolyticus",
+            "missing_rate": 0.01,
+            "pairwise_distances": {"S1|S2": 4, "S3|S1": 9},
+        }
+        summary.update(overrides)
+        _write_json(root / "snp" / "vpara" / "snp_summary.json", summary)
+
+    def test_snp_tree_v2_shape_support_and_summary(self, seeded):
+        _, client, run, root = seeded
+        self._v2_snp(root)
+        data = client.get(f"/api/v1/gvixb/runs/{run.run_id}/tree/snp/vpara").json()
+        assert data["schema"] == "gvixb.phylogeny/v2" and data["demo"] is False
+        assert data["title"] == "Vibrio parahaemolyticus 核心 SNP 树 · vpara"
+        assert data["source"].startswith(f"bacmap 运行 {run.run_id}")
+        tree = data["tree"]
+        assert tree["kind"] == "inferred" and tree["root"] == {"status": "unrooted"}
+        assert tree["method"].endswith("SH-aLRT/UFBoot ×1000")
+        assert tree["support"] == {"labels": ["SH-aLRT", "UFBoot"], "scale": 100}
+        assert tree["branch_length"]["unit"] == "substitutions_per_site"
+        assert tree["branch_length"]["alignment_sites"] == 42
+        assert data["summary"]["n_samples"] == 3
+        assert data["summary"]["missing_rate"] == 0.01
+
+    def test_snp_tree_without_support_labels_omits_support(self, seeded):
+        _, client, run, root = seeded
+        self._v2_snp(root, newick="(S1:0.1,(S2:0.2,S3:0.1):0.05);")
+        tree = client.get(f"/api/v1/gvixb/runs/{run.run_id}/tree/snp/vpara").json()["tree"]
+        assert "support" not in tree
+        assert "SH-aLRT" not in tree["method"]
+
+    def test_snp_sample_st_serotype_and_missing_values(self, seeded):
+        _, client, run, root = seeded
+        self._v2_snp(root)
+        _write_json(
+            root / "S1" / "report" / "S1_summary.json",
+            {"steps": {"mlst": {"st": "3"}, "serotype": {"value": "O3:K6"}}},
+        )
+        _write_json(
+            root / "S2" / "report" / "S2_summary.json",
+            {"steps": {"mlst": {"st": "N/A"}, "serotype": {"value": "-"}}},
+        )
+        data = client.get(f"/api/v1/gvixb/runs/{run.run_id}/tree/snp/vpara").json()
+        assert data["metadata"]["S1"] == {"ST": "3", "serotype": "O3:K6"}
+        assert "S2" not in data["metadata"] and "S3" not in data["metadata"]
+        field_keys = [f["key"] for f in data["fields"]]
+        assert "ST" in field_keys and "serotype" in field_keys
+
+    def test_strain_metadata_whitelist_isolate_mapping_and_dates(self, seeded):
+        engine, client, run, root = seeded
+        self._v2_snp(root)
+        home = Path(engine.home)
+        (home / "workflows" / "bacmap" / "config" / "samples.tsv").write_text(
+            "sample\tisolate\nS1\tISO1\nS2\tISO2\n", encoding="utf-8"
+        )
+        from bacmap.store.strain_metadata import StrainMetadataService
+
+        with StrainMetadataService(home / "data" / "bacmap.sqlite") as svc:
+            svc.upsert("ISO1", {
+                "isolation_date": "2024/03/05", "collection_date": "2024-02",
+                "province": "上海", "city": "黄浦", "district": "外滩",
+                "sample_source": "食品", "outbreak_id": "OB7",
+                "patient_name": "张三", "patient_phone": "13800000000",
+                "onset_date": "2024-03-01", "hospital": "某医院",
+                "cluster_note": "note", "submit_date": "2024-04-01",
+            })
+            svc.upsert("ISO2", {"province": "江苏"})
+        data = client.get(f"/api/v1/gvixb/runs/{run.run_id}/tree/snp/vpara").json()
+        s1 = data["metadata"]["S1"]
+        assert s1["isolation_date"] == "2024-03-05"
+        assert s1["collection_date"] == "2024-02"
+        assert s1["province"] == "上海" and s1["outbreak_id"] == "OB7"
+        assert data["metadata"]["S2"] == {"province": "江苏"}
+        text = json.dumps(data, ensure_ascii=False)
+        for forbidden in (
+            "patient_name", "patient_phone", "onset_date", "hospital",
+            "cluster_note", "submit_date", "张三", "13800000000", "某医院", "extra",
+        ):
+            assert forbidden not in text
+        fields = {f["key"]: f for f in data["fields"]}
+        assert fields["isolation_date"]["role"] == "time"
+        assert fields["isolation_date"]["primary"] is True
+        assert "primary" not in fields["collection_date"]
+        assert fields["city"] == {
+            "key": "city", "type": "categorical", "label": "城市",
+            "role": "place", "parent": "province",
+        }
+        assert fields["district"]["parent"] == "city"
+        assert fields["outbreak_id"]["role"] == "cluster"
+
+    def test_fields_only_when_present_and_primary_fallback(self, seeded):
+        engine, client, run, root = seeded
+        self._v2_snp(root)
+        home = Path(engine.home)
+        (home / "workflows" / "bacmap" / "config" / "samples.tsv").write_text(
+            "sample\tisolate\nS1\tISO1\n", encoding="utf-8"
+        )
+        from bacmap.store.strain_metadata import StrainMetadataService
+
+        with StrainMetadataService(home / "data" / "bacmap.sqlite") as svc:
+            # city 无 province：parent 不得悬挂；collection_date 单独存在时 primary。
+            svc.upsert("ISO1", {
+                "city": "黄浦", "district": "外滩",
+                "collection_date": "2023-12", "isolation_date": "nope",
+            })
+        data = client.get(f"/api/v1/gvixb/runs/{run.run_id}/tree/snp/vpara").json()
+        fields = {f["key"]: f for f in data["fields"]}
+        assert "isolation_date" not in fields and "province" not in fields
+        assert "parent" not in fields["city"]
+        assert fields["district"]["parent"] == "city"
+        assert fields["collection_date"]["primary"] is True
+        assert "isolation_date" not in data["metadata"]["S1"]
+
+    def test_snp_matrices_null_and_zero_rows(self, seeded):
+        _, client, run, root = seeded
+        self._v2_snp(root)
+        _write_json(
+            root / "S1" / "gspec" / "card.json",
+            {"files": [{"file": "S1", "hits": [
+                {"gene": "blaA", "resistance": "beta-lactam;other"},
+                {"gene": "tetM", "resistance": "tetracycline"},
+            ]}]},
+        )
+        _write_json(
+            root / "S2" / "gspec" / "card.json",
+            {"files": [{"file": "S2", "hits": [{"gene": "blaA"}]}]},
+        )
+        data = client.get(f"/api/v1/gvixb/runs/{run.run_id}/tree/snp/vpara").json()
+        amr = next(m for m in data["matrices"] if m["id"] == "amr")
+        assert amr["label"] == "AMR 基因（CARD）"
+        assert [c["id"] for c in amr["columns"]] == ["blaA", "tetM"]
+        assert amr["columns"][0]["group"] == "beta-lactam"
+        assert "group" not in amr["columns"][1] or amr["columns"][1]["group"] == "tetracycline"
+        assert amr["rows"]["S1"] == [1, 1]
+        assert amr["rows"]["S2"] == [1, 0]
+        assert amr["rows"]["S3"] == [None, None]
+        assert all(m["id"] != "plasmid" for m in data["matrices"])
+
+    def test_snp_distances_triangle_order_and_nulls(self, seeded):
+        _, client, run, root = seeded
+        self._v2_snp(root)
+        distances = client.get(
+            f"/api/v1/gvixb/runs/{run.run_id}/tree/snp/vpara"
+        ).json()["distances"]
+        assert distances["unit"] == "snp" and distances["samples"] == ["S1", "S2", "S3"]
+        # 上三角 i<j：(S1,S2)=4、(S1,S3)=9（反向键 "S3|S1" 命中）、(S2,S3) 缺失 → null
+        assert distances["values"] == [4.0, 9.0, None]
+
+    def test_cgmlst_tree_withdrawn(self, seeded):
+        _, client, run, _ = seeded
+        views = client.get(f"/api/v1/gvixb/runs/{run.run_id}/manifest").json()["views"]
+        assert not any(view["id"].startswith("tree:cgmlst") for view in views)
+        api = client.get(f"/api/v1/gvixb/runs/{run.run_id}/tree/cgmlst/vpara")
+        assert api.status_code == 410
+        assert f"/api/v1/gvixb/runs/{run.run_id}/mst/vpara" in api.json()["detail"]
+        page = client.get(
+            f"/gvixb/runs/{run.run_id}/tree/cgmlst/vpara", follow_redirects=False
+        )
+        assert page.status_code == 307
+        assert page.headers["location"] == f"/gvixb/runs/{run.run_id}/mst/vpara"
+        bad = client.get(f"/api/v1/gvixb/runs/{run.run_id}/tree/cgmlst/bad%2Fpath")
+        assert bad.status_code in (400, 404, 410)
+
+
+def test_strain_meta_whitelist_disjoint_from_d4():
+    from bacmap.interfaces.gvixb import _TREE_STRAIN_META_KEYS
+    from bacmap.tasks.gates import _D4_KEYS
+
+    assert not (_TREE_STRAIN_META_KEYS & _D4_KEYS)
