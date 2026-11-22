@@ -17,6 +17,7 @@ const SHELL_IDS = [
   'analysis-description',
   'analysis-stats',
   'analysis-lists',
+  'analysis-sidebar',
   'analysis-controls',
   'analysis-source',
   'analysis-head',

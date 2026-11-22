@@ -5,6 +5,13 @@ import {
 } from '../framework/algorithms.js';
 import { escapeHtml, makeDustField, makeLabel, makePillLabel, disposeHierarchy } from '../framework/primitives.js';
 import { leafSectors, matrixColumnStats, selectColumns, ringLayout, buildRingCells } from '../framework/rings.js';
+import {
+  evaluateFilter,
+  filterFieldTypes as buildFilterFieldTypes,
+  tableColumnOptions, defaultTableColumns,
+} from '../framework/query.js';
+import { createFilterUi } from '../framework/filter-ui.js';
+import { createMatchTable } from '../framework/match-table.js';
 import { createConstellation, NETWORK_NEUTRAL, NETWORK_ACCENT } from '../framework/constellation.js';
 import {
   metadataFieldOptions, heightModeOptions, defaultColorField, nodeColoring, encodeHeights, MISSING, COLOR_SCHEMES,
@@ -215,6 +222,9 @@ export const phyloView = {
         epi.brush = { a: td.minStart, b: td.maxEnd };
       }
     }
+    // Data rings are currently hidden pending readability evaluation; all
+    // state is still serialised/restored so re-enabling is a one-line flip.
+    const RINGS_ENABLED = false;
     // ---- data rings (矩阵/字段环) ----
     const matrices = v2.matrices || [];
     const categoricalFields = (v2.fields || [])
@@ -249,6 +259,7 @@ export const phyloView = {
     };
     let ringGroup = null, ringCellsMeta = null, ringColumnMeta = [], leaderLines = null;
     let lastFlat = null, lastHeights = null;
+    let frameUpdateMs = 0;
     let ringEmphasis = null;   // null = all emphasised; else Set of emphasised leaf node ids
 
     const brushActive = () => {
@@ -400,11 +411,196 @@ export const phyloView = {
             : '平面：无根等角布局，分支长度沿各自扇区方向绘制（角度不表示数值）。'}${arbitraryRootNote()}${mstDerived ? ' 由 MST 转换的树，非系统发育推断。' : ''} 流光仅为装饰。`,
       });
       if (constellationHost) constellation.mountSidebar(constellationHost);
-      lastFlat = flat;
-      lastHeights = heights;
-      buildRings(flat, heights);
+      if (RINGS_ENABLED) {
+        lastFlat = flat;
+        lastHeights = heights;
+        buildRings(flat, heights);
+      }
       applyEpi();
       renderRingsBlock();
+      applyFilter();
+      filterUi?.render();
+    }
+
+    // ---- metadata / matrix filter ----
+    const filterFieldTypes = buildFilterFieldTypes(v2.fields, fields);
+    const filterState = {
+      mode: 'all',
+      conditions: [],
+      dim: 0.45,
+      pulse: typeof window === 'undefined'
+        || !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
+    };
+    let filterMatched = null;       // Set<leafName> | null
+    let filterWarnings = [];
+    let panelEl = null;             // right-panel match table section
+    // persisted under filter.table: columns=null → defaults; sort={key,dir}
+    const tableState = { columns: null, sort: null, collapsed: false, colPickerOpen: false, colSearch: '' };
+    let filterUi = null;            // shared 筛选 block component
+    let matchTable = null;          // shared 匹配表 panel component
+    const fltValueCounts = new Map();   // field -> Map(value,count)
+    const valueCounts = key => {
+      if (!fltValueCounts.has(key)) {
+        const m = new Map();
+        for (const leaf of tree.leaves) {
+          const v = recordOf(leaf)[key];
+          if (v === undefined || v === null || v === '') continue;
+          m.set(String(v), (m.get(String(v)) || 0) + 1);
+        }
+        fltValueCounts.set(key, m);
+      }
+      return fltValueCounts.get(key);
+    };
+
+    function applyFilter() {
+      const out = evaluateFilter(filterState, {
+        leaves: tree.leaves.map(leaf => leaf.name),
+        metadata, matrices, fieldTypes: filterFieldTypes,
+      });
+      filterMatched = out.matched;
+      filterWarnings = out.warnings;
+      const ids = filterMatched
+        ? tree.leaves.filter(leaf => filterMatched.has(leaf.name)).map(leaf => leaf.id) : null;
+      constellation?.setMatchPulse(ids, { pulse: filterState.pulse });
+      constellation?.setDimOpacity?.(filterState.dim);
+      applyEmphasis();
+      matchTable?.render();
+    }
+
+    const leafPassesFilters = leaf => {
+      if (epi.focus >= 0 && !(epi.clusters[epi.focus] || []).includes(leaf.name)) return false;
+      if (brushActive()) {
+        const interval = timeData(epi.timeField)?.intervals.get(leaf.name);
+        if (!interval || interval.start > epi.brush.b || interval.end < epi.brush.a) return false;
+      }
+      return !filterMatched || filterMatched.has(leaf.name);
+    };
+
+    function focusMatched() {
+      if (!filterMatched?.size || !constellation) return;
+      const pts = tree.leaves.filter(leaf => filterMatched.has(leaf.name))
+        .map(leaf => constellation.nodePosition(leaf.id)).filter(Boolean);
+      if (!pts.length) return;
+      const c = new THREE.Vector3();
+      for (const pt of pts) c.add(pt);
+      c.divideScalar(pts.length);
+      let r = 1;
+      for (const pt of pts) r = Math.max(r, pt.distanceTo(c));
+      const dir = host.camera.position.clone().sub(host.controls.target).normalize();
+      host.flyTo(c.clone().add(dir.multiplyScalar(Math.max(r * 2.6, 8))), c);
+    }
+
+    // ---- match table (right panel, shared component) ----
+    const tableCellValue = (col, leaf) => {
+      if (col.kind === 'matrix') {
+        const m = matrices.find(mx => mx.id === col.matrix);
+        const ci = m?.columns.findIndex(c => c.id === col.column) ?? -1;
+        const v = ci >= 0 ? m.rows?.[leaf.name]?.[ci] : null;
+        return v === undefined ? null : v;
+      }
+      const v = recordOf(leaf)[col.key];
+      return v === undefined || v === '' ? null : v;
+    };
+    const tableCellText = (col, leaf) => {
+      const v = tableCellValue(col, leaf);
+      if (v === null || v === undefined) return '—';
+      if (col.kind === 'matrix') return v === 1 ? '阳性' : v === 0 ? '阴性' : '未检测';
+      return String(v);
+    };
+
+    const tableColumns = () => {
+      const options = tableColumnOptions({
+        conditions: filterState.conditions, fields: v2.fields || [],
+        fieldTypes: filterFieldTypes, matrices, fieldLabel,
+      });
+      const byId = new Map(options.map(c => [c.id, c]));
+      const current = tableState.columns
+        ? tableState.columns.map(id => byId.get(id)).filter(Boolean)
+        : defaultTableColumns({
+            conditions: filterState.conditions,
+            colorField: state.color && state.color !== 'clade' ? state.color : null,
+            fields: v2.fields || [], fieldLabel,
+          }).map(c => byId.get(c.id) || { ...c, label: c.label || (c.kind === 'matrix' ? `${c.matrix}:${c.column}` : fieldLabel(c.key)) });
+      return { options, current };
+    };
+
+    const flyToLeaf = leaf => {
+      const position = constellation.nodePosition(leaf.id);
+      if (position) host.centerOn?.(position);
+    };
+
+    function createPanel(el) {
+      matchTable = createMatchTable({
+        el,
+        adapter: {
+          state: tableState,
+          active: () => !!filterMatched,
+          rows: () => tree.leaves.filter(leaf => filterMatched?.has(leaf.name)),
+          rowKey: leaf => String(leaf.id),
+          leadingCols: [{ id: 'name', label: '叶名', value: leaf => leaf.name }],
+          columns: tableColumns,
+          cellValue: tableCellValue,
+          cellText: tableCellText,
+          title: k => `匹配表 · ${k} 株`,
+          isDimmed: leaf => !leafPassesFilters(leaf),
+          isSelected: leaf => selectedNode?.id === leaf.id,
+          activate: leaf => { host.select?.({ type: 'node', id: leaf.id }); flyToLeaf(leaf); },
+          notify: () => host.notifyStateChange?.(),
+        },
+      });
+      matchTable.render();
+    }
+
+    function createFilterBlock(el) {
+      filterUi = createFilterUi({
+        el,
+        adapter: {
+          state: filterState,
+          available: matrices.length > 0 || [...filterFieldTypes.values()].some(t => t !== 'date'),
+          fieldTypes: filterFieldTypes,
+          matrices,
+          fieldLabel,
+          matrixLabel: id => matrices.find(m => m.id === id)?.label || id,
+          valueCounts,
+          apply: applyFilter,
+          onDim: dim => constellation?.setDimOpacity?.(dim),
+          context: () => {
+            const comboActive = epi.focus >= 0 || brushActive();
+            const combined = filterMatched && comboActive ? tree.leaves.filter(leafPassesFilters).length : null;
+            const distCounts = filterMatched ? (() => {
+              const m = new Map();
+              for (const leaf of tree.leaves) {
+                if (!filterMatched.has(leaf.name)) continue;
+                const v = state.color && state.color !== 'clade' ? (recordOf(leaf)[state.color] ?? MISSING)
+                  : (cladeKey.get(leaf.id) ?? MISSING);
+                m.set(String(v), (m.get(String(v)) || 0) + 1);
+              }
+              return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+            })() : [];
+            return {
+              matched: filterMatched,
+              k: filterMatched ? filterMatched.size : 0,
+              n: tree.leafCount,
+              extras: combined !== null ? [`与时间窗/簇聚焦叠加后 ${combined} 株`] : [],
+              distCounts,
+              matchRows: filterMatched
+                ? tree.leaves.filter(l => filterMatched.has(l.name)).map(l => ({ key: String(l.id), label: l.name }))
+                : [],
+              warnings: filterWarnings,
+            };
+          },
+          selectRow: key => {
+            const node = tree.nodes[Number(key)];
+            if (!node) return;
+            host.select?.({ type: 'node', id: node.id });
+            const position = constellation.nodePosition(node.id);
+            if (position) host.flyTo(position.clone().add(new THREE.Vector3(0, 3.2, 7.5)), position);
+          },
+          focus: focusMatched,
+          notify: () => host.notifyStateChange?.(),
+        },
+      });
+      filterUi.render();
     }
 
     // ---- rings geometry ----
@@ -717,6 +913,7 @@ export const phyloView = {
     function renderRingsBlock() {
       if (!ringsBlockEl) return;
       const blk = ringsBlockEl;
+      if (!RINGS_ENABLED) { blk.innerHTML = ''; return; }
       // keep expanded 列设置 details open across re-renders
       const openGroups = new Set(
         [...blk.querySelectorAll('details.ctl-group[open]')].map(d => d.dataset.det));
@@ -846,22 +1043,7 @@ export const phyloView = {
     }
 
     function applyEmphasis() {
-      const highlightOk = leaf => {
-        const hl = ringsState.highlight;
-        if (!hl) return true;
-        if (hl.ring.startsWith('field:')) return recordOf(leaf)[hl.column] === hl.value;
-        const m = matrices.find(mx => mx.id === hl.ring);
-        const row = m?.rows?.[leaf.name];
-        return !!row && row[m.columns.findIndex(c => c.id === hl.column)] === 1;
-      };
-      const leafOk = leaf => {
-        if (epi.focus >= 0 && !(epi.clusters[epi.focus] || []).includes(leaf.name)) return false;
-        if (brushActive()) {
-          const interval = timeData(epi.timeField)?.intervals.get(leaf.name);
-          if (!interval || interval.start > epi.brush.b || interval.end < epi.brush.a) return false;
-        }
-        return highlightOk(leaf);
-      };
+      const leafOk = leafPassesFilters;
       const emphasisedIds = new Set();
       (function mark(node) {
         node.children.forEach(mark);
@@ -871,10 +1053,12 @@ export const phyloView = {
           emphasisedIds.add(node.id);
         }
       })(tree.root);
-      const allOn = epi.focus < 0 && !brushActive() && !ringsState.highlight;
+      const allOn = epi.focus < 0 && !brushActive() && !filterMatched;
       ringEmphasis = allOn ? null : new Set(tree.leaves.filter(leafOk).map(leaf => leaf.id));
       constellation?.setEmphasis(allOn ? null : i => emphasisedIds.has(i));
       applyRingEmphasis();
+      filterUi?.updateResult();
+      matchTable?.updateDim();
     }
 
     function applyClusters() {
@@ -1136,6 +1320,17 @@ export const phyloView = {
           leaders: ringsState.leaders,
           highlight: ringsState.highlight ? { ...ringsState.highlight } : null,
         },
+        filter: {
+          mode: filterState.mode,
+          conditions: filterState.conditions.map(c => ({ ...c, values: Array.isArray(c.values) ? [...c.values] : c.values })),
+          pulse: filterState.pulse,
+          dim: filterState.dim,
+          table: {
+            columns: tableState.columns ? [...tableState.columns] : null,
+            sort: tableState.sort ? { ...tableState.sort } : null,
+            collapsed: tableState.collapsed,
+          },
+        },
       }),
       setState: (saved) => {
         const warnings = [];
@@ -1172,11 +1367,11 @@ export const phyloView = {
         }
         epi.focus = Number.isInteger(e2.focusedCluster) && e2.focusedCluster >= 0
           ? e2.focusedCluster : -1;
-        // 3) rings
+        // 3) rings (hidden for now — state kept for forward compat, no warnings)
         const rs = saved.rings || {};
         if (rs.matrices && typeof rs.matrices === 'object') {
           for (const [mid, cfg] of Object.entries(rs.matrices)) {
-            if (!ringsState.matrices[mid]) { warnings.push(`未知矩阵环：${mid}`); continue; }
+            if (!ringsState.matrices[mid]) { if (RINGS_ENABLED) warnings.push(`未知矩阵环：${mid}`); continue; }
             const dst = ringsState.matrices[mid];
             if (typeof cfg.on === 'boolean') dst.on = cfg.on;
             if (['group', 'prev', 'name'].includes(cfg.sort)) dst.sort = cfg.sort;
@@ -1197,16 +1392,46 @@ export const phyloView = {
             ? categoricalFields.includes(hl.column)
             : matrices.find(m => m.id === hl.ring)?.columns.some(c => c.id === hl.column);
           if (valid) ringsState.highlight = { ring: hl.ring, column: hl.column, value: hl.value };
-          else warnings.push(`无效环高亮：${hl.ring}/${hl.column}`);
+          else if (RINGS_ENABLED) warnings.push(`无效环高亮：${hl.ring}/${hl.column}`);
         }
+        // 4) metadata / matrix filter
+        const fs = saved.filter || {};
+        if (fs.mode === 'all' || fs.mode === 'any') filterState.mode = fs.mode;
+        if (typeof fs.pulse === 'boolean') filterState.pulse = fs.pulse;
+        if (Number.isFinite(fs.dim)) filterState.dim = Math.max(0.1, Math.min(1, fs.dim));
+        const ts = fs.table;
+        if (ts && typeof ts === 'object') {
+          if (Array.isArray(ts.columns)) {
+            tableState.columns = ts.columns.filter(id => typeof id === 'string');
+            if (!tableState.columns.length) tableState.columns = null;
+          }
+          if (ts.sort && typeof ts.sort === 'object' && typeof ts.sort.key === 'string' && [1, -1].includes(ts.sort.dir)) {
+            tableState.sort = { key: ts.sort.key, dir: ts.sort.dir };
+          }
+          if (typeof ts.collapsed === 'boolean') tableState.collapsed = ts.collapsed;
+        }
+        if (Array.isArray(fs.conditions)) {
+          filterState.conditions = [];
+          for (const c of fs.conditions) {
+            if (!c || typeof c !== 'object') { warnings.push('无效筛选条件'); continue; }
+            if (c.source === 'matrix'
+              ? !(typeof c.matrix === 'string' && typeof c.column === 'string' && ['pos', 'neg', 'untested'].includes(c.op))
+              : !(typeof c.field === 'string' && typeof c.op === 'string')) {
+              warnings.push('无效筛选条件'); continue;
+            }
+            filterState.conditions.push({ ...c });
+          }
+        }
+        applyFilter();
         stopPlay();
         rerender();
         renderClusterBlock();
         renderTimeBlock();
         renderRingsBlock();
+        filterUi?.render();
         return warnings;
       },
-      debug: () => ({ state: { ...state }, fields, leaves: tree.leafCount, root: effectiveRoot(), ringTimings, ...constellation.debug() }),
+      debug: () => ({ state: { ...state }, fields, leaves: tree.leafCount, root: effectiveRoot(), ringTimings, updateMs: frameUpdateMs, tableMs: matchTable?.lastMs || 0, ...constellation.debug() }),
       stats: () => {
         const summary = v2.summary || {};
         const rows = [
@@ -1240,9 +1465,11 @@ export const phyloView = {
       },
       update: dt => {
         dust.rotation.y += dt * 0.006;
+        const t0 = performance.now();
         constellation.update(dt);
+        frameUpdateMs = frameUpdateMs * 0.9 + (performance.now() - t0) * 0.1;
       },
-      dispose: () => { stopPlay(); disposeRings(); },
+      dispose: () => { stopPlay(); disposeRings(); constellation?.dispose(); constellation = null; },
       select: payload => {
         if (payload?.type === 'ring') {
           // ring cell click: toggle column highlight + select the leaf
@@ -1261,12 +1488,14 @@ export const phyloView = {
         if (node) constellation.selectNode(node.id, calloutFor(node));
         else constellation.clearSelection();
         renderRootBlock();
+        matchTable?.highlight(node?.id ?? -1);
       },
       hover: payload => constellation.hoverNode(getNode(payload)?.id ?? -1),
       mountSidebar: el => {
         sidebarEl = el;
         el.innerHTML = `
           <div class="blk" data-role="root-blk"></div>
+          <div class="blk" data-role="filter-blk"></div>
           <div class="blk" data-role="cluster-blk"></div>
           <div class="blk" data-role="time-blk"></div>
           <div class="blk" data-role="rings-blk"></div>
@@ -1277,6 +1506,7 @@ export const phyloView = {
           <div data-role="constellation-side"></div>`;
         rootBlockEl = el.querySelector('[data-role="root-blk"]');
         renderRootBlock();
+        createFilterBlock(el.querySelector('[data-role="filter-blk"]'));
         clusterBlockEl = el.querySelector('[data-role="cluster-blk"]');
         if (dist && distCoverage >= 2) renderClusterBlock();
         timeBlockEl = el.querySelector('[data-role="time-blk"]');
@@ -1318,12 +1548,14 @@ export const phyloView = {
           const id = Number(btn.dataset.node);
           const node = tree.nodes[id];
           if (!node) return;
-          selectedNode = node;
-          constellation.selectNode(node.id, calloutFor(node));
-          renderRootBlock();
+          host.select?.({ type: 'node', id: node.id });
           const position = constellation.nodePosition(node.id);
           if (position) host.flyTo(position.clone().add(new THREE.Vector3(0, 3.2, 7.5)), position);
         });
+      },
+      mountPanel: el => {
+        panelEl = el;
+        createPanel(el);
       },
       focus: payload => {
         const node = getNode(payload);

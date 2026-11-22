@@ -32,14 +32,14 @@
       ],
       "source": "views/phylo-view.js",
       "description": "Newick phylogram",
-      "sha256": "baf0913c6677f982b14a9f89ecb1c80080c7cae553c197f9f4813bfcd7e14c3a"
+      "sha256": "8ed18f01cc577d12f33b1fdd5dd257bf7aaf90a4bf75e3665408d7fece274a0f"
     },
     {
       "id": "mst",
       "schema": "gvixb.mst/v1",
       "source": "views/mst-view.js",
       "description": "Minimum spanning tree",
-      "sha256": "3be0ba46bc2030bb6aeaa11ce90defdd84ba9824bff24e906ba4471cd39b91bc"
+      "sha256": "f3658782fb838474d6530b737a33ce1b2a1c63b77eaef69cc3b8abe61451ddf5"
     }
   ],
   "license": "UNLICENSED",
@@ -47,23 +47,27 @@
     "externalNetwork": false,
     "threeJs": "0.180"
   },
-  "bundleHash": "47d2ccba0d479d4cb9ae0977f934042c3609797a805ff408057006b5ccfa6d55",
+  "bundleHash": "ce7c3ebe0bd48b81c2d1f351b4066bdb4c9571772e66b47397eae73234556097",
   "files": {
     "contracts/phylogeny.js": "5a86fa3865fa68fe6cc81ba9e3a066d13f37964a10baf361ee38b2231cb085fa",
     "contracts/schemas.js": "982b1a379c0bd76c21827ef8ebad62d949a36fddd46715bbfcd5baaeced80d61",
     "framework/algorithms.js": "a192997b1c80e11f39d74297db622942f760caf835db918828e2bc5cef25a459",
-    "framework/analysis-framework.js": "ac6bbf9350b9c9c117995a00736df855a2841c0d611d7bc6a120544cc92d6f7f",
-    "framework/constellation.js": "e91d9e153cce056c8d679a44ebf824c0037a38ff2fea28b798d031b813502f68",
+    "framework/analysis-framework.js": "889d7b1bcb2a281e150a0c89d57e690823c36508b1b7f71f7d4429aafd0f299f",
+    "framework/constellation.js": "1d59072374e3250ea64f2d57a80bd80012967e30dd567a7bb7f42d262c824368",
     "framework/encodings.js": "c2084c524c14df561a929cdcb85641f5e2f95b2ab5818e1f0df9151175b9cf46",
     "framework/epi.js": "8f6377b9148cda79bd6a5cced8d813feca52b81f8fe80bc48ecd310f184f68be",
+    "framework/filter-ui.js": "e946132157d6a9f9ae7a7cc994fe4f93457af7d7e8380b9cd8c6644cf5deb9cb",
+    "framework/match-table.js": "b6f81925a1908035c30d579eb708aa6ded8166627c0137c6a6d831efb0b9df6b",
     "framework/primitives.js": "b9f6a673458fb5763e88395686ba7a05073bd84956a589d4de48d369c2c75d39",
+    "framework/query.js": "0a795724aa014dded6a1244481ab903b0802b4939f8e4159e3cc72ab78dfa3cf",
     "framework/rings.js": "0b0f54823025e6e973b30c67787a4b09ad0d866c4f3a85d955d3541b019853cd",
     "framework/scene-host.js": "f773343608ca24f7e18a36181095d32e3c2dc3777929763c4a28ca0f28834a3b",
+    "framework/ui-prefs.js": "2efb5aa719d1acf0bff2a87bb0073de3b2fde5662ab731299ff0e17b44c9e95e",
     "gvixb-app.js": "fb575c4d92ca9fb7038ef100416735ccdedfc0ec46c37189f658c668acbdc211",
-    "gvixb-shell.css": "9da4b3b54960b151b023a6dbc6e1757547487239f635cca4033c114deae67ac5",
-    "gvixb.css": "dd40befb18a9a53630f2c7cf634238052b2a09760d2d450a7e55f3ff0cc5ef73",
-    "gvixb.js": "51d50b50395454cf28ffce900aa4c4e95d51212f31bcdbd9eb6c7c41a03b35e9",
-    "shell.js": "419e863d9e596e0472a81d78c3ea5dd429ae4c36a49cf5979f3b70b8611d7d1c",
+    "gvixb-shell.css": "ab01f00e6f15204816a715bd002347a83031674eefc682a3bd518781d16c749d",
+    "gvixb.css": "fd28e2a212b86bb32c85085b223b7daa318b0bda13fceccd6f819cca6dca7918",
+    "gvixb.js": "04df48cc3951295cd11ff3d9e0c05fac5145661bca52e7e947e791bae249fd44",
+    "shell.js": "86c54933c376640fc31a8734ab237ac42aa56882a91c1a626d2310af48f824ee",
     "vendor/OrbitControls.js": "06864a0fcb647730bfbc690b6c25a121199d716a3e299a40158509cbd247c3bf",
     "vendor/postprocessing/EffectComposer.js": "a982594e92f174a55c0ab004072d3449849974ffc9775faec1d88e22e93976c7",
     "vendor/postprocessing/MaskPass.js": "7cd08eee9d5d6f5578beaddbdcbe9c384f6873810af27f22ab7db3ceeb127aa3",
@@ -80,7 +84,7 @@
     "views/assembly-view.js": "80521b2d897f94f7d3dc83f99e724dd59da148c02c4b7a0483459c026876dbf8",
     "views/circular-annotation-view.js": "a632e0eddb8793836ec10ce2a612b8240688673aaa161e2d125d987c61ae589f",
     "views/index.js": "273298cdbf8f0bbd5f997a9673f5f0b51bfff924a735102a396c20af430703df",
-    "views/mst-view.js": "3be0ba46bc2030bb6aeaa11ce90defdd84ba9824bff24e906ba4471cd39b91bc",
-    "views/phylo-view.js": "baf0913c6677f982b14a9f89ecb1c80080c7cae553c197f9f4813bfcd7e14c3a"
+    "views/mst-view.js": "f3658782fb838474d6530b737a33ce1b2a1c63b77eaef69cc3b8abe61451ddf5",
+    "views/phylo-view.js": "8ed18f01cc577d12f33b1fdd5dd257bf7aaf90a4bf75e3665408d7fece274a0f"
   }
 }

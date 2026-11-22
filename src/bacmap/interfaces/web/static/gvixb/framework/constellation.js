@@ -4,6 +4,7 @@ import {
   disposeHierarchy,
 } from './primitives.js';
 import { clamp } from './algorithms.js';
+import { readUiPrefs, writeUiPrefs } from './ui-prefs.js';
 
 /**
  * Network "constellation" renderer shared by graph-like views (MST, radial
@@ -55,11 +56,17 @@ export function createConstellation({
   const nodeVisible = i => layerVisible(nodes[i].layer);
   let edgeFilter = null;
   let emphasisFn = null;
+  // alpha applied to de-emphasised dots/labels/edges/marks (all emphasis
+  // sources share it); 1 = no visible difference, lower = stronger fade
+  let dimOpacity = 0.45;
   const emphasised = i => !emphasisFn || emphasisFn(i);
   const outlineGroup = new THREE.Group();
   outlineGroup.name = 'cluster-outlines';
   overlay.add(outlineGroup);
   let outlineRings = [];
+  // match marks: matched dots pulse in scale (descriptive emphasis only)
+  let matchSet = null, matchPulseOn = false, matchTime = 0;
+  const MATCH_WHITE = new THREE.Color('#ffffff');
   const edgeVisible = i => nodeVisible(edges[i].source) && nodeVisible(edges[i].target)
     && (!edgeFilter || edgeFilter(edges[i]));
   const edgeDashed = i => dashedEdgePredicate?.(edges[i], i) === true;
@@ -127,7 +134,7 @@ export function createConstellation({
       tmpA.set(ca); tmpB.set(cb);
       const dashed = dashedEdgePredicate?.(edge, i) === true;
       const alpha = edgeVisible(i) && !dashed
-        ? edgeAlpha * density * ((!emphasised(edge.source) && !emphasised(edge.target)) ? 0.15 : 1)
+        ? edgeAlpha * density * ((!emphasised(edge.source) && !emphasised(edge.target)) ? dimOpacity : 1)
         : 0;
       edgeColors.set([tmpA.r, tmpA.g, tmpA.b, alpha, tmpB.r, tmpB.g, tmpB.b, alpha], i * 8);
     });
@@ -488,9 +495,21 @@ export function createConstellation({
       floatEl = document.createElement('div');
       floatEl.className = 'gvixb-float-legend';
       floatEl.innerHTML = `
-        <div class="blk-head"><span class="t">${escapeHtml(legendTitle)}</span><span class="n">${layers.size}</span></div>
-        <div data-role="decks"></div>
-        <p class="gene-note">${escapeHtml(legendNote ?? '纵向高度只表示分组归属，不表示数值。点击行可隐藏 / 显示该层。')}</p>`;
+        <div class="blk-head"><span class="t">${escapeHtml(legendTitle)}</span><span class="n">${layers.size}</span><button type="button" class="legend-fold" aria-expanded="true" aria-label="折叠图例">▾</button></div>
+        <div class="legend-body"><div data-role="decks"></div>
+        <p class="gene-note">${escapeHtml(legendNote ?? '纵向高度只表示分组归属，不表示数值。点击行可隐藏 / 显示该层。')}</p></div>`;
+      floatEl.classList.toggle('collapsed', readUiPrefs().legend);
+      const foldBtn = floatEl.querySelector('.legend-fold');
+      const setFold = on => {
+        floatEl.classList.toggle('collapsed', on);
+        foldBtn.setAttribute('aria-expanded', String(!on));
+        foldBtn.setAttribute('aria-label', on ? '展开图例' : '折叠图例');
+        foldBtn.textContent = on ? '▸' : '▾';
+        writeUiPrefs({ legend: on });
+      };
+      setFold(readUiPrefs().legend);
+      foldBtn.addEventListener('click', ev => { ev.stopPropagation(); setFold(!floatEl.classList.contains('collapsed')); });
+      floatEl.querySelector('.blk-head').addEventListener('click', () => setFold(!floatEl.classList.contains('collapsed')));
       // Keep the legend inside the host mount instead of leaking to <body>.
       (el.closest('#app') || el.closest('[data-gvixb]') || el.parentElement || el).appendChild(floatEl);
     }
@@ -510,13 +529,20 @@ export function createConstellation({
 
   function positionLegend() {
     // anchor to the sidebar *panel* (el is an inner container of it), so the
-    // legend's top edge lines up with the panel's, 20 px to its right
+    // legend's top edge lines up with the panel's, 20 px to its right. When the
+    // left panel is collapsed, dock to the right edge of its reveal tab + 12.
     const panel = sidebarEl?.closest?.('aside') || sidebarEl;
     const host = panel?.getBoundingClientRect?.();
     if (!floatEl || !host) return;
+    const collapsed = panel?.classList?.contains('collapsed');
+    const tab = collapsed && panel.ownerDocument?.querySelector?.('.panel-tab-left');
+    const anchor = collapsed && tab ? tab.getBoundingClientRect() : host;
     floatEl.style.top = `${host.top}px`;
-    floatEl.style.left = `${host.right + 20}px`;
+    floatEl.style.left = `${anchor.right + (collapsed ? 12 : 20)}px`;
   }
+
+  const onLayoutChange = () => positionLegend();
+  document.addEventListener('gvixb:layout', onLayoutChange);
 
   function updateReadout() {
     positionLegend();
@@ -578,9 +604,9 @@ export function createConstellation({
         deck.pill.material.opacity = edgeT;
       }
       const labelT = clamp((elapsed - LABEL_T0) / LABEL_DUR, 0, 1);
-      for (const [i, label] of nodeLabels.entries()) if (label) label.material.opacity = labelT * (emphasised(i) ? 1 : 0.15);
+      for (const [i, label] of nodeLabels.entries()) if (label) label.material.opacity = labelT * (emphasised(i) ? 1 : dimOpacity);
       for (const label of edgeLabels) if (label) label.material.opacity = labelT;
-      for (const [i, dot] of dots.entries()) dot.material.opacity = emphasised(i) ? 1 : 0.15;
+      for (const [i, dot] of dots.entries()) dot.material.opacity = emphasised(i) ? 1 : dimOpacity;
       if (elapsed >= INTRO_END) {
         introDone = true;
         dots.forEach((dot, i) => dot.scale.setScalar(dotScale(i)));
@@ -595,13 +621,22 @@ export function createConstellation({
       for (let i = 0; i < dots.length; i++) {
         const d = host.camera.position.distanceTo(nodes[i].position);
         const rel = d / ref;
-        const fade = emphasised(i) ? 1 : 0.15;
+        const fade = emphasised(i) ? 1 : dimOpacity;
         dots[i].material.opacity = clamp(1.5 - rel * 0.78, 0.22, 1) * fade;
         dots[i].scale.setScalar(dotScale(i) * Math.pow(ref / Math.max(d, 1e-3), 0.5));
         const label = nodeLabels[i];
         if (label) label.material.opacity = clamp(1.3 - rel * 0.55, 0.3, 1) * fade;
       }
     }
+    // matched-node emphasis: smooth ~1 Hz sinusoidal dot scale
+    // (photosensitivity-safe: continuous sine, < 3 Hz). No work when unset.
+    if (matchSet && introDone) {
+      matchTime += dt;
+      const p = matchPulseOn ? 0.5 + 0.5 * Math.sin(matchTime * Math.PI * 2) : 0;
+      const dotMul = 1 + p * 0.35;
+      if (matchPulseOn) for (const i of matchSet) dots[i].scale.multiplyScalar(dotMul);
+    }
+
     updateBurst(dt);
 
     for (const ring2 of outlineRings) {
@@ -610,7 +645,7 @@ export function createConstellation({
       if (!ring2.visible) continue;
       const dist = host.camera.position.distanceTo(ring2.position);
       ring2.scale.setScalar(Math.max(nodes[i].size * sizeMul * 1.7, dist * 0.05));
-      ring2.material.opacity = emphasised(i) ? 0.95 : 0.15;
+      ring2.material.opacity = emphasised(i) ? 0.95 : dimOpacity;
     }
     // marks keep a roughly constant on-screen size
     if (ring.visible && selectedNode >= 0) {
@@ -689,6 +724,17 @@ export function createConstellation({
         outlineRings.push(sprite);
       });
     },
+    // ids = node indices to mark; {pulse} enables the 1 Hz smooth pulse.
+    // Matched dots pulse in scale; with pulse off they are only set apart by
+    // the emphasis fade of the others. null clears marks.
+    setMatchPulse: (ids, { pulse = true } = {}) => {
+      if (matchSet) for (const i of matchSet) dots[i].material.color.copy(dots[i].userData.baseColor);
+      matchSet = Array.isArray(ids) && ids.length ? new Set(ids) : null;
+      matchPulseOn = !!pulse;
+      matchTime = 0;
+    },
+    // shared fade factor for de-emphasised dots/labels/edges/marks
+    setDimOpacity: value => { dimOpacity = clamp(Number(value), 0.05, 1) || 0.45; writeEdgeColors(); },
     mountSidebar,
     update,
     dispose: () => {
@@ -697,6 +743,7 @@ export function createConstellation({
       root.remove(scene);
       disposeHierarchy(scene);
       sparkTexture.dispose();
+      document.removeEventListener('gvixb:layout', onLayoutChange);
       floatEl?.remove();
       sidebarEl = readoutEl = floatEl = null;
     },

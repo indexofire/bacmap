@@ -133,6 +133,7 @@ export function mountGvixb(root, {
       observer?.disconnect();
       window?.removeEventListener('resize', resize);
       framework.deactivate();
+      framework.dispose?.();
       renderer.dispose();
       renderer.forceContextLoss?.();
       RETIRED_CANVASES.add(canvas);

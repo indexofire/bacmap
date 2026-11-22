@@ -5,6 +5,12 @@ import { createConstellation, NETWORK_NEUTRAL } from '../framework/constellation
 import {
   metadataFieldOptions, heightModeOptions, defaultHeightMode, defaultColorField, nodeColoring, encodeHeights, MISSING, COLOR_SCHEMES,
 } from '../framework/encodings.js';
+import {
+  evaluateFilter, filterFieldTypes, mstSampleRecords, matchedNodeSet,
+  tableColumnOptions, defaultTableColumns,
+} from '../framework/query.js';
+import { createFilterUi } from '../framework/filter-ui.js';
+import { createMatchTable } from '../framework/match-table.js';
 
 const STRUCTURE_LABEL = '到中心节点的等位距离';
 const RESERVED = new Set(['id', 'label', 'count', 'member_count', 'members', 'profile', 'profile_key', 'meta', 'meta_breakdown']);
@@ -208,12 +214,193 @@ export const mstView = {
       applyEdgeColor();
       constellation.setEdgeFilter(edge => edge.distance <= Math.max(4, state.edgeMax));
       if (constellationHost) constellation.mountSidebar(constellationHost);
+      applyFilter();   // re-apply emphasis/pulse on the rebuilt constellation
     }
     function applyEdgeColor() {
       constellation.recolorEdges(state.edgeColor === 'distance'
         ? (_, i) => distanceColor(edges[i].distance)
         : edge => [nodes[edge.source].color, nodes[edge.target].color]);
     }
+
+    // ---- sample records + metadata filter (shared components) ----
+    const records = mstSampleRecords(isolates);
+    const sampleMeta = Object.fromEntries(records.map(r => [r.key, r.values]));
+    const sampleFields = metadataFieldOptions(records.map(r => r.values));
+    const filterTypes = filterFieldTypes([], sampleFields);
+    const nodeRecordCount = i => records.reduce((n, r) => n + (r.nodeIndex === i ? 1 : 0), 0);
+    const nodeMatchedCount = i => !filterMatched ? 0
+      : records.reduce((n, r) => n + (r.nodeIndex === i && filterMatched.has(r.key) ? 1 : 0), 0);
+    const fltValueCounts = new Map();
+    const valueCounts = key => {
+      if (!fltValueCounts.has(key)) {
+        const m = new Map();
+        for (const r of records) {
+          const v = r.values[key];
+          if (v === undefined || v === null || v === '') continue;
+          m.set(String(v), (m.get(String(v)) || 0) + 1);
+        }
+        fltValueCounts.set(key, m);
+      }
+      return fltValueCounts.get(key);
+    };
+
+    const filterState = {
+      mode: 'all',
+      conditions: [],
+      dim: 0.45,
+      pulse: typeof window === 'undefined'
+        || !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
+    };
+    const tableState = { columns: null, sort: null, collapsed: false, colPickerOpen: false, colSearch: '' };
+    let filterMatched = null, filterWarnings = [];
+    let filterUi = null, matchTable = null, panelEl = null;
+    let selectedIndex = -1;
+
+    function applyEmphasis() {
+      const nodeSet = matchedNodeSet(filterMatched, records);
+      constellation?.setEmphasis(!filterMatched ? null : i => nodeSet.has(i));
+      filterUi?.updateResult();
+      matchTable?.updateDim();
+    }
+
+    function applyFilter() {
+      const out = evaluateFilter(filterState, {
+        leaves: records.map(r => r.key), metadata: sampleMeta, matrices: [], fieldTypes: filterTypes,
+      });
+      filterMatched = out.matched;
+      filterWarnings = out.warnings;
+      const nodeSet = matchedNodeSet(filterMatched, records);
+      constellation?.setMatchPulse(nodeSet ? [...nodeSet] : null, { pulse: filterState.pulse });
+      constellation?.setDimOpacity?.(filterState.dim);
+      applyEmphasis();
+      matchTable?.render();
+    }
+
+    function focusMatched() {
+      const nodeSet = matchedNodeSet(filterMatched, records);
+      if (!nodeSet?.size || !constellation) return;
+      const pts = [...nodeSet].map(i => constellation.nodePosition(i)).filter(Boolean);
+      if (!pts.length) return;
+      const c = new THREE.Vector3();
+      for (const pt of pts) c.add(pt);
+      c.divideScalar(pts.length);
+      let r = 1;
+      for (const pt of pts) r = Math.max(r, pt.distanceTo(c));
+      const dir = host.camera.position.clone().sub(host.controls.target).normalize();
+      host.flyTo(c.clone().add(dir.multiplyScalar(Math.max(r * 2.6, 8))), c);
+    }
+
+    const flyToNode = index => {
+      const position = constellation.nodePosition(index);
+      if (position) host.centerOn?.(position);
+    };
+
+    const colorFallback = (key, r) => r.memberIndex !== null
+      && key === state.color
+      && (r.values[key] === undefined || r.values[key] === null || r.values[key] === '');
+    const tableCellValue = (col, r) => {
+      const v = colorFallback(col.key, r) ? isolates[r.nodeIndex].record[col.key] : r.values[col.key];
+      return v === undefined || v === '' ? null : v;
+    };
+    const tableCellText = (col, r) => {
+      const v = tableCellValue(col, r);
+      return v === null || v === undefined ? '—' : String(v);
+    };
+    const tableColumns = () => {
+      const options = tableColumnOptions({
+        conditions: filterState.conditions, fields: [],
+        fieldTypes: filterTypes, matrices: [], fieldLabel: key => key,
+      });
+      const byId = new Map(options.map(c => [c.id, c]));
+      const current = tableState.columns
+        ? tableState.columns.map(id => byId.get(id)).filter(Boolean)
+        : defaultTableColumns({
+            conditions: filterState.conditions,
+            colorField: state.color || null,
+            fields: [], fieldLabel: key => key,
+          }).map(c => byId.get(c.id) || { ...c, label: c.label || c.key || c.id });
+      return { options, current };
+    };
+
+    function createPanel(el) {
+      matchTable = createMatchTable({
+        el,
+        adapter: {
+          state: tableState,
+          active: () => !!filterMatched,
+          rows: () => records.filter(r => filterMatched?.has(r.key)),
+          rowKey: r => r.key,
+          leadingCols: [
+            { id: 'sample', label: '样本', value: r => r.id },
+            { id: 'node', label: '节点', value: r => isolates[r.nodeIndex].id },
+          ],
+          columns: tableColumns,
+          cellValue: tableCellValue,
+          cellText: tableCellText,
+          cellClass: (col, r) => colorFallback(col.key, r) ? 'mp-node' : '',
+          title: k => `匹配表 · ${k} 株`,
+          isDimmed: () => false,
+          isSelected: r => r.nodeIndex === selectedIndex,
+          activate: r => { host.select?.({ type: 'node', index: r.nodeIndex }); flyToNode(r.nodeIndex); },
+          notify: () => host.notifyStateChange?.(),
+        },
+      });
+      matchTable.render();
+    }
+
+    function createFilterBlock(el) {
+      filterUi = createFilterUi({
+        el,
+        adapter: {
+          state: filterState,
+          available: filterTypes.size > 0,
+          fieldTypes: filterTypes,
+          matrices: [],
+          fieldLabel: key => key,
+          matrixLabel: id => id,
+          valueCounts,
+          apply: applyFilter,
+          onDim: dim => constellation?.setDimOpacity?.(dim),
+          context: () => {
+            const nodeSet = matchedNodeSet(filterMatched, records);
+            const distCounts = filterMatched && state.color ? (() => {
+              const m = new Map();
+              for (const r of records) {
+                if (!filterMatched.has(r.key)) continue;
+                const v = colorFallback(state.color, r)
+                  ? (isolates[r.nodeIndex].record[state.color] ?? MISSING)
+                  : (r.values[state.color] ?? MISSING);
+                m.set(String(v), (m.get(String(v)) || 0) + 1);
+              }
+              return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+            })() : [];
+            return {
+              matched: filterMatched,
+              k: filterMatched ? filterMatched.size : 0,
+              n: records.length,
+              extras: filterMatched ? [`涉及 ${nodeSet.size} 个节点`] : [],
+              distCounts,
+              matchRows: filterMatched
+                ? records.filter(r => filterMatched.has(r.key))
+                    .map(r => ({ key: r.key, label: r.id === isolates[r.nodeIndex].id ? r.id : `${r.id} · ${isolates[r.nodeIndex].id}` }))
+                : [],
+              warnings: filterWarnings,
+            };
+          },
+          selectRow: key => {
+            const r = records.find(x => x.key === key);
+            if (!r) return;
+            host.select?.({ type: 'node', index: r.nodeIndex });
+            const position = constellation.nodePosition(r.nodeIndex);
+            if (position) host.flyTo(position.clone().add(new THREE.Vector3(0, 3.2, 7.5)), position);
+          },
+          focus: focusMatched,
+          notify: () => host.notifyStateChange?.(),
+        },
+      });
+      filterUi.render();
+    }
+
     build();
 
     const calloutFor = payload => {
@@ -226,9 +413,13 @@ export const mstView = {
       return { title: `Δ ${edge.distance} alleles`, subtitle: `${isolates[edge.source].id} ↔ ${isolates[edge.target].id}` };
     };
     const select = payload => {
+      selectedIndex = payload?.type === 'node' ? payload.index : -1;
       if (payload?.type === 'node') constellation.selectNode(payload.index, calloutFor(payload));
       else if (payload?.type === 'edge') constellation.selectEdge(payload.index, calloutFor(payload));
       else constellation.clearSelection();
+      if (payload?.type === 'node') {
+        matchTable?.highlight(records.filter(r => r.nodeIndex === payload.index).map(r => r.key));
+      }
     };
     const payloadPosition = payload => {
       if (payload?.type === 'node') return constellation.nodePosition(payload.index);
@@ -290,6 +481,7 @@ export const mstView = {
         if (key === 'elevate') { state.elevate = !!value; build(); }
         if (key === 'edgeMax') { state.edgeMax = Number(value); constellation.setEdgeFilter(edge => edge.distance <= Math.max(4, state.edgeMax)); }
       },
+      dispose: () => { constellation?.dispose(); constellation = null; },
       update: dt => {
         dust.rotation.y += dt * 0.006;
         constellation.update(dt);
@@ -299,6 +491,7 @@ export const mstView = {
       mountSidebar: el => {
         sidebarEl = el;
         el.innerHTML = `
+          <div class="blk" data-role="filter-blk"></div>
           <div class="blk mst-search-blk">
             <input class="mst-search" type="search" placeholder="搜索样本 / ST / 克隆群…" aria-label="搜索节点">
             <div class="mst-search-results"></div>
@@ -306,6 +499,7 @@ export const mstView = {
           <div data-role="constellation-side"></div>`;
         constellationHost = el.querySelector('[data-role="constellation-side"]');
         constellation.mountSidebar(constellationHost);
+        createFilterBlock(el.querySelector('[data-role="filter-blk"]'));
         const input = el.querySelector('.mst-search');
         const out = el.querySelector('.mst-search-results');
         const rank = (iso, q) => {
@@ -345,6 +539,54 @@ export const mstView = {
           if (position) host.flyTo(position.clone().add(new THREE.Vector3(0, 3.2, 7.5)), position);
         });
       },
+      mountPanel: el => {
+        panelEl = el;
+        createPanel(el);
+      },
+      getState: () => ({
+        filter: {
+          mode: filterState.mode,
+          conditions: filterState.conditions.map(c => ({ ...c, values: Array.isArray(c.values) ? [...c.values] : c.values })),
+          pulse: filterState.pulse,
+          dim: filterState.dim,
+          table: {
+            columns: tableState.columns ? [...tableState.columns] : null,
+            sort: tableState.sort ? { ...tableState.sort } : null,
+            collapsed: tableState.collapsed,
+          },
+        },
+      }),
+      setState: saved => {
+        const warnings = [];
+        if (!saved || typeof saved !== 'object') return warnings;
+        const fs = saved.filter || {};
+        if (fs.mode === 'all' || fs.mode === 'any') filterState.mode = fs.mode;
+        if (typeof fs.pulse === 'boolean') filterState.pulse = fs.pulse;
+        if (Number.isFinite(fs.dim)) filterState.dim = Math.max(0.1, Math.min(1, fs.dim));
+        const ts = fs.table;
+        if (ts && typeof ts === 'object') {
+          if (Array.isArray(ts.columns)) {
+            tableState.columns = ts.columns.filter(id => typeof id === 'string');
+            if (!tableState.columns.length) tableState.columns = null;
+          }
+          if (ts.sort && typeof ts.sort === 'object' && typeof ts.sort.key === 'string' && [1, -1].includes(ts.sort.dir)) {
+            tableState.sort = { key: ts.sort.key, dir: ts.sort.dir };
+          }
+          if (typeof ts.collapsed === 'boolean') tableState.collapsed = ts.collapsed;
+        }
+        if (Array.isArray(fs.conditions)) {
+          filterState.conditions = [];
+          for (const c of fs.conditions) {
+            if (!c || typeof c !== 'object' || c.source === 'matrix' || typeof c.field !== 'string' || typeof c.op !== 'string') {
+              warnings.push('无效筛选条件'); continue;
+            }
+            filterState.conditions.push({ ...c });
+          }
+        }
+        applyFilter();
+        filterUi?.render();
+        return warnings;
+      },
       focus: payload => {
         const position = payloadPosition(payload);
         if (position) host.flyTo(position.clone().add(new THREE.Vector3(0, 3.2, 7.5)), position);
@@ -360,7 +602,7 @@ export const mstView = {
           const tag = state.color ? `${state.color}: ${isolate.record[state.color] ?? MISSING}` : '';
           return `<div class="tt-name">${escapeHtml(isolate.id)}</div>
             <div class="tt-sub">${escapeHtml(stOf(isolate.record) || 'ST —')}${tag ? ` · ${escapeHtml(tag)}` : ''}</div>
-            <div class="tt-sub">${isolate.count} 个聚合样本 · MST 度 ${degree[payload.index]} · Δ中心 ${centre.dist[payload.index]}</div>`;
+            <div class="tt-sub">${isolate.count} 个聚合样本 · MST 度 ${degree[payload.index]} · Δ中心 ${centre.dist[payload.index]}${filterMatched && isolate.count > 1 ? ` · 匹配 ${nodeMatchedCount(payload.index)}/${nodeRecordCount(payload.index)}` : ''}</div>`;
         }
         if (payload?.type === 'edge') {
           const edge = edges[payload.index];
@@ -405,6 +647,7 @@ export const mstView = {
               <div><span>MST 节点度</span><b>${degree[payload.index]}</b></div>
               <div><span>Δ 到中心</span><b>${centre.dist[payload.index]}</b></div>
               <div><span>中心节点</span><b>${payload.index === centre.centre ? '是' : '否'}</b></div>
+              ${filterMatched ? `<div><span>匹配样本</span><b>${nodeMatchedCount(payload.index)} / ${nodeRecordCount(payload.index)}</b></div>` : ''}
             </div>
             ${profileSection}
             ${composition}

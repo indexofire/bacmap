@@ -39,11 +39,6 @@
     <div id="analysis-stats"></div>
     <div id="analysis-lists"></div>
     <div class="view-controls" id="analysis-controls"></div>
-    <div class="analysis-actions">
-      <button id="btn-analysis-auto" type="button">自转</button>
-      <button id="btn-analysis-reset" type="button">复位</button>
-      <button id="btn-analysis-export" type="button">PNG</button>
-    </div>
     <p class="source-note" id="analysis-source">{{ link.context }}</p>
   </aside>
 
@@ -55,6 +50,11 @@
   <div id="bottombar" class="analysis">
     <div id="dock">
       <div class="dock-brand">gvixb <span>{{ link.context }}</span></div>
+      <div class="dock-actions">
+        <button id="btn-analysis-auto" type="button" title="自动旋转">自转</button>
+        <button id="btn-analysis-reset" type="button" title="复位视角">复位</button>
+        <button id="btn-analysis-export" type="button" title="导出 PNG 截图">PNG</button>
+      </div>
       <div class="dock-read">
         <span>Zoom</span><b id="dock-zoom">—</b>
         <span>Sel</span><b id="dock-sel">—</b>

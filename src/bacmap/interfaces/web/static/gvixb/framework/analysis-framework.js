@@ -1,7 +1,9 @@
+import * as THREE from '../vendor/three.module.js';
 import { SceneHost } from './scene-host.js';
 import { escapeHtml } from './primitives.js';
 import { validateData } from '../contracts/schemas.js';
 import { VIEWS } from '../views/index.js';
+import { readUiPrefs, writeUiPrefs } from './ui-prefs.js';
 
 export const ANALYSIS_VIEWS = VIEWS;
 
@@ -28,12 +30,28 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
   const tooltip = $('tooltip');
   let activeDefinition = null;
   let token = 0;
+  let panelEl = null;
   const viewStateListeners = new Set();
   const controlValues = {};
   let currentControls = [];
   const notifyViewStateChange = () => viewStateListeners.forEach(cb => {
     try { cb(getViewState()); } catch (error) { console.error(error); }
   });
+
+  const handleSelect = payload => {
+    if (!payload || !host.view) {
+      renderEmptyInspector();
+      setText('dock-sel', '—');
+      return;
+    }
+    const body = $('analysis-body');
+    if (body) body.innerHTML = host.view.inspect?.(payload) || '<p class="empty">该对象没有详情。</p>';
+    $('analysis-panel')?.classList.remove('empty');
+    setText('dock-sel', host.view.selectionLabel?.(payload) || 'Selected');
+    // selection while the right panel is collapsed: hint on the tab, no auto-open
+    const rightAside = $('analysis-panel');
+    if (rightAside?.classList.contains('collapsed')) panelTabs.get('right')?.classList.add('dot');
+  };
 
   const host = new SceneHost({
     renderer, canvas,
@@ -49,19 +67,25 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
       tooltip.style.left = `${Math.min(event.clientX + 16, window.innerWidth - 340)}px`;
       tooltip.style.top = `${Math.min(event.clientY + 14, window.innerHeight - 100)}px`;
     },
-    onSelect: payload => {
-      if (!payload || !host.view) {
-        renderEmptyInspector();
-        setText('dock-sel', '—');
-        return;
-      }
-      const body = $('analysis-body');
-      if (body) body.innerHTML = host.view.inspect?.(payload) || '<p class="empty">该对象没有详情。</p>';
-      $('analysis-panel')?.classList.remove('empty');
-      setText('dock-sel', host.view.selectionLabel?.(payload) || 'Selected');
-    },
+    onSelect: handleSelect,
     onReadout: ({ zoom }) => setText('dock-zoom', zoom),
   });
+
+  // Programmatic selection — identical to a pick click: plugin.select handles
+  // the scene mark, the framework path renders the inspector + dock label.
+  host.select = payload => {
+    host.view?.select?.(payload);
+    handleSelect(payload);
+  };
+  // Fly so the camera keeps its CURRENT view direction and ends centred on
+  // `position` at `distance` (default: current distance, clamped to [6, 14]).
+  host.centerOn = (position, { distance } = {}) => {
+    const target = new THREE.Vector3().copy(position);
+    const dir = host.camera.position.clone().sub(host.controls.target).normalize();
+    const current = host.camera.position.distanceTo(host.controls.target);
+    const dist = Math.min(14, Math.max(6, Number.isFinite(distance) ? distance : current));
+    host.flyTo(target.clone().add(dir.multiplyScalar(dist)), target);
+  };
 
   host.notifyStateChange = notifyViewStateChange;
   // set a control through the same path as user input (DOM + setOption + notify)
@@ -173,6 +197,21 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
       listHost.innerHTML = '';
       host.view?.mountSidebar?.(listHost);
     }
+
+    // Optional view-owned right-panel section (e.g. a matched-leaf table),
+    // inserted above the inspector body. The plugin toggles el.hidden; the
+    // shell keeps the aside visible via the has-view-panel class.
+    const panelAside = $('analysis-panel');
+    const panelBody = $('analysis-body');
+    if (panelAside && panelBody && host.view?.mountPanel) {
+      panelEl?.remove();
+      panelEl = document.createElement('section');
+      panelEl.className = 'view-panel';
+      panelEl.dataset.role = 'view-panel';
+      panelEl.hidden = true;
+      panelAside.insertBefore(panelEl, panelBody);
+      host.view.mountPanel(panelEl);
+    }
   }
 
   async function activate(id) {
@@ -180,6 +219,9 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
     if (!definition) throw new Error(`未注册的可视化视图：${id}`);
     const currentToken = ++token;
     activeDefinition = definition;
+    panelEl?.remove();
+    panelEl = null;
+    $('analysis-panel')?.classList.remove('has-view-panel');
     setText('crumb-sub', `ANALYSIS // ${definition.subtitle} · DEMO DATA`);
 
     // Rebuild on entry so the controls and scene options always share state.
@@ -222,11 +264,128 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
     }
   }
 
+  // ---- collapsible side panels ------------------------------------------
+  // Screen-layout preference only (localStorage gvixb:ui-panels) — never part
+  // of the view-state/session contract. Each existing aside gets a slim tab on
+  // its inner edge; collapsed asides slide off-screen (pointer-events none).
+  const panelTabs = new Map();
+  const panelCleanups = [];
+  const panelAside = side => $(side === 'left' ? 'analysis-sidebar' : 'analysis-panel');
+
+  function positionPanelTab(side) {
+    const aside = panelAside(side);
+    const tab = panelTabs.get(side);
+    if (!aside || !tab) return;
+    const collapsed = aside.classList.contains('collapsed');
+    // offset* metrics ignore the slide transform, so the tab gets the settled
+    // (expanded) edge even while the panel is still animating back in
+    // the tab is position:fixed, so add the (untransformed) offsetParent's
+    // viewport origin — hosts may not mount the shell at the page origin
+    const base = aside.offsetParent?.getBoundingClientRect?.() ?? { left: 0, top: 0 };
+    const left = base.left + aside.offsetLeft, width = aside.offsetWidth;
+    if (side === 'left') {
+      tab.style.left = collapsed ? '0px' : `${Math.max(0, left + width - 1)}px`;
+      tab.style.right = 'auto';
+    } else {
+      tab.style.right = collapsed ? '0px' : `${Math.max(0, window.innerWidth - left - 1)}px`;
+      tab.style.left = 'auto';
+    }
+    tab.style.top = `${Math.max(0, base.top + aside.offsetTop + 30)}px`;
+  }
+
+  function setPanelCollapsed(side, collapsed, { persist = true } = {}) {
+    const aside = panelAside(side);
+    const tab = panelTabs.get(side);
+    if (!aside || !tab) return;
+    aside.classList.toggle('collapsed', collapsed);
+    tab.classList.toggle('collapsed', collapsed);
+    tab.setAttribute('aria-expanded', String(!collapsed));
+    tab.setAttribute('aria-label', `${collapsed ? '显示' : '隐藏'}${side === 'left' ? '左' : '右'}侧面板`);
+    tab.textContent = side === 'left' ? (collapsed ? '›' : '‹') : (collapsed ? '‹' : '›');
+    if (!collapsed) tab.classList.remove('dot');
+    if (persist) writeUiPrefs({ [side]: collapsed });
+    positionPanelTab(side);
+    // let float-legend listeners reposition once the slide settles (and once
+    // immediately for prefers-reduced-motion where no transition fires)
+    document.dispatchEvent(new CustomEvent('gvixb:layout'));
+  }
+
+  function setupPanelToggles() {
+    const prefs = readUiPrefs();
+    for (const side of ['left', 'right']) {
+      const aside = panelAside(side);
+      if (!aside) continue;
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = `panel-tab panel-tab-${side}`;
+      aside.parentElement?.appendChild(tab);
+      panelTabs.set(side, tab);
+      tab.addEventListener('click', () => setPanelCollapsed(side, !aside.classList.contains('collapsed')));
+      const onAsideEnd = ev => {
+        if (ev.target !== aside || ev.propertyName !== 'transform') return;
+        positionPanelTab(side);
+        document.dispatchEvent(new CustomEvent('gvixb:layout'));
+      };
+      aside.addEventListener('transitionend', onAsideEnd);
+      panelCleanups.push(() => aside.removeEventListener('transitionend', onAsideEnd));
+      setPanelCollapsed(side, !!prefs[side], { persist: false });
+    }
+    const onPanelResize = () => { positionPanelTab('left'); positionPanelTab('right'); };
+    window.addEventListener('resize', onPanelResize);
+    panelCleanups.push(() => window.removeEventListener('resize', onPanelResize));
+    const onPanelKeydown = ev => {
+      if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing) return;
+      // physical key position wins (IME may rewrite ev.key to 【/】 or 'Process')
+      const side = ev.code === 'BracketLeft' ? 'left'
+        : ev.code === 'BracketRight' ? 'right'
+        : ev.key === '[' || ev.key === '【' ? 'left'
+        : ev.key === ']' || ev.key === '】' ? 'right' : null;
+      if (!side) return;
+      const t = ev.target;
+      const tag = t?.tagName;
+      if (tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable) return;
+      if (tag === 'INPUT') {
+        const type = (t.type || 'text').toLowerCase();
+        const nonText = ['checkbox', 'radio', 'range', 'button', 'submit', 'reset', 'color', 'file', 'image', 'hidden'];
+        if (!nonText.includes(type)) return; // text-entry inputs keep their keys
+      }
+      setPanelCollapsed(side, !panelAside(side)?.classList.contains('collapsed'));
+    };
+    window.addEventListener('keydown', onPanelKeydown);
+    panelCleanups.push(() => window.removeEventListener('keydown', onPanelKeydown));
+  }
+  setupPanelToggles();
+
   function deactivate() {
     token++;
     activeDefinition = null;
+    panelEl?.remove();
+    panelEl = null;
+    $('analysis-panel')?.classList.remove('has-view-panel');
+    renderEmptyInspector();
+    setText('dock-sel', '—');
     host.deactivate();
     if (tooltip) tooltip.style.display = 'none';
+  }
+
+  // Full teardown: the tabs live outside the mount root and the window/aside
+  // listeners are registered per mount — without this, remounting the app
+  // (e.g. 重新导入) duplicates tabs and keydown handlers. The asides' collapsed
+  // classes stay: prefs re-apply on the next setupPanelToggles.
+  function dispose() {
+    for (const cleanup of panelCleanups.splice(0)) cleanup();
+    for (const tab of panelTabs.values()) tab.remove();
+    panelTabs.clear();
+    panelEl?.remove();
+    panelEl = null;
+    $('analysis-panel')?.classList.remove('has-view-panel');
+    // deactivate() alone leaves the view mounted — dispose it so per-view DOM
+    // (float legend, view-panel leftovers) and listeners are actually removed
+    host.clearView?.();
+    for (const id of ['analysis-stats', 'analysis-lists', 'analysis-controls', 'analysis-description', 'analysis-source', 'analysis-head', 'analysis-kicker', 'analysis-title']) {
+      const el = $(id);
+      if (el) el.textContent = '';
+    }
   }
 
   $('btn-analysis-reset')?.addEventListener('click', () => host.resetCamera());
@@ -300,6 +459,7 @@ export function createAnalysisFramework({ renderer, canvas, views = ANALYSIS_VIE
   return {
     activate,
     deactivate,
+    dispose,
     getViewState,
     applyViewState,
     onViewStateChange,
