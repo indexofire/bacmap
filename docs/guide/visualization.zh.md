@@ -31,7 +31,7 @@ demo 数据集，零外网请求。
 
 运行作用域的 gvixb 页面顶部还有「视图」选择器，可在当前菌株的组装/注释圈图与运行内
 tree/mst 之间切换；也接受 `?view=phylo&endpoint=/api/v1/gvixb/...` 形式的同源覆盖参数。
-Demo 页底部的 Phylo/MST 会跳到 `/static/gvixb/preview.html`（与上游 `scripts/preview/preview-dev.html`
+Demo 页底部的 Phylo/MST 会跳到 `/static/gvixb/demo/preview.html`（与上游 `scripts/preview/preview-dev.html`
 相同的 modular 预览壳）；上游 preview-dev 文件本身不随 bacmap 分发。
 
 | bacmap 页面 | gvixb 视图 |

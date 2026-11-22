@@ -1592,7 +1592,7 @@ document.querySelectorAll('#dock [data-mode]').forEach(button => {
       const endpoint = mode === 'phylo'
         ? '/gvixb/demo/data/preview/fixture-phylo-320.json'
         : '/gvixb/demo/data/preview/fixture-mst-mlst-870.json';
-      location.href = `/static/gvixb/preview.html?view=${mode}&endpoint=${encodeURIComponent(endpoint)}`;
+      location.href = `/static/gvixb/demo/preview.html?view=${mode}&endpoint=${encodeURIComponent(endpoint)}`;
       return;
     }
     setMode(mode);

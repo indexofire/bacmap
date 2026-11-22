@@ -5,6 +5,21 @@
 
 ## [Unreleased]
 
+### gvixb 合同与 demo 预览修复（v1.10.48）
+
+- 修复注释圈图加载失败：gvixb 0.2 的 `gvixb.annotated-genome/v1` 要求
+  `replicons[].gc` 必须是数字，而 Bakta 改名后按长度映射失败的 contig 曾输出 `null`。
+  现在优先从 Bakta `.fna` 按精确 contig 读取 GC（支持冷产物 `.gz`），再回退装配
+  contig 的 GC，仍未知则填 `0.0`；模型层改为非空 `float`，避免再次输出 null。
+- 恢复 Demo 的 Phylo / MST 预览壳，并迁到宿主自有目录 `/static/gvixb/demo/preview.html`：
+  原 `/static/gvixb/preview.html` 位于 runtime 镜像目录，gvixb 同步默认清理失效文件时
+  会被误删，导致样例入口 404。`gvixb/demo/` 不受同步清理影响；fixture 本身已在
+  `gvixb/demo/data/preview/`。
+- 实测：15VPA0065 注释圈图（111 replicons / 4704 features）与 Phylo(320)/MST(870)
+  预览页均正常渲染；431 个最新注释载荷无 `gc=null`。
+- 测试：新增“同名长度用 Bakta fna 取 GC”和“预览壳随包发布”2 个用例，
+  基线（HEAD 实测 2365）→ 2367。
+
 ### 物种登记：marker 未命中后升档 + 跳过项上报（v1.10.47）
 
 - `register_fastas` 的自动识别由"单档 marker"改为**可升档**：marker 判不出时补一档 ANI

@@ -278,6 +278,44 @@ class TestGvixbAnnotation:
         data = client.get("/api/v1/gvixb/samples/S1/annotated-genome")
         assert data.status_code == 200 and data.json()["scope"] == "latest"
 
+    def test_duplicate_lengths_use_bakta_fasta_gc(self, seeded):
+        """同名长度无法按长度映射时，GC 从 Bakta fna 的精确 contig 读取（合同要求数字）。"""
+        engine, _, run, root = seeded
+        sample = root / "S1"
+        (sample / "annotation" / "bakta" / "S1.replicons.tsv").unlink()
+        (sample / "assembly" / "S1.fasta").write_text(
+            ">contig00001 len=120\n" + "ACGT" * 30 + "\n"
+            ">contig00002 len=120\n" + "AAAA" * 30 + "\n",
+            encoding="utf-8",
+        )
+        (sample / "annotation" / "bakta" / "S1.gff3").write_text(
+            "##gff-version 3\n"
+            "##sequence-region contig_1 1 120\n"
+            "##sequence-region contig_2 1 120\n"
+            "contig_1\tBakta\tCDS\t2\t20\t.\t+\t0\tID=cds:1;locus_tag=LOC1;product=a\n"
+            "contig_2\tBakta\tCDS\t2\t20\t.\t+\t0\tID=cds:2;locus_tag=LOC2;product=b\n",
+            encoding="utf-8",
+        )
+        (sample / "annotation" / "bakta" / "S1.fna").write_text(
+            ">contig_1\n" + "GCGC" * 30 + "\n"
+            ">contig_2\n" + "ATAT" * 30 + "\n",
+            encoding="utf-8",
+        )
+        for name in ("abricate_card.tsv", "abricate_vfdb.tsv"):
+            path = sample / "amr" / name
+            path.write_text(
+                path.read_text(encoding="utf-8").replace("\tc1\t", "\tcontig00001\t"),
+                encoding="utf-8",
+            )
+        payload = gvixb_service.annotated_genome_payload(engine, run.run_id, "S1")
+        gc = {replicon.id: replicon.gc for replicon in payload.replicons}
+        assert gc == {"contig_1": 100.0, "contig_2": 0.0}
+
+    def test_preview_shell_is_packaged(self, seeded):
+        """Demo 的 Phylo/MST 样例页（/static/gvixb/demo/preview.html）必须随 bundle 发布。"""
+        _, client, _, _ = seeded
+        assert client.get("/static/gvixb/demo/preview.html").status_code == 200
+
     def test_cold_compaction_and_legacy_names(self, seeded):
         """v1.10.20 冷产物压缩（注释目录 .gz）与 v1.10.22 前旧文件名仍可渲染。"""
         _, client, run, root = seeded

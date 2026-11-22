@@ -224,7 +224,8 @@ class AnnotationReplicon(GvixbModel):
     id: str
     name: str
     length: int
-    gc: float | None = None
+    # gvixb 0.2 合同要求 gc 是数字（null 会被前端校验拒绝）；未知时填 0.0。
+    gc: float = 0.0
     topology: Literal["circular", "linear"]
     type: Literal["chromosome", "plasmid", "contig"] = "contig"
     track: Track | None = None
@@ -465,6 +466,55 @@ def _read_fasta(path: Path) -> list[Contig]:
     if not contigs:
         raise ValueError("组装 FASTA 不含序列")
     return contigs
+
+
+def _fasta_gc_by_id(path: Path) -> dict[str, float]:
+    """Bakta FASTA（可 .gz）→ {contig_id: GC%}；流式只读描述性统计。"""
+    out: dict[str, float] = {}
+    current = ""
+    gc_bases = 0
+    called = 0
+    total_bp = 0
+
+    def finish() -> None:
+        nonlocal current, gc_bases, called
+        if current:
+            out[current] = round(100 * gc_bases / called, 3) if called else 0.0
+        current, gc_bases, called = "", 0, 0
+
+    try:
+        opener = gzip.open if path.name.endswith(".gz") else open
+        with opener(path, "rt", encoding="ascii") as handle:
+            for raw in handle:
+                line = raw.strip()
+                if not line:
+                    continue
+                if line.startswith(">"):
+                    finish()
+                    current = line[1:].split()[0]
+                    continue
+                total_bp += len(line)
+                if total_bp > _MAX_FASTA_BYTES:
+                    raise ValueError("注释 FASTA 超过 gvixb 的 64 MiB 安全上限")
+                upper = line.upper()
+                gc_bases += upper.count("G") + upper.count("C")
+                called += sum(upper.count(base) for base in "ACGT")
+    except (OSError, UnicodeError):
+        return {}
+    finish()
+    return out
+
+
+def _annotation_gc_by_id(scope: _Scope, sample_id: str) -> dict[str, float]:
+    path = _resolve_sample_artifact(
+        scope,
+        sample_id,
+        (
+            Path("annotation") / "bakta" / f"{sample_id}.fna",
+            Path("annotation") / "bakta" / "contigs.fna",
+        ),
+    )
+    return _fasta_gc_by_id(path) if path is not None else {}
 
 
 def _optional_float(row: dict[str, str], key: str) -> float | None:
@@ -1031,6 +1081,7 @@ def _gff_annotation(
     for contig in contigs:
         assembly_by_length.setdefault(contig.length, []).append(contig)
     replicon_table = _replicon_table(scope, sample_id)
+    gc_by_id = _annotation_gc_by_id(scope, sample_id)
 
     include_sequence = sum(seq_lengths.values()) <= _MAX_SEQUENCE_PAYLOAD_BP
     replicons: list[AnnotationReplicon] = []
@@ -1056,11 +1107,16 @@ def _gff_annotation(
         topology: Literal["circular", "linear"] = (
             "circular" if table.get("topology") == "circular" else "linear"
         )
+        # 优先用 Bakta fna 的精确 contig GC（改名后 assembly 映射可能缺失）；
+        # 再不济退回装配 contig 的 GC；两者都没有时填 0.0（合同不接受 null）。
+        gc_value = gc_by_id.get(seq_id)
+        if gc_value is None and source is not None:
+            gc_value = source.gc
         replicon = AnnotationReplicon(
             id=seq_id,
             name=table.get("name") or source_id or seq_id,
             length=length,
-            gc=source.gc if source else None,
+            gc=gc_value if gc_value is not None else 0.0,
             topology=topology,
             type=replicon_type,
             track=source.track if source else None,
