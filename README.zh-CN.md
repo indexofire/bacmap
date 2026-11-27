@@ -43,7 +43,8 @@ MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小�
 - **不可变证据** — run 级结果、`runs.sqlite` 运行记录、含哈希/工具版本/种子的 manifest、版本化
   GOM 对象。
 - **仅 MCP 的智能体接入** — 26 个注册表工具 + 计划/任务/记录工具，按固定的 `cloud`（默认）或
-  `local-trusted` 数据分级 Profile 裁剪。无内置对话（ADR-21）。
+  `local-trusted` 数据分级 Profile 裁剪；配置 gaxis 上游后可额外获得 `bacmap_chart_*` 图表工具。
+  无内置对话（ADR-21）。
 - **多种界面** — `/console/` 的 Vue 3 控制台（暗色/浅色/灰色主题、图表、审批）、CLI、TUI、
   JSON API `/api/v1`、MCP（stdio / Streamable HTTP）。
 - **个人模式或本地账号** — `BACMAP_WEB_AUTH=personal` 用 `bacmap personal init` 生成的一次性

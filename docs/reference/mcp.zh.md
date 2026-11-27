@@ -186,6 +186,19 @@ JSON 只含 D1 元数据——`task_id`、`kind`（`submitted|step|progress|fini
 `write` 工具（`bio_analyze_pathogen`、`bio_generate_report`、`bio_add_metadata`、
 `bio_add_lab_result`）永不直接暴露；请使用任务/计划/记录。
 
+### 3.7 可选 gaxis 图表工具
+
+配置 `BACMAP_GAXIS_URL`（以及可选的 `BACMAP_GAXIS_TOKEN`）后，bacmap 会以薄适配器
+方式把本地/局域网的 gaxis MCP 服务挂成 `bacmap_chart_*` 工具（复现图表、图表配方、
+从数据渲染等）。未配置或 gaxis 不可达时静默跳过，bacmap 行为不变。
+
+- 工具按 gaxis 声明的数据级别与当前 MCP Profile 上限双重裁剪；超出上限的工具不会注册，
+  调用时还会再检查一次。
+- 默认只允许回环/私网/链路本地 gaxis 地址；公网端点需显式
+  `BACMAP_GAXIS_ALLOW_REMOTE=1`，且只在 D0–D1 Profile 下可用。
+- gaxis 适配器不改变任何 `bacmap_*` 工具，也不绕过计划/确认/证据链。
+- gaxis 本身不在 bacmap 的默认分析路径；它只是可选的图表上游。
+
 ## 4. 提示词与资源
 
 | 类型 | 名称 | 用途 |

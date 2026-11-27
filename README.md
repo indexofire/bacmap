@@ -49,7 +49,8 @@ fallback and operations surface.
 - **Immutable evidence** — run-scoped results, `runs.sqlite` records, manifests with hashes/tool
   versions/seeds, and versioned GOM objects.
 - **MCP-only agent access** — 26 registry tools plus plan/task/record tools, filtered by a fixed
-  `cloud` (default) or `local-trusted` data-class profile. No built-in chat (ADR-21).
+  `cloud` (default) or `local-trusted` data-class profile. Optional gaxis upstream exposes
+  `bacmap_chart_*` figure tools when configured. No built-in chat (ADR-21).
 - **Interfaces** — Vue 3 console at `/console/` (dark / light / gray themes, charts, approvals),
   CLI, TUI, JSON API `/api/v1`, MCP (stdio / Streamable HTTP).
 - **Personal mode or local accounts** — `BACMAP_WEB_AUTH=personal` uses a one-time access

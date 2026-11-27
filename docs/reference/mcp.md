@@ -191,6 +191,20 @@ the data ceiling are registered; under `local-trusted`, all read/compute tools a
 `write` tools (`bio_analyze_pathogen`, `bio_generate_report`, `bio_add_metadata`,
 `bio_add_lab_result`) are never exposed directly; use tasks/plans/records.
 
+### 3.7 Optional gaxis chart tools
+
+When `BACMAP_GAXIS_URL` is configured (and optionally `BACMAP_GAXIS_TOKEN`), bacmap exposes a
+local/LAN gaxis MCP service as thin `bacmap_chart_*` tools (chart reproduction, figure recipes,
+render-from-data, and so on). If it is unset or unreachable, the adapter silently skips and
+bacmap behaviour is unchanged.
+
+- Tools are filtered by both the data class declared by gaxis and the active MCP profile ceiling;
+  tools above the ceiling are never registered and are checked again at call time.
+- Only loopback/private/link-local gaxis endpoints are allowed by default; a public endpoint
+  requires `BACMAP_GAXIS_ALLOW_REMOTE=1` and is limited to D0–D1 profiles.
+- The adapter does not alter any `bacmap_*` tool, plan confirmation, or evidence chain.
+- gaxis is not part of bacmap's default analysis path; it is an optional chart upstream.
+
 ## 4. Prompts and resources
 
 | Kind | Name | Purpose |

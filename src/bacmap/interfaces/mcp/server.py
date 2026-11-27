@@ -123,12 +123,39 @@ def build_server(engine: Any = None, profile: ProfileSpec | None = None) -> MCPS
         _register_research_tools(server, engine, profile)
 
     _register_capabilities(server, profile)
+    _register_gaxis_upstream(server, profile)
     _register_role_prompts(server)
     _register_skill_resources(
         server, Path(engine.home) if engine is not None else None
     )
 
     return server
+
+
+def _register_gaxis_upstream(server: MCPServer, profile: ProfileSpec) -> None:
+    """可选：把本地 gaxis 服务的工具挂成 ``bacmap_chart_*``（ADR-03 薄适配器）。
+
+    未配置 ``BACMAP_GAXIS_URL`` 或未安装 gaxis 时静默跳过——bacmap 行为不变。
+    数据级别裁剪在适配器内完成（注册期 + 调用期双重 fail-closed）。
+    """
+    try:
+        from bacmap.interfaces.mcp.upstream.gaxis import build_upstream
+    except ImportError as exc:  # gaxis 未安装：不影响 bacmap 自身
+        logger.info("gaxis upstream skipped (%s)", exc)
+        return
+    upstream = build_upstream(profile)
+    if upstream is None:
+        return
+    try:
+        names = upstream.register(server)
+    except Exception as exc:
+        logger.warning("gaxis upstream not registered: %s", exc)
+        return
+    logger.info(
+        "gaxis upstream: %d tool(s) exposed at ceiling %s",
+        len(names),
+        profile.max_data_class.name,
+    )
 
 
 def _register_role_prompts(server: MCPServer) -> None:

@@ -13,6 +13,16 @@
 - 本版汇总 P0–P4：四层湿实验数据、导入/修改提案与审核、个人/组织账号、
   AI 映射建议、多用户写闭环与归属、提案保留期清理。
 
+### 可选 gaxis 图表上游与依赖更新
+
+- 新增可选 gaxis MCP 上游适配器：配置 `BACMAP_GAXIS_URL` 后暴露
+  `bacmap_chart_*` 工具，按 gaxis 数据级别与 MCP Profile 双重裁剪；默认只允许回环/私网地址，
+  公网端点需显式 `BACMAP_GAXIS_ALLOW_REMOTE=1` 且限 D0–D1；未配置或 gaxis
+  不可达时静默跳过，不改变 `bacmap_*` 工具。
+- gaxis 以公开 git rev 固定，避免本地路径依赖；更新 gside 0.2.4、
+  gspec 0.10.6、gmlst 0.6.3、gseek 0.10.5、gmeta 0.1.2。
+- 测试基线 2428 → 2432（4 个 gaxis 适配器测试）。
+
 ### 多用户湿实验写闭环（v1.10.56，P4）
 
 - `data/bacmap.sqlite` 迁移 7 扩展 `import_jobs`：`kind`、提案载荷、目标与

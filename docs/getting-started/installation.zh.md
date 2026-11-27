@@ -64,7 +64,7 @@ bacmap --version      # 0.1.5
   （见 `pixi.toml`）。
 - **常用分析工具**（ADR-20）：`gside`（物种鉴定）、`gspec`（基因筛查/分型）、
   `gmlst`（MLST/cgMLST/MST）。
-- **可选 mNGS**：`gmeta` 0.1.0（宏基因组分析与监测报告）已作为依赖安装，但未接入
+- **可选 mNGS**：`gmeta` 0.1.2（宏基因组分析与监测报告）已作为依赖安装，但未接入
   默认细菌分离株管线。
 - **AMR 筛查**使用 gspec 的 `card`/`vfdb`/`plasmidfinder`，以及 NCBI
   **AMRFinderPlus**（基因 + 点突变）。AMRFinderPlus 4.2.7+ 同时是 Bakta 内部

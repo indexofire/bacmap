@@ -66,7 +66,7 @@ What `pixi install` provides:
   (see `pixi.toml`).
 - **Common analysis tools** (ADR-20): `gside` (species identification), `gspec` (gene
   screening/typing), `gmlst` (MLST/cgMLST/MST).
-- **Optional mNGS**: `gmeta` 0.1.0 (metagenomic profiling and surveillance reports) is installed
+- **Optional mNGS**: `gmeta` 0.1.2 (metagenomic profiling and surveillance reports) is installed
   as a dependency but not wired into the default bacterial isolate pipeline.
 - **AMR screening** uses gspec's `card`/`vfdb`/`plasmidfinder` plus NCBI
   **AMRFinderPlus** (genes + point mutations). AMRFinderPlus 4.2.7+ is also Bakta's

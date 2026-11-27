@@ -50,7 +50,9 @@ bakta = ">=1.12,<2"
 eggnog-mapper = ">=2.1.12,<2.1.13"
 
 [pypi-dependencies]
-gmlst = "==0.6.2"
+gmlst = "==0.6.3"
+# optional: upstream gaxis MCP adapter (bacmap_chart_* tools)
+gaxis = { git = "https://github.com/indexofire/gaxis.git", rev = "3db0d47742036b8dab22a665ced22f861922c7a1" }
 biopython = ">=1.83"
 sistr-cmd = ">=1.1.3,<2"
 setuptools = "<81"
@@ -60,7 +62,7 @@ mappy = ">=2.24"
 pyhmmer = ">=0.10"
 pyyaml = ">=6.0"
 sourmash = ">=4.8"
-gspec = "==0.10.5"
+gspec = "==0.10.6"
 # gside 0.2+ 与 gspec 0.10 的可选 gseek 引擎共同使用 gseek 0.10.5；
 # 显式钉住，避免 extras 缺失时落回旧适配器。
 gseek = "==0.10.5"
@@ -73,7 +75,7 @@ httpx = ">=0.27"
 pydantic-ai-slim = { version = ">=2.0,<3", extras = ["openai"] }
 gside = "==0.2.4"
 # mNGS 宏基因组分析与监测报告（可选依赖；不进入默认分析路径）。
-gmeta = "==0.1.0"
+gmeta = "==0.1.2"
 textual = ">=0.80"
 bacmap = { path = ".", editable = true }
 quast = ">=5.2.0, <6"
