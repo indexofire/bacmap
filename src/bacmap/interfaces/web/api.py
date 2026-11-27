@@ -11,6 +11,7 @@ MCP（ADR-21）。事件流 SSE 支持 ``Last-Event-ID`` 续传；事件不是�
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections.abc import Iterator
 from importlib.metadata import version as pkg_version
@@ -52,12 +53,25 @@ from bacmap.interfaces.views import (
     specimen_detail,
     specimen_rows,
 )
-from bacmap.interfaces.web.auth import verify_csrf
+from bacmap.interfaces.web.auth import (
+    CSRF_COOKIE,
+    SESSION_COOKIE,
+    principal_of,
+    verify_csrf,
+)
+from bacmap.interfaces.web.imports import build_import_routes
 from bacmap.interfaces.web.payloads import (
     approval_payload,
     fields_from_text,
     submit_task_payload,
 )
+from bacmap.interfaces.web.rbac import (
+    Permission,
+    actor,
+    require_permission,
+    scoped_owner,
+)
+from bacmap.interfaces.web.wetlab import build_wetlab_routes
 from bacmap.research.discovery import ExploreRequest
 from bacmap.research.models import (
     ClaimCreate,
@@ -80,16 +94,22 @@ from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 from bacmap.tasks.events import EventLog
 from bacmap.tasks.spec import TaskId, TaskType
 
+logger = logging.getLogger(__name__)
+
 API_VERSION = "1"
 _STATUS = {"validation_error": 400, "not_found": 404, "conflict": 409}
 _SSE_POLL_S = 1.0
 _SSE_MAX_S = 300
+_LOGIN_WINDOW_S = 300.0
+_LOGIN_MAX_FAILURES = 10
+_login_failures: dict[str, list[float]] = {}
 
 
 class ConfirmBody(BaseModel):
     version: int
     plan_hash: str = Field(min_length=12, max_length=64)
-    confirmer: str = Field(min_length=1, max_length=64)
+    # 仅旧模式兼容；accounts 模式下服务端用登录主体覆盖。
+    confirmer: str = Field(default="web", max_length=64)
 
 
 class RejectBody(BaseModel):
@@ -104,7 +124,8 @@ class TaskSubmitBody(BaseModel):
 
 
 class ApprovalBody(BaseModel):
-    approver: str = Field(min_length=1, max_length=64)
+    # 仅旧模式兼容；accounts 模式下由服务端登录主体覆盖，不信任客户端自填。
+    approver: str = Field(default="web", max_length=64)
     decision: Literal["approve", "reject"]
     signature: str = Field(min_length=1, max_length=256)
     comment: str | None = None
@@ -132,16 +153,114 @@ class SpecimenAssignBody(BaseModel):
     specimen_id: str = Field(min_length=1, max_length=128)
     isolates: list[str] = Field(default_factory=list)
     datasets: list[str] = Field(default_factory=list)
+    owner_user_id: str | None = Field(default=None, max_length=64)
 
 
 class LoginBody(BaseModel):
-    token: str = ""
+    token: str = Field(default="", max_length=512)
+    username: str = Field(default="", max_length=64)
+    password: str = Field(default="", max_length=256)
     next: str = "/console/"
+
+
+class UserCreateBody(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=8, max_length=256)
+    role: Literal["admin", "analyst", "user"] = "user"
+    display_name: str = ""
+
+
+class UserRoleBody(BaseModel):
+    role: Literal["admin", "analyst", "user"]
+
+
+class UserDisabledBody(BaseModel):
+    disabled: bool
+
+
+class UserPasswordBody(BaseModel):
+    password: str = Field(min_length=8, max_length=256)
+
+
+class TokenCreateBody(BaseModel):
+    name: str = ""
+    expires_days: int = 0
 
 
 def _require_csrf(request: Request) -> None:
     if not verify_csrf(request, request.headers.get("x-csrf-token", "")):
         raise HTTPException(403, "CSRF check failed")
+
+
+def _personal_login(
+    request: Request,
+    body: LoginBody,
+    cfg: Any,
+    response: JSONResponse,
+) -> None:
+    """个人模式登录：访问密钥哈希校验 → 内置 owner 会话（v1.10.54）。"""
+    from bacmap.store.personal import (
+        PERSONAL_USERNAME,
+        load_personal,
+        verify_access_key,
+    )
+
+    engine = getattr(request.app.state, "engine", None)
+    factory = getattr(request.app.state, "users_factory", None)
+    if engine is None or factory is None:
+        raise HTTPException(503, "personal auth service is not configured")
+    key = _login_key(request, "personal")
+    if _login_blocked(key):
+        raise HTTPException(429, "too many failed logins; try again later")
+    access = load_personal(Path(engine.home))
+    if access is None:
+        raise HTTPException(
+            503,
+            "personal mode is not initialized; run `bacmap personal init`",
+        )
+    supplied = body.token or body.password
+    if not verify_access_key(Path(engine.home), supplied):
+        _record_login_failure(key)
+        raise HTTPException(401, "invalid access key")
+    _clear_login_failures(key)
+    with factory() as users:
+        user = users.get_by_username(access.username or PERSONAL_USERNAME)
+        if user is None:
+            raise HTTPException(
+                503,
+                "personal owner account is missing; run `bacmap personal init --rotate`",
+            )
+        users.purge_expired_sessions()
+        from bacmap.tasks.events import EventType as _ET
+
+        _audit(request, _ET.AUTH_LOGIN, actor_name=user.username)
+        token = users.create_session(
+            user.user_id,
+            ttl_s=cfg.ttl_s,
+            client_ip=request.client.host if request.client else "",
+            user_agent=request.headers.get("user-agent", ""),
+        )
+        response.set_cookie(SESSION_COOKIE, token, **cfg.session_cookie_kwargs())
+
+
+def _login_key(request: Request, username: str) -> str:
+    ip = request.client.host if request.client else ""
+    return f"{username.strip().lower()}|{ip}"
+
+
+def _login_blocked(key: str) -> bool:
+    now = time.monotonic()
+    recent = [t for t in _login_failures.get(key, []) if now - t < _LOGIN_WINDOW_S]
+    _login_failures[key] = recent
+    return len(recent) >= _LOGIN_MAX_FAILURES
+
+
+def _record_login_failure(key: str) -> None:
+    _login_failures.setdefault(key, []).append(time.monotonic())
+
+
+def _clear_login_failures(key: str) -> None:
+    _login_failures.pop(key, None)
 
 
 def _limit(raw: int, ceiling: int = 200) -> int:
@@ -174,22 +293,21 @@ def build_api_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
 
     _meta_routes(router, engine)
     _auth_routes(router)
+    _user_routes(router)
     _task_routes(router, engine)
     _record_routes(router, engine)
     _plan_routes(router, PlanService(engine, engine.db))
     _event_routes(router, engine, EventLog(engine.db))
     _evidence_routes(router, engine)
     _identity_routes(router, engine)
+    build_import_routes(router, engine)
+    build_wetlab_routes(router, engine)
     _research_routes(router, engine)
     app.include_router(router)
 
 
-def _auth_routes(router: APIRouter) -> None:
-    """控制台登录体验（v1.10.28）：单令牌登录/状态/登出，不引入账号体系。
-
-    登录仍沿用 ADR-14 的签名会话 cookie + CSRF；``/auth/status`` 与
-    ``/auth/login`` 在鉴权中间件中免鉴权（登录页自身需要它们）。
-    """
+def _auth_routes(router: APIRouter) -> None:  # noqa: C901 — 登录/状态/登出内聚
+    """登录/状态/登出：accounts 模式走本地账号，其余模式保持单令牌兼容。"""
 
     @router.get("/auth/status")
     def auth_status(request: Request) -> dict[str, Any]:
@@ -200,22 +318,50 @@ def _auth_routes(router: APIRouter) -> None:
         )
 
         cfg = request.app.state.web_auth
-        if not cfg.enabled:
-            return {
-                "enabled": False,
-                "mode": "disabled",
-                "authenticated": True,
-                "operator": "",
-                "login_url": "",
-            }
-        authenticated = _request_authenticated(request, cfg)
-        return {
-            "enabled": True,
-            "mode": cfg.mode,
-            "authenticated": authenticated,
-            "operator": _operator_label(cfg) if authenticated else "",
-            "login_url": LOGIN_PATH if cfg.mode == "cookie" else "",
+        principal = principal_of(request)
+        base: dict[str, Any] = {
+            "enabled": cfg.enabled,
+            "mode": cfg.mode if cfg.enabled else "disabled",
+            "authenticated": True if not cfg.enabled else _request_authenticated(request, cfg),
+            "operator": "",
+            "login_url": "",
+            "role": "",
+            "username": "",
+            "display_name": "",
+            "accounts_ready": False,
+            "personal_ready": False,
+            "permissions": [],
         }
+        if not cfg.enabled:
+            return base
+        base["login_url"] = (
+            LOGIN_PATH if cfg.mode in ("cookie", "accounts", "personal") else ""
+        )
+        if cfg.accounts:
+            factory = getattr(request.app.state, "users_factory", None)
+            if factory is not None:
+                with factory() as users:
+                    base["accounts_ready"] = users.has_users()
+        if cfg.personal:
+            from bacmap.store.personal import personal_ready
+
+            engine = getattr(request.app.state, "engine", None)
+            if engine is not None:
+                base["personal_ready"] = personal_ready(Path(engine.home))
+        if base["authenticated"]:
+            base["operator"] = _operator_label(cfg, principal)
+        if principal is not None:
+            from bacmap.interfaces.web.rbac import permissions_for
+
+            base.update(
+                {
+                    "role": principal.role.value,
+                    "username": principal.username,
+                    "display_name": principal.display_name,
+                    "permissions": sorted(p.value for p in permissions_for(principal.role)),
+                }
+            )
+        return base
 
     @router.post("/auth/login")
     def auth_login(request: Request, body: LoginBody) -> Response:
@@ -223,29 +369,60 @@ def _auth_routes(router: APIRouter) -> None:
         from urllib.parse import urlparse
 
         from bacmap.interfaces._security import consteq
-        from bacmap.interfaces.web.auth import (
-            CSRF_COOKIE,
-            SESSION_COOKIE,
-            issue_session,
-            safe_next,
-        )
+        from bacmap.interfaces.web.auth import issue_session, safe_next
 
         cfg = request.app.state.web_auth
-        if not (cfg.enabled and cfg.mode == "cookie"):
+        if not cfg.enabled:
             raise HTTPException(409, "browser login is not enabled")
         host = request.headers.get("host", "")
         origin = request.headers.get("origin", "")
         if origin and urlparse(origin).netloc != host:
             raise HTTPException(403, "cross-origin login rejected")
-        if not consteq(body.token, cfg.token):
-            raise HTTPException(401, "invalid token")
         target = safe_next(body.next, default="/console/")
         response = JSONResponse({"ok": True, "next": target})
-        response.set_cookie(
-            SESSION_COOKIE,
-            issue_session(cfg.secret, cfg.ttl_s),
-            **cfg.session_cookie_kwargs(),
-        )
+        if cfg.personal:
+            _personal_login(request, body, cfg, response)
+        elif cfg.accounts:
+            factory = getattr(request.app.state, "users_factory", None)
+            if factory is None:
+                raise HTTPException(503, "account service is not configured")
+            key = _login_key(request, body.username)
+            if _login_blocked(key):
+                raise HTTPException(429, "too many failed logins; try again later")
+            with factory() as users:
+                if not users.has_users():
+                    raise HTTPException(
+                        503,
+                        "no accounts configured; run `bacmap user create --role admin`",
+                    )
+                user = users.authenticate(body.username, body.password)
+                if user is None:
+                    _record_login_failure(key)
+                    raise HTTPException(401, "invalid username or password")
+                _clear_login_failures(key)
+                users.purge_expired_sessions()
+                from bacmap.tasks.events import EventType as _ET
+
+                _audit(request, _ET.AUTH_LOGIN, actor_name=user.username)
+                token = users.create_session(
+                    user.user_id,
+                    ttl_s=cfg.ttl_s,
+                    client_ip=request.client.host if request.client else "",
+                    user_agent=request.headers.get("user-agent", ""),
+                )
+                response.set_cookie(
+                    SESSION_COOKIE, token, **cfg.session_cookie_kwargs()
+                )
+        else:
+            if not (cfg.mode == "cookie"):
+                raise HTTPException(409, "browser login is not enabled")
+            if not consteq(body.token, cfg.token):
+                raise HTTPException(401, "invalid token")
+            response.set_cookie(
+                SESSION_COOKIE,
+                issue_session(cfg.secret, cfg.ttl_s),
+                **cfg.session_cookie_kwargs(),
+            )
         response.set_cookie(
             CSRF_COOKIE, secrets.token_urlsafe(24), **cfg.csrf_cookie_kwargs()
         )
@@ -253,16 +430,197 @@ def _auth_routes(router: APIRouter) -> None:
 
     @router.post("/auth/logout")
     def auth_logout(request: Request) -> Response:
-        from bacmap.interfaces.web.auth import CSRF_COOKIE, SESSION_COOKIE
-
         _require_csrf(request)
+        principal = principal_of(request)
+        if principal is not None:
+            from bacmap.tasks.events import EventType as _ET
+
+            _audit(request, _ET.AUTH_LOGOUT, actor_name=principal.username)
+        if principal is not None and principal.session_hash:
+            factory = getattr(request.app.state, "users_factory", None)
+            if factory is not None:
+                with factory() as users:
+                    users.revoke_session(principal.session_hash)
         response = JSONResponse({"ok": True})
         response.delete_cookie(SESSION_COOKIE, path="/")
         response.delete_cookie(CSRF_COOKIE, path="/")
         return response
 
 
-def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
+def _audit(
+    request: Request,
+    type_: Any,
+    *,
+    actor_name: str,
+    payload: dict[str, Any] | None = None,
+) -> None:
+    """账号/登录审计写领域事件；审计失败不得影响登录本身。"""
+    engine = getattr(request.app.state, "engine", None)
+    if engine is None:
+        return
+    try:
+        from bacmap.tasks.events import EventLog
+        from bacmap.tools.spec import DataClass
+
+        EventLog(Path(engine.db)).append(
+            type_,
+            actor=actor_name,
+            payload=payload or {},
+            data_class=DataClass.D2,
+        )
+    except Exception:  # 审计是旁路，不阻断登录/管理操作
+        logger.warning("audit event append failed", exc_info=True)
+
+
+def _user_payload(user: Any) -> dict[str, Any]:
+    return {
+        "user_id": user.user_id,
+        "username": user.username,
+        "role": user.role.value,
+        "display_name": user.display_name,
+        "disabled": user.disabled,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+    }
+
+
+def _user_routes(router: APIRouter) -> None:  # noqa: C901 — 路由族内聚
+    """管理员用户管理（accounts 模式；旧令牌模式同样需要管理员主体）。"""
+
+    def _users(request: Request) -> Any:
+        factory = getattr(request.app.state, "users_factory", None)
+        if factory is None:
+            raise HTTPException(503, "account service is not configured")
+        return factory()
+
+    @router.get("/users")
+    def list_users(request: Request) -> dict[str, Any]:
+        require_permission(request, Permission.USER_MANAGE)
+        with _users(request) as users:
+            return {"items": [_user_payload(u) for u in users.list_users()]}
+
+    @router.post("/users")
+    def create_user(request: Request, body: UserCreateBody) -> dict[str, Any]:
+        _require_csrf(request)
+        require_permission(request, Permission.USER_MANAGE)
+        with _users(request) as users:
+            try:
+                created = users.create(
+                    body.username, body.password, body.role, body.display_name
+                )
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
+        from bacmap.tasks.events import EventType as _ET
+
+        _audit(
+            request,
+            _ET.USER_CREATED,
+            actor_name=actor(request),
+            payload={"username": created.username, "role": created.role.value},
+        )
+        return _user_payload(created)
+
+    @router.patch("/users/{user_id}/role")
+    def set_role(request: Request, user_id: str, body: UserRoleBody) -> dict[str, Any]:
+        _require_csrf(request)
+        require_permission(request, Permission.USER_MANAGE)
+        with _users(request) as users:
+            try:
+                updated = users.set_role(user_id, body.role)
+            except KeyError as exc:
+                raise NotFound("no such user") from exc
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
+        from bacmap.tasks.events import EventType as _ET
+
+        _audit(
+            request,
+            _ET.USER_UPDATED,
+            actor_name=actor(request),
+            payload={"username": updated.username, "role": updated.role.value},
+        )
+        return _user_payload(updated)
+
+    @router.patch("/users/{user_id}/disabled")
+    def set_disabled(
+        request: Request, user_id: str, body: UserDisabledBody
+    ) -> dict[str, Any]:
+        _require_csrf(request)
+        require_permission(request, Permission.USER_MANAGE)
+        with _users(request) as users:
+            try:
+                updated = users.set_disabled(user_id, body.disabled)
+            except KeyError as exc:
+                raise NotFound("no such user") from exc
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
+        from bacmap.tasks.events import EventType as _ET
+
+        _audit(
+            request,
+            _ET.USER_UPDATED,
+            actor_name=actor(request),
+            payload={"username": updated.username, "disabled": updated.disabled},
+        )
+        return _user_payload(updated)
+
+    @router.post("/users/{user_id}/password")
+    def reset_password(
+        request: Request, user_id: str, body: UserPasswordBody
+    ) -> dict[str, Any]:
+        _require_csrf(request)
+        require_permission(request, Permission.USER_MANAGE)
+        with _users(request) as users:
+            try:
+                users.set_password(user_id, body.password)
+            except KeyError as exc:
+                raise NotFound("no such user") from exc
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+        from bacmap.tasks.events import EventType as _ET
+
+        _audit(
+            request,
+            _ET.USER_UPDATED,
+            actor_name=actor(request),
+            payload={"user_id": user_id, "password_reset": True},
+        )
+        return {"ok": True}
+
+    @router.get("/users/{user_id}/tokens")
+    def list_tokens(request: Request, user_id: str) -> dict[str, Any]:
+        require_permission(request, Permission.USER_MANAGE)
+        with _users(request) as users:
+            return {"items": users.list_api_tokens(user_id)}
+
+    @router.post("/users/{user_id}/tokens")
+    def create_token(
+        request: Request, user_id: str, body: TokenCreateBody
+    ) -> dict[str, Any]:
+        _require_csrf(request)
+        require_permission(request, Permission.USER_MANAGE)
+        with _users(request) as users:
+            try:
+                token = users.create_api_token(
+                    user_id, body.name, expires_days=body.expires_days
+                )
+            except KeyError as exc:
+                raise NotFound("no such user") from exc
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
+        return {"token": token, "warning": "shown once; store it securely"}
+
+    @router.delete("/users/{user_id}/tokens/{token_id}")
+    def revoke_token(request: Request, user_id: str, token_id: str) -> dict[str, Any]:
+        _require_csrf(request)
+        require_permission(request, Permission.USER_MANAGE)
+        with _users(request) as users:
+            if not users.revoke_api_token(user_id, token_id):
+                raise NotFound("no such token")
+        return {"ok": True}
+
+
+def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa: C901 — 路由族内聚
     @router.get("/capabilities")
     def capabilities(request: Request) -> dict[str, Any]:
         # v1.10.24：智能体对话嵌入清单（[[web.agent_embed]] 配置驱动）。
@@ -295,21 +653,72 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
 
     @router.get("/samples")
     def list_samples(
+        request: Request,
         cursor: str | None = None,
         limit: int = 50,
         offset: int | None = None,
         sort: str = "sample_id",
         order: str = "asc",
+        q: str = "",
+        species: str = "",
+        serotype: str = "",
+        mlst_st: str = "",
+        amr_gene: str = "",
     ) -> dict[str, Any]:
-        from bacmap.interfaces.views import SAMPLE_SORT_FIELDS, sort_samples
-
-        if sort not in SAMPLE_SORT_FIELDS:
-            raise HTTPException(400, f"unknown sort field: {sort}")
+        require_permission(request, Permission.DATA_READ)
+        owner = scoped_owner(request)
         if order not in ("asc", "desc"):
             raise HTTPException(400, f"unknown order: {order}")
+        # 有索引时走 SQL（10 万级仍毫秒级）；索引尚未回填的旧数据根回退文件扫描。
+        from bacmap.store.strain_index import StrainGenotypeIndex
+
+        gom_db = Path(engine.home) / "gom.sqlite"
+        if gom_db.is_file() and cursor is None:
+            try:
+                with StrainGenotypeIndex(gom_db) as index:
+                    indexed = index.count_indexed()
+                    if indexed:
+                        items, total = index.sample_page(
+                            query=q,
+                            species=species,
+                            serotype=serotype,
+                            mlst_st=mlst_st,
+                            amr_gene=amr_gene,
+                            owner_user_id=owner,
+                            offset=max(0, offset or 0),
+                            limit=_limit(limit, 500),
+                            sort=sort,
+                            order=order,
+                        )
+                        return {
+                            "items": items,
+                            "next_cursor": None,
+                            "total": total,
+                            "offset": max(0, offset or 0),
+                            "limit": _limit(limit, 500),
+                            "indexed": True,
+                        }
+            except ValueError as exc:
+                raise HTTPException(400, str(exc)) from exc
+        # ---- 旧数据根回退（无索引）：普通用户只看到 owner 过滤后的空集 ----
+        from bacmap.interfaces.views import SAMPLE_SORT_FIELDS, sort_samples
+
+        if sort in ("species", "analysis_date"):
+            # 索引未回填时前端仍可能选中物种/时间列：退回样本 ID 排序。
+            sort = "sample_id"
+        if sort not in SAMPLE_SORT_FIELDS:
+            raise HTTPException(400, f"unknown sort field: {sort}")
         descending = order == "desc"
-        # 默认按样本 ID 升序且未显式 offset 时保持游标分页：只解析本页 summary。
-        if sort == "sample_id" and not descending and offset is None:
+        if owner is not None:
+            return {
+                "items": [],
+                "next_cursor": None,
+                "total": 0,
+                "offset": max(0, offset or 0),
+                "limit": _limit(limit, 500),
+                "indexed": False,
+            }
+        if sort == "sample_id" and not descending and offset is None and not q:
             total = count_samples(engine.home)
             items, next_cursor = sample_page(engine.home, cursor, _limit(limit))
             return {
@@ -317,9 +726,18 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
                 "next_cursor": next_cursor,
                 "total": total,
                 "limit": _limit(limit),
+                "indexed": False,
             }
-        # 按组装指标排序需要看到全量行（449 级规模，全量解析仍是一次请求内完成）。
         rows = sort_samples(sample_rows(engine), sort, descending)
+        if q:
+            needle = q.strip().lower()
+            rows = [
+                row for row in rows
+                if needle in " ".join(
+                    str(row.get(key, ""))
+                    for key in ("sample_id", "verdict", "st", "serovar")
+                ).lower()
+            ]
         start = max(0, offset or 0)
         return {
             "items": rows[start : start + _limit(limit, 500)],
@@ -327,26 +745,52 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
             "total": len(rows),
             "offset": start,
             "limit": _limit(limit, 500),
+            "indexed": False,
         }
 
+    @router.get("/species")
+    def species_summary(request: Request) -> dict[str, Any]:
+        """物种维度聚合（物种页）；普通用户只看自己的结果。"""
+        require_permission(request, Permission.DATA_READ)
+        owner = scoped_owner(request)
+        from bacmap.store.strain_index import StrainGenotypeIndex
+
+        gom_db = Path(engine.home) / "gom.sqlite"
+        if not gom_db.is_file():
+            return {"items": [], "indexed": False}
+        with StrainGenotypeIndex(gom_db) as index:
+            return {
+                "items": index.species_summary(owner_user_id=owner),
+                "indexed": bool(index.count_indexed()),
+            }
+
     @router.get("/samples/{sample_id}")
-    def get_sample(sample_id: str) -> dict[str, Any]:
+    def get_sample(request: Request, sample_id: str) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ)
         data = sample_detail(engine.home, sample_id)
         if data is None:
+            raise NotFound(f"no such sample: {sample_id}")
+        from bacmap.interfaces.web.rbac import can_access_owner
+        from bacmap.store.catalog import sample_owner
+
+        if not can_access_owner(request, sample_owner(engine.home, sample_id) or None):
             raise NotFound(f"no such sample: {sample_id}")
         data["gvixb"] = _gvixb_sample_links(engine, sample_id)
         return data
 
     @router.get("/overview")
-    def overview() -> dict[str, Any]:
+    def overview(request: Request) -> dict[str, Any]:
+        require_permission(request, Permission.SYSTEM_READ)
         return overview_data(engine)
 
     @router.get("/stats")
-    def stats() -> dict[str, Any]:
+    def stats(request: Request) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ_ALL)
         return gather_stats(engine.home)
 
     @router.get("/search")
     def search(
+        request: Request,
         q: str = "",
         serotype: str = "",
         mlst_st: str = "",
@@ -354,6 +798,29 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         offset: int = 0,
         limit: int = 50,
     ) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ)
+        owner = scoped_owner(request)
+        from bacmap.store.strain_index import StrainGenotypeIndex
+
+        gom_db = Path(engine.home) / "gom.sqlite"
+        if gom_db.is_file():
+            with StrainGenotypeIndex(gom_db) as index:
+                if index.count_indexed():
+                    items, total = index.sample_page(
+                        query=q,
+                        serotype=serotype,
+                        mlst_st=mlst_st,
+                        amr_gene=amr_gene,
+                        owner_user_id=owner,
+                        offset=offset,
+                        limit=_limit(limit, 500),
+                    )
+                    return {
+                        "items": items,
+                        "total": total,
+                        "offset": max(0, offset),
+                        "limit": _limit(limit, 500),
+                    }
         items, total = search_page(
             sample_rows(engine),
             query=q,
@@ -363,6 +830,8 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
             offset=offset,
             limit=_limit(limit, 500),
         )
+        if owner is not None:
+            items, total = [], 0
         return {
             "items": items,
             "total": total,
@@ -372,15 +841,36 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
 
 
 def _task_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa: C901 — 路由族内聚；拆分收益低于可读性损失
+    def _task_or_404(task_id: str) -> dict[str, Any]:
+        try:
+            return engine.get_task(TaskId(task_id))
+        except KeyError as exc:
+            raise NotFound(f"no such task: {task_id}") from exc
+
+    def _ensure_task_access(request: Request, task: dict[str, Any]) -> None:
+        from bacmap.interfaces.web.auth import principal_of
+        from bacmap.store.users import Role
+
+        principal = principal_of(request)
+        if principal is None or principal.role is not Role.USER:
+            return
+        if str(task.get("submitted_by") or "") != principal.username:
+            raise NotFound(f"no such task: {task.get('task_id', '')}")
+
     @router.get("/tasks")
     def list_tasks(
-        limit: int = 50, offset: int = 0, task_type: str = ""
+        request: Request, limit: int = 50, offset: int = 0, task_type: str = ""
     ) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ)
+        owner = scoped_owner(request)
         return {
             "items": engine.list_tasks(
-                _limit(limit, 500), offset=offset, task_type=task_type
+                _limit(limit, 500),
+                offset=offset,
+                task_type=task_type,
+                submitted_by=owner,
             ),
-            "total": engine.count_tasks(task_type=task_type),
+            "total": engine.count_tasks(task_type=task_type, submitted_by=owner),
             "offset": max(0, offset),
             "limit": _limit(limit, 500),
         }
@@ -388,27 +878,59 @@ def _task_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa: C9
     @router.post("/tasks")
     def create_task(request: Request, body: TaskSubmitBody) -> dict[str, Any]:
         _require_csrf(request)
+        principal = require_permission(request, Permission.TASK_SUBMIT)
         tt, params = submit_task_payload(body.task_type, body.samples, body.scope)
+        if principal is not None:
+            from bacmap.store.catalog import sample_owner
+            from bacmap.store.users import Role
+
+            if principal.role is Role.USER and tt not in (
+                TaskType.ANALYZE,
+                TaskType.REANALYZE,
+            ):
+                raise HTTPException(403, f"role user cannot submit {tt.value} tasks")
+            if principal.role is Role.USER:
+                samples = body.samples
+                requested = samples if isinstance(samples, list) else [
+                    s for s in str(samples).replace(",", " ").split() if s
+                ]
+                denied = [
+                    s for s in requested
+                    if sample_owner(engine.home, s) != principal.username
+                ]
+                if denied:
+                    raise HTTPException(
+                        403,
+                        "samples are not assigned to you: " + ", ".join(denied[:5]),
+                    )
+            # 目录直入时新建的样本/菌株归提交者；已存在数据的 owner 不会被覆盖。
+            params["owner_user_id"] = principal.username
+        actor_name = actor(request, "web")
         try:
-            tid = engine.submit(tt, params, "web")
+            tid = engine.submit(tt, params, actor_name)
         except (ValueError, NotImplementedError) as exc:
             raise HTTPException(400, str(exc)) from exc
         return engine.get_task(tid)
 
     @router.get("/tasks/{task_id}")
-    def get_task(task_id: str) -> dict[str, Any]:
-        try:
-            return engine.get_task(TaskId(task_id))
-        except KeyError as exc:
-            raise NotFound(f"no such task: {task_id}") from exc
+    def get_task(request: Request, task_id: str) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ)
+        task = _task_or_404(task_id)
+        _ensure_task_access(request, task)
+        return task
 
     @router.post("/tasks/{task_id}/approve")
     def approve_task(request: Request, task_id: str, body: ApprovalBody) -> dict[str, Any]:
         _require_csrf(request)
+        require_permission(request, Permission.TASK_APPROVE)
+        principal = principal_of(request)
+        task = _task_or_404(task_id)
+        _ensure_task_access(request, task)
+        approver = principal.username if principal is not None else body.approver
         try:
             engine.approve(
                 TaskId(task_id),
-                approval_payload(body.approver, body.decision, body.signature, body.comment),
+                approval_payload(approver, body.decision, body.signature, body.comment),
             )
         except KeyError as exc:
             raise NotFound(f"no such task: {task_id}") from exc
@@ -419,6 +941,8 @@ def _task_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa: C9
     @router.post("/tasks/{task_id}/cancel")
     def cancel_task(request: Request, task_id: str) -> dict[str, Any]:
         _require_csrf(request)
+        require_permission(request, Permission.TASK_CONTROL)
+        _ensure_task_access(request, _task_or_404(task_id))
         try:
             engine.cancel(TaskId(task_id))
         except KeyError as exc:
@@ -431,6 +955,8 @@ def _task_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa: C9
     def pause_task(request: Request, task_id: str) -> dict[str, Any]:
         """v1.10.22：用户暂停（工作流在下一边界收场，snakemake 跑完当前规则）。"""
         _require_csrf(request)
+        require_permission(request, Permission.TASK_CONTROL)
+        _ensure_task_access(request, _task_or_404(task_id))
         try:
             engine.pause(TaskId(task_id))
         except KeyError as exc:
@@ -443,6 +969,8 @@ def _task_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa: C9
     def resume_task(request: Request, task_id: str) -> dict[str, Any]:
         """v1.10.22：恢复 paused/failed(interrupted) 任务（同 run 目录续跑）。"""
         _require_csrf(request)
+        require_permission(request, Permission.TASK_CONTROL)
+        _ensure_task_access(request, _task_or_404(task_id))
         try:
             engine.resume(TaskId(task_id))
         except KeyError as exc:
@@ -456,8 +984,11 @@ def _record_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
     """记录类任务（metadata/lab/knowledge）的 JSON 入口。"""
 
     @router.get("/records")
-    def list_records(limit: int = 50, offset: int = 0) -> dict[str, Any]:
+    def list_records(
+        request: Request, limit: int = 50, offset: int = 0
+    ) -> dict[str, Any]:
         """记录任务列表（数据记录页分页；任务层只读视图）。"""
+        require_permission(request, Permission.RECORD_WRITE)
         return {
             "items": engine.list_tasks(
                 _limit(limit, 500), offset=offset, task_type="record"
@@ -470,6 +1001,7 @@ def _record_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
     @router.post("/records/{kind}")
     def create_record(request: Request, kind: str, body: RecordBody) -> dict[str, Any]:
         _require_csrf(request)
+        require_permission(request, Permission.RECORD_WRITE)
         params: dict[str, Any]
         if kind == "metadata":
             params = {
@@ -509,34 +1041,65 @@ def _record_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
 
 
 def _plan_routes(router: APIRouter, plans: PlanService) -> None:
+    def _ensure_plan_access(request: Request, record: Any) -> None:
+        from bacmap.interfaces.web.auth import principal_of
+        from bacmap.store.users import Role
+
+        principal = principal_of(request)
+        if principal is None or principal.role is not Role.USER:
+            return
+        if str(record.created_by or "") != principal.username:
+            raise NotFound("no such plan")
+
     @router.get("/plans")
-    def list_plans(limit: int = 20) -> dict[str, Any]:
-        return {"items": [p.model_dump(mode="json") for p in plans.list_plans(_limit(limit))]}
+    def list_plans(request: Request, limit: int = 20) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ)
+        owner = scoped_owner(request)
+        return {
+            "items": [
+                p.model_dump(mode="json")
+                for p in plans.list_plans(_limit(limit), created_by=owner)
+            ]
+        }
 
     @router.get("/plans/{plan_id}")
-    def get_plan(plan_id: str, version: int | None = None) -> dict[str, Any]:
-        return plans.get(plan_id, version).model_dump(mode="json")
+    def get_plan(request: Request, plan_id: str, version: int | None = None) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ)
+        record = plans.get(plan_id, version)
+        _ensure_plan_access(request, record)
+        return record.model_dump(mode="json")
 
     @router.post("/plans/{plan_id}/confirm")
     def confirm_plan(request: Request, plan_id: str, body: ConfirmBody) -> dict[str, Any]:
         _require_csrf(request)
-        actor = f"api:{body.confirmer.strip()}"
-        return plans.confirm(plan_id, body.version, body.plan_hash, actor).model_dump(mode="json")
+        require_permission(request, Permission.PLAN_CONFIRM)
+        principal = principal_of(request)
+        actor_name = f"api:{principal.username}" if principal else f"api:{body.confirmer.strip()}"
+        return plans.confirm(plan_id, body.version, body.plan_hash, actor_name).model_dump(
+            mode="json"
+        )
 
     @router.post("/plans/{plan_id}/reject")
     def reject_plan(request: Request, plan_id: str, body: RejectBody) -> dict[str, Any]:
         _require_csrf(request)
-        return plans.reject(plan_id, body.version, body.reason, "api").model_dump(mode="json")
+        require_permission(request, Permission.PLAN_CONFIRM)
+        principal = principal_of(request)
+        actor_name = f"api:{principal.username}" if principal else "api"
+        return plans.reject(plan_id, body.version, body.reason, actor_name).model_dump(
+            mode="json"
+        )
 
 
 def _event_routes(router: APIRouter, engine: DbosTaskEngine, events: EventLog) -> None:
     @router.get("/events")
     def list_events(
+        request: Request,
         after: int = 0,
         limit: int = 100,
         task_id: str | None = None,
         plan_id: str | None = None,
     ) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ_ALL)
         items = events.list(after=after, limit=limit, task_id=task_id, plan_id=plan_id)
         return {
             "events": [e.model_dump(mode="json") for e in items],
@@ -547,6 +1110,7 @@ def _event_routes(router: APIRouter, engine: DbosTaskEngine, events: EventLog) -
 
     @router.get("/events/stream")
     def stream_events(request: Request, after: int = 0, timeout: int = _SSE_MAX_S) -> Any:
+        require_permission(request, Permission.DATA_READ_ALL)
         header = request.headers.get("last-event-id", "")
         cursor = int(header) if header.isdigit() else after
         deadline = time.monotonic() + max(0, min(timeout, _SSE_MAX_S))
@@ -580,34 +1144,61 @@ def _identity_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa
     """
 
     @router.get("/specimens")
-    def specimens(limit: int = 200, offset: int = 0) -> dict[str, Any]:
+    def specimens(
+        request: Request, limit: int = 200, offset: int = 0, q: str = ""
+    ) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ)
+        owner = scoped_owner(request)
         return {
-            "items": specimen_rows(engine.home, _limit(limit, 500), offset),
-            "total": count_specimens(engine.home),
+            "items": specimen_rows(
+                engine.home, _limit(limit, 500), offset, query=q, owner_user_id=owner
+            ),
+            "total": count_specimens(engine.home, query=q, owner_user_id=owner),
             "offset": max(0, offset),
             "limit": _limit(limit, 500),
         }
 
     @router.get("/specimens/{specimen_id}")
-    def specimen(specimen_id: str) -> dict[str, Any]:
+    def specimen(request: Request, specimen_id: str) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ)
         data = specimen_detail(engine.home, specimen_id)
         if data is None:
+            raise NotFound(f"no such specimen: {specimen_id}")
+        from bacmap.interfaces.web.rbac import can_access_owner
+
+        if not can_access_owner(
+            request, str(data["specimen"].get("owner_user_id") or "") or None
+        ):
             raise NotFound(f"no such specimen: {specimen_id}")
         return data
 
     @router.get("/isolates")
-    def isolates(limit: int = 500, offset: int = 0) -> dict[str, Any]:
+    def isolates(
+        request: Request, limit: int = 500, offset: int = 0, q: str = ""
+    ) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ)
+        owner = scoped_owner(request)
         return {
-            "items": isolate_rows(engine.home, _limit(limit, 2000), offset),
-            "total": count_isolates(engine.home),
+            "items": isolate_rows(
+                engine.home, _limit(limit, 2000), offset, query=q, owner_user_id=owner
+            ),
+            "total": count_isolates(engine.home, query=q, owner_user_id=owner),
             "offset": max(0, offset),
             "limit": _limit(limit, 2000),
         }
 
     @router.get("/isolates/{isolate_id}")
-    def isolate(isolate_id: str) -> dict[str, Any]:
+    def isolate(request: Request, isolate_id: str) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ)
         data = isolate_detail(engine.home, isolate_id)
         if data is None:
+            raise NotFound(f"no such isolate: {isolate_id}")
+        from bacmap.interfaces.web.rbac import can_access_owner
+        from bacmap.store.catalog import owner_for_isolate
+
+        if not can_access_owner(
+            request, owner_for_isolate(engine.home, isolate_id) or None
+        ):
             raise NotFound(f"no such isolate: {isolate_id}")
         return data
 
@@ -615,6 +1206,7 @@ def _identity_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa
     def delete_isolate_route(request: Request, isolate_id: str) -> dict[str, Any]:
         """安全删除空菌株（无测序数据/元数据/化验/GOM/运行记录；CSRF）。"""
         _require_csrf(request)
+        require_permission(request, Permission.DATA_DELETE)
         from bacmap.workflow.samples_registry import delete_isolate
 
         try:
@@ -631,12 +1223,9 @@ def _identity_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa
         specimen_id: str,
         body: SpecimenDeleteBody | None = None,
     ) -> dict[str, Any]:
-        """删除样本（可信界面写操作，需 CSRF）。
-
-        默认只允许空样本；``force=true`` 先解除菌株关联（不删菌株/数据）再删除。
-        权限点（specimen.delete）预留给后续多用户 RBAC。
-        """
+        """删除样本（可信界面写操作，需 CSRF；仅 analyst/admin）。"""
         _require_csrf(request)
+        require_permission(request, Permission.DATA_DELETE)
         from bacmap.workflow.samples_registry import delete_specimen
 
         try:
@@ -653,6 +1242,7 @@ def _identity_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa
     def assign_specimen(request: Request, body: SpecimenAssignBody) -> dict[str, Any]:
         """把菌株/测序数据关联到样本（可信界面写操作，需 CSRF）。"""
         _require_csrf(request)
+        require_permission(request, Permission.SPECIMEN_WRITE)
         from bacmap.workflow.samples_registry import assign_specimens
 
         results: list[dict[str, Any]] = []
@@ -674,6 +1264,18 @@ def _identity_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa
             )
         if not results:
             raise HTTPException(400, "give at least one isolate or dataset")
+        if body.owner_user_id is not None:
+            from bacmap.store.specimens import SpecimenService
+            from bacmap.store.strain_index import StrainGenotypeIndex
+
+            db = Path(engine.home) / "data" / "bacmap.sqlite"
+            with SpecimenService(db) as specimens:
+                if not specimens.set_owner(body.specimen_id, body.owner_user_id):
+                    raise NotFound(f"no such specimen: {body.specimen_id}")
+            gom_db = Path(engine.home) / "gom.sqlite"
+            if gom_db.is_file():
+                with StrainGenotypeIndex(gom_db) as index:
+                    index.set_owner(body.owner_user_id, specimen_id=body.specimen_id)
         return {
             "specimen_id": body.specimen_id,
             "updated": sum(int(r["updated"]) for r in results),
@@ -682,30 +1284,46 @@ def _identity_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa
 
     @router.get("/search/identity")
     def identity_search_route(
+        request: Request,
         q: str = "",
         specimen_offset: int = 0,
         specimen_limit: int = 50,
         isolate_offset: int = 0,
         isolate_limit: int = 50,
     ) -> dict[str, Any]:
-        """统一检索：样本与菌株分页（测序数据仍用 /search 的结构化过滤）。"""
-        from bacmap.interfaces.views import identity_page
-
-        return identity_page(
-            engine.home,
-            q,
-            specimen_offset=specimen_offset,
-            specimen_limit=_limit(specimen_limit, 500),
-            isolate_offset=isolate_offset,
-            isolate_limit=_limit(isolate_limit, 500),
-        )
+        """统一检索：样本与菌株分页（SQL 文本检索，不再全表扫描）。"""
+        require_permission(request, Permission.DATA_READ)
+        owner = scoped_owner(request)
+        so = max(0, specimen_offset)
+        io = max(0, isolate_offset)
+        sl = _limit(specimen_limit, 100)
+        il = _limit(isolate_limit, 100)
+        return {
+            "specimens": specimen_rows(
+                engine.home, sl, so, query=q, owner_user_id=owner
+            ),
+            "isolates": isolate_rows(
+                engine.home, il, io, query=q, owner_user_id=owner
+            ),
+            "specimen_total": count_specimens(
+                engine.home, query=q, owner_user_id=owner
+            ),
+            "isolate_total": count_isolates(
+                engine.home, query=q, owner_user_id=owner
+            ),
+            "specimen_offset": so,
+            "isolate_offset": io,
+            "specimen_limit": sl,
+            "isolate_limit": il,
+        }
 
 
 def _evidence_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
     """运行记录与 GOM 的只读接口（v1.7.1，ADR-18/13）。"""
 
     @router.get("/runs")
-    def runs(limit: int = 20, offset: int = 0) -> dict[str, Any]:
+    def runs(request: Request, limit: int = 20, offset: int = 0) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ_ALL)
         return {
             "items": list_runs(engine.home, _limit(limit), offset),
             "total": count_runs(engine.home),
@@ -714,7 +1332,8 @@ def _evidence_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         }
 
     @router.get("/runs/{run_id}")
-    def run(run_id: str) -> dict[str, Any]:
+    def run(request: Request, run_id: str) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ_ALL)
         data = run_detail(engine.home, run_id)
         if data is None:
             raise NotFound(f"no such run: {run_id}")
@@ -728,6 +1347,7 @@ def _evidence_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
     ) -> dict[str, Any]:
         """清理运行物理产物（CSRF）：保留运行记录与 GOM；最新 run 拒绝。"""
         _require_csrf(request)
+        require_permission(request, Permission.DATA_DELETE)
         from bacmap.store.runs import purge_run_artifacts
 
         try:
@@ -740,7 +1360,8 @@ def _evidence_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
             raise HTTPException(409, str(exc)) from exc
 
     @router.get("/runs/{run_id}/compare")
-    def run_compare(run_id: str, other: str) -> dict[str, Any]:
+    def run_compare(request: Request, run_id: str, other: str) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ_ALL)
         data = compare_run_records(engine.home, run_id, other)
         if data is None:
             raise NotFound("one of the runs does not exist")
@@ -748,8 +1369,12 @@ def _evidence_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
 
     @router.get("/gom/objects")
     def gom_objects(
-        type: str | None = None, limit: int = 100, offset: int = 0
+        request: Request,
+        type: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ_ALL)
         return {
             "items": list_gom_objects(
                 engine.home, type, _limit(limit, 500), offset
@@ -760,7 +1385,10 @@ def _evidence_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         }
 
     @router.get("/gom/objects/{object_id}")
-    def gom_one(object_id: str, version: int | None = None) -> dict[str, Any]:
+    def gom_one(
+        request: Request, object_id: str, version: int | None = None
+    ) -> dict[str, Any]:
+        require_permission(request, Permission.DATA_READ_ALL)
         data = gom_object(engine.home, object_id, version)
         if data is None:
             raise NotFound(f"no such GOM object: {object_id}")

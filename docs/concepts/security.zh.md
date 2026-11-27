@@ -10,18 +10,19 @@ bacmap 假设工作站可信，而*模型*不可信。设计上把数据留在�
 | **D0** | 公开参考元数据、诊断信息 | 允许 | 允许 |
 | **D1** | 去标识化的汇总统计 | 允许（默认上限） | 允许 |
 | **D2** | 单株分型结果、样本 ID | 默认阻止；管理员可将上限提高到 D2 | 仅当上限为 D2 时允许 |
-| **D3** | 序列、比对、组装 | **永不** | 需要 `local-trusted` |
-| **D4** | 个人/流行病学标识、元数据、实验室结果 | **永不** | 需要 `local-trusted` |
+| **D3** | 序列、比对、组装 | **永不**（debug 双开关例外） | 需要 `local-trusted` |
+| **D4** | 个人/流行病学标识、元数据、实验室结果 | **永不**（debug 双开关例外） | 需要 `local-trusted` |
 
 上限在两处强制执行：
 
 1. **LLM 网关** —— 发送前，`LlmGateway` 将载荷分级与 `[llm.data_policy].cloud_max_data_class`
-   比较；D3/D4 不能配置到 D2 以上。
+   比较；默认 D3/D4 不能配置到 D2 以上。
 2. **MCP Profile** —— `cloud` 服务器甚至不会注册输出级别超过上限的工具；调用时还会再次检查。
+3. **调试例外（v1.10.51，用户裁定）** —— 只有 `BACMAP_DEBUG=1`（或 `[debug].enabled=true`）**且** `BACMAP_DEBUG_ALLOW_CLOUD_D4=1` 时，`agent.llm` 才允许 cloud 端点配置到 D4；运行时还会复核双开关，关闭后立即 fail-closed。MCP `cloud` Profile 的 D4 同样需要这把第二开关；单独开 debug 不再自动把 MCP cloud 放宽到 D4。`local-trusted` 仍是受控本地 Profile。默认关闭；数据一旦发到 cloud 不可撤回。
 
 ```toml
 [llm.data_policy]
-cloud_max_data_class = "D1"      # "D1" or "D2" only
+cloud_max_data_class = "D1"      # 默认 "D1"/"D2"；D3/D4 仅 debug 双开关
 ```
 
 ```
@@ -81,6 +82,10 @@ MCP elicitation 与 harness 工具审批由客户端/模型作答。因此 bacma
   因此请使用 SSH 隧道或 cookie 模式。
 - `cookie` 模式：`/login` 签发带签名的 `HttpOnly`、`SameSite=Strict` 会话 cookie；
   每个改变状态的 POST 都需要 CSRF 令牌与同源 Origin/Referer。
+- `accounts` 模式（v1.10.49）：用户名 + scrypt 密码登录；服务端 `web_sessions` 存
+  SHA-256 哈希，cookie 只含随机令牌；admin/analyst/user 三档权限由服务端强制，
+  普通用户只能读自己提交/归属的数据。登录失败按“用户名 + 来源 IP”限速。
+  账号、角色与初始管理员命令见 [多用户与角色](accounts.zh.md)。
 - `BACMAP_WEB_COOKIE_SECURE=1` 在 TLS 之后加上 `Secure`。
 - 安全响应头包括严格 CSP、nosniff、frame-deny、referrer-policy 与 COOP。
 - JSON API 是可信操作员界面；绝不要把它令牌交给 harness。
@@ -111,7 +116,11 @@ MCP elicitation 与 harness 工具审批由客户端/模型作答。因此 bacma
 | 智能体在你确认前调换计划 | 计划归属 + 版本/哈希绑定 + 输入指纹 |
 | 伪造请求写入元数据 | record 任务 + 任务层；MCP 仅在 local-trusted 下可用 D4 |
 | 恶意 mine 脚本逃逸 | 无网络容器、只读挂载、不挂载主机 |
+| 恶意/超大湿实验上传 | 20 MB/类型白名单；本地解析且不执行宏；文件 0600；pending_review 人审后才写；需 CSRF/权限 |
+| Web 湿实验编辑越权 | 仅 `record.write`（analyst/admin）；强制 CSRF；写入仍只提交 `record` 任务；普通 `user` 只读/上传提案 |
+| AI 映射建议泄露原始数据 | 顾问只读不写；云端点仅 schema/聚合（D1）；原始样例仅 local/lan 且 `ai_max_data_class >= D4`；网关复核总上限/位置/角色，失败即退回 D1 或拒绝 |
 | Web 令牌泄露给 harness | Web/MCP 令牌分离；文档与启动提示；操作员界面不面向智能体 |
+| 共享工作站用户越权 | accounts 模式：服务端 RBAC + owner 过滤；管理视图仅 analyst/admin |
 | 会话窃取 / CSRF | 带签名的 HttpOnly cookie、SameSite=Strict、CSRF 令牌 + 来源检查 |
 | 经样本 ID 的路径穿越 | `^[A-Za-z0-9._-]+$`，拒绝 `.`/`..`，在每个接口处校验 |
 | 数据库篡改 | 只追加的运行记录/清单；GOM 不可变；清单中记录哈希 |

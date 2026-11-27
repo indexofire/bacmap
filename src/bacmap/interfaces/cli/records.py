@@ -53,6 +53,11 @@ def submit_record(args: argparse.Namespace, params: dict[str, Any]) -> None:
 
 def run_record(args: argparse.Namespace) -> None:
     kind = args.record_command
+    if kind == "import":
+        from bacmap.interfaces.cli.wetlab import run_import
+
+        run_import(args)
+        return
     if kind == "metadata":
         params: dict[str, Any] = {
             "strain_id": args.strain_id,
@@ -142,6 +147,57 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(lab)
     add_json(lab)
     lab.set_defaults(func=run_record)
+
+    imp = rec.add_parser(
+        "import",
+        help=T(
+            "bulk import wet-lab layers from XLSX/CSV/TSV",
+            "从 XLSX/CSV/TSV 批量导入四层湿实验数据",
+        ),
+    )
+    imp.add_argument("path")
+    imp.add_argument(
+        "--metadata-sheet",
+        default="",
+        help=T(
+            "legacy alias for --isolate-sheet (isolate metadata)",
+            "--isolate-sheet 的兼容别名（菌株元数据）",
+        ),
+    )
+    imp.add_argument(
+        "--isolate-sheet",
+        default="",
+        help=T("isolate metadata worksheet", "菌株元数据工作表"),
+    )
+    imp.add_argument(
+        "--specimen-sheet",
+        default="",
+        help=T("specimen/patient metadata worksheet", "样本/患者元数据工作表"),
+    )
+    imp.add_argument(
+        "--library-sheet",
+        default="",
+        help=T("sequencing library metadata worksheet", "测序数据元数据工作表"),
+    )
+    imp.add_argument(
+        "--lab-sheet",
+        default="",
+        help=T("lab result worksheet", "化验结果工作表"),
+    )
+    imp.add_argument(
+        "--lab-subject",
+        choices=["auto", "isolate", "specimen"],
+        default="auto",
+        help=T(
+            "lab result subject; auto uses specimen only for specimen-only IDs",
+            "化验结果归属；auto 仅在仅有样本 ID 时挂样本",
+        ),
+    )
+    imp.add_argument("--dry-run", action="store_true")
+    imp.add_argument("--by", default="cli:import", help=T("submitter", "提交者"))
+    add_home(imp)
+    add_json(imp)
+    imp.set_defaults(func=run_record)
 
     ki = rec.add_parser(
         "knowledge-import",

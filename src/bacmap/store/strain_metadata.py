@@ -206,12 +206,36 @@ class StrainMetadataService:
             updated_at=d.get("updated_at", "") or "",
         )
 
-    def upsert(self, strain_id: str, data: dict[str, Any]) -> StrainMeta:
+    def upsert(
+        self, strain_id: str, data: dict[str, Any], *, replace: bool = False
+    ) -> StrainMeta:
         existing = self.get(strain_id)
         existing_extra = existing.extra if existing else {}
 
-        core, extra = self._split_core_extra(data)
-        merged_extra = {**existing_extra, **extra}
+        if replace:
+            # 全量替换：未给出的核心列清空，extra 不保留旧键。
+            core: dict[str, Any] = {
+                column: None
+                for column in _CORE_COLUMNS
+                if column not in ("strain_id", "sample_id")
+            }
+            core.update(
+                {k: v for k, v in data.items() if k in _CORE_COLUMNS}
+            )
+            if not core.get("sample_id"):
+                core["sample_id"] = (
+                    (existing.sample_id if existing else "") or strain_id
+                )
+            extra = {
+                k: v
+                for k, v in data.items()
+                if k not in _CORE_COLUMNS
+                and k not in ("created_at", "updated_at", "strain_id", "sample_id", "extra")
+            }
+            merged_extra = extra
+        else:
+            core, extra = self._split_core_extra(data)
+            merged_extra = {**existing_extra, **extra}
 
         now = datetime.now(UTC).isoformat()
         core["strain_id"] = strain_id

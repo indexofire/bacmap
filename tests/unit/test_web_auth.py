@@ -83,3 +83,9 @@ class TestAuthConfig:
     def test_unknown_mode_falls_back_to_bearer(self):
         cfg = WebAuthConfig.from_env("tok", env={"BACMAP_WEB_AUTH": "cokie"})
         assert cfg.mode == "bearer"
+
+    def test_personal_mode_enables_access_key_login(self):
+        cfg = WebAuthConfig.from_env(None, env={"BACMAP_WEB_AUTH": "personal"})
+        assert cfg.enabled is True
+        assert cfg.personal is True and cfg.accounts is False
+        assert cfg.mode == "personal"

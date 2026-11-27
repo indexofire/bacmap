@@ -52,6 +52,11 @@ fallback and operations surface.
   `cloud` (default) or `local-trusted` data-class profile. No built-in chat (ADR-21).
 - **Interfaces** — Vue 3 console at `/console/` (dark / light / gray themes, charts, approvals),
   CLI, TUI, JSON API `/api/v1`, MCP (stdio / Streamable HTTP).
+- **Personal mode or local accounts** — `BACMAP_WEB_AUTH=personal` uses a one-time access
+  key (`bacmap personal init`) for a single-user full-feature workstation; `accounts` adds
+  admin/analyst/user roles where a `user` only sees tasks, plans and data it submitted or owns;
+  edits/deletes/creates go through the same review queue. Single-token mode remains the default.
+  See [accounts](docs/concepts/accounts.md).
 - **gvixb integration** — result-launched linear assemblies, annotated Bakta/eggNOG circles,
   SNP phylogenies and original gmlst MSTs from the console's sample, run and GOM pages, with
   local assets and run-scoped reads.
@@ -62,7 +67,7 @@ fallback and operations surface.
 git clone <repo> bacmap && cd bacmap
 pixi install            # runtime environment (Python 3.12 + bioinformatics tools)
 pixi shell
-bacmap --version        # 0.1.5
+bacmap --version        # 0.1.9
 bacmap config init      # optional: create config from config.example.toml
 bacmap doctor           # health check
 bacmap start web        # http://127.0.0.1:8800/console/

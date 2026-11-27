@@ -32,37 +32,48 @@ const toast = useToast()
 const handledTaskStates = new Set<string>()
 let eventSource: EventSource | undefined
 
+const role = computed(() => auth.value?.role ?? '')
+const isManager = computed(() => !role.value || role.value === 'admin' || role.value === 'analyst')
+const isAdmin = computed(() => role.value === 'admin')
+
+type NavItem = { to: string; label: string; icon: string; exact?: boolean }
+
 const groups = computed(() => {
-  const base = [
-    {
-      label: '工作台',
-      items: [
-        { to: '/', label: '仪表盘', icon: 'dashboard', exact: true },
-        { to: '/tasks', label: '任务', icon: 'tasks' },
-        { to: '/plans', label: '计划', icon: 'plans' },
-        { to: '/research', label: '研究', icon: 'chart' },
-      ],
-    },
-    {
-      label: '证据链',
-      items: [
-        { to: '/specimens', label: '样本', icon: 'records' },
-        { to: '/isolates', label: '菌株', icon: 'grid' },
-        { to: '/samples', label: '测序数据', icon: 'activity' },
-        { to: '/runs', label: '运行记录', icon: 'runs' },
-        { to: '/records', label: '数据记录', icon: 'file-text' },
-        { to: '/gom', label: 'GOM', icon: 'server' },
-      ],
-    },
-    {
-      label: '系统',
-      items: [
-        { to: '/overview', label: '系统概览', icon: 'overview' },
-        { to: '/search', label: '检索', icon: 'search' },
-      ],
-    },
+  const workbench: NavItem[] = [
+    { to: '/', label: '仪表盘', icon: 'dashboard', exact: true },
+    { to: '/tasks', label: '任务', icon: 'tasks' },
+    { to: '/plans', label: '计划', icon: 'plans' },
   ]
-  if (agentEmbeds.value.length) {
+  if (isManager.value) {
+    workbench.push({ to: '/research', label: '研究', icon: 'chart' })
+  }
+  const evidence: NavItem[] = [
+    { to: '/species', label: '物种', icon: 'grid' },
+    { to: '/specimens', label: '样本', icon: 'records' },
+    { to: '/isolates', label: '菌株', icon: 'grid' },
+    { to: '/samples', label: '测序数据', icon: 'activity' },
+    { to: '/imports', label: '湿实验导入', icon: 'file-text' },
+  ]
+  if (isManager.value) {
+    evidence.push(
+      { to: '/runs', label: '运行记录', icon: 'runs' },
+      { to: '/records', label: '数据记录', icon: 'file-text' },
+      { to: '/gom', label: 'GOM', icon: 'server' },
+    )
+  }
+  const system: NavItem[] = [
+    { to: '/overview', label: '系统概览', icon: 'overview' },
+    { to: '/search', label: '检索', icon: 'search' },
+  ]
+  if (isAdmin.value) {
+    system.push({ to: '/admin/users', label: '用户管理', icon: 'shield' })
+  }
+  const base = [
+    { label: '工作台', items: workbench },
+    { label: '证据链', items: evidence },
+    { label: '系统', items: system },
+  ]
+  if (agentEmbeds.value.length && isManager.value) {
     base.push({
       label: '智能体对话',
       items: agentEmbeds.value.map((e, i) => ({
@@ -122,6 +133,10 @@ function chooseTheme(id: 'dark' | 'light' | 'gray') {
 }
 
 async function loadPending() {
+  if (!isManager.value) {
+    pendingApprovals.value = 0
+    return
+  }
   try {
     const stats = await api.stats()
     pendingApprovals.value = stats.tasks.by_state.awaiting_approval ?? 0
@@ -133,7 +148,7 @@ async function loadPending() {
 async function loadAuth() {
   try {
     auth.value = await api.authStatus()
-    if (!auth.value.enabled || auth.value.authenticated) {
+    if ((!auth.value.enabled || auth.value.authenticated) && isManager.value) {
       void startTaskStream()
     }
   } catch {

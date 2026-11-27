@@ -578,10 +578,13 @@ def _step_ingest_gom(home_s: str, sample: str, run_id: str, summary: dict[str, A
     mlst/amr/dec/plasmid）供 `bio_search_samples` 与特征索引读取，`summary` 保留
     原始结果供比较运行（compare_runs）与报告。
     """
+    from bacmap.core.analysis.assembly_qc import summary_metrics
+    from bacmap.store.catalog import library_identity
     from bacmap.store.strain_index import StrainGenotypeIndex, _extract_genotype
 
     home = Path(home_s)
     steps = summary.get("steps", {}) or {}
+    metrics = summary_metrics(steps if isinstance(steps, dict) else {})
     sp = steps.get("species", {}) or {}
     species = (
         str(sp.get("verdict") or sp.get("species") or "") if isinstance(sp, dict) else str(sp)
@@ -605,6 +608,8 @@ def _step_ingest_gom(home_s: str, sample: str, run_id: str, summary: dict[str, A
 
     # 同步本地菌株特征索引（ADR-19 读回/去重）：与 GOM 同库，供 bio_search_samples。
     genotype = _extract_genotype(payload)
+    identity = library_identity(home, sample)
+    genes = genotype["amr_genes"]
     idx = StrainGenotypeIndex(home / "gom.sqlite")
     try:
         idx.upsert(
@@ -616,10 +621,24 @@ def _step_ingest_gom(home_s: str, sample: str, run_id: str, summary: dict[str, A
             mlst_scheme=genotype["mlst_scheme"],
             mlst_st=genotype["mlst_st"],
             plasmid_types=genotype["plasmid_types"],
-            amr_genes=genotype["amr_genes"],
+            amr_genes=genes,
             object_id=object_id,
             analysis_date=datetime.now(UTC).isoformat(),
             pipeline_version=provenance["pipeline_version"],
+            specimen_id=identity["specimen_id"],
+            isolate_id=identity["isolate_id"],
+            genome_size=metrics.get("genome_size"),
+            contigs=metrics.get("contigs"),
+            gc_pct=metrics.get("gc_pct"),
+            n_card=sum(
+                1 for g in genes if str(g.get("database", "")).lower()
+                in ("card", "ncbi", "amrfinderplus")
+            ),
+            n_vfdb=sum(
+                1 for g in genes if str(g.get("database", "")).lower() == "vfdb"
+            ),
+            n_plasmid=len(genotype["plasmid_types"]),
+            owner_user_id=identity["owner_user_id"],
         )
     finally:
         idx.close()
@@ -844,10 +863,33 @@ def _step_register_inputs(params: dict[str, Any]) -> dict[str, Any]:
     _progress(params, "register_inputs")
     home = Path(params["home"])
     species = str(params.get("species") or "")
+    owner = str(params.get("owner_user_id") or "")
     if params.get("fasta_dir"):
-        reg = register_fastas(home, Path(str(params["fasta_dir"])).expanduser(), species)
+        reg = register_fastas(
+            home,
+            Path(str(params["fasta_dir"])).expanduser(),
+            species,
+            owner_user_id=owner,
+        )
     else:
-        reg = register_fastqs_dir(home, Path(str(params["fastq_dir"])).expanduser(), species)
+        reg = register_fastqs_dir(
+            home,
+            Path(str(params["fastq_dir"])).expanduser(),
+            species,
+            owner_user_id=owner,
+        )
+    if owner:
+        from bacmap.store.catalog import sample_owner
+
+        denied = [
+            str(sample)
+            for sample in reg.get("samples", [])
+            if sample_owner(home, str(sample)) not in ("", owner)
+        ]
+        if denied:
+            raise ValueError(
+                "samples are assigned to another user: " + ", ".join(denied[:5])
+            )
     _report_skipped_inputs(params, list(reg.get("skipped") or []))
     return reg
 
@@ -1494,15 +1536,263 @@ from bacmap.tasks.engine.task_engine import DbosTaskEngine  # noqa: E402,F401
 # ---------------------------------------------------------------------------
 
 
+def _write_metadata_record(home: Path, record: Any) -> dict[str, Any]:
+    from bacmap.store.ownership import claim_owner
+    from bacmap.store.strain_metadata import StrainMetadataService
+
+    data = dict(record.fields)
+    data["sample_id"] = record.sample_id or record.strain_id
+    data.update(record.extra)
+    with StrainMetadataService(home / "data" / "bacmap.sqlite") as store:
+        store.upsert(record.strain_id, data, replace=bool(record.replace))
+    claim_owner(home, "isolate", record.strain_id, record.owner_user_id)
+    return {
+        "status": "SUCCEEDED",
+        "kind": record.kind,
+        "strain_id": record.strain_id,
+        "replaced": bool(record.replace),
+        "message": f"recorded metadata for {record.strain_id}",
+    }
+
+
+def _delete_metadata_record(home: Path, record: Any) -> dict[str, Any]:
+    from bacmap.store.strain_metadata import StrainMetadataService
+
+    with StrainMetadataService(home / "data" / "bacmap.sqlite") as store:
+        deleted = store.delete(record.strain_id)
+    return {
+        "status": "SUCCEEDED",
+        "kind": record.kind,
+        "strain_id": record.strain_id,
+        "deleted": deleted,
+        "message": f"deleted metadata for {record.strain_id}",
+    }
+
+
+def _write_specimen_metadata(home: Path, record: Any) -> dict[str, Any]:
+    from bacmap.store.specimen_metadata import SpecimenMetadataService
+
+    with SpecimenMetadataService(home / "data" / "bacmap.sqlite") as store:
+        merged = store.upsert(
+            record.specimen_id, dict(record.data), replace=bool(record.replace)
+        )
+    from bacmap.store.ownership import claim_owner
+
+    claim_owner(home, "specimen", record.specimen_id, record.owner_user_id)
+    return {
+        "status": "SUCCEEDED",
+        "kind": record.kind,
+        "specimen_id": record.specimen_id,
+        "replaced": bool(record.replace),
+        "fields": sorted(merged),
+        "message": f"recorded specimen metadata for {record.specimen_id}",
+    }
+
+
+def _write_library_metadata(home: Path, record: Any) -> dict[str, Any]:
+    from bacmap.store.catalog import library_exists, library_links
+    from bacmap.store.library_metadata import LibraryMetadataService
+
+    if not library_exists(home, record.library_id):
+        raise ValueError(f"library is not registered in samples.tsv: {record.library_id}")
+    links = library_links(home, record.library_id)
+    specimen_id = record.specimen_id or links["specimen_id"]
+    isolate_id = record.isolate_id or links["isolate_id"]
+    if record.specimen_id and not links["specimen_id"]:
+        raise ValueError(
+            f"library {record.library_id} is not linked to a specimen"
+        )
+    if record.isolate_id and not links["isolate_id"]:
+        raise ValueError(
+            f"library {record.library_id} is not linked to an isolate"
+        )
+    if record.specimen_id and links["specimen_id"] and record.specimen_id != links["specimen_id"]:
+        raise ValueError(
+            f"library {record.library_id} belongs to specimen {links['specimen_id']}, "
+            f"not {record.specimen_id}"
+        )
+    if record.isolate_id and links["isolate_id"] and record.isolate_id != links["isolate_id"]:
+        raise ValueError(
+            f"library {record.library_id} belongs to isolate {links['isolate_id']}, "
+            f"not {record.isolate_id}"
+        )
+    with LibraryMetadataService(home / "data" / "bacmap.sqlite") as store:
+        merged = store.upsert(
+            record.library_id,
+            dict(record.data),
+            specimen_id=specimen_id,
+            isolate_id=isolate_id,
+            replace=bool(record.replace),
+        )
+    from bacmap.store.ownership import claim_owner
+
+    claim_owner(home, "library", record.library_id, record.owner_user_id)
+    return {
+        "status": "SUCCEEDED",
+        "kind": record.kind,
+        "library_id": record.library_id,
+        "specimen_id": specimen_id,
+        "isolate_id": isolate_id,
+        "replaced": bool(record.replace),
+        "fields": sorted(merged["data"]),
+        "message": f"recorded library metadata for {record.library_id}",
+    }
+
+
+def _create_specimen(home: Path, record: Any) -> dict[str, Any]:
+    from bacmap.store.ownership import claim_owner
+    from bacmap.store.specimens import SpecimenService
+
+    with SpecimenService(home / "data" / "bacmap.sqlite") as store:
+        created = store.get(record.specimen_id) is None
+        store.ensure(
+            record.specimen_id,
+            origin=record.origin,
+            note=record.note,
+            owner_user_id=record.owner_user_id or None,
+        )
+    if record.owner_user_id:
+        claim_owner(home, "specimen", record.specimen_id, record.owner_user_id)
+    return {
+        "status": "SUCCEEDED",
+        "kind": record.kind,
+        "specimen_id": record.specimen_id,
+        "created": created,
+        "message": f"{'created' if created else 'kept'} specimen {record.specimen_id}",
+    }
+
+
+def _create_isolate(home: Path, record: Any) -> dict[str, Any]:
+    from bacmap.store.isolates import IsolateService
+    from bacmap.store.ownership import claim_owner
+    from bacmap.store.specimens import SpecimenService
+
+    db = home / "data" / "bacmap.sqlite"
+    if record.specimen_id:
+        with SpecimenService(db) as specimens:
+            if specimens.get(record.specimen_id) is None:
+                raise ValueError(f"no such specimen: {record.specimen_id}")
+    with IsolateService(db) as store:
+        created = store.get(record.isolate_id) is None
+        store.ensure(
+            record.isolate_id,
+            lineage_id=record.lineage_id,
+            passage=record.passage,
+            specimen_id=record.specimen_id or None,
+            owner_user_id=record.owner_user_id or None,
+        )
+    if record.owner_user_id:
+        claim_owner(home, "isolate", record.isolate_id, record.owner_user_id)
+        if record.specimen_id:
+            claim_owner(home, "specimen", record.specimen_id, record.owner_user_id)
+    return {
+        "status": "SUCCEEDED",
+        "kind": record.kind,
+        "isolate_id": record.isolate_id,
+        "created": created,
+        "message": f"{'created' if created else 'kept'} isolate {record.isolate_id}",
+    }
+
+
+def _delete_specimen_metadata(home: Path, record: Any) -> dict[str, Any]:
+    from bacmap.store.specimen_metadata import SpecimenMetadataService
+
+    with SpecimenMetadataService(home / "data" / "bacmap.sqlite") as store:
+        deleted = store.delete(record.specimen_id)
+    return {
+        "status": "SUCCEEDED",
+        "kind": record.kind,
+        "specimen_id": record.specimen_id,
+        "deleted": deleted,
+        "message": f"deleted specimen metadata for {record.specimen_id}",
+    }
+
+
+def _delete_library_metadata(home: Path, record: Any) -> dict[str, Any]:
+    from bacmap.store.library_metadata import LibraryMetadataService
+
+    with LibraryMetadataService(home / "data" / "bacmap.sqlite") as store:
+        deleted = store.delete(record.library_id)
+    return {
+        "status": "SUCCEEDED",
+        "kind": record.kind,
+        "library_id": record.library_id,
+        "deleted": deleted,
+        "message": f"deleted library metadata for {record.library_id}",
+    }
+
+
+def _update_lab_record(home: Path, record: Any) -> dict[str, Any]:
+    from bacmap.store.lab_results import LabResultService
+
+    payload = record.model_dump(exclude={"kind", "result_id"}, exclude_none=True)
+    with LabResultService(home / "data" / "bacmap.sqlite") as store:
+        row = store.update(record.result_id, **payload)
+    if row is None:
+        raise ValueError(f"no such lab result: {record.result_id}")
+    return {
+        "status": "SUCCEEDED",
+        "kind": record.kind,
+        "lab_result_id": row.id,
+        "message": f"updated lab result {row.id}",
+    }
+
+
+def _delete_lab_record(home: Path, record: Any) -> dict[str, Any]:
+    from bacmap.store.lab_results import LabResultService
+
+    with LabResultService(home / "data" / "bacmap.sqlite") as store:
+        deleted = store.delete(record.result_id)
+    return {
+        "status": "SUCCEEDED",
+        "kind": record.kind,
+        "lab_result_id": record.result_id,
+        "deleted": deleted,
+        "message": f"deleted lab result {record.result_id}",
+    }
+
+
+def _write_lab_record(home: Path, record: Any) -> dict[str, Any]:
+    from bacmap.store.lab_results import LabResultService
+
+    payload = record.model_dump(exclude={"kind", "owner_user_id"})
+    strain_id = payload.pop("strain_id")
+    category = payload.pop("category")
+    test_name = payload.pop("test_name")
+    result_value = payload.pop("result")
+    row = LabResultService(home / "data" / "bacmap.sqlite").add(
+        strain_id, category, test_name, result_value, **payload
+    )
+    from bacmap.store.ownership import claim_owner
+
+    claim_owner(home, "lab", row.id, record.owner_user_id)
+    return {
+        "status": "SUCCEEDED",
+        "kind": record.kind,
+        "lab_result_id": row.id,
+        "message": f"recorded lab result for {strain_id}",
+    }
+
+
 @DBOS.step()
-def _step_record(params: dict[str, Any]) -> dict[str, Any]:
+def _step_record(params: dict[str, Any]) -> dict[str, Any]:  # noqa: C901 — 判别联合分支集中
     """把一条记录写入对应 store；知识库导入只入暂存，审核另起一条记录任务。"""
     from bacmap.tasks.records import (
+        BatchRecord,
+        IsolateCreate,
         KnowledgeApprove,
         KnowledgeImport,
+        LabResultDelete,
         LabResultRecord,
+        LabResultUpdate,
+        LibraryMetadataDelete,
+        LibraryMetadataRecord,
+        MetadataDelete,
         MetadataRecord,
         SpecimenAssign,
+        SpecimenCreate,
+        SpecimenMetadataDelete,
+        SpecimenMetadataRecord,
         parse_record,
     )
 
@@ -1512,34 +1802,63 @@ def _step_record(params: dict[str, Any]) -> dict[str, Any]:
     actor = str(params.get("submitted_by") or "record")
 
     if isinstance(record, MetadataRecord):
-        from bacmap.store.strain_metadata import StrainMetadataService
+        return _write_metadata_record(home, record)
 
-        data = dict(record.fields)
-        data["sample_id"] = record.sample_id or record.strain_id
-        StrainMetadataService(home / "data" / "bacmap.sqlite").upsert(record.strain_id, data)
-        return {
-            "status": "SUCCEEDED",
-            "kind": record.kind,
-            "strain_id": record.strain_id,
-            "message": f"recorded metadata for {record.strain_id}",
-        }
+    if isinstance(record, SpecimenMetadataRecord):
+        return _write_specimen_metadata(home, record)
+
+    if isinstance(record, LibraryMetadataRecord):
+        return _write_library_metadata(home, record)
 
     if isinstance(record, LabResultRecord):
-        from bacmap.store.lab_results import LabResultService
+        return _write_lab_record(home, record)
 
-        payload = record.model_dump(exclude={"kind"})
-        strain_id = payload.pop("strain_id")
-        category = payload.pop("category")
-        test_name = payload.pop("test_name")
-        result_value = payload.pop("result")
-        row = LabResultService(home / "data" / "bacmap.sqlite").add(
-            strain_id, category, test_name, result_value, **payload
-        )
+    if isinstance(record, LabResultUpdate):
+        return _update_lab_record(home, record)
+
+    if isinstance(record, LabResultDelete):
+        return _delete_lab_record(home, record)
+
+    if isinstance(record, MetadataDelete):
+        return _delete_metadata_record(home, record)
+
+    if isinstance(record, SpecimenMetadataDelete):
+        return _delete_specimen_metadata(home, record)
+
+    if isinstance(record, LibraryMetadataDelete):
+        return _delete_library_metadata(home, record)
+
+    if isinstance(record, SpecimenCreate):
+        return _create_specimen(home, record)
+
+    if isinstance(record, IsolateCreate):
+        return _create_isolate(home, record)
+
+    if isinstance(record, BatchRecord):
+        counts = {"metadata": 0, "specimen_metadata": 0, "library_metadata": 0, "lab_results": 0}
+        for row in record.rows:
+            if isinstance(row, MetadataRecord):
+                _write_metadata_record(home, row)
+                counts["metadata"] += 1
+            elif isinstance(row, SpecimenMetadataRecord):
+                _write_specimen_metadata(home, row)
+                counts["specimen_metadata"] += 1
+            elif isinstance(row, LibraryMetadataRecord):
+                _write_library_metadata(home, row)
+                counts["library_metadata"] += 1
+            elif isinstance(row, LabResultRecord):
+                _write_lab_record(home, row)
+                counts["lab_results"] += 1
         return {
             "status": "SUCCEEDED",
             "kind": record.kind,
-            "lab_result_id": row.id,
-            "message": f"recorded lab result for {strain_id}",
+            **counts,
+            "message": (
+                f"imported {counts['metadata']} isolate metadata, "
+                f"{counts['specimen_metadata']} specimen metadata, "
+                f"{counts['library_metadata']} library metadata and "
+                f"{counts['lab_results']} lab result row(s)"
+            ),
         }
 
     if isinstance(record, KnowledgeImport):
@@ -1578,6 +1897,13 @@ def _step_record(params: dict[str, Any]) -> dict[str, Any]:
                     by="isolate",
                 )
             )
+        from bacmap.store.ownership import claim_owner
+
+        claim_owner(home, "specimen", record.specimen_id, record.owner_user_id)
+        for isolate_id in record.isolates:
+            claim_owner(home, "isolate", isolate_id, record.owner_user_id)
+        for dataset_id in record.datasets:
+            claim_owner(home, "library", dataset_id, record.owner_user_id)
         return {
             "status": "SUCCEEDED",
             "kind": record.kind,

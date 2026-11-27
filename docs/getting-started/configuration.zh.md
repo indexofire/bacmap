@@ -133,6 +133,35 @@ bacmap overview
 | D2 | 单菌株分型细节 | 除非管理员将上限提高到 D2，否则阻止 |
 | D3–D4 | 序列、个人/流行病学标识符 | 永不发往云端端点 |
 
+### Web 身份与 AI 数据上限
+
+个人工作站用访问密钥（无需用户名/密码）：
+
+```bash
+bacmap personal init                    # 只显示一次 bk_…
+export BACMAP_WEB_AUTH=personal
+bacmap start web
+```
+
+单位共用工作站用本地账号（见[多用户与角色](../concepts/accounts.zh.md)）：
+
+```bash
+bacmap user create admin --role admin
+export BACMAP_WEB_AUTH=accounts
+```
+
+所有 AI 调用可再加一条跨端点总上限：
+
+```toml
+[llm.data_policy]
+cloud_max_data_class = "D1"   # 云端点位置上限
+ai_max_data_class = "D2"      # AI 总上限（默认 D4）
+```
+
+实际生效级别取“AI 总上限 / 端点位置 / 角色上限”中最严的一档。导入页的
+**AI 映射建议**只返回建议：云端点只看到列名与聚合统计；只有本地/局域网端点、
+且总上限允许 D4 时才附带最多 3 行截断样例值。
+
 ## 4. MCP 侧（智能体）
 
 **cloud** MCP 实例是默认实例，只暴露输出在 `cloud_max_data_class` 范围内的工具。**local-trusted**

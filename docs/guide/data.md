@@ -181,6 +181,80 @@ bacmap record lab --strain-id HZCPE-01 --category mic \
 
 Query them with `bio_query_lab_results` (local-trusted) or the Records page.
 
+
+### Bulk import wet-lab data (XLSX / CSV / TSV, four layers)
+
+Use the per-row commands for small edits; for a whole wet-lab workbook:
+
+```bash
+bacmap record import wetlab.xlsx --dry-run
+bacmap record import wetlab.xlsx
+```
+
+The console **Wet-lab import** page also accepts uploads: a `user` creates a
+`pending_review` proposal, and an `analyst`/`admin` must approve it before a record
+task is submitted. Submitters cannot approve their own proposal (an admin may force
+self-approval). Uploaded files stay locally under `imports/<job_id>/`.
+
+When a normal `user` edits/deletes existing data or creates a specimen/isolate, the console
+creates the same review proposal as a file import (`/api/v1/wetlab/proposals`). Submitters
+cannot self-approve; approval rechecks that the target did not change meanwhile, and unowned
+targets are claimed for the submitter after approval. Use `bacmap imports list|prune` to
+review or expire local upload/proposal artifacts.
+
+Specimen and isolate detail pages now manage wet-lab data directly (analyst/admin only;
+writes still go through `record` tasks): edit or clear specimen/isolate fields, edit or
+delete library metadata, add/update/delete isolate or specimen lab results, and link
+isolates/datasets to a specimen. Saving waits for the record task and refreshes the page;
+a normal `user` can still only upload proposals and cannot write directly.
+
+**AI mapping advice** in the preview panel is a read-only advisor: it suggests target
+fields for unrecognised columns, which columns should stay in custom `extra`, and flags
+privacy/date/unit risks. It never edits the file, writes domain tables or invents GOM IDs.
+Data classes are enforced by configuration: a cloud endpoint sees only column names and
+aggregates; a local/LAN endpoint receives up to three truncated sample values only when
+`ai_max_data_class >= D4`.
+
+A workbook may contain four sheets (Chinese or English names, or specify them):
+
+```text
+specimen / 样本信息 / 患者信息
+specimen_id    patient_name  collection_date  sample_source
+A03-SN-001     Zhang San     2026-10-01       food
+
+isolate / wetlab / 湿实验 / 菌株信息
+isolate_id  isolation_date  province  custom_field_a
+HZCPE-01    2026-10-12      Guangdong value
+
+library / 测序数据
+library_id      platform   sequencing_date
+HZCPE-01__ilm   illumina   2026-10-03
+
+lab / 化验 / 药敏
+library_id      category  test_name  result  unit  interpretation
+HZCPE-01__ilm   mic       meropenem  0.25    mg/L  S
+```
+
+- **Specimen** rows (`specimen_id`/`样本编号`): patient, collection date, source and
+  other sample-level fields. Column names are not fixed; they are stored as specimen
+  metadata JSON.
+- **Isolate** rows (`isolate_id`/`菌株编号`): isolation date, source, passage, etc.
+  `METADATA_FIELDS` and common Chinese aliases are mapped; unknown columns go to `extra`.
+- **Library** rows (`library_id`, the `sample` column in `samples.tsv`): platform, run,
+  date, etc. WGS libraries link to isolate/specimen; mNGS links only to specimen.
+  One isolate may have many libraries.
+- **Lab** rows: long format, one test per row; default subject is isolate, and
+  `--lab-subject specimen` attaches results to a specimen (e.g. mNGS). Required:
+  `category`/`test_name`/`result`.
+- Isolate/library keys also accept a library or specimen ID and resolve through
+  `samples.tsv`/identity tables; a specimen with multiple isolates is rejected.
+- One file becomes one `record` task (`kind=batch`). Every row is validated first;
+  a missing key/required field/identity rejects the whole file with sheet and row numbers.
+- CSV/TSV use one table and auto-detect the target; XLSX may specify
+  `--specimen-sheet` / `--isolate-sheet` / `--library-sheet` / `--lab-sheet`
+  (`--metadata-sheet` is a compatibility alias for `--isolate-sheet`).
+- Import never creates specimens/isolates/libraries; rows must match registered entities.
+
 ### Knowledge
 
 ```bash

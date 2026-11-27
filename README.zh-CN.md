@@ -46,6 +46,11 @@ MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小�
   `local-trusted` 数据分级 Profile 裁剪。无内置对话（ADR-21）。
 - **多种界面** — `/console/` 的 Vue 3 控制台（暗色/浅色/灰色主题、图表、审批）、CLI、TUI、
   JSON API `/api/v1`、MCP（stdio / Streamable HTTP）。
+- **个人模式或本地账号** — `BACMAP_WEB_AUTH=personal` 用 `bacmap personal init` 生成的一次性
+  访问密钥登录，单用户拥有全部功能；`BACMAP_WEB_AUTH=accounts` 提供 admin/analyst/user 角色，
+  普通用户只能看到自己提交/归属的任务、计划与数据，修改/删除/新建同样走审核队列。
+  单令牌模式仍是默认。见
+  [多用户与角色](docs/concepts/accounts.zh.md)。
 - **gvixb 集成** — 从控制台的样本、运行和 GOM 页面直接打开线性组装、Bakta/eggNOG 注释圈图、
   SNP 进化树及 gmlst 原始 MST；全部资源本地化，历史结果严格按运行读取。
 
@@ -55,7 +60,7 @@ MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小�
 git clone <repo> bacmap && cd bacmap
 pixi install            # 运行时环境（Python 3.12 + 生信工具链）
 pixi shell
-bacmap --version        # 0.1.5
+bacmap --version        # 0.1.9
 bacmap config init      # 可选：从 config.example.toml 生成配置
 bacmap doctor           # 只读体检
 bacmap start web        # http://127.0.0.1:8800/console/

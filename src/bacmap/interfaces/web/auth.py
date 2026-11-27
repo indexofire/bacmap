@@ -1,6 +1,8 @@
 """Web 浏览器端鉴权（cookie 会话 + CSRF）与 Bearer 兼容（ADR-14；§10 v1.4.15）。
 
 - ``BACMAP_WEB_AUTH=bearer``（默认，向后兼容）：仅 ``Authorization: Bearer``（API 客户端）；
+- ``BACMAP_WEB_AUTH=personal``（v1.10.54）：个人模式，访问密钥（scrypt 哈希）登录，
+  内置 ``owner``（admin）会话；
 - ``BACMAP_WEB_AUTH=cookie``：浏览器可登录（``/login``）→ 签名会话 cookie；每次状态变更
   POST 需 CSRF 同步令牌（``csrf`` 表单字段 == ``bacmap_csrf`` cookie）+ Origin/Referer 校验。
 - 会话 cookie：``HttpOnly; SameSite=Strict; Path=/``，值为 ``sid.exp.sig``（HMAC-SHA256），
@@ -25,6 +27,7 @@ from urllib.parse import quote, urlparse
 from starlette.requests import Request
 
 from bacmap.interfaces._security import consteq
+from bacmap.store.users import Role, User, UserService
 
 _logger = logging.getLogger(__name__)
 
@@ -37,8 +40,56 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 # 必须免鉴权，否则登录页自身拿不到状态（v1.10.28）。
 LOGIN_PATH = "/console/login"
 PUBLIC_PATHS = frozenset(
-    {"/login", LOGIN_PATH, "/api/v1/auth/status", "/api/v1/auth/login"}
+    {
+        "/login",
+        LOGIN_PATH,
+        "/api/v1/auth/status",
+        "/api/v1/auth/login",
+        "/api/v1/auth/logout",
+    }
 )
+
+
+@dataclass(frozen=True)
+class Principal:
+    """已认证主体（账号模式）；``auth_method`` 为 session/api_token/legacy_admin。"""
+
+    user_id: str
+    username: str
+    role: Role
+    display_name: str = ""
+    auth_method: str = "session"
+    session_hash: str = ""
+
+    @property
+    def label(self) -> str:
+        return self.display_name or self.username
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role is Role.ADMIN
+
+    @property
+    def can_manage_data(self) -> bool:
+        return self.role in (Role.ADMIN, Role.ANALYST)
+
+
+def principal_of(request: Request) -> Principal | None:
+    """从 ASGI state 读取主体；未启用账号模式/旧令牌模式返回 None。"""
+    value = getattr(request.state, "principal", None)
+    return value if isinstance(value, Principal) else None
+
+
+def user_to_principal(user: User, *, auth_method: str = "session",
+                     session_hash: str = "") -> Principal:
+    return Principal(
+        user_id=user.user_id,
+        username=user.username,
+        role=user.role,
+        display_name=user.display_name,
+        auth_method=auth_method,
+        session_hash=session_hash,
+    )
 
 # 回环绑定（文档化的免鉴权单机形态；ADR-16 默认只绑本机）
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"})
@@ -60,7 +111,8 @@ def require_auth_when_exposed(
     if debug_mode():
         _logger.warning(debug_warning(prog))
         return
-    if token or host in _LOOPBACK_HOSTS:
+    mode = (os.environ.get("BACMAP_WEB_AUTH") or "").strip().lower()
+    if token or mode in {"accounts", "personal"} or host in _LOOPBACK_HOSTS:
         return
     from bacmap.interfaces.i18n import T
 
@@ -108,11 +160,13 @@ def verify_session(secret: str, value: str) -> bool:
 @dataclass(frozen=True)
 class WebAuthConfig:
     enabled: bool
-    mode: str  # "bearer" | "cookie"
+    mode: str  # "bearer" | "cookie" | "accounts" | "personal"
     token: str
     secret: str
     cookie_secure: bool
     ttl_s: int = SESSION_TTL_S
+    accounts: bool = False
+    personal: bool = False
 
     @classmethod
     def from_env(
@@ -132,11 +186,11 @@ class WebAuthConfig:
             )
         tok = token or ""
         mode = (env.get("BACMAP_WEB_AUTH") or "bearer").strip().lower()
-        if mode not in ("bearer", "cookie"):
+        if mode not in ("bearer", "cookie", "accounts", "personal"):
             # 静默回退会掩盖配置错误（如 cookie 拼错落回 bearer，浏览器 401 难排查）。
             _logger.warning(
-                "invalid BACMAP_WEB_AUTH=%r (expected 'bearer' or 'cookie');"
-                " falling back to 'bearer'",
+                "invalid BACMAP_WEB_AUTH=%r (expected 'bearer', 'cookie', 'accounts'"
+                " or 'personal'); falling back to 'bearer'",
                 mode,
             )
             mode = "bearer"
@@ -144,16 +198,20 @@ class WebAuthConfig:
         if not secret:
             secret = sha256(f"bacmap-web:{tok}".encode()).hexdigest() if tok else ""
         return cls(
-            enabled=bool(tok),
+            enabled=bool(tok) or mode in {"accounts", "personal"},
             mode=mode,
             token=tok,
             secret=secret,
             cookie_secure=env.get("BACMAP_WEB_COOKIE_SECURE") == "1",
+            accounts=mode == "accounts",
+            personal=mode == "personal",
         )
 
     def bearer_ok(self, provided: str) -> bool:
         # provided 来自 latin-1 解码的请求头，重新编码即还原线字节；
         # expected 走 UTF-8——token 含非 latin-1 字符不再编码崩溃 → 500。
+        if not self.token:
+            return False
         return hmac.compare_digest(
             provided.encode("latin-1"), f"Bearer {self.token}".encode()
         )
@@ -181,17 +239,21 @@ class WebAuthConfig:
 
 
 def request_authenticated(request: Request, cfg: WebAuthConfig) -> bool:
-    """请求是否已通过鉴权（Bearer 头或 cookie 会话）。供 API 状态接口复用。"""
+    """请求是否已通过鉴权（账号主体 / Bearer 头 / cookie 会话）。"""
+    if principal_of(request) is not None:
+        return True
     header = request.headers.get("authorization", "")
     if header and cfg.bearer_ok(header):
         return True
-    if cfg.mode == "cookie":
+    if cfg.mode in ("cookie", "personal"):
         return cfg.cookie_ok(request.cookies.get(SESSION_COOKIE, ""))
     return False
 
 
-def operator_label(cfg: WebAuthConfig) -> str:
-    """单令牌部署的操作员标识：令牌指纹（不泄露令牌本体）。"""
+def operator_label(cfg: WebAuthConfig, principal: Principal | None = None) -> str:
+    """操作员标识：账号模式显示用户名；旧令牌模式显示令牌指纹（不泄露令牌本体）。"""
+    if principal is not None:
+        return principal.label
     if not cfg.token:
         return ""
     return "operator-" + sha256(cfg.token.encode()).hexdigest()[:8]
@@ -231,20 +293,88 @@ margin:3em auto;padding:0 1em;line-height:1.6">
 </body></html>""".encode()
 
 
-class WebAuthMiddleware:
-    """浏览器(cookie) + API(Bearer) 双通道鉴权；bearer 模式等价于纯 Bearer。"""
+# 普通用户不可进入的管理/全库视图（服务端硬边界；前端隐藏只是体验）。
+_USER_DENIED_PREFIXES = (
+    "/api/v1/research",
+    "/api/v1/runs",
+    "/api/v1/gom",
+    "/api/v1/gvixb",
+    "/api/v1/events",
+    "/api/v1/stats",
+    "/api/v1/records",
+    "/api/v1/users",
+    "/research",
+    "/legacy",
+)
 
-    def __init__(self, app: Any, cfg: WebAuthConfig) -> None:
+
+class WebAuthMiddleware:
+    """浏览器(cookie) + API(Bearer) 双通道鉴权；``accounts`` 模式走账号会话/令牌。"""
+
+    def __init__(
+        self,
+        app: Any,
+        cfg: WebAuthConfig,
+        *,
+        users_factory: Any = None,
+    ) -> None:
         if not cfg.enabled:
-            raise ValueError("WebAuthMiddleware 需要非空 token")
+            raise ValueError("WebAuthMiddleware 需要非空 token 或 accounts 模式")
         self._app = app
         self._cfg = cfg
+        self._users_factory = users_factory
+
+    def _resolve_principal(self, scope: dict[str, Any]) -> Principal | None:
+        """解析账号主体；账号服务不可用时返回 None（请求随后 401）。"""
+        if self._users_factory is None:
+            return None
+        header = _headers(scope).get("authorization", "")
+        token = ""
+        method = ""
+        if header.lower().startswith("bearer "):
+            token = header[7:].strip()
+            method = "api_token"
+        elif self._cfg.accounts or self._cfg.personal:
+            token = _cookies(scope).get(SESSION_COOKIE, "")
+            method = "session"
+        if not token:
+            return None
+        users: UserService = self._users_factory()
+        try:
+            if method == "api_token":
+                user = users.resolve_api_token(token)
+                return user_to_principal(user, auth_method="api_token") if user else None
+            resolved = users.resolve_session(token)
+            if resolved is None:
+                return None
+            user, session_hash = resolved
+            return user_to_principal(
+                user, auth_method="session", session_hash=session_hash
+            )
+        finally:
+            users.close()
 
     def _authenticated(self, scope: dict[str, Any]) -> bool:
         header = _headers(scope).get("authorization", "")
         if header and self._cfg.bearer_ok(header):
+            # 旧部署令牌在 accounts 模式下作为服务账号（全部权限），
+            # 便于脚本/监控继续工作；普通用户应使用个人 API 令牌。
+            scope.setdefault("state", {})["principal"] = Principal(
+                user_id="system",
+                username=operator_label(self._cfg),
+                role=Role.ADMIN,
+                display_name="deployment token",
+                auth_method="legacy_admin",
+            )
             return True
-        if self._cfg.mode == "cookie":
+        if self._cfg.accounts or self._cfg.personal:
+            principal = self._resolve_principal(scope)
+            if principal is not None:
+                state = scope.setdefault("state", {})
+                state["principal"] = principal
+                return True
+            return False
+        if self._cfg.mode in ("cookie", "personal"):
             return self._cfg.cookie_ok(_cookies(scope).get(SESSION_COOKIE, ""))
         return False
 
@@ -262,9 +392,37 @@ class WebAuthMiddleware:
             or path.startswith("/static/")
             or path.startswith("/console/assets/")
         ):
+            # /auth/status 是公开路径，但仍需要解析已有会话以返回角色/用户名
+            #（只放行请求，不等于匿名）。
+            if (self._cfg.accounts or self._cfg.personal) and path in (
+                "/api/v1/auth/status", "/api/v1/auth/logout"
+            ):
+                self._authenticated(scope)
             await self._app(scope, receive, send)
             return
         if self._authenticated(scope):
+            principal = scope.get("state", {}).get("principal")
+            if (
+                isinstance(principal, Principal)
+                and principal.role is Role.USER
+                and any(path.startswith(p) for p in _USER_DENIED_PREFIXES)
+            ):
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 403,
+                        "headers": [
+                            (b"content-type", b"application/json; charset=utf-8")
+                        ],
+                    }
+                )
+                await send(
+                    {
+                        "type": "http.response.body",
+                        "body": b'{"code":"forbidden","error":"permission denied"}',
+                    }
+                )
+                return
             await self._app(scope, receive, send)
             return
         method = str(scope.get("method", "GET")).upper()
@@ -274,7 +432,7 @@ class WebAuthMiddleware:
         if (
             method in SAFE_METHODS
             and self._accepts_html(scope)
-            and self._cfg.mode == "cookie"
+            and self._cfg.mode in ("cookie", "accounts", "personal")
         ):
             location = LOGIN_PATH + "?next=" + quote(path, safe="/")
             await send(
@@ -408,7 +566,7 @@ def verify_csrf(request: Request, form_csrf: str) -> bool:
     cfg: WebAuthConfig = request.app.state.web_auth
     if not cfg.enabled:
         return not _cross_site_browser_request(request)
-    if cfg.mode != "cookie":
+    if cfg.mode not in ("cookie", "accounts", "personal"):
         return True
     host = request.headers.get("host", "")
     origin = request.headers.get("origin", "")

@@ -1,5 +1,7 @@
 import { nextTick } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
+import { api } from './api'
+import type { AuthStatus } from './types'
 
 const routerBase = window.__BACMAP_ROUTER_BASE__ || '/console/'
 
@@ -35,6 +37,18 @@ const router = createRouter({
       name: 'plan-detail',
       component: () => import('./views/PlanDetailView.vue'),
       meta: { title: '计划详情' },
+    },
+    {
+      path: '/species',
+      name: 'species',
+      component: () => import('./views/SpeciesView.vue'),
+      meta: { title: '物种' },
+    },
+    {
+      path: '/admin/users',
+      name: 'admin-users',
+      component: () => import('./views/AdminUsersView.vue'),
+      meta: { title: '用户管理', roles: ['admin'] },
     },
     {
       path: '/specimens',
@@ -76,19 +90,19 @@ const router = createRouter({
       path: '/gom',
       name: 'gom',
       component: () => import('./views/GomView.vue'),
-      meta: { title: 'GOM' },
+      meta: { title: 'GOM', roles: ['admin', 'analyst'] },
     },
     {
       path: '/gom/:id',
       name: 'gom-detail',
       component: () => import('./views/GomDetailView.vue'),
-      meta: { title: 'GOM 对象' },
+      meta: { title: 'GOM 对象', roles: ['admin', 'analyst'] },
     },
     {
       path: '/research',
       name: 'research',
       component: () => import('./views/ResearchView.vue'),
-      meta: { title: '研究' },
+      meta: { title: '研究', roles: ['admin', 'analyst'] },
     },
     {
       // v1.10.20：旧 Jinja 研究工具纳入控制台外壳（嵌入而非跳出）。
@@ -97,6 +111,7 @@ const router = createRouter({
       component: () => import('./views/LegacyEmbedView.vue'),
       meta: {
         title: '高级研究工作台',
+        roles: ['admin', 'analyst'],
         hint: 'Study / Cohort / Claim 表单工作流（队列冻结、断言评审等）',
         legacyPath: '/research',
       },
@@ -107,6 +122,7 @@ const router = createRouter({
       component: () => import('./views/LegacyEmbedView.vue'),
       meta: {
         title: '系统发育（BEAST 规格）',
+        roles: ['admin', 'analyst'],
         hint: 'alignment / 日期 / 分区 → BEAST XML 与验证',
         legacyPath: '/research/phylo',
       },
@@ -117,6 +133,7 @@ const router = createRouter({
       component: () => import('./views/LegacyEmbedView.vue'),
       meta: {
         title: 'Logistic 关联分析',
+        roles: ['admin', 'analyst'],
         hint: 'P1 薄链路：本地 logistic（OR / CI / p 值）',
         legacyPath: '/research/stats',
       },
@@ -127,6 +144,7 @@ const router = createRouter({
       component: () => import('./views/LegacyEmbedView.vue'),
       meta: {
         title: 'Study 打包',
+        roles: ['admin', 'analyst'],
         hint: '投稿包裹构建与下载',
         legacyPath: '/research/studies/:id/package',
       },
@@ -137,6 +155,7 @@ const router = createRouter({
       component: () => import('./views/LegacyEmbedView.vue'),
       meta: {
         title: 'Study 操作台',
+        roles: ['admin', 'analyst'],
         hint: '队列 / 计划 / 断言 / 实验表单（服务端渲染工具）',
         legacyPath: '/research/studies/:id',
       },
@@ -145,43 +164,49 @@ const router = createRouter({
       path: '/research/dag/:id',
       name: 'research-dag',
       component: () => import('./views/DagView.vue'),
-      meta: { title: '研究 DAG' },
+      meta: { title: '研究 DAG', roles: ['admin', 'analyst'] },
     },
     {
       path: '/research/sessions/:id',
       name: 'research-session',
       component: () => import('./views/ResearchSessionView.vue'),
-      meta: { title: '研究会话' },
+      meta: { title: '研究会话', roles: ['admin', 'analyst'] },
     },
     {
       path: '/research/studies/:id',
       name: 'research-study',
       component: () => import('./views/ResearchStudyView.vue'),
-      meta: { title: 'Study' },
+      meta: { title: 'Study', roles: ['admin', 'analyst'] },
     },
     {
       path: '/runs',
       name: 'runs',
       component: () => import('./views/RunsView.vue'),
-      meta: { title: '运行记录' },
+      meta: { title: '运行记录', roles: ['admin', 'analyst'] },
     },
     {
       path: '/runs/:id',
       name: 'run-detail',
       component: () => import('./views/RunDetailView.vue'),
-      meta: { title: '运行详情' },
+      meta: { title: '运行详情', roles: ['admin', 'analyst'] },
+    },
+    {
+      path: '/imports',
+      name: 'imports',
+      component: () => import('./views/ImportView.vue'),
+      meta: { title: '湿实验导入' },
     },
     {
       path: '/records',
       name: 'records',
       component: () => import('./views/RecordsView.vue'),
-      meta: { title: '数据记录' },
+      meta: { title: '数据记录', roles: ['admin', 'analyst'] },
     },
     {
       path: '/overview',
       name: 'overview',
       component: () => import('./views/OverviewView.vue'),
-      meta: { title: '系统概览' },
+      meta: { title: '系统概览', roles: ['admin', 'analyst'] },
     },
     {
       path: '/search',
@@ -193,7 +218,7 @@ const router = createRouter({
       path: '/agent/:idx',
       name: 'agent-embed',
       component: () => import('./views/AgentEmbedView.vue'),
-      meta: { title: '智能体对话' },
+      meta: { title: '智能体对话', roles: ['admin', 'analyst'] },
     },
     {
       path: '/login',
@@ -209,6 +234,29 @@ const router = createRouter({
     },
   ],
   scrollBehavior: () => ({ top: 0 }),
+})
+
+let authPromise: Promise<AuthStatus | null> | null = null
+
+function loadAuthOnce(): Promise<AuthStatus | null> {
+  if (!authPromise) {
+    authPromise = api.authStatus().catch(() => null)
+  }
+  return authPromise
+}
+
+router.beforeEach(async (to) => {
+  const roles = to.meta.roles as string[] | undefined
+  if (!roles?.length) return true
+  const status = await loadAuthOnce()
+  if (!status) return true
+  if (!status.enabled || !status.authenticated) {
+    return { path: '/login', query: { next: `/console${to.fullPath}` } }
+  }
+  if (status.role && !roles.includes(status.role)) {
+    return { path: '/' }
+  }
+  return true
 })
 
 router.afterEach((to) => {

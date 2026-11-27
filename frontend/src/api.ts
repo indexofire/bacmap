@@ -22,10 +22,15 @@ import type {
   RunPurgeResult,
   SampleDetail,
   SampleRow,
+  SpeciesSummary,
   SpecimenDetail,
   SpecimenRow,
   TaskEvent,
   TaskRow,
+  ImportJob,
+  MappingAdvice,
+  WetlabWriteResult,
+  UserRow,
 } from './types'
 
 export class ApiError extends Error {
@@ -90,7 +95,178 @@ export const api = {
   authStatus: () => request<AuthStatus>('/auth/status'),
   login: (token: string, next = '/console/') =>
     request<{ ok: boolean; next: string }>('/auth/login', json({ token, next })),
+  loginAccount: (username: string, password: string, next = '/console/') =>
+    request<{ ok: boolean; next: string }>(
+      '/auth/login',
+      json({ username, password, next }),
+    ),
   logout: () => request<{ ok: boolean }>('/auth/logout', json({})),
+
+  createSpecimen: (payload: {
+    specimen_id: string
+    origin?: string
+    note?: string
+  }) => request<WetlabWriteResult>('/wetlab/specimens', json(payload)),
+  createIsolate: (payload: {
+    isolate_id: string
+    specimen_id?: string
+    lineage_id?: string | null
+    passage?: number | null
+  }) => request<WetlabWriteResult>('/wetlab/isolates', json(payload)),
+  saveSpecimenMetadata: (id: string, data: Record<string, unknown>, replace = true) =>
+    request<WetlabWriteResult>(
+      `/wetlab/specimens/${encodeURIComponent(id)}/metadata`,
+      json({ data, replace }),
+    ),
+  assignSpecimenTask: (id: string, isolates: string[], datasets: string[]) =>
+    request<WetlabWriteResult>(
+      `/wetlab/specimens/${encodeURIComponent(id)}/assign`,
+      json({ isolates, datasets }),
+    ),
+  deleteSpecimenMetadata: (id: string) =>
+    request<WetlabWriteResult>(
+      `/wetlab/specimens/${encodeURIComponent(id)}/metadata/delete`,
+      json({}),
+    ),
+  saveIsolateMetadata: (
+    id: string,
+    data: Record<string, unknown>,
+    sampleId = '',
+    replace = true,
+  ) =>
+    request<WetlabWriteResult>(
+      `/wetlab/isolates/${encodeURIComponent(id)}/metadata`,
+      json({ data, sample_id: sampleId, replace }),
+    ),
+  deleteIsolateMetadata: (id: string) =>
+    request<WetlabWriteResult>(
+      `/wetlab/isolates/${encodeURIComponent(id)}/metadata/delete`,
+      json({}),
+    ),
+  saveLibraryMetadata: (id: string, data: Record<string, unknown>, replace = true) =>
+    request<WetlabWriteResult>(
+      `/wetlab/libraries/${encodeURIComponent(id)}/metadata`,
+      json({ data, replace }),
+    ),
+  deleteLibraryMetadata: (id: string) =>
+    request<WetlabWriteResult>(
+      `/wetlab/libraries/${encodeURIComponent(id)}/metadata/delete`,
+      json({}),
+    ),
+  addLabResult: (payload: Record<string, unknown>) =>
+    request<WetlabWriteResult>('/wetlab/lab', json(payload)),
+  updateLabResult: (id: string, payload: Record<string, unknown>) =>
+    request<WetlabWriteResult>(
+      `/wetlab/lab/${encodeURIComponent(id)}`,
+      json(payload),
+    ),
+  deleteLabResult: (id: string) =>
+    request<WetlabWriteResult>(
+      `/wetlab/lab/${encodeURIComponent(id)}/delete`,
+      json({}),
+    ),
+
+  listImports: (offset = 0, limit = 50, status = '', kind = '') => {
+    const q = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+    if (status) q.set('status', status)
+    if (kind) q.set('kind', kind)
+    return request<Page<ImportJob>>(`/imports?${q.toString()}`)
+  },
+  getImport: (id: string) => request<ImportJob>(`/imports/${encodeURIComponent(id)}`),
+  proposeWetlab: (params: Record<string, unknown>) =>
+    request<ImportJob>('/wetlab/proposals', json({ params })),
+  adviseImport: (id: string) =>
+    request<MappingAdvice>(`/imports/${encodeURIComponent(id)}/advise`, json({})),
+  previewImport: (id: string, limit = 20) =>
+    request<{
+      summary: ImportJob['summary']
+      errors: string[]
+      total?: number
+      limit?: number
+      rows: Array<Record<string, unknown>>
+    }>(`/imports/${encodeURIComponent(id)}/preview?limit=${limit}`),
+  uploadImport: async (file: File, fields: Record<string, string> = {}) => {
+    const body = new FormData()
+    body.append('file', file)
+    for (const [key, value] of Object.entries(fields)) {
+      if (value) body.append(key, value)
+    }
+    const response = await fetch(appUrl('/api/v1/imports'), {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': csrfToken(), Accept: 'application/json' },
+      body,
+      credentials: 'same-origin',
+    })
+    if (response.status === 401) {
+      window.location.assign(appUrl('/console/login'))
+      throw new ApiError(401, 'unauthorized', '需要登录')
+    }
+    const text = await response.text()
+    let parsed: unknown = null
+    try {
+      parsed = text ? JSON.parse(text) : null
+    } catch {
+      parsed = text
+    }
+    if (!response.ok) {
+      const record = (parsed ?? {}) as Record<string, unknown>
+      const details = Array.isArray(record.details) ? `：${record.details.join('；')}` : ''
+      throw new ApiError(
+        response.status,
+        String(record.code ?? 'http_error'),
+        String(record.error ?? record.detail ?? '上传失败') + details,
+      )
+    }
+    return parsed as ImportJob
+  },
+  approveImport: (id: string, force = false) =>
+    request<ImportJob>(
+      `/imports/${encodeURIComponent(id)}/approve${force ? '?force_self_approval=true' : ''}`,
+      json({}),
+    ),
+  rejectImport: (id: string, note = '') =>
+    request<ImportJob>(
+      `/imports/${encodeURIComponent(id)}/reject?note=${encodeURIComponent(note)}`,
+      json({}),
+    ),
+  withdrawImport: (id: string) =>
+    request<ImportJob>(`/imports/${encodeURIComponent(id)}/withdraw`, json({})),
+
+  listUsers: () =>
+    request<{ items: UserRow[] }>('/users').then((r) => r.items),
+  createUser: (body: {
+    username: string
+    password: string
+    role: UserRow['role']
+    display_name?: string
+  }) => request<UserRow>('/users', json(body)),
+  setUserRole: (id: string, role: UserRow['role']) =>
+    request<UserRow>(`/users/${encodeURIComponent(id)}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    }),
+  setUserDisabled: (id: string, disabled: boolean) =>
+    request<UserRow>(`/users/${encodeURIComponent(id)}/disabled`, {
+      method: 'PATCH',
+      body: JSON.stringify({ disabled }),
+    }),
+  resetUserPassword: (id: string, password: string) =>
+    request<{ ok: boolean }>(`/users/${encodeURIComponent(id)}/password`, json({ password })),
+  listUserTokens: (id: string) =>
+    request<{ items: Array<Record<string, unknown>> }>(
+      `/users/${encodeURIComponent(id)}/tokens`,
+    ).then((r) => r.items),
+  createUserToken: (id: string, name: string, expiresDays = 0) =>
+    request<{ token: string; warning: string }>(
+      `/users/${encodeURIComponent(id)}/tokens`,
+      json({ name, expires_days: expiresDays }),
+    ),
+  revokeUserToken: (id: string, tokenId: string) =>
+    request<{ ok: boolean }>(
+      `/users/${encodeURIComponent(id)}/tokens/${encodeURIComponent(tokenId)}`,
+      { method: 'DELETE' },
+    ).then(() => undefined),
+
   capabilities: () => request<Capabilities>('/capabilities'),
   overview: () => request<Overview>('/overview'),
   stats: () => request<DatabaseStats>('/stats'),
@@ -213,19 +389,46 @@ export const api = {
   },
   getSample: (id: string) => request<SampleDetail>(`/samples/${encodeURIComponent(id)}`),
   samplesPage: (
-    offset = 0,
-    limit = 50,
-    sort: 'sample_id' | 'genome_size' | 'contigs' | 'gc_pct' = 'sample_id',
-    order: 'asc' | 'desc' = 'asc',
-  ) =>
-    request<Page<SampleRow> & { next_cursor: string | null }>(
-      `/samples?offset=${offset}&limit=${limit}&sort=${sort}&order=${order}`,
-    ),
+    params: {
+      offset?: number
+      limit?: number
+      sort?: string
+      order?: 'asc' | 'desc'
+      q?: string
+      species?: string
+      serotype?: string
+      mlst_st?: string
+      amr_gene?: string
+    } = {},
+  ) => {
+    const q = new URLSearchParams({
+      offset: String(params.offset ?? 0),
+      limit: String(params.limit ?? 50),
+      sort: params.sort ?? 'sample_id',
+      order: params.order ?? 'asc',
+    })
+    if (params.q) q.set('q', params.q)
+    if (params.species) q.set('species', params.species)
+    if (params.serotype) q.set('serotype', params.serotype)
+    if (params.mlst_st) q.set('mlst_st', params.mlst_st)
+    if (params.amr_gene) q.set('amr_gene', params.amr_gene)
+    return request<Page<SampleRow> & { next_cursor: string | null; indexed?: boolean }>(
+      `/samples?${q.toString()}`,
+    )
+  },
+  speciesSummary: () =>
+    request<{ items: SpeciesSummary[]; indexed: boolean }>('/species'),
 
   listSpecimens: (limit = 200) =>
     request<{ items: SpecimenRow[] }>(`/specimens?limit=${limit}`).then((r) => r.items),
-  specimensPage: (offset = 0, limit = 50) =>
-    request<Page<SpecimenRow>>(`/specimens?offset=${offset}&limit=${limit}`),
+  specimensPage: (offset = 0, limit = 50, q = '') => {
+    const params = new URLSearchParams({
+      offset: String(offset),
+      limit: String(limit),
+    })
+    if (q) params.set('q', q)
+    return request<Page<SpecimenRow>>(`/specimens?${params.toString()}`)
+  },
   getSpecimen: (id: string) =>
     request<SpecimenDetail>(`/specimens/${encodeURIComponent(id)}`),
   searchIdentity: (q: string) =>
@@ -269,8 +472,14 @@ export const api = {
     }>(`/specimens/${encodeURIComponent(id)}/delete`, json({ force })),
   listIsolates: (limit = 500) =>
     request<{ items: IsolateRow[] }>(`/isolates?limit=${limit}`).then((r) => r.items),
-  isolatesPage: (offset = 0, limit = 50) =>
-    request<Page<IsolateRow>>(`/isolates?offset=${offset}&limit=${limit}`),
+  isolatesPage: (offset = 0, limit = 50, q = '') => {
+    const params = new URLSearchParams({
+      offset: String(offset),
+      limit: String(limit),
+    })
+    if (q) params.set('q', q)
+    return request<Page<IsolateRow>>(`/isolates?${params.toString()}`)
+  },
   getIsolate: (id: string) => request<IsolateDetail>(`/isolates/${encodeURIComponent(id)}`),
   deleteIsolate: (id: string) =>
     request<{ deleted: boolean; isolate_id: string }>(

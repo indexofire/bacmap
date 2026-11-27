@@ -651,37 +651,53 @@ class DbosTaskEngine:
                 logger.warning("reconcile failed for %s", row["task_id"], exc_info=True)
 
     def list_tasks(
-        self, limit: int = 50, *, offset: int = 0, task_type: str = ""
+        self,
+        limit: int = 50,
+        *,
+        offset: int = 0,
+        task_type: str = "",
+        submitted_by: str | None = None,
     ) -> list[dict[str, Any]]:
         """最近任务列表（Web 列表页消费）。读取前先对账 running 的终态。"""
         self._reconcile_running()
+        clauses: list[str] = []
+        params: list[Any] = []
+        if task_type:
+            clauses.append("task_type = ?")
+            params.append(task_type)
+        if submitted_by is not None:
+            clauses.append("submitted_by = ?")
+            params.append(submitted_by)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         base = (
             "SELECT task_id, task_type, state, submitted_by, created_at, updated_at,"
             " current_step, message FROM tasks"
         )
         with self._conn() as conn:
-            if task_type:
-                rows = conn.execute(
-                    base + " WHERE task_type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                    (task_type, max(1, min(limit, 500)), max(0, offset)),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    base + " ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                    (max(1, min(limit, 500)), max(0, offset)),
-                ).fetchall()
+            rows = conn.execute(
+                base + where + " ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (*params, max(1, min(limit, 500)), max(0, offset)),
+            ).fetchall()
         return [dict(r) for r in rows]
 
-    def count_tasks(self, *, task_type: str = "") -> int:
-        """任务总数（分页用）；type 为空时统计全部。"""
+    def count_tasks(
+        self, *, task_type: str = "", submitted_by: str | None = None
+    ) -> int:
+        """任务总数（分页用）；可按类型/提交者过滤。"""
         self._reconcile_running()
+        clauses: list[str] = []
+        params: list[Any] = []
+        if task_type:
+            clauses.append("task_type = ?")
+            params.append(task_type)
+        if submitted_by is not None:
+            clauses.append("submitted_by = ?")
+            params.append(submitted_by)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         with self._conn() as conn:
-            if task_type:
-                row = conn.execute(
-                    "SELECT COUNT(*) FROM tasks WHERE task_type = ?", (task_type,)
-                ).fetchone()
-            else:
-                row = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()
+            row = conn.execute(
+                "SELECT COUNT(*) FROM tasks" + where, params  # noqa: S608 — where 仅由本模块常量拼装，值参数化
+            ).fetchone()
         return int(row[0]) if row else 0
 
     def count_states(self) -> dict[str, int]:

@@ -139,6 +139,36 @@ Data-class rules are enforced in code before a request is sent:
 | D2 | single-strain typing detail | blocked unless the admin raises the ceiling to D2 |
 | D3–D4 | sequences, personal/epidemiological identifiers | never sent to a cloud endpoint |
 
+### Web identity and AI data ceiling
+
+A personal workstation uses an access key (no username/password):
+
+```bash
+bacmap personal init                    # prints bk_… once
+export BACMAP_WEB_AUTH=personal
+bacmap start web
+```
+
+A shared workstation uses local accounts (see [Accounts & roles](../concepts/accounts.md)):
+
+```bash
+bacmap user create admin --role admin
+export BACMAP_WEB_AUTH=accounts
+```
+
+Every AI call can also carry an endpoint-independent cap:
+
+```toml
+[llm.data_policy]
+cloud_max_data_class = "D1"   # cloud endpoint cap
+ai_max_data_class = "D2"      # AI-wide cap (default D4)
+```
+
+The effective class is the strictest of the AI-wide cap, the endpoint location and the role
+ceiling. The import page's **AI mapping advice** is advisory only: a cloud endpoint sees column
+names and aggregates; only a local/LAN endpoint with a D4-capable ceiling receives up to three
+truncated sample values.
+
 ## 4. MCP side (agents)
 
 A **cloud** MCP instance is the default and exposes only tools whose output is within

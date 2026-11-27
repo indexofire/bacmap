@@ -45,7 +45,7 @@
 | # | 约束 | 来源 |
 |---|---|---|
 | C1 | 单台 Linux 工作站/服务器即可运行，离线可用 | project.md §2.1 |
-| C2 | 序列数据（D3）与个人及流调可识别信息（D4）**永不**出本地网络；单株分型结果（D2）默认不发公网端点，管理员可按 ADR-16 放行至 D2 为止；LLM API 只能接收数据分级允许的内容 | 第一轮裁决，v1.2/v1.4.3 细化；**用户已批准（2026-10-09，后续调整走修订流程）** |
+| C2 | 序列数据（D3）与个人及流调可识别信息（D4）**永不**出本地网络（v1.10.51 起的受控 debug 双开关例外见 ADR-16）；单株分型结果（D2）默认不发公网端点，管理员可按 ADR-16 放行至 D2 为止；LLM API 只能接收数据分级允许的内容 | 第一轮裁决，v1.2/v1.4.3 细化；**用户已批准（2026-10-09，后续调整走修订流程）** |
 | C3 | **没有 LLM 也能完成全部确定性功能**（分析、特征库发布、报告） | 本文新增，由 ADR-02 依赖方向 + ADR-06 确定性路径 + ADR-09 T0 档共同保证 |
 | C4 | 每个结论挂证据链 `(strain_id, run_id)`：`run_id` 指向一次分析运行的完整运行记录，含分析时间、流程版本、全部参数、参考数据库与工具的实测版本、输入文件校验值（v1.2 由三元证据链扩展，ADR-18）；结果不可覆盖 | project.md §4.5–4.6 |
 | C5 | LLM 产生的文本在展示、导出、入库之前必须过门 | 第二轮裁决，ADR-07 |
@@ -258,6 +258,7 @@ v1.2 起，"能力档位"与"部署位置"是两个独立维度：档位决定�
 - **决策**：FastAPI + Jinja2 + htmx + SSE；从只读看板升级为主交互入口（任务提交、对话、审批、签名）；默认只绑定本机，局域网访问需开启鉴权。
 - **理由**：一线用户不使用终端（第二轮）；不引入前端工程（ADR-01）。
 - **v1.5.2 补充**：新增版本化 JSON API `/api/v1`（任务、计划确认/拒绝、事件轮询与 SSE 续传、样本游标分页），与页面共用鉴权；它是可信界面，令牌不得交给外部 Harness（ADR-21）。
+- **v1.10.49 补充**：可选 `accounts` 模式（本地账号 + admin/analyst/user），服务端会话与权限点；普通用户只读自己提交/归属的数据。单令牌 `bearer`/`cookie` 仍是默认，MCP 令牌体系不变。
 
 ### ADR-15 Hermes 的角色 —— 可替换（v1.1 重写）
 - **定位**：Hermes 是 bacmap 的**可选外部客户端之一**，与 Claude、Codex、Cursor、Strata 聊天页等地位相同。bacmap 不依赖 Hermes 运行，也不把任何核心功能放在 Hermes 里。
@@ -285,10 +286,11 @@ v1.2 起，"能力档位"与"部署位置"是两个独立维度：档位决定�
 | D0 | 公开知识：文献、公共数据库条目、方法说明、用户的一般性提问 | 可以 |
 | D1 | 去标识的聚合统计：如本地各 ST 的占比、某年耐药基因检出率 | 可以 |
 | D2 | 单株分型结果：某株的物种、血清型、ST、耐药基因（不含个人信息与精确地点） | 默认不可，管理员可开启 |
-| D3 | 序列与比对数据：reads、组装、等位基因谱、SNP 矩阵 | **永不** |
-| D4 | 个人与流调可识别信息：患者姓名、电话、病例细节、精确住址 | **永不** |
+| D3 | 序列与比对数据：reads、组装、等位基因谱、SNP 矩阵 | **永不**（v1.10.51 debug 双开关例外，`agent.llm`/MCP `cloud`） |
+| D4 | 个人与流调可识别信息：患者姓名、电话、病例细节、精确住址 | **永不**（v1.10.51 debug 双开关例外，`agent.llm`/MCP `cloud`） |
 
 - 执行方式：每个工具声明 `output_data_class`（ADR-04）；`bacmap.agent.llm` 在发出请求前检查本次上下文中所有内容的最高级别，超过端点允许级别即拒绝发送并记录事件；角色清单声明 `max_data_class`，路由到 `cloud` 端点的角色若需要更高级别数据，则拒绝启动
+- **v1.10.51 调试例外（用户裁定 2026-11-27）**：仅当 `BACMAP_DEBUG=1`（或 `[debug].enabled=true`）**且** `BACMAP_DEBUG_ALLOW_CLOUD_D4=1`（仅环境变量）时，`agent.llm` 的 cloud 端点允许配置/接收 D3/D4；`LlmGateway` 在每次调用时复核双开关，任一关闭立即 fail-closed。MCP `cloud` Profile 的 D4 同样由第二开关控制；`local-trusted` 仍为受控本地 Profile。默认关闭；数据一旦发送到 cloud 不可撤回。
 - 现有 `strain_metadata` 含患者姓名、电话等字段（证据 §2.4），这些字段一律为 D4，不进入发往 `cloud` 端点的请求，也不进入本地流行特征库的特征表
 - 序列与流调数据不出本地网络
 - 智能体生成的代码只在沙箱中运行，不联网
@@ -843,3 +845,11 @@ bacmap/
 | v1.10.46 | 2026-11-18 | **预检识别「未声明的分型方案」**：`PreflightReport` 新增 `decisions`，对「gmlst catalog 里有该物种的 MLST/cgMLST 方案、但 registry 与 `tool_selection.yaml` 都没声明」的情况逐项列出（含 `gmlst scheme download`，已缓存未声明时改提示 `bacmap selection select`）；这类缺口**不触发 fail-fast**，但此前会让 `typing_mlst` 静默写 `NO_SCHEME`，与「本物种没有 MLST」无法区分。仅在物种完全没有声明分型方案时才读取 gmlst 目录（避免每次预检拉子进程），目录不可用时静默降级；`bacmap database status`、MCP `bacmap_database_status` 与 analyze/reanalyze 日志均透出。`scheme_matches_species` 提升为公开函数并排除上游 `non-<species>` 方案的误命中。测试基线 2346 → 2351。 | 用户反馈：缺 MLST 数据库时流程未提示就出 N/A（CAM/CDI 全为 NO_SCHEME） |
 | v1.10.47 | 2026-11-18 | **登记阶段物种识别升档 + 跳过项上报**：`register_fastas` 不再单档 marker 判生死——marker 未命中时补一档 ANI（自动适配 `ani`/`panel` 跨版本别名），仍判不出才跳过；新增 `SpeciesCall`/`detect_species_call()` 记录逐档结论（含失败原因与 ANI 命中 ani/af），`detect_species()` 签名不变。登记被跳过的文件（文件名+原因）无条件写入运行日志并追加 `task.step` 事件（D1：不含绝对路径），修复“部分失败全程静默”。同时修 `_gside_species_name` 读不到 `methods.<mode>.result.species` 的缺陷（此前非 marker 档一律被读成 Unknown）。实施中实测发现 `D2_ani` 分级库缺 `metadata.tsv`/`taxa_map.tsv`：ANI 命中 99.14%/af 91.89% 仍返回 Unknown，escalation 实为空转——已记入 ADR-24 提案（P1a）。新增 9 个用例。 | 用户反馈：给了目录却漏了 4 个基因组，且程序未提示 |
 | v1.10.48 | 2026-11-20 | **gvixb 合同与 demo 预览修复**：`gvixb.annotated-genome/v1` 要求 `replicons[].gc` 为数字；Bakta 改名导致装配映射缺失时，改为从 Bakta `.fna`（支持 `.gz`）按精确 contig 计算 GC，回退装配 GC，未知填 0.0，模型层改为非空 float。恢复 runtime 同步时误删的 `/static/gvixb/preview.html`，修复 Demo 的 Phylo/MST 样例 404。实测 15VPA0065 注释圈图与 Phylo/MST 预览正常，431 个注释载荷无 null GC。测试基线 2365 → 2367。 | 用户实测 gvixb 更新后注释图与 Phylo/MST 样例无法加载 |
+| v1.10.49 | 2026-11-26 | **本地账号/RBAC + 结果索引目录（多用户与 10 万级浏览）**：用户裁定启用本地账号。新增 `BACMAP_WEB_AUTH=accounts`（`data/bacmap.sqlite` 迁移 4：users/web_sessions/api_tokens + specimens/isolates.owner_user_id）；scrypt 密码、服务端会话哈希、登录限速，CSRF 沿用 ADR-14；admin/analyst/user 由服务端强制，审批/计划确认的 approver/confirmer 不再信任请求体；user 仅见自己提交/归属的任务、计划、样本、菌株与结果，无主历史数据仅 analyst/admin 可见（`bacmap specimen assign-owner` 回填）；新增 `bacmap user list/create/set-role/disable/passwd/token`。结果索引 `strain_genotype_index` 迁移 3 增列 specimen/isolate、组装指标、CARD/VFDB/质粒计数、owner、analysis_date；analyze ingest 直写，`bacmap results reindex` 回填历史；`/api/v1/samples|species|specimens|isolates` 改为服务端过滤/分页，控制台新增物种页、用户管理页，测序数据列表不再全量拉取。**DuckDB 不引入**：SQLite 10 万级实测深分页 <1 ms、物种过滤 ~3 ms、全表 LIKE ~20 ms；仅未来千万级或宽表 Parquet/即席分析再评估只读分析侧车。迁移成本：升级后执行一次 `bacmap results reindex --backfill-metadata`（已有索引行只补新列、保留 GOM 关联；未回填时列表回退旧扫描）；启用 accounts 前先执行 `bacmap user create --role admin`。测试基线 2367 → 2382（+15；工作区另有未提交的 gaxis 4 个测试未计入）。 | 用户裁定（账号分级 + 10 万级 SQLite/DuckDB 评估 + 管理页检索）+ 实施验证 |
+| v1.10.50 | 2026-11-26 | **湿实验批量导入（XLSX/CSV/TSV）**：`record` 任务新增 `batch` 子类型，一个任务批量写 `strain_metadata` / `lab_results`（仍经任务层审计，不新增任务类型、不改变门禁）；`MetadataRecord` / `LabResultRecord` 增加 `extra` JSON，保留 Excel 中不在白名单的自定义列；新增 `bacmap record import`（自动识别 metadata/lab 工作表、中文列名映射、菌株/测序数据/样本编号解析到 isolate、整体校验、`--dry-run`）；菌株详情在无数据时显示湿实验空状态与导入入口。测试基线 2382 → 2386。 | 用户需求（xlsx 导入湿实验字段）+ 实施验证 |
+| v1.10.51 | 2026-11-27 | **Debug 双开关允许 agent.llm/MCP cloud D3/D4（用户裁定）**：`DataPolicy` 在 `BACMAP_DEBUG`（环境变量或 `[debug].enabled=true`）且 `BACMAP_DEBUG_ALLOW_CLOUD_D4=1`（仅环境变量）时允许 `cloud_max_data_class` 配到 D4；`LlmGateway` 在每次调用时运行期复核双开关，任一关闭立即 fail-closed，不只依赖配置加载时检查。例外覆盖 `agent.llm` 与 MCP `cloud` Profile：D4 需双开关；`local-trusted` 仍为受控本地 Profile。默认关闭，启动/每次 D3/D4 cloud 调用打醒目警告。**风险**：数据一旦发送到 cloud 模型即不可撤回；仅限受控开发机。测试基线 2386 → 2391（+5：配置校验、配置加载、运行期双开关、MCP cloud、无端点策略）。 | 用户裁定（保留 debug 权限，cloud 可开 D4）+ 实施验证 |
+| v1.10.52 | 2026-11-27 | **四层湿实验存储与导入**：`data/bacmap.sqlite` 迁移 5 新增 `specimen_metadata`（患者/采样/来源，JSON 扩展）、`library_metadata`（一个菌株多份测序数据；mNGS 只挂 specimen）；`lab_results` 增加 `subject_type/subject_id`（默认 isolate，兼容旧 `strain_id`）。`record` batch 新增 `specimen_metadata`/`library_metadata` 行类型；`bacmap record import` 支持 specimen/isolate/library/lab 四类工作表，按 samples.tsv/身份表解析链接并整体校验；样本详情展示样本元数据与样本级化验，菌株详情展示测序数据元数据。GOM 不被写入，只通过身份 ID 关联。测试基线 2391 → 2398（+7）。 | 用户需求（样本/菌株/测序/实验四层湿实验数据导入）+ 第一性原理评审 |
+| v1.10.53 | 2026-11-27 | **P1 Web 湿实验导入提案与审核**：`data/bacmap.sqlite` 迁移 6 新增 `import_jobs`（文件哈希/路径、pending_review 状态、提交人/审核人、摘要与错误）；新增 `/api/v1/imports` 上传/列表/详情/approve/reject/withdraw：上传只解析并生成提案，不写业务表；`user` 只能看/撤回自己的提案，`analyst/admin` 审核通过后才提交一个 `record` batch 任务；提交人不能自审（admin 可显式 force）；文件 20 MB/类型白名单、0600 保存在本机；控制台新增“湿实验导入”页。测试基线 2398 → 2400（+2）。 | 用户裁定（P0 后进入 P1：user 上传、analyst/admin 审核写入） |
+| v1.10.54 | 2026-11-27 | **P2 个人模式与 AI 映射建议**：①`BACMAP_WEB_AUTH=personal` + `bacmap personal init|status|rotate`：访问密钥（`bk_…`，scrypt 哈希，`$BACMAP_HOME/personal.json` 0600）登录，内置 `owner`（admin，全功能）服务端会话；密钥只在创建/轮换时显示一次，默认回环绑定。②`[llm.data_policy] ai_max_data_class`（D0–D4，默认 D4）作为 AI 总上限，`LlmGateway` 每次调用复核；实际生效 = min(AI 总上限, 端点位置策略, 角色 max_data_class)。③湿实验导入新增只读 AI 映射顾问 `/api/v1/imports/{id}/advise`：云端点仅接收列名与聚合统计（D1），local/lan 且上限允许 D4 时才附 3 行截断样例；输出仅建议，不写业务表/GOM；控制台预览面板展示建议与风险。④修复守护进程归属：`bacmap stop/start` 按目标进程实际 `BACMAP_HOME`（argv `--home` 或 `/proc/<pid>/environ`）匹配，避免跨 home 误杀。测试基线 2400 → 2413（+13）。 | 用户裁定（P1 验收后进入 P2：个人模式 + AI 映射顾问） |
+| v1.10.55 | 2026-11-27 | **P3 湿实验数据管理闭环**：①新增 record 种类 `metadata_delete` / `specimen_metadata_delete` / `library_metadata_delete` / `lab_result_update` / `lab_result_delete`，三种元数据记录增加 `replace` 全量替换语义；②`specimen_metadata` / `library_metadata` / `strain_metadata` 支持清空字段，`lab_results` 支持部分更新与删除，`library_metadata` 增加删除；③新增 `/api/v1/wetlab/...` 编辑接口：保存/删除 specimen、isolate、library 字段，新增/更新/删除化验结果；关联也经 `specimen_assign` record 任务；所有写入仍只提交 `record` 任务（ADR-07），仅 `analyst`/`admin`（`record.write`），CSRF 强制；④样本/菌株详情页增加编辑、删除、新增化验、关联菌株/测序数据，保存等待任务终态后刷新；普通 `user` 仍走上传提案+审核，不直接写库。测试基线 2413 → 2420（+7）。 | 用户裁定（P2 后进入 P3：湿实验数据管理闭环） |
+| v1.10.56 | 2026-11-27 | **P4 多用户湿实验写闭环**：①迁移 7 扩展 `import_jobs`（`kind`/`payload_json`/`target_type`/`target_id`/`base_version`），文件导入与用户修改/删除/新建/关联提案共用同一审核队列；`user` 可对**自己可见**的数据提交提案，提交人不能自审，审核时检测目标版本变化并重新校验归属。②record 模型增加 `owner_user_id`：审核通过后只对**无主** specimen/isolate/library/lab 归属到提交人，已有 owner 不覆盖；新增 `specimen_create`/`isolate_create` record 种类与 Web 新建入口。③新增 `bacmap imports list|prune`：过期 pending、清理终态提案与本机上传目录。④Web 样本/菌株详情页支持 user 提案模式，审核仍在 `/console/imports`。测试基线 2420 → 2428（+8）。 | 用户裁定（P4：多用户写闭环、归属、新建实体与保留期） |

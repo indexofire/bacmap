@@ -90,3 +90,149 @@ def test_record_is_in_help(monkeypatch, capsys):
         cli.main()
     out = capsys.readouterr().out
     assert "record" in out and "task" in out
+
+
+def test_import_xlsx_batch(engine, capsys, tmp_path: Path):
+    from openpyxl import Workbook
+
+    from bacmap.store.isolates import IsolateService
+
+    with IsolateService(tmp_path / "data" / "bacmap.sqlite") as isolates:
+        isolates.ensure("ISO-1")
+        isolates.ensure("ISO-2")
+
+    book = Workbook()
+    meta = book.active
+    meta.title = "metadata"
+    meta.append(["菌株编号", "省份", "自定义字段"])
+    meta.append(["ISO-1", "Guangdong", "custom-value"])
+    lab = book.create_sheet("lab")
+    lab.append(["菌株编号", "类别", "检验项目", "结果", "单位", "备注"])
+    lab.append(["ISO-2", "mic", "meropenem", 0.25, "mg/L", "panel-A"])
+    path = tmp_path / "wetlab.xlsx"
+    book.save(path)
+
+    out = _run(
+        capsys,
+        "record",
+        "import",
+        str(path),
+        "--home",
+        str(tmp_path),
+        "--json",
+    )
+    body = json.loads(out)
+    assert body["isolate_rows"] == 1 and body["lab_rows"] == 1
+    kind, params, by = engine.calls[0]
+    assert kind == "record" and params["kind"] == "batch" and by == "cli:import"
+    rows = params["rows"]
+    assert {row["kind"] for row in rows} == {"metadata", "lab_result"}
+    metadata_row = next(row for row in rows if row["kind"] == "metadata")
+    assert metadata_row["strain_id"] == "ISO-1"
+    assert metadata_row["fields"]["province"] == "Guangdong"
+    assert metadata_row["extra"]["自定义字段"] == "custom-value"
+    lab_row = next(row for row in rows if row["kind"] == "lab_result")
+    assert lab_row["strain_id"] == "ISO-2"
+    assert lab_row["result"] == "0.25" and lab_row["unit"] == "mg/L"
+
+
+def test_import_dry_run_does_not_submit(engine, capsys, tmp_path: Path):
+    from bacmap.store.isolates import IsolateService
+
+    with IsolateService(tmp_path / "data" / "bacmap.sqlite") as isolates:
+        isolates.ensure("ISO-1")
+    path = tmp_path / "wetlab.tsv"
+    path.write_text("菌株编号\t省份\nISO-1\tGuangdong\n", encoding="utf-8")
+    _run(capsys, "record", "import", str(path), "--home", str(tmp_path), "--dry-run")
+    assert engine.calls == []
+
+
+def test_import_four_layer_xlsx(engine, capsys, tmp_path: Path):
+    from openpyxl import Workbook
+
+    from bacmap.store.isolates import IsolateService
+    from bacmap.store.specimens import SpecimenService
+
+    db = tmp_path / "data" / "bacmap.sqlite"
+    with SpecimenService(db) as specimens:
+        specimens.ensure("SP-1")
+    with IsolateService(db) as isolates:
+        isolates.ensure("ISO-1", specimen_id="SP-1")
+    cfg = tmp_path / "workflows" / "bacmap" / "config"
+    cfg.mkdir(parents=True)
+    (cfg / "samples.tsv").write_text(
+        "sample\tspecies\tR1\tR2\tlongread\tassembly\tisolate\tplatform"
+        "\tchecksum\tspecimen\n"
+        "LIB-1\tSAL\t\t\t\ta.fasta\tISO-1\tilm\t\tSP-1\n",
+        encoding="utf-8",
+    )
+
+    book = Workbook()
+    specimen = book.active
+    specimen.title = "specimen"
+    specimen.append(["样本编号", "患者姓名", "采样日期"])
+    specimen.append(["SP-1", "张三", "2026-10-01"])
+    isolate = book.create_sheet("isolate")
+    isolate.append(["菌株编号", "分离日期", "省份"])
+    isolate.append(["ISO-1", "2026-10-02", "广东"])
+    library = book.create_sheet("library")
+    library.append(["测序数据编号", "平台", "测序日期"])
+    library.append(["LIB-1", "illumina", "2026-10-03"])
+    lab = book.create_sheet("lab")
+    lab.append(["测序数据编号", "类别", "检验项目", "结果"])
+    lab.append(["LIB-1", "mic", "meropenem", "0.25"])
+    path = tmp_path / "wetlab-four.xlsx"
+    book.save(path)
+
+    out = _run(
+        capsys, "record", "import", str(path), "--home", str(tmp_path), "--json"
+    )
+    body = json.loads(out)
+    assert body["specimen_rows"] == 1
+    assert body["isolate_rows"] == 1
+    assert body["library_rows"] == 1
+    assert body["lab_rows"] == 1
+    rows = engine.calls[0][1]["rows"]
+    assert {row["kind"] for row in rows} == {
+        "specimen_metadata", "metadata", "library_metadata", "lab_result"
+    }
+    specimen_row = next(row for row in rows if row["kind"] == "specimen_metadata")
+    assert specimen_row["specimen_id"] == "SP-1"
+    assert specimen_row["data"]["患者姓名"] == "张三"
+    library_row = next(row for row in rows if row["kind"] == "library_metadata")
+    assert library_row["library_id"] == "LIB-1"
+    assert library_row["isolate_id"] == "ISO-1"
+    assert library_row["specimen_id"] == "SP-1"
+    lab_row = next(row for row in rows if row["kind"] == "lab_result")
+    assert lab_row["subject_type"] == "isolate"
+    assert lab_row["subject_id"] == "ISO-1"
+
+
+def test_lab_can_target_specimen(engine, capsys, tmp_path: Path):
+    from openpyxl import Workbook
+
+    from bacmap.store.specimens import SpecimenService
+
+    with SpecimenService(tmp_path / "data" / "bacmap.sqlite") as specimens:
+        specimens.ensure("SP-1")
+    book = Workbook()
+    lab = book.active
+    lab.title = "lab"
+    lab.append(["样本编号", "类别", "检验项目", "结果"])
+    lab.append(["SP-1", "mngs", "blaCTX-M", "positive"])
+    path = tmp_path / "specimen-lab.xlsx"
+    book.save(path)
+    _run(
+        capsys,
+        "record",
+        "import",
+        str(path),
+        "--lab-subject",
+        "specimen",
+        "--home",
+        str(tmp_path),
+        "--json",
+    )
+    row = engine.calls[0][1]["rows"][0]
+    assert row["kind"] == "lab_result"
+    assert row["subject_type"] == "specimen" and row["subject_id"] == "SP-1"

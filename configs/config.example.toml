@@ -30,10 +30,15 @@
 # 确定性的 analysis_claims 门（NLI 反射器，无 LLM）比对管线事实。
 # ─────────────────────────────────────────────────────────────────
 
-# 数据分级上限（ADR-16 红线）：cloud 端点默认 D1，管理员最多放宽到 D2；
-# 配置 D3/D4 会在加载时被直接拒绝。D0=元数据 D1=汇总 D2=单株分型 D3/D4=原始数据。
+# 数据分级上限（ADR-16）：cloud 端点默认 D1，管理员最多放宽到 D2；
+# D3/D4 默认在加载时拒绝。仅开发调试双开关
+# （BACMAP_DEBUG=1 + BACMAP_DEBUG_ALLOW_CLOUD_D4=1）允许 cloud D4；
+# 数据一旦发出不可撤回；MCP `cloud` Profile 的 D4 同样受双开关控制，`local-trusted` 不受影响。
 # [llm.data_policy]
 # cloud_max_data_class = "D1"
+# AI 总上限（默认 D4）：所有 purpose 的实际级别取 min(本上限, 端点位置, 角色上限)。
+# 组织模式可收紧到 D2/D1；导入映射顾问在收紧后自动只发 schema/聚合统计。
+# ai_max_data_class = "D2"
 
 # 端点定义：每个 [llm.endpoints.<名字>] 一个端点。字段含义：
 #   location                  local | lan | cloud（决定数据分级上限的适用）

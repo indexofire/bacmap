@@ -23,7 +23,17 @@ from bacmap.store.strain_metadata import METADATA_FIELDS
 
 class RecordKind(StrEnum):
     METADATA = "metadata"
+    SPECIMEN_METADATA = "specimen_metadata"
+    LIBRARY_METADATA = "library_metadata"
     LAB_RESULT = "lab_result"
+    LAB_RESULT_UPDATE = "lab_result_update"
+    LAB_RESULT_DELETE = "lab_result_delete"
+    METADATA_DELETE = "metadata_delete"
+    SPECIMEN_METADATA_DELETE = "specimen_metadata_delete"
+    LIBRARY_METADATA_DELETE = "library_metadata_delete"
+    SPECIMEN_CREATE = "specimen_create"
+    ISOLATE_CREATE = "isolate_create"
+    BATCH = "batch"
     KNOWLEDGE_IMPORT = "knowledge_import"
     KNOWLEDGE_APPROVE = "knowledge_approve"
     SPECIMEN_ASSIGN = "specimen_assign"
@@ -36,6 +46,12 @@ class MetadataRecord(BaseModel):
     strain_id: str = Field(min_length=1, max_length=128)
     sample_id: str = Field(default="", max_length=128)
     fields: dict[str, Any] = Field(default_factory=dict)
+    # Excel/CSV 中不在白名单内的自定义湿实验列（JSON 存储）；不得覆盖已知列。
+    extra: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    # Web 编辑用：true = 全量替换（未给出的核心列/extra 清空），false = 合并。
+    replace: bool = False
+    # 审核通过后把无主数据归属到提交人（空值不改变归属）。
+    owner_user_id: str = Field(default="", max_length=64)
 
     def model_post_init(self, __context: Any) -> None:
         unknown = sorted(set(self.fields) - set(METADATA_FIELDS))
@@ -43,6 +59,10 @@ class MetadataRecord(BaseModel):
             raise ValueError(f"unknown metadata field(s): {unknown}")
         if "strain_id" in self.fields or "sample_id" in self.fields:
             raise ValueError("strain_id/sample_id are top-level, not part of fields")
+        reserved = set(METADATA_FIELDS) | {"strain_id", "sample_id", "extra"}
+        bad_extra = sorted(set(self.extra) & reserved)
+        if bad_extra:
+            raise ValueError(f"extra cannot override known field(s): {bad_extra}")
 
 
 class LabResultRecord(BaseModel):
@@ -61,6 +81,117 @@ class LabResultRecord(BaseModel):
     tested_by: str = ""
     lab: str = ""
     notes: str = ""
+    subject_type: Literal["isolate", "specimen"] = "isolate"
+    subject_id: str = ""
+    extra: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    owner_user_id: str = Field(default="", max_length=64)
+
+
+class LabResultUpdate(BaseModel):
+    """部分更新一条化验结果；只改给出的字段。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["lab_result_update"] = "lab_result_update"
+    result_id: str = Field(min_length=1, max_length=64)
+    category: str | None = Field(default=None, max_length=64)
+    test_name: str | None = Field(default=None, max_length=128)
+    result: str | None = Field(default=None, max_length=256)
+    unit: str | None = None
+    method: str | None = None
+    interpretation: str | None = None
+    standard: str | None = None
+    tested_date: str | None = None
+    tested_by: str | None = None
+    lab: str | None = None
+    notes: str | None = None
+    subject_type: Literal["isolate", "specimen"] | None = None
+    subject_id: str | None = None
+    extra: dict[str, str | int | float | bool | None] | None = None
+
+    def model_post_init(self, __context: Any) -> None:
+        changed = [
+            value
+            for name, value in self.model_dump(exclude={"kind", "result_id"}).items()
+            if value is not None
+        ]
+        if not changed:
+            raise ValueError("lab_result_update requires at least one field")
+
+
+class LabResultDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["lab_result_delete"] = "lab_result_delete"
+    result_id: str = Field(min_length=1, max_length=64)
+
+
+class MetadataDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["metadata_delete"] = "metadata_delete"
+    strain_id: str = Field(min_length=1, max_length=128)
+
+
+class SpecimenMetadataDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["specimen_metadata_delete"] = "specimen_metadata_delete"
+    specimen_id: str = Field(min_length=1, max_length=128)
+
+
+class LibraryMetadataDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["library_metadata_delete"] = "library_metadata_delete"
+    library_id: str = Field(min_length=1, max_length=128)
+
+
+class SpecimenCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["specimen_create"] = "specimen_create"
+    specimen_id: str = Field(min_length=1, max_length=128)
+    origin: str = Field(default="manual", max_length=64)
+    note: str = Field(default="", max_length=2000)
+    owner_user_id: str = Field(default="", max_length=64)
+
+
+class IsolateCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["isolate_create"] = "isolate_create"
+    isolate_id: str = Field(min_length=1, max_length=128)
+    specimen_id: str = Field(default="", max_length=128)
+    lineage_id: str | None = Field(default=None, max_length=128)
+    passage: int | None = Field(default=None, ge=0)
+    owner_user_id: str = Field(default="", max_length=64)
+
+
+class SpecimenMetadataRecord(BaseModel):
+    """样本级湿实验信息（患者/采样/来源）；与 specimen 挂钩。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["specimen_metadata"] = "specimen_metadata"
+    specimen_id: str = Field(min_length=1, max_length=128)
+    data: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    replace: bool = False
+    owner_user_id: str = Field(default="", max_length=64)
+
+
+class LibraryMetadataRecord(BaseModel):
+    """测序数据级元数据；WGS 可挂 isolate，mNGS 只挂 specimen。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["library_metadata"] = "library_metadata"
+    library_id: str = Field(min_length=1, max_length=128)
+    specimen_id: str = ""
+    isolate_id: str = ""
+    data: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    replace: bool = False
+    owner_user_id: str = Field(default="", max_length=64)
 
 
 class KnowledgeImport(BaseModel):
@@ -85,6 +216,7 @@ class SpecimenAssign(BaseModel):
     specimen_id: str = Field(min_length=1, max_length=128)
     isolates: list[str] = Field(default_factory=list)
     datasets: list[str] = Field(default_factory=list)
+    owner_user_id: str = Field(default="", max_length=64)
 
     def model_post_init(self, __context: Any) -> None:
         if not self.isolates and not self.datasets:
@@ -98,12 +230,57 @@ class KnowledgeApprove(BaseModel):
     entry_id: int = Field(ge=1)
 
 
+class BatchRecord(BaseModel):
+    """Excel/CSV 批量导入：一个任务写多行元数据/化验结果（仍经 record 工作流）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["batch"] = "batch"
+    rows: list[
+        Annotated[
+            MetadataRecord
+            | SpecimenMetadataRecord
+            | LibraryMetadataRecord
+            | LabResultRecord,
+            Field(discriminator="kind"),
+        ]
+    ] = Field(min_length=1, max_length=5000)
+
+
 RecordTask = Annotated[
-    MetadataRecord | LabResultRecord | KnowledgeImport | KnowledgeApprove | SpecimenAssign,
+    MetadataRecord
+    | SpecimenMetadataRecord
+    | LibraryMetadataRecord
+    | LabResultRecord
+    | LabResultUpdate
+    | LabResultDelete
+    | MetadataDelete
+    | SpecimenMetadataDelete
+    | LibraryMetadataDelete
+    | SpecimenCreate
+    | IsolateCreate
+    | BatchRecord
+    | KnowledgeImport
+    | KnowledgeApprove
+    | SpecimenAssign,
     Field(discriminator="kind"),
 ]
 RecordModel = (
-    MetadataRecord | LabResultRecord | KnowledgeImport | KnowledgeApprove | SpecimenAssign
+    MetadataRecord
+    | SpecimenMetadataRecord
+    | LibraryMetadataRecord
+    | LabResultRecord
+    | LabResultUpdate
+    | LabResultDelete
+    | MetadataDelete
+    | SpecimenMetadataDelete
+    | LibraryMetadataDelete
+    | SpecimenCreate
+    | IsolateCreate
+    | BatchRecord
+    | KnowledgeImport
+    | KnowledgeApprove
+    | SpecimenAssign
 )
 _ADAPTER: TypeAdapter[RecordModel] = TypeAdapter(RecordTask)
 

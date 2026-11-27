@@ -166,8 +166,9 @@ def debug_mode() -> bool:
     """开发调试模式：环境变量或 ``[debug] enabled = true`` 时放宽运行控制。
 
     优先级：``BACMAP_DEBUG`` 显式设置 > ``config.toml``。因此 ``BACMAP_DEBUG=0``
-    可以临时关闭配置文件开启的 debug 模式。仅用于受控开发机；数据红线
-    （D3/D4 永不发往 cloud 端点）不在此开关范围内。
+    可以临时关闭配置文件开启的 debug 模式。仅用于受控开发机。默认仍禁止
+    D3/D4 发往 cloud；只有额外设置 BACMAP_DEBUG_ALLOW_CLOUD_D4=1 才允许
+    agent.llm / MCP cloud 的 D4（v1.10.51 用户裁定的调试例外）。
     """
     enabled = _debug_from_env()
     if enabled is not None:
@@ -175,13 +176,34 @@ def debug_mode() -> bool:
     return _debug_from_config()
 
 
+_ALLOW_CLOUD_D4_ENV = "BACMAP_DEBUG_ALLOW_CLOUD_D4"
+
+
+def debug_allow_cloud_d4() -> bool:
+    """调试双开关：允许 cloud LLM 端点接收 D3/D4（agent.llm 与 MCP cloud；local-trusted 不受影响）。
+
+    ``BACMAP_DEBUG=1``（或 ``[debug].enabled=true``）**且**
+    ``BACMAP_DEBUG_ALLOW_CLOUD_D4=1`` 才为真。第二个开关只认环境变量，
+    不写入 config.toml——避免调试配置随数据目录被复制到生产。
+    MCP `cloud` Profile 同样受此开关控制；`local-trusted` 不受影响。默认关闭。
+    """
+    raw = (os.environ.get(_ALLOW_CLOUD_D4_ENV) or "").strip().lower()
+    return debug_mode() and raw in {"1", "true", "yes", "on"}
+
+
 def debug_warning(component: str) -> str:
     """统一警告文本（调用方打印到 stderr/日志）。"""
-    return (
+    text = (
         f"[bacmap] DEBUG MODE ({component}): BACMAP_DEBUG=1 或 "
         "[debug] enabled=true——鉴权/CSRF/审批/门/MCP Profile/沙箱限制已放宽。"
         "仅限本机开发；不要用于生产。"
     )
+    if debug_allow_cloud_d4():
+        text += (
+            " ⚠ CLOUD D3/D4 EGRESS ENABLED: BACMAP_DEBUG_ALLOW_CLOUD_D4=1；"
+            "患者/序列数据一旦发送到 cloud 模型即不可撤回。"
+        )
+    return text
 
 
 _UI_LANGUAGES = ("en", "zh")

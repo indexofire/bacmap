@@ -10,6 +10,8 @@ const status = ref<AuthStatus | null>(null)
 const loading = ref(true)
 const submitting = ref(false)
 const token = ref('')
+const username = ref('')
+const password = ref('')
 const error = ref('')
 
 // 只接受站内路径：服务端已过滤一次，这里再兜底（防开放重定向）。
@@ -38,12 +40,15 @@ async function refresh() {
 }
 
 async function submit() {
-  const value = token.value.trim()
-  if (!value) return
+  const accounts = status.value?.mode === 'accounts'
+  if (accounts && (!username.value.trim() || !password.value)) return
+  if (!accounts && !token.value.trim()) return
   submitting.value = true
   error.value = ''
   try {
-    const result = await api.login(value, next.value)
+    const result = accounts
+      ? await api.loginAccount(username.value.trim(), password.value, next.value)
+      : await api.login(token.value.trim(), next.value)
     window.location.assign(result.next || '/console/')
   } catch (err) {
     error.value = err instanceof Error ? err.message : '登录失败'
@@ -65,6 +70,81 @@ async function submit() {
       <h1 id="login-title" class="login-title">登录控制台</h1>
 
       <p v-if="loading" class="login-hint">正在检查登录状态…</p>
+
+      <template v-else-if="status?.enabled && status.mode === 'accounts'">
+        <p v-if="status.accounts_ready === false" class="login-hint">
+          尚未创建账号。请在本机执行
+          <code>bacmap user create --role admin</code> 后刷新。
+        </p>
+        <template v-else>
+          <p class="login-hint">使用本地账号登录控制台。</p>
+          <form class="login-form" @submit.prevent="submit">
+            <label class="field__label" for="login-username">用户名</label>
+            <input
+              id="login-username"
+              v-model="username"
+              class="input"
+              type="text"
+              autocomplete="username"
+              autofocus
+              required
+            />
+            <label class="field__label" for="login-password">密码</label>
+            <input
+              id="login-password"
+              v-model="password"
+              class="input"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+            <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+            <button
+              class="btn btn--primary login-submit"
+              type="submit"
+              :disabled="submitting || !username.trim() || !password"
+            >
+              <span v-if="submitting" class="spinner" />
+              <Icon v-else name="shield" />
+              登录
+            </button>
+          </form>
+          <p class="login-foot">账号与密码只保存在本机数据库。</p>
+        </template>
+      </template>
+
+      <template v-else-if="status?.enabled && status.mode === 'personal'">
+        <p v-if="status.personal_ready === false" class="login-hint">
+          个人模式尚未初始化。请在本机执行
+          <code>bacmap personal init</code> 生成访问密钥后刷新。
+        </p>
+        <template v-else>
+          <p class="login-hint">输入个人访问密钥（<code>bk_…</code>）进入控制台。</p>
+          <form class="login-form" @submit.prevent="submit">
+            <label class="field__label" for="login-token">访问密钥</label>
+            <input
+              id="login-token"
+              v-model="token"
+              class="input"
+              type="password"
+              autocomplete="current-password"
+              autofocus
+              required
+            />
+            <p v-if="error" class="form-error" role="alert">{{ error }}</p>
+            <button
+              class="btn btn--primary login-submit"
+              type="submit"
+              :disabled="submitting || !token.trim()"
+            >
+              <span v-if="submitting" class="spinner" />
+              <Icon v-else name="shield" />
+              登录
+            </button>
+          </form>
+          <p class="login-foot">个人模式拥有全部功能；密钥只保存在本机。</p>
+        </template>
+      </template>
 
       <template v-else-if="status?.enabled && status.mode === 'cookie'">
         <p class="login-hint">

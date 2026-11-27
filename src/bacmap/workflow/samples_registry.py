@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import subprocess
 from dataclasses import dataclass
@@ -31,6 +32,8 @@ _HEADER = [
     "assembly", "isolate", "platform", "checksum", "specimen",
 ]
 _IDENTITY_COLUMNS = ("isolate", "platform", "checksum", "specimen")
+
+_logger = logging.getLogger(__name__)
 
 _READ_STEMS = (".fastq.gz", ".fq.gz", ".fastq.bz2", ".fq.bz2", ".fastq", ".fq")
 _MATE_PAT = re.compile(r"^(?P<prefix>.+?)[_.]?(?P<mate>R?[12])(_001)?$", re.IGNORECASE)
@@ -355,8 +358,18 @@ def _guard_collision(
             )
 
 
-def _ensure_isolates(home: Path, rows: list[list[str]], header: list[str]) -> None:
-    """把 samples.tsv 中的 isolate/specimen 同步进身份表（幂等；失败不阻断登记）。"""
+def _ensure_isolates(
+    home: Path,
+    rows: list[list[str]],
+    header: list[str],
+    *,
+    owner_user_id: str = "",
+) -> None:
+    """把 samples.tsv 中的 isolate/specimen 同步进身份表（幂等；失败不阻断登记）。
+
+    ``owner_user_id`` 只在新登记行上生效：已有样本/菌株的归属不会被后续
+    登记静默改写（换归属走管理员接口）。
+    """
     if "isolate" not in header:
         return
     from bacmap.store.isolates import IsolateService
@@ -364,6 +377,7 @@ def _ensure_isolates(home: Path, rows: list[list[str]], header: list[str]) -> No
 
     idx = header.index("isolate")
     sidx = header.index("specimen") if "specimen" in header else None
+    owner = owner_user_id or None
     try:
         with (
             IsolateService(home / "data" / "bacmap.sqlite") as svc,
@@ -373,12 +387,12 @@ def _ensure_isolates(home: Path, rows: list[list[str]], header: list[str]) -> No
                 isolate = row[idx] if len(row) > idx else ""
                 specimen = row[sidx] if sidx is not None and len(row) > sidx else ""
                 if specimen:
-                    specimens.ensure(specimen)
+                    specimens.ensure(specimen, owner_user_id=owner)
                 if isolate:
-                    svc.ensure(isolate, specimen_id=specimen or None)
+                    svc.ensure(isolate, specimen_id=specimen or None, owner_user_id=owner)
                 elif specimen:
                     # 样本级测序（mNGS/tNGS 预留）：library 直接挂样本，无 isolate。
-                    specimens.ensure(specimen)
+                    specimens.ensure(specimen, owner_user_id=owner)
     except (OSError, ValueError):  # 注册表不可写不应让数据登记失败（登记本身已完成）
         pass
 
@@ -473,6 +487,14 @@ def delete_specimen(
     db = home / "data" / "bacmap.sqlite"
     with SpecimenService(db) as specimens:
         result = specimens.delete(specimen_id, force=force)
+    if result["deleted"]:
+        from bacmap.store.lab_results import LabResultService
+        from bacmap.store.specimen_metadata import SpecimenMetadataService
+
+        with SpecimenMetadataService(db) as metadata:
+            metadata.delete(specimen_id)
+        with LabResultService(db) as labs:
+            labs.delete_by_subject("specimen", specimen_id)
 
     updated_rows = 0
     if result["deleted"] and "specimen" in header:
@@ -486,7 +508,7 @@ def delete_specimen(
     return {**result, "specimen_id": specimen_id, "updated_tsv_rows": updated_rows}
 
 
-def assign_specimens(
+def assign_specimens(  # noqa: C901 — 关联写路径集中在一处，拆分收益低于可读性损失
     home: Path,
     assignments: dict[str, str],
     *,
@@ -551,6 +573,38 @@ def assign_specimens(
                 svc.set_specimen(isolate, target)
     if updated:
         _save_table(tsv, header, rows)
+        # 结果索引也同步身份映射；否则样本/菌株页的物种与结果数会停留在旧关联。
+        gom_db = home / "gom.sqlite"
+        if gom_db.is_file():
+            from bacmap.store.strain_index import StrainGenotypeIndex
+
+            try:
+                with StrainGenotypeIndex(gom_db) as index:
+                    for row in rows:
+                        key = row[id_idx] if len(row) > id_idx else ""
+                        target = assignments.get(key)
+                        if target is None:
+                            continue
+                        isolate = (
+                            (
+                                row[iso_idx]
+                                if iso_idx is not None and len(row) > iso_idx
+                                else ""
+                            )
+                            or (key if by == "isolate" else "")
+                        )
+                        if by == "dataset":
+                            index.set_identity(
+                                sample_id=key,
+                                specimen_id=target,
+                                new_isolate_id=isolate,
+                            )
+                        else:
+                            index.set_identity(
+                                isolate_id=key, specimen_id=target
+                            )
+            except Exception:  # 索引同步失败不应回滚已完成的关联
+                _logger.warning("strain index identity sync failed", exc_info=True)
     return {
         "updated": updated,
         "specimens": sorted(used_specimens),
@@ -680,7 +734,7 @@ def _scan_unpaired_longreads(
     return results
 
 def register_fastas(
-    home: Path, fasta_dir: Path, species: str = ""
+    home: Path, fasta_dir: Path, species: str = "", *, owner_user_id: str = ""
 ) -> dict[str, Any]:
     """组装 FASTA 目录登记（assembly 列）。species 省略时逐株 gside 自动识别；
     识别失败的文件跳过并在 ``skipped`` 中列明原因。
@@ -744,7 +798,7 @@ def register_fastas(
         added += 1
 
     _save_table(tsv, header, rows)
-    _ensure_isolates(home, rows, header)
+    _ensure_isolates(home, rows, header, owner_user_id=owner_user_id)
     return {
         "samples": samples,
         "added": added,
@@ -757,7 +811,7 @@ def register_fastas(
 
 
 def register_fastqs_dir(
-    home: Path, fastq_dir: Path, species: str = ""
+    home: Path, fastq_dir: Path, species: str = "", *, owner_user_id: str = ""
 ) -> dict[str, Any]:
     """reads 目录登记（R1/R2 列 + 长读自动检测→longread 列）。
 
@@ -850,7 +904,7 @@ def register_fastqs_dir(
         added += 1
 
     _save_table(tsv, header, rows)
-    _ensure_isolates(home, rows, header)
+    _ensure_isolates(home, rows, header, owner_user_id=owner_user_id)
     return {
         "samples": samples,
         "added": added,

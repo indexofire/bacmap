@@ -5,6 +5,133 @@
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-11-27
+
+### 版本与 CLI
+
+- 程序版本 `0.1.8` → `0.1.9`（`pyproject.toml` / `pixi.toml`）。
+- 本版汇总 P0–P4：四层湿实验数据、导入/修改提案与审核、个人/组织账号、
+  AI 映射建议、多用户写闭环与归属、提案保留期清理。
+
+### 多用户湿实验写闭环（v1.10.56，P4）
+
+- `data/bacmap.sqlite` 迁移 7 扩展 `import_jobs`：`kind`、提案载荷、目标与
+  基础版本；文件导入和用户修改/删除/新建/关联提案共用审核队列。
+- `user` 可对**自己可见**的数据提交修改/删除/新建/关联提案；提交人不能自审，
+  审核时检测目标在提案期间是否被修改并重新校验归属。
+- record 写入增加 `owner_user_id`：审核通过后只对无主 specimen/isolate/library/lab
+  归属到提交人，已有 owner 不覆盖。
+- 新增 `specimen_create` / `isolate_create` record 种类；Web 样本/菌株列表页
+  支持新建（analyst/admin 直接创建，user 提交提案）。
+- 样本/菌株详情页支持 user 提案模式，审核仍在 `/console/imports`。
+- 新增 `bacmap imports list|prune`：过期 pending、清理终态提案与本机上传目录。
+- 测试基线 2420 → 2428（8 个新测试）。
+
+### 湿实验数据管理闭环（v1.10.55，P3）
+
+- 新增 record 种类：`metadata_delete`、`specimen_metadata_delete`、
+  `library_metadata_delete`、`lab_result_update`、`lab_result_delete`。
+- 菌株/样本/测序数据元数据支持 `replace` 全量替换；可清空单个字段或全部字段。
+- 化验结果支持部分更新和删除；测序数据附加元数据支持删除。
+- 新增 `/api/v1/wetlab/...` 编辑接口；所有写入仍只提交 `record` 任务，
+  仅 `analyst`/`admin` 可用并强制 CSRF。
+- 样本/菌株详情页新增编辑、删除、新增化验结果与关联菌株/测序数据；
+  保存后等待 record 任务终态并刷新。普通 `user` 仍只能上传提案等待审核。
+- 测试基线 2413 → 2420（7 个新测试）。
+
+### 个人模式与 AI 映射建议（v1.10.54，P2）
+
+- 新增 `BACMAP_WEB_AUTH=personal`：`bacmap personal init` 生成一次性访问密钥
+  （`bk_…`），`personal.json` 只存 scrypt 哈希（0600）；登录为内置 `owner`
+  （admin，全功能）创建服务端会话。`bacmap personal status|rotate` 可查看/轮换。
+- 新增 `[llm.data_policy] ai_max_data_class`（D0–D4，默认 D4）：AI 总上限，
+  与端点位置、角色上限取最严值；网关每次调用复核。
+- 湿实验导入页新增 **AI 映射建议**（`POST /api/v1/imports/{id}/advise`）：
+  只读顾问，不写业务表/GOM；云端点仅列名与聚合统计，本地/局域网在
+  上限允许 D4 时才附 3 行截断样例；网关拒绝时自动退回 D1。
+- 控制台登录页支持个人模式访问密钥；预览面板展示建议、置信度与风险提示。
+- 修复守护进程归属判断：`bacmap stop/start` 现在按目标进程的实际
+  `BACMAP_HOME`（argv `--home` 或 `/proc/<pid>/environ`）匹配，不再把默认
+  home 的 Web 实例误判为当前 home，避免跨 home 误杀。
+- 测试基线 2400 → 2413（13 个新测试）。
+
+### Web 湿实验导入提案与审核（v1.10.53，P1）
+
+- `data/bacmap.sqlite` 迁移 6 新增 `import_jobs`；上传文件只生成本地
+  `pending_review` 提案，不写 specimen/isolate/library/lab 业务数据。
+- 新增 `/api/v1/imports` 上传/列表/详情/approve/reject/withdraw。
+  `user` 只能看/撤回自己的提案；`analyst`/`admin` 审核通过后才提交一个
+  `record` batch 任务。提交人不能自审（admin 可显式 force）。
+- 上传限制 20 MB / 类型白名单，本地解析不执行宏，文件 0600 保存；
+  预览只返回摘要/错误，不返回数据行。
+- 控制台新增“湿实验导入”页面（所有角色可见，审核按钮仅 analyst/admin）。
+- 测试基线 2398 → 2400（2 个新测试）。
+
+### 四层湿实验存储与导入（v1.10.52）
+
+- `data/bacmap.sqlite` 迁移 5：新增 `specimen_metadata`、`library_metadata`；
+  `lab_results` 增加 `subject_type/subject_id`，旧数据回填为 isolate。
+- `record` batch 支持 `specimen_metadata` / `library_metadata` 行；`bacmap record import`
+  支持 specimen/isolate/library/lab 四类工作表，按 `samples.tsv` 与身份表解析链接，
+  整体校验后一个任务写入。
+- 样本详情显示样本级湿实验信息与样本级化验；菌株详情显示每份测序数据的元数据。
+- 仍然不写 GOM；湿实验只通过 specimen/isolate/library ID 与 GOM 关联。
+- 测试基线 2391 → 2398（7 个新测试）。
+
+### Debug 双开关允许 agent.llm/MCP cloud D4（v1.10.51）
+
+- 冻结修订 ADR-16 / C2：默认仍禁止 D3/D4→cloud；仅当
+  `BACMAP_DEBUG=1`（或 `[debug].enabled=true`）且
+  `BACMAP_DEBUG_ALLOW_CLOUD_D4=1`（仅环境变量）时，`agent.llm` 与 MCP `cloud`
+  Profile 允许配置 D4（`local-trusted` 不受影响）。
+- `LlmGateway` 在每次调用时复核双开关；配置加载时允许不代表运行期一直允许，
+  开关关闭后立即 fail-closed。
+- MCP `cloud` Profile 的 D4 同样需要第二开关；单独开 debug 不再自动把 MCP
+  cloud 放宽到 D4。`local-trusted` 仍保持受控本地 Profile。
+- 启动和每次 cloud D3/D4 调用打印醒目警告；默认关闭。
+- 风险：发送到 cloud 模型的数据不可撤回；仅限受控开发机。
+- 测试基线 2386 → 2391（5 个新测试）。
+
+### 湿实验批量导入（v1.10.50）
+
+- 新增 `bacmap record import <xlsx|csv|tsv>`：一个文件提交一个 `record` 任务
+  （`kind=batch`），批量写入 `strain_metadata` / `lab_results`。
+- 自动识别 `metadata`/`湿实验` 与 `lab`/`化验`/`药敏` 工作表，也可用
+  `--metadata-sheet` / `--lab-sheet` 指定；支持常用中文列名。
+- 菌株列可用 `strain_id`/`isolate_id`/`菌株编号`，也接受测序数据 ID 或样本编号，
+  自动解析到 isolate；一个样本多个菌株时拒绝并要求改用菌株/测序数据编号。
+- 元数据/化验结果支持 `extra` JSON：Excel 中不在白名单的自定义列不再丢失。
+- **整体校验**：任一行缺菌株/必填列会拒绝整个文件并列出工作表与行号；
+  `--dry-run` 可先预览行数、涉及菌株和字段。
+- 菌株详情页在无湿实验数据时显示空状态与导入提示。
+- 测试基线 2382 → 2386（4 个新测试）。
+
+### 本地账号/RBAC + 结果索引目录（v1.10.49）
+
+- **多用户**：新增 `BACMAP_WEB_AUTH=accounts` 与 `data/bacmap.sqlite` 迁移 4
+  （`users`/`web_sessions`/`api_tokens`，`specimens`/`isolates` 增加 `owner_user_id`）。
+  scrypt 密码、服务端会话哈希、登录限速；admin/analyst/user 权限由服务端强制，
+  审批与计划确认使用登录主体。普通用户只能看到自己提交/归属的任务、计划、样本、
+  菌株与结果；无主历史数据仅 analyst/admin 可见，可用
+  `bacmap specimen assign-owner` 回填。
+- **CLI**：新增 `bacmap user list/create/set-role/disable/passwd/token ...`；
+  首个管理员必须在本机 shell 创建。
+- **结果索引**：`strain_genotype_index` 迁移 3 增加 specimen/isolate、基因组大小、
+  contigs、GC、CARD/VFDB/质粒计数、owner、analysis_date；analyze ingest 直写，
+  `bacmap results reindex` 回填历史。`/api/v1/samples`、`/api/v1/species`、
+  `/api/v1/specimens`、`/api/v1/isolates` 改为服务端过滤/分页。
+- **控制台**：新增“物种”页与“用户管理”页；测序数据列表不再全量拉取，支持物种/
+  ST/血清型/耐药基因筛选与服务端排序分页。CONCRETE 主题表格行 hover 反色时，
+  行内 ghost/primary/danger 按钮、输入框、下拉框与 chip 同步反色，修复按钮“消失”；
+  CONCRETE 的表单型 `meta-grid` 恢复统一 16px 间距，避免多个输入框粘连、
+  焦点阴影互相覆盖。
+- **DuckDB 评估**：不引入主库。SQLite 在 10 万级合成数据上深分页 <1 ms、
+  物种过滤约 3 ms、全表 LIKE 约 20 ms；仅在千万级/宽表 Parquet 即席分析时再评估
+  只读侧车。
+- 升级动作：已有结果索引时执行 `bacmap results reindex --backfill-metadata`（只补新列、保留 GOM 关联）；全新/空索引可用 `bacmap results reindex`；启用 accounts 前
+  `bacmap user create --role admin`。
+- 测试基线 2367 → 2382（+15；工作区另有未提交的 gaxis 4 个测试未计入）。
+
 ### gvixb 合同与 demo 预览修复（v1.10.48）
 
 - 修复注释圈图加载失败：gvixb 0.2 的 `gvixb.annotated-genome/v1` 要求

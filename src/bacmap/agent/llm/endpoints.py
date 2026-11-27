@@ -3,7 +3,8 @@
 配置源：``$BACMAP_HOME/config.toml`` 的 ``[llm.endpoints.<name>]``、
 ``[llm.routing]``、``[llm.data_policy]``；无配置时内置 Strata 本地端点。
 位置（local/lan/cloud）与能力（T1/T2）是独立维度；位置决定数据分级
-上限（ADR-16：cloud 默认 D1，管理员最多放宽到 D2，D3/D4 永不）。
+上限（ADR-16：cloud 默认 D1，管理员最多放宽到 D2；D3/D4 仅 v1.10.51
+debug 双开关例外）。
 """
 
 from __future__ import annotations
@@ -54,15 +55,29 @@ class LlmResources(BaseModel):
 
 class DataPolicy(BaseModel):
     cloud_max_data_class: DataClass = DataClass.D1
+    # AI 总上限（v1.10.54）：任何 purpose 的载荷都不得超过；组织模式可用
+    # ``[llm.data_policy] ai_max_data_class = "D2"`` 收紧。实际生效级别
+    # = min(本上限, 端点位置上限, 角色 max_data_class)。
+    ai_max_data_class: DataClass = DataClass.D4
 
     @field_validator("cloud_max_data_class")
     @classmethod
     def _clamp_cloud_limit(cls, v: DataClass) -> DataClass:
-        """ADR-16 红线：cloud 端点最多放宽到 D2；D3/D4 永不，配置层直接拒绝。"""
+        """ADR-16：cloud 默认最多 D2；D3/D4 仅在双开关调试模式下允许。
+
+        双开关 = ``BACMAP_DEBUG``（环境变量或 config.toml）+
+        ``BACMAP_DEBUG_ALLOW_CLOUD_D4=1``（仅环境变量）。默认与生产部署
+        仍 fail-closed；MCP Profile 不受此开关影响。
+        """
         if v > DataClass.D2:
-            raise ValueError(
-                f"cloud_max_data_class 最多可放宽到 D2（ADR-16），收到 {v.name}"
-            )
+            from bacmap.config import debug_allow_cloud_d4
+
+            if not debug_allow_cloud_d4():
+                raise ValueError(
+                    "cloud_max_data_class 最多可放宽到 D2；D3/D4 仅允许在"
+                    " BACMAP_DEBUG=1 且 BACMAP_DEBUG_ALLOW_CLOUD_D4=1 时配置"
+                    f"（收到 {v.name}）"
+                )
         return v
 
 
@@ -106,8 +121,17 @@ def default_config() -> LlmConfig:
         routing={
             "intent_classifier": "strata",
             "interpretation": "strata",
+            "import_mapping": "strata",
         },
     )
+
+
+def _policy_from(raw: dict[str, Any]) -> DataPolicy:
+    raw_limit = raw.get("cloud_max_data_class", "D1")
+    limit = DataClass[raw_limit] if isinstance(raw_limit, str) else DataClass(raw_limit)
+    raw_ai = raw.get("ai_max_data_class", "D4")
+    ai_limit = DataClass[raw_ai] if isinstance(raw_ai, str) else DataClass(raw_ai)
+    return DataPolicy(cloud_max_data_class=limit, ai_max_data_class=ai_limit)
 
 
 def load_llm_config(config_path: Path) -> LlmConfig:
@@ -125,8 +149,13 @@ def load_llm_config(config_path: Path) -> LlmConfig:
     )
 
     if not llm.get("endpoints"):
-        # 无端点段时端点/路由取默认，但 resources 独立生效（ADR-17）。
-        return default_config().model_copy(update={"resources": resources})
+        # 无端点段时端点/路由取默认，但 resources 与 data_policy 独立生效
+        #（ADR-17 / ADR-16；此前 policy 被默认 D1 静默覆盖）。
+        policy_raw = llm.get("data_policy", {})
+        policy = _policy_from(policy_raw if isinstance(policy_raw, dict) else {})
+        return default_config().model_copy(
+            update={"resources": resources, "policy": policy}
+        )
 
     endpoints: dict[str, LlmEndpoint] = {}
     for name, raw in llm["endpoints"].items():
@@ -135,8 +164,5 @@ def load_llm_config(config_path: Path) -> LlmConfig:
 
     routing = dict(llm.get("routing", {}))
     policy_raw = llm.get("data_policy", {})
-    raw_limit = policy_raw.get("cloud_max_data_class", "D1")
-    # "D1" 名称查找（§4.5 TOML 字符串形式）
-    limit = DataClass[raw_limit] if isinstance(raw_limit, str) else DataClass(raw_limit)
-    policy = DataPolicy(cloud_max_data_class=limit)
+    policy = _policy_from(policy_raw if isinstance(policy_raw, dict) else {})
     return LlmConfig(endpoints=endpoints, routing=routing, policy=policy, resources=resources)

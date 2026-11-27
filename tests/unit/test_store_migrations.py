@@ -154,7 +154,7 @@ class TestGomFileVersioned:
         gos.GenomeObjectService(db).close()
         with sqlite3.connect(db) as conn:
             assert conn.execute("SELECT event_id FROM events").fetchall() == [("e1",)]
-        assert schema_version(db) == len(gos.GOM_MIGRATIONS) == 2
+        assert schema_version(db) == len(gos.GOM_MIGRATIONS) == 3
         assert (tmp_path / "gom.sqlite.bak-v0").is_file()
 
 
@@ -191,7 +191,7 @@ class TestDataDbVersioned:
         assert strain_metadata.StrainMetadataService(db).get("S1") is not None
         from bacmap.store.schema import data_migrations
 
-        assert schema_version(db) == len(data_migrations()) == 3
+        assert schema_version(db) == len(data_migrations()) == 7
         assert (tmp_path / "bacmap.sqlite.bak-v0").is_file()
 
 
@@ -202,7 +202,7 @@ class TestGomHoldsStrainIndex:
 
         db = tmp_path / "gom.sqlite"
         StrainGenotypeIndex(db).upsert(strain_id="S1", organism="SAL")
-        assert schema_version(db) == len(GOM_MIGRATIONS) == 2
+        assert schema_version(db) == len(GOM_MIGRATIONS) == 3
         with sqlite3.connect(db) as conn:
             assert conn.execute("SELECT strain_id FROM strain_genotype_index").fetchall() == [
                 ("S1",)

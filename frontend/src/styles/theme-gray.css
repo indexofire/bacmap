@@ -517,6 +517,49 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* 行内操作控件随反色行一起反转：否则 ghost/primary 按钮在 #111 行上
+   仍是 #111 文字/边框，视觉上直接消失（CONCRETE 主题列表页）。 */
+:root[data-theme="gray"] .table tbody tr:hover .btn {
+  border-color: #f7f7f2;
+  box-shadow: 2px 2px 0 #f7f7f2;
+}
+
+:root[data-theme="gray"] .table tbody tr:hover .btn:hover {
+  box-shadow: 3px 3px 0 #f7f7f2;
+}
+
+:root[data-theme="gray"] .table tbody tr:hover .btn:active {
+  box-shadow: 0 0 0 #f7f7f2;
+}
+
+:root[data-theme="gray"] .table tbody tr:hover .btn--ghost {
+  background: transparent;
+  color: #f7f7f2;
+}
+
+:root[data-theme="gray"] .table tbody tr:hover .btn--primary,
+:root[data-theme="gray"] .table tbody tr:hover .btn--danger {
+  background: #f7f7f2;
+  color: #111;
+}
+
+:root[data-theme="gray"] .table tbody tr:hover .input,
+:root[data-theme="gray"] .table tbody tr:hover .select {
+  border-color: #f7f7f2;
+  background: #f7f7f2;
+  color: #111;
+}
+
+:root[data-theme="gray"] .table tbody tr:hover .chip {
+  border-color: #f7f7f2;
+  color: #f7f7f2;
+}
+
+:root[data-theme="gray"] .table tbody tr:hover .chip.is-active {
+  background: #f7f7f2;
+  color: #111;
+}
+
 :root[data-theme="gray"] .link-cell {
   color: #111;
   font-weight: 600;
@@ -665,10 +708,11 @@
    （meta-grid 被检索页筛选区复用，边框会让 input 周围出现异常线条）。
    表格化网格效果仅在含 .meta-item 数据格时生效（仪表盘系统状态等）。 */
 :root[data-theme="gray"] .meta-grid {
-  gap: 0;
+  gap: var(--sp-4);
 }
 
 :root[data-theme="gray"] .meta-grid:has(.meta-item) {
+  gap: 0;
   border-top: 1px solid #111;
   border-left: 1px solid #111;
 }
@@ -877,6 +921,48 @@
   :root[data-theme="gray"] .table tbody tr:hover .muted,
   :root[data-theme="gray"] .table tbody tr:hover code {
     color: inherit;
+  }
+
+  :root[data-theme="gray"] .table tbody tr:hover .btn {
+    border-color: #111;
+    box-shadow: 2px 2px 0 #111;
+  }
+
+  :root[data-theme="gray"] .table tbody tr:hover .btn:hover {
+    box-shadow: 3px 3px 0 #111;
+  }
+
+  :root[data-theme="gray"] .table tbody tr:hover .btn--ghost {
+    background: transparent;
+    color: #111;
+  }
+
+  :root[data-theme="gray"] .table tbody tr:hover .btn--primary {
+    background: #111;
+    color: #f7f7f2;
+  }
+
+  :root[data-theme="gray"] .table tbody tr:hover .btn--danger {
+    background: #efd9d6;
+    border-color: #a11b1b;
+    color: #a11b1b;
+  }
+
+  :root[data-theme="gray"] .table tbody tr:hover .input,
+  :root[data-theme="gray"] .table tbody tr:hover .select {
+    border-color: #c9c9c2;
+    background: #f7f7f2;
+    color: #111;
+  }
+
+  :root[data-theme="gray"] .table tbody tr:hover .chip {
+    border-color: #111;
+    color: #111;
+  }
+
+  :root[data-theme="gray"] .table tbody tr:hover .chip.is-active {
+    background: #111;
+    color: #f7f7f2;
   }
 
   .gray-hero__left {

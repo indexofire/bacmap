@@ -243,13 +243,13 @@ class TestWebCookieAuth:
     def test_auth_status_and_json_login(self, engine, monkeypatch):
         c = self._client(engine, monkeypatch)
         before = c.get("/api/v1/auth/status").json()
-        assert before == {
-            "enabled": True,
-            "mode": "cookie",
-            "authenticated": False,
-            "operator": "",
-            "login_url": "/console/login",
-        }
+        assert before["enabled"] is True
+        assert before["mode"] == "cookie"
+        assert before["authenticated"] is False
+        assert before["operator"] == ""
+        assert before["login_url"] == "/console/login"
+        assert before["role"] == ""
+        assert before["permissions"] == []
         assert c.post("/api/v1/auth/login", json={"token": "nope"}).status_code == 401
         ok = c.post(
             "/api/v1/auth/login",

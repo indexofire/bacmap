@@ -38,6 +38,15 @@ class EventType(StrEnum):
     TASK_STEP = "task.step"
     TASK_STATE = "task.state"
     TASK_APPROVAL = "task.approval"
+    AUTH_LOGIN = "auth.login"
+    AUTH_LOGOUT = "auth.logout"
+    USER_CREATED = "user.created"
+    USER_UPDATED = "user.updated"
+    IMPORT_UPLOADED = "import.uploaded"
+    IMPORT_ADVISED = "import.advised"
+    WETLAB_PROPOSED = "wetlab.proposed"
+    IMPORT_APPROVED = "import.approved"
+    IMPORT_REJECTED = "import.rejected"
 
 
 class Event(BaseModel):

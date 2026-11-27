@@ -490,15 +490,27 @@ def _register_record_tool(server: MCPServer, engine: Any, profile: ProfileSpec) 
         name="bacmap_record_data",
         description=(
             "Record data through the task layer (audited). record.kind is one of: metadata "
-            "(strain_id, sample_id, fields), lab_result (strain_id, category, test_name, result, "
-            "optional unit/method/interpretation/standard/tested_date/tested_by/lab/notes), "
-            "knowledge_import (title, authors, year, source, identifier, content, entry_kind), "
-            "knowledge_approve (entry_id), specimen_assign (specimen_id, isolates[], "
-            "datasets[]). Knowledge entries are staged until approved."
+            "(strain_id, sample_id, fields, extra, replace), specimen_metadata (specimen_id, "
+            "data, replace), library_metadata (library_id, data, replace), lab_result "
+            "(strain_id, category, test_name, result, optional unit/method/interpretation/"
+            "standard/tested_date/tested_by/lab/notes/extra), lab_result_update (result_id, "
+            "fields), lab_result_delete (result_id), metadata_delete (strain_id), "
+            "specimen_metadata_delete (specimen_id), library_metadata_delete (library_id), "
+            "specimen_create (specimen_id, origin, note), isolate_create (isolate_id, "
+            "specimen_id?, lineage_id?, passage?), knowledge_import (title, authors, year, "
+            "source, identifier, content, entry_kind), knowledge_approve (entry_id), "
+            "specimen_assign (specimen_id, isolates[], datasets[]). Knowledge entries are "
+            "staged until approved."
         ),
     )
     def record_data(record: dict[str, Any]) -> str:
         payload = dict(record)
+        # 归属只能由审核/受控 Web 流程注入，MCP 客户端不得自报 owner。
+        payload.pop("owner_user_id", None)
+        if payload.get("kind") == "batch":
+            for row in payload.get("rows") or []:
+                if isinstance(row, dict):
+                    row.pop("owner_user_id", None)
         payload.setdefault("kind", "")
         try:
             parse_record(payload)

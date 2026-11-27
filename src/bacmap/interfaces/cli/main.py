@@ -12,6 +12,7 @@
 - ``bacmap task list|show|submit|approve|cancel``  任务查询与写操作（list 别名 ls）
 - ``bacmap sample ls|show``                        样本查询
 - ``bacmap search``                                样本检索
+- ``bacmap user list|create|set-role|disable|passwd|token``  本地账号管理
 - ``bacmap --version`` / ``bacmap -V``             版本号
 
 显示语言：``[ui] language``（en|zh，默认 en）或环境变量 ``BACMAP_LANG``；
@@ -167,9 +168,32 @@ def _web_daemon_pids(home: Path) -> list[int]:
         is_web_daemon = ("start" in parts and "web" in parts) or "restart" in parts
         if not is_web_daemon:
             continue
-        if home_str in parts or ("--home" not in parts and home_str == str(BACMAP_HOME)):
+        daemon_home = _daemon_home(entry, parts)
+        if daemon_home is not None and daemon_home == Path(home_str).expanduser().resolve():
             found.append(pid)
     return found
+
+
+def _daemon_home(entry: Path, parts: list[str]) -> Path | None:
+    """解析守护进程实际使用的 BACMAP_HOME（argv --home 优先，其次 /proc environ）。
+
+    不能拿调用方进程的 ``BACMAP_HOME`` 兜底：在另一个 home 下执行
+    ``bacmap stop/start`` 会因此误认并停掉默认 home 的服务（实测事故）。
+    """
+    if "--home" in parts:
+        index = parts.index("--home")
+        if index + 1 < len(parts):
+            return Path(parts[index + 1]).expanduser().resolve()
+        return None
+    try:
+        raw = (entry / "environ").read_bytes()
+    except OSError:
+        return None
+    for item in raw.split(b"\0"):
+        if item.startswith(b"BACMAP_HOME="):
+            value = item.split(b"=", 1)[1].decode("utf-8", "replace")
+            return Path(value).expanduser().resolve()
+    return (Path.home() / ".local" / "share" / "bacmap").resolve()
 
 
 def _port_in_use(host: str, port: int) -> bool:
@@ -445,7 +469,18 @@ def _run_web(args: argparse.Namespace) -> None:
             os.write(ready_fd, b"1")
             os.close(ready_fd)
     mode = (os.environ.get("BACMAP_WEB_AUTH") or "bearer").strip().lower()
-    if not token:
+    if mode == "accounts":
+        hint = T(
+            f"browser login: http://{args.host}:{args.port}/console/login (local accounts)",
+            f"浏览器登录：http://{args.host}:{args.port}/console/login（本地账号）",
+        )
+    elif mode == "personal":
+        hint = T(
+            f"browser login: http://{args.host}:{args.port}/console/login "
+            f"(personal access key)",
+            f"浏览器登录：http://{args.host}:{args.port}/console/login（个人访问密钥）",
+        )
+    elif not token:
         hint = T(
             f"auth disabled ({args.token_env} not set; local-only is safe)",
             f"鉴权关闭（未设置 {args.token_env}；仅本机安全）",
@@ -1205,20 +1240,26 @@ def build_parser() -> argparse.ArgumentParser:
     from bacmap.interfaces.cli.agent import add_parser as add_agent_parser
     from bacmap.interfaces.cli.config_cmd import add_parser as add_config_parser
     from bacmap.interfaces.cli.evidence import add_parser as add_evidence_parser
+    from bacmap.interfaces.cli.imports_cmd import add_parser as add_imports_parser
     from bacmap.interfaces.cli.isolates import add_parser as add_isolate_parser
     from bacmap.interfaces.cli.ops import add_parser as add_ops_parser
+    from bacmap.interfaces.cli.personal import add_parser as add_personal_parser
     from bacmap.interfaces.cli.quickwin import add_parser as add_quickwin_parser
     from bacmap.interfaces.cli.records import add_parser as add_record_parser
     from bacmap.interfaces.cli.research import add_parser as add_research_parser
     from bacmap.interfaces.cli.specimens import add_parser as add_specimen_parser
+    from bacmap.interfaces.cli.users import add_parser as add_user_parser
 
     add_record_parser(sub, _add_home, _add_json)
     add_config_parser(sub, _add_home, _add_json)
     add_research_parser(sub, _add_home, _add_json)
     add_agent_parser(sub, _add_home, _add_json)
     add_evidence_parser(sub, _add_home, _add_json)
+    add_imports_parser(sub, _add_home, _add_json)
     add_isolate_parser(sub, _add_home, _add_json)
     add_specimen_parser(sub, _add_home, _add_json)
+    add_user_parser(sub, _add_home, _add_json)
+    add_personal_parser(sub, _add_home, _add_json)
     add_ops_parser(sub, _add_home, _add_json)
     add_quickwin_parser(sub, _add_home, _add_json)
 

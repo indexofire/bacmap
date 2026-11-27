@@ -355,14 +355,25 @@ class PlanService:
             raise NotFound(f"no such plan: {plan_id}" + (f" v{version}" if version else ""))
         return _record(row)
 
-    def list_plans(self, limit: int = 20) -> list[PlanRecord]:
+    def list_plans(
+        self, limit: int = 20, *, created_by: str | None = None
+    ) -> list[PlanRecord]:
         with self._conn() as conn:
-            rows = conn.execute(
-                "SELECT p.* FROM plans p JOIN (SELECT plan_id, MAX(version) AS v FROM plans"
-                " GROUP BY plan_id) m ON p.plan_id = m.plan_id AND p.version = m.v"
-                " ORDER BY p.updated_at DESC LIMIT ?",
-                (max(1, min(limit, 200)),),
-            ).fetchall()
+            if created_by is None:
+                rows = conn.execute(
+                    "SELECT p.* FROM plans p JOIN (SELECT plan_id, MAX(version) AS v FROM plans"
+                    " GROUP BY plan_id) m ON p.plan_id = m.plan_id AND p.version = m.v"
+                    " ORDER BY p.updated_at DESC LIMIT ?",
+                    (max(1, min(limit, 200)),),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT p.* FROM plans p JOIN (SELECT plan_id, MAX(version) AS v FROM plans"
+                    " GROUP BY plan_id) m ON p.plan_id = m.plan_id AND p.version = m.v"
+                    " WHERE p.created_by = ?"
+                    " ORDER BY p.updated_at DESC LIMIT ?",
+                    (created_by, max(1, min(limit, 200))),
+                ).fetchall()
         return [_record(r) for r in rows]
 
     # ---- 内部 -------------------------------------------------------------------

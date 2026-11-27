@@ -134,6 +134,7 @@ class TestTasks:
         overview = c.get("/api/v1/overview").json()
         assert "BACMAP_HOME" in overview["paths"]
         assert overview["cloud_max_data_class"] in ("D1", "D2")
+        assert overview["ai_max_data_class"] in ("D0", "D1", "D2", "D3", "D4")
         hits = c.get("/api/v1/search?q=Salmonella").json()["items"]
         assert {row["sample_id"] for row in hits} == {"S1", "S2", "S3"}
 
@@ -152,6 +153,138 @@ class TestTasks:
         body = r.json()
         assert body["task_type"] == "record" and body["state"] == "running"
 
+
+
+class TestWetlabEdit:
+    def test_edit_endpoints_submit_record_tasks(self, env):
+        engine, c, _ = env
+        cfg = engine.home / "workflows" / "bacmap" / "config"
+        cfg.mkdir(parents=True, exist_ok=True)
+        (cfg / "samples.tsv").write_text(
+            "sample\tspecies\tR1\tR2\tlongread\tassembly\tisolate\tplatform"
+            "\tchecksum\tspecimen\n"
+            "LIB-WEB\tSAL\t\t\t\ta.fasta\tISO-WEB\tilm\t\tSP-WEB\n",
+            encoding="utf-8",
+        )
+        from bacmap.store.isolates import IsolateService
+        from bacmap.store.specimens import SpecimenService
+
+        db = engine.home / "data" / "bacmap.sqlite"
+        with SpecimenService(db) as specimens:
+            specimens.ensure("SP-WEB")
+        with IsolateService(db) as isolates:
+            isolates.ensure("ISO-WEB", specimen_id="SP-WEB")
+
+        created = c.post(
+            "/api/v1/wetlab/specimens",
+            json={"specimen_id": "SP-NEW", "origin": "manual"},
+        )
+        assert created.status_code == 200, created.text
+        assert created.json()["kind"] == "specimen_create"
+        isolate_created = c.post(
+            "/api/v1/wetlab/isolates",
+            json={"isolate_id": "ISO-NEW", "specimen_id": "SP-WEB"},
+        )
+        assert isolate_created.status_code == 200, isolate_created.text
+        assert isolate_created.json()["kind"] == "isolate_create"
+
+        specimen = c.post(
+            "/api/v1/wetlab/specimens/SP-WEB/metadata",
+            json={"data": {"patient_name": "张三", "province": "广东"}},
+        )
+        assert specimen.status_code == 200, specimen.text
+        assert specimen.json()["kind"] == "specimen_metadata"
+
+        assigned = c.post(
+            "/api/v1/wetlab/specimens/SP-WEB/assign",
+            json={"isolates": ["ISO-WEB"], "datasets": ["LIB-WEB"]},
+        )
+        assert assigned.status_code == 200, assigned.text
+        assert assigned.json()["kind"] == "specimen_assign"
+
+        isolate = c.post(
+            "/api/v1/wetlab/isolates/ISO-WEB/metadata",
+            json={
+                "data": {"patient_phone": "13800000000", "custom_lab": "x"},
+                "sample_id": "SP-WEB",
+            },
+        )
+        assert isolate.status_code == 200, isolate.text
+        assert isolate.json()["kind"] == "metadata"
+
+        library = c.post(
+            "/api/v1/wetlab/libraries/LIB-WEB/metadata",
+            json={"data": {"run_id": "R1"}},
+        )
+        assert library.status_code == 200, library.text
+        assert library.json()["kind"] == "library_metadata"
+
+        lab = c.post(
+            "/api/v1/wetlab/lab",
+            json={
+                "subject_type": "specimen",
+                "subject_id": "SP-WEB",
+                "category": "mngs",
+                "test_name": "blaCTX-M",
+                "result": "positive",
+            },
+        )
+        assert lab.status_code == 200, lab.text
+        assert lab.json()["kind"] == "lab_result"
+
+        assert c.post(
+            "/api/v1/wetlab/specimens/NOPE/metadata", json={"data": {}}
+        ).status_code == 404
+        assert c.post(
+            "/api/v1/wetlab/isolates/NOPE/metadata", json={"data": {}}
+        ).status_code == 404
+        assert c.post(
+            "/api/v1/wetlab/libraries/NOPE/metadata", json={"data": {}}
+        ).status_code == 404
+        assert c.post(
+            "/api/v1/wetlab/lab",
+            json={
+                "subject_type": "isolate",
+                "subject_id": "NOPE",
+                "category": "mic",
+                "test_name": "x",
+                "result": "1",
+            },
+        ).status_code == 404
+
+    def test_lab_update_and_metadata_delete_endpoints(self, env):
+        engine, c, _ = env
+        db = engine.home / "data" / "bacmap.sqlite"
+        from bacmap.store.isolates import IsolateService
+        from bacmap.store.lab_results import LabResultService
+        from bacmap.store.specimen_metadata import SpecimenMetadataService
+        from bacmap.store.specimens import SpecimenService
+
+        with SpecimenService(db) as specimens:
+            specimens.ensure("SP-DEL")
+        with IsolateService(db) as isolates:
+            isolates.ensure("ISO-DEL", specimen_id="SP-DEL")
+        with SpecimenMetadataService(db) as store:
+            store.upsert("SP-DEL", {"patient_name": "张三"})
+        with LabResultService(db) as store:
+            row = store.add("ISO-DEL", "mic", "meropenem", "0.25")
+
+        updated = c.post(
+            f"/api/v1/wetlab/lab/{row.id}",
+            json={"result": "1.0", "notes": "rechecked"},
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["kind"] == "lab_result_update"
+        assert c.post(
+            "/api/v1/wetlab/lab/nope", json={"result": "1"}
+        ).status_code == 404
+
+        deleted = c.post("/api/v1/wetlab/specimens/SP-DEL/metadata/delete")
+        assert deleted.status_code == 200, deleted.text
+        assert deleted.json()["kind"] == "specimen_metadata_delete"
+        assert c.post("/api/v1/wetlab/isolates/ISO-DEL/metadata/delete").status_code == 200
+        assert c.post(f"/api/v1/wetlab/lab/{row.id}/delete").status_code == 200
+        assert c.post("/api/v1/wetlab/lab/nope/delete").status_code == 404
 
 class TestPlans:
     def test_list_get_confirm_reject(self, env):

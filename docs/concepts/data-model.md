@@ -69,7 +69,7 @@ long reads (`longread`), hybrid (both), or a pre-assembled FASTA (`assembly`).
 | `gom.sqlite` | genome objects, GOM events, datasets, strain genotype index, AMR gene index |
 | `baseline.sqlite` | baseline candidates and published releases |
 | `research.sqlite` | Research Workbench sessions, stat results, artifacts, ledger (P1) |
-| `data/bacmap.sqlite` | strain metadata, lab results, isolates, specimens |
+| `data/bacmap.sqlite` | strain/specimen/library wet-lab metadata, lab results (isolate or specimen subject), identity entities, local accounts/sessions/API tokens |
 | `data/knowledge.sqlite` | literature/method entries + FTS5 index |
 | `refs/manifest.json` | external database versions/checksums |
 

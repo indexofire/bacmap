@@ -62,17 +62,36 @@ class SpecimenService:
     def __exit__(self, *exc: object) -> None:
         self.close()
 
-    def ensure(self, specimen_id: str, *, origin: str = "", note: str = "") -> None:
-        """登记样本（幂等；已存在时不覆盖 origin/note）。"""
+    def ensure(
+        self,
+        specimen_id: str,
+        *,
+        origin: str = "",
+        note: str = "",
+        owner_user_id: str | None = None,
+    ) -> None:
+        """登记样本（幂等；已存在时不覆盖 origin/note/owner）。
+
+        ``owner_user_id`` 只在新行写入时生效；旧数据/已有样本的归属不会被
+        普通登记流程改写（显式改归属走 ``set_owner`` 或管理员接口）。
+        """
         if not validate_specimen_id(specimen_id):
             raise ValueError(f"invalid specimen id: {specimen_id!r}")
         now = datetime.now(UTC).isoformat()
         self._conn.execute(
             "INSERT OR IGNORE INTO specimens"
-            " (specimen_id, origin, note, created_at, updated_at)"
-            " VALUES (?,?,?,?,?)",
-            (specimen_id, origin, note, now, now),
+            " (specimen_id, origin, note, created_at, updated_at, owner_user_id)"
+            " VALUES (?,?,?,?,?,?)",
+            (specimen_id, origin, note, now, now, owner_user_id or None),
         )
+
+    def set_owner(self, specimen_id: str, owner_user_id: str | None) -> bool:
+        """显式改样本归属；返回是否命中该样本（管理员/导入脚本使用）。"""
+        cur = self._conn.execute(
+            "UPDATE specimens SET owner_user_id = ?, updated_at = ? WHERE specimen_id = ?",
+            (owner_user_id or None, datetime.now(UTC).isoformat(), specimen_id),
+        )
+        return cur.rowcount > 0
 
     def exists(self, specimen_id: str) -> bool:
         return self.get(specimen_id) is not None
@@ -121,16 +140,47 @@ class SpecimenService:
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def list(self, limit: int = 200, offset: int = 0) -> list[dict[str, Any]]:
+    def list(
+        self,
+        limit: int = 200,
+        offset: int = 0,
+        *,
+        query: str = "",
+        owner_user_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        where, params = _specimen_filters(query, owner_user_id)
         rows = self._conn.execute(
-            "SELECT s.*,"
+            "SELECT s.*,"  # noqa: S608 — where 片段仅由本模块常量拼装
             " (SELECT COUNT(*) FROM isolates i WHERE i.specimen_id = s.specimen_id)"
             " AS n_isolates"
-            " FROM specimens s ORDER BY s.specimen_id LIMIT ? OFFSET ?",
-            (max(1, limit), max(0, offset)),
+            f" FROM specimens s{where} ORDER BY s.specimen_id LIMIT ? OFFSET ?",
+            (*params, max(1, limit), max(0, offset)),
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def count(self) -> int:
-        row = self._conn.execute("SELECT COUNT(*) FROM specimens").fetchone()
+    def count(
+        self, *, query: str = "", owner_user_id: str | None = None
+    ) -> int:
+        where, params = _specimen_filters(query, owner_user_id)
+        row = self._conn.execute(
+            f"SELECT COUNT(*) FROM specimens s{where}", params  # noqa: S608
+        ).fetchone()
         return int(row[0]) if row else 0
+
+
+def _specimen_filters(
+    query: str, owner_user_id: str | None
+) -> tuple[str, tuple[Any, ...]]:
+    clauses: list[str] = []
+    params: list[Any] = []
+    if owner_user_id is not None:
+        clauses.append("s.owner_user_id = ?")
+        params.append(owner_user_id)
+    q = query.strip().lower()
+    if q:
+        like = f"%{q}%"
+        clauses.append(
+            "(LOWER(s.specimen_id) LIKE ? OR LOWER(s.origin) LIKE ? OR LOWER(s.note) LIKE ?)"
+        )
+        params.extend([like, like, like])
+    return (" WHERE " + " AND ".join(clauses)) if clauses else "", tuple(params)

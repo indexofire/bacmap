@@ -136,6 +136,29 @@ class TestDaemonDiscovery:
             proc.kill()
             proc.wait(timeout=5)
 
+    def test_matches_daemon_env_home_not_caller_home(self, tmp_path, monkeypatch):
+        """另一 home 下的 stop/start 不得把默认 home 的守护进程误判为自己。"""
+        from bacmap.interfaces.cli.main import _web_daemon_pids
+
+        home_a = tmp_path / "a"
+        home_b = tmp_path / "b"
+        home_a.mkdir()
+        home_b.mkdir()
+        script = tmp_path / "fakebin" / "bacmap"
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text("import time\ntime.sleep(60)\n", encoding="utf-8")
+        env = {**os.environ, "BACMAP_HOME": str(home_a)}
+        proc = subprocess.Popen(
+            [sys.executable, str(script), "start", "web", "-D"], env=env
+        )
+        try:
+            monkeypatch.setenv("BACMAP_HOME", str(home_b))
+            assert proc.pid in _web_daemon_pids(home_a)
+            assert proc.pid not in _web_daemon_pids(home_b)
+        finally:
+            proc.kill()
+            proc.wait(timeout=5)
+
     def test_ignores_wrapper_without_bacmap_script(self, tmp_path):
         """pixi/bash 包装进程（argv 词元相同但不是控制台脚本）不得误报。"""
         import subprocess

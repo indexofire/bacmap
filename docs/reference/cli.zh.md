@@ -6,7 +6,7 @@
   `bacmap start mcp|web|tui|console`；各界面保留自己的参数；
 - **`stop` / `restart`**，后台 Web 守护进程（`bacmap start web -D`）的生命周期管理；
 - **命令**，执行一次操作后退出：`overview`、`task`、`plan`、`record`、`run`、
-  `gom`、`isolate`、`sample`、`search`、`selection`、`doctor`、`backup`、`restore`、
+  `gom`、`isolate`、`sample`、`search`、`user`、`selection`、`doctor`、`backup`、`restore`、
   `results`、`events`。
 
 `--version` 打印程序版本。
@@ -166,9 +166,71 @@ bacmap record knowledge-import --title TITLE [--authors A] [--year Y] [--source 
                                [--identifier ID] [--content TEXT]
                                [--entry-kind {literature,method,report}]
 bacmap record knowledge-approve <entry_id>
+bacmap record import <file.xlsx|file.csv|file.tsv>
+                    [--specimen-sheet NAME] [--isolate-sheet NAME]
+                    [--library-sheet NAME] [--lab-sheet NAME]
+                    [--lab-subject {auto,isolate,specimen}]
+                    [--dry-run] [--by ACTOR] [--json]
 ```
 
-示例见[数据与身份](../guide/data.zh.md#5)。
+`record import` 把一个工作簿中的元数据/化验行合并为一个 `record` 任务（`kind=batch`）
+提交；先整体校验，任一行缺菌株/必填列即拒绝。列名与示例见
+[数据与身份](../guide/data.zh.md#5)。
+
+
+## `bacmap user`
+
+```text
+bacmap user list|ls [--home H] [--json]
+bacmap user create <username> --role {admin,analyst,user} [--password P] [--display-name N]
+bacmap user set-role <username> {admin,analyst,user}
+bacmap user disable <username> [--enable]
+bacmap user passwd <username> [--password P]
+bacmap user token create <username> [--name N] [--expires-days D] [--json]
+bacmap user token list <username> [--json]
+bacmap user token revoke <username> <token-id>
+```
+
+本地账号只存于 `$BACMAP_HOME/data/bacmap.sqlite`。首个管理员必须在本机 shell 创建
+（Web 无匿名注册入口）；密码省略时交互输入。启用账号模式：
+
+```bash
+bacmap user create admin --role admin
+export BACMAP_WEB_AUTH=accounts
+bacmap start web
+```
+
+API 令牌以 `bm_...` 开头，只显示一次，用于脚本/API 客户端（本机 CLI 不需要）；角色随账号。普通用户的
+数据可见性见[多用户与角色](../concepts/accounts.zh.md)。
+
+## `bacmap imports`
+
+```text
+bacmap imports list|ls [--status STATUS] [--kind import|edit] [--limit N] [--json]
+bacmap imports prune [--days 30] [--dry-run] [--json]
+```
+
+`list` 查看文件导入与用户修改提案；`prune` 把超过保留期的 `pending_review`
+标记为 `expired`，删除更早的终态提案及其本机上传目录（`--dry-run` 只报告）。
+审核仍通过 Web `/console/imports` 或 API 完成。
+
+## `bacmap personal`
+
+```text
+bacmap personal init [--rotate] [--json]
+bacmap personal status [--json]
+bacmap personal rotate [--json]
+```
+
+个人模式（单用户、全功能）的访问密钥管理。`init` 生成 `bk_...` 并创建内置
+`owner`（admin），密钥只显示一次；`personal.json` 只存 scrypt 哈希（0600）。
+轮换后旧密钥立即失效。启用：
+
+```bash
+bacmap personal init
+export BACMAP_WEB_AUTH=personal
+bacmap start web
+```
 
 ## `bacmap specimen`
 
@@ -179,6 +241,8 @@ bacmap specimen import <map.tsv> [--by {dataset,isolate}] [--dry-run]
 bacmap specimen assign --specimen ID [--dataset D ...] [--isolate I ...]
 bacmap specimen backfill [--dry-run]
 bacmap specimen delete <specimen_id> [--force]
+bacmap specimen assign-owner <specimen_id> <username>
+bacmap specimen assign-owner <specimen_id> --clear
 ```
 
 样本（specimen）是唯一送检编号，下辖 0..N 个菌株，每个菌株可有多次测序数据。
@@ -463,12 +527,15 @@ bacmap restore --from FILE [--home DIR] [--force]
 
 ```text
 bacmap results migrate [--dry-run]
-bacmap results reindex [--dry-run] [--force] [--json]
+bacmap results reindex [--dry-run] [--force] [--backfill-metadata] [--json]
 ```
 
 `migrate` 把遗留的扁平结果目录移入 `runs/legacy-<name>/` 并用链接替换。`reindex` 从现有
-final summary 回填 `strain_genotype_index`（适用于未经过当前 analyze/ingest 路径的历史结果）；
+final summary 回填 `strain_genotype_index`（适用于未经过当前 analyze/ingest 路径的历史结果），
+包括物种/型别、组装指标、AMR 计数以及 samples.tsv 中的 specimen/isolate/owner；
 已存在的菌株默认跳过，`--force` 覆盖；不创建 GOM 对象、不修改原始结果。
+`--backfill-metadata` 只更新新增列（specimen/isolate、组装指标、AMR 计数、owner），
+保留已有 object_id/分型/GOM 关联；v1.10.49 升级后建议执行一次。
 
 ## `bacmap events`
 

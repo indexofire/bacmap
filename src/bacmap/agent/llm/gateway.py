@@ -127,6 +127,43 @@ class LlmGateway:
         if endpoint is None:
             raise LlmUnavailableError(f"no enabled endpoint for purpose {purpose!r}")
 
+        # AI 总上限（v1.10.54，组织模式可配）：先于位置规则检查；
+        # 实际生效 = min(ai_max_data_class, 位置策略, 角色上限)。
+        if data_class > self._config.policy.ai_max_data_class:
+            logger.warning(
+                "AI data ceiling violation: purpose=%s endpoint=%s payload=%s cap=%s",
+                purpose,
+                endpoint.name,
+                data_class.name,
+                self._config.policy.ai_max_data_class.name,
+            )
+            raise DataClassViolationError(
+                f"payload {data_class.name} exceeds AI data ceiling "
+                f"{self._config.policy.ai_max_data_class.name}"
+            )
+
+        # 运行时复核（不信任配置对象缓存）：即使 config 在双开关打开时加载了
+        # D4，一旦开关关闭，cloud D3/D4 也必须立即失败关闭。
+        if endpoint.location == "cloud" and data_class > DataClass.D2:
+            from bacmap.config import debug_allow_cloud_d4
+
+            if not debug_allow_cloud_d4():
+                logger.warning(
+                    "cloud D3/D4 blocked: purpose=%s endpoint=%s payload=%s",
+                    purpose,
+                    endpoint.name,
+                    data_class.name,
+                )
+                raise DataClassViolationError(
+                    f"payload {data_class.name} to cloud requires "
+                    "BACMAP_DEBUG=1 and BACMAP_DEBUG_ALLOW_CLOUD_D4=1"
+                )
+            logger.warning(
+                "DEBUG cloud D3/D4 egress allowed: purpose=%s endpoint=%s payload=%s",
+                purpose,
+                endpoint.name,
+                data_class.name,
+            )
         if (
             endpoint.location == "cloud"
             and data_class > self._config.policy.cloud_max_data_class

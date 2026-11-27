@@ -58,13 +58,17 @@ def _make_config(
     location: str = "local",
     cloud_max: int = 1,
     routing: dict[str, str] | None = None,
+    ai_max: int = 4,
 ) -> LlmConfig:
     return LlmConfig(
         endpoints={
             "e": LlmEndpoint(name="e", base_url="http://x/v1", model="m", location=location)
         },
         routing={"p": "e"} if routing is None else routing,
-        policy=DataPolicy(cloud_max_data_class=DataClass(cloud_max)),
+        policy=DataPolicy(
+            cloud_max_data_class=DataClass(cloud_max),
+            ai_max_data_class=DataClass(ai_max),
+        ),
     )
 
 
@@ -179,6 +183,63 @@ min_free_ram_gb_for_heavy_steps = 24
         with pytest.raises(ValidationError):
             DataPolicy(cloud_max_data_class=DataClass.D4)
 
+    def test_debug_switch_allows_d4_cloud_limit(self, monkeypatch):
+        monkeypatch.setattr("bacmap.config.debug_mode", lambda: True)
+        monkeypatch.setenv("BACMAP_DEBUG_ALLOW_CLOUD_D4", "1")
+        assert (
+            DataPolicy(cloud_max_data_class=DataClass.D4).cloud_max_data_class
+            == DataClass.D4
+        )
+
+    def test_load_config_accepts_d4_with_debug_switch(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr("bacmap.config.debug_mode", lambda: True)
+        monkeypatch.setenv("BACMAP_DEBUG_ALLOW_CLOUD_D4", "1")
+        cfg_file = tmp_path / "config.toml"
+        cfg_file.write_text(
+            """
+[llm.endpoints.x]
+location = "cloud"
+base_url = "http://x/v1"
+model = "m"
+
+[llm.data_policy]
+cloud_max_data_class = "D4"
+""",
+            encoding="utf-8",
+        )
+        assert load_llm_config(cfg_file).policy.cloud_max_data_class == DataClass.D4
+
+    def test_ai_data_ceiling_parsed_and_enforced(self, tmp_path: Path):
+        cfg_file = tmp_path / "config.toml"
+        cfg_file.write_text(
+            """
+[llm.endpoints.x]
+location = "local"
+base_url = "http://x/v1"
+model = "m"
+
+[llm.data_policy]
+ai_max_data_class = "D2"
+""",
+            encoding="utf-8",
+        )
+        cfg = load_llm_config(cfg_file)
+        assert cfg.policy.ai_max_data_class == DataClass.D2
+        agent = _FakeAgent(output=_Out())
+        gw = LlmGateway(cfg, agent_factory=lambda ep, ot, _i=None: agent)
+        with pytest.raises(DataClassViolationError):
+            gw.structured("p", "prompt", _Out, data_class=DataClass.D3)
+        assert agent.calls == 0
+        assert gw.structured("p", "prompt", _Out, data_class=DataClass.D2) is not None
+        assert agent.calls == 1
+
+    def test_data_policy_applies_without_endpoint_section(self, tmp_path: Path):
+        cfg_file = tmp_path / "config.toml"
+        cfg_file.write_text(
+            "[llm.data_policy]\ncloud_max_data_class = 'D2'\n", encoding="utf-8"
+        )
+        assert load_llm_config(cfg_file).policy.cloud_max_data_class == DataClass.D2
+
     def test_load_config_rejects_d3_cloud_limit(self, tmp_path: Path):
         cfg_file = tmp_path / "config.toml"
         cfg_file.write_text(
@@ -236,6 +297,23 @@ class TestGateway:
         )
         out = gw.structured("p", "prompt", _Out, data_class=DataClass.D1)
         assert out is want
+
+    def test_cloud_d4_requires_debug_switch_at_call_time(self, monkeypatch):
+        monkeypatch.setattr("bacmap.config.debug_mode", lambda: True)
+        monkeypatch.setenv("BACMAP_DEBUG_ALLOW_CLOUD_D4", "1")
+        agent = _FakeAgent(output=_Out(tasks=[]))
+        gw = LlmGateway(
+            _make_config(location="cloud", cloud_max=4),
+            agent_factory=lambda ep, ot, _i=None: agent,
+        )
+        assert gw.structured("p", "prompt", _Out, data_class=DataClass.D4) is not None
+        assert agent.calls == 1
+
+        # 配置对象仍允许 D4，但运行期开关关闭后必须立即失败关闭。
+        monkeypatch.delenv("BACMAP_DEBUG_ALLOW_CLOUD_D4", raising=False)
+        with pytest.raises(DataClassViolationError):
+            gw.structured("p", "prompt", _Out, data_class=DataClass.D4)
+        assert agent.calls == 1
 
     def test_local_endpoint_accepts_all_classes(self):
         want = _Out(tasks=[])

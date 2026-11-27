@@ -173,6 +173,74 @@ bacmap record lab --strain-id HZCPE-01 --category mic \
 
 用 `bio_query_lab_results`（local-trusted）或 Records 页面查询它们。
 
+
+### 批量导入湿实验（XLSX / CSV / TSV，四层）
+
+逐条 `record metadata` / `record lab` 适合少量补录；整批湿实验表用：
+
+```bash
+bacmap record import wetlab.xlsx --dry-run
+bacmap record import wetlab.xlsx
+```
+
+控制台 **湿实验导入** 页也支持上传：`user` 上传后生成 `pending_review` 提案，
+`analyst`/`admin` 审核通过才提交 record 任务；提交人不能审核自己的提案
+（admin 可显式强制）。上传文件只在本机 `imports/<job_id>/` 保存。
+
+普通用户修改/删除已有数据、或新建样本/菌株时，会生成与文件导入相同的审核
+提案（`/api/v1/wetlab/proposals`）：提交人不能自审，审核通过后才写入；审核时
+会检查目标是否在提案期间被修改。审核通过后，无主数据自动归到提交人名下。
+上传/修改提案的本机文件与记录可用 `bacmap imports list|prune` 管理保留期。
+
+样本/菌株详情页现在可以直接管理湿实验数据（仅 `analyst`/`admin`，写入仍经
+`record` 任务）：编辑或清空 specimen / isolate 字段、编辑或删除 library 附加
+元数据、为 isolate 或 specimen 新增/修改/删除化验结果，以及在样本页关联菌株/
+测序数据。保存会等待 record 任务结束后刷新详情；普通 `user` 仍只能上传提案，
+不能直接改库。
+
+预览面板的 **AI 映射建议** 是只读顾问：它指出未识别列可能对应的字段、需要
+保留为自定义 `extra` 的列，以及隐私/日期/单位等风险，但**不会**改文件、
+写业务表或生成 GOM ID。数据级别按配置收紧：云端点只能看到列名与聚合统计；
+本地/局域网端点在 `ai_max_data_class >= D4` 时才附带最多 3 行截断样例值。
+
+工作簿可包含四个工作表（名称可用中文或英文，也可显式指定）：
+
+```text
+specimen / 样本信息 / 患者信息
+样本编号      患者姓名   采样日期     样本来源
+A03-SN-001    张三      2026-10-01   food
+
+isolate / 湿实验 / 菌株信息
+菌株编号      分离日期     省份   自定义字段A
+HZCPE-01     2026-10-12  广东   value
+
+library / 测序数据
+测序数据编号   平台       测序日期
+HZCPE-01__ilm illumina  2026-10-03
+
+lab / 化验 / 药敏
+测序数据编号      类别   检验项目     结果    单位   判读
+HZCPE-01__ilm   mic    meropenem   0.25    mg/L   S
+```
+
+- **样本级**（`specimen`）：患者、采样、来源等信息挂 `specimen`；键为
+  `specimen_id`/`样本编号`。数据列不做白名单，原列名/值进入样本元数据 JSON。
+- **菌株级**（`isolate`）：分离日期、来源、传代等挂 `isolate`；键为
+  `isolate_id`/`菌株编号`。支持 `METADATA_FIELDS` 与常用中文别名，未知列进 `extra`。
+- **测序数据级**（`library`）：平台、run、日期等挂 `library_id`（samples.tsv 的
+  `sample` 列）；WGS 自动关联 isolate/specimen，mNGS 只关联 specimen。
+  一个菌株可以有多份测序数据。
+- **化验结果**（`lab`）：长表，一行一个项目；默认挂菌株，`--lab-subject specimen`
+  可挂样本（如 mNGS 结果）。必填 `category`/`test_name`/`result`。
+- 菌株/测序数据键也接受 library 或样本编号，按 samples.tsv/身份表解析；一个样本
+  多个菌株时拒绝并要求改用菌株/测序数据编号。
+- 一个文件提交一个 `record` 任务（`kind=batch`），任务层统一写入并审计；
+  任一行缺键/缺必填字段/匹配不到身份会整体拒绝并列出 `sheet:行号`。
+- CSV/TSV 用单表，按表头自动判断目标；XLSX 可用
+  `--specimen-sheet` / `--isolate-sheet` / `--library-sheet` / `--lab-sheet`
+  显式指定（`--metadata-sheet` 是 `--isolate-sheet` 的兼容别名）。
+- 导入不会创建新的样本/菌株/测序数据；湿实验必须对应已登记实体。
+
 ### 知识库
 
 ```bash

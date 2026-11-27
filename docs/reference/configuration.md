@@ -49,15 +49,16 @@ export BACMAP_CONFIG="$PWD/config.toml"
 | `BACMAP_NOTIFY_ALLOWED_HOSTS` | — | extra callback hosts (loopback always allowed) |
 | `BACMAP_MCP_TOKEN` | — | bearer token for MCP HTTP |
 | `BACMAP_WEB_TOKEN` | — | bearer token for Web/API |
-| `BACMAP_WEB_AUTH` | `bearer` | `bearer` or `cookie` |
-| `BACMAP_WEB_SECRET` | derived from token | HMAC key for session cookies |
+| `BACMAP_WEB_AUTH` | `bearer` | `bearer`, `cookie`, `personal` (access key), or `accounts` (local accounts with admin/analyst/user roles) |
+| `BACMAP_WEB_SECRET` | derived from token | HMAC key for legacy cookie mode (accounts mode uses server-side random sessions) |
 | `BACMAP_WEB_COOKIE_SECURE` | off | `1` adds `Secure` to cookies |
 | `BACMAP_WEB_ALLOWED_HOSTS` | — | extra comma-separated `Host` names the Web console accepts (reverse proxy / LAN DNS name); loopback names and the bind address are always allowed; `*` disables the check only when Web auth is enabled |
 | `BACMAP_LANG` | — | CLI display language override (`en`/`zh`); takes precedence over `[ui].language` |
 | `BACMAP_TOOL_SELECTION` | — | explicit `tool_selection.yaml` overlay path (§13) |
 | `BACMAP_DB_SELECTION` | — | legacy gspec-only overlay path (translated to `tool_selection.yaml`) |
 | `BACMAP_RESEARCH_PROFILE` | `research` | default governance profile for Research Workbench (`open-test`/`research`/`publication`) |
-| `BACMAP_DEBUG` | off | **development only**: explicit override of `[debug].enabled`; `1` enables, `0` disables. Disables Web auth/CSRF, plan confirmation, task approvals, gates, MCP Profile limits, Research claim/publication gates and sandbox fallback. D3/D4→cloud remains blocked. |
+| `BACMAP_DEBUG` | off | **development only**: explicit override of `[debug].enabled`; `1` enables, `0` disables. Disables Web auth/CSRF, plan confirmation, task approvals, gates, MCP Profile limits, Research claim/publication gates and sandbox fallback. D3/D4→cloud remains blocked by default; only with `BACMAP_DEBUG_ALLOW_CLOUD_D4=1` may cloud be configured up to D4. |
+| `BACMAP_DEBUG_ALLOW_CLOUD_D4` | off | **dangerous debug switch**: effective only when `BACMAP_DEBUG` is on; allows `agent.llm` and MCP `cloud` Profiles to receive D3/D4; `local-trusted` is unaffected. Off by default, environment-only (never config.toml). Egress cannot be recalled. |
 | `BACMAP_BENCHMARK_DATA` | — | local public-data snapshot for research benchmarks; may be a dataset dir or a parent containing `bvbrc_kpn_meropenem`/`osf_n78q3` |
 | `BACMAP_ALLOW_UNSANDBOXED` | off | `1` allows direct execution (dev only) |
 | `CHECKM2_DB` | — | CheckM2 database path |
@@ -71,6 +72,7 @@ token.
 ```toml
 [llm.data_policy]
 cloud_max_data_class = "D1"
+ai_max_data_class = "D4"
 
 [llm.endpoints.strata]
 location = "local"
@@ -345,7 +347,9 @@ Existing gates (`open-test`/`research`/`publication`) are unaffected.
 ## 11. Validation and failure behaviour
 
 - Unknown TOML keys in typed sections are rejected (pydantic `extra="forbid"`).
-- `cloud_max_data_class` above D2 is a parse error.
+- `cloud_max_data_class` above D2 is a parse error (except the debug double switch).
+- `ai_max_data_class` must be D0–D4; AI payloads above the current ceiling are refused
+  before sending.
 - Invalid `plans.auto_confirm` policy (`max_samples`/`max_tasks`/`task_types`/flags) disables auto-confirm (fail-safe).
 - A database newer than the code is refused; restore a matching backup instead of downgrading.
 - `config.toml` may contain only the name of a secret env var, never the key itself.

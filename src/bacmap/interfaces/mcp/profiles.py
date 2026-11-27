@@ -2,7 +2,8 @@
 
 MCP 客户端背后的模型位置不可验证（外部 Harness 可能接云端模型），因此
 默认按最不利假设处理：``cloud`` Profile 只暴露 ``output_data_class`` 不超过
-``[llm.data_policy].cloud_max_data_class``（默认 D1，管理员最多放宽到 D2）的工具。
+``[llm.data_policy].cloud_max_data_class``（默认 D1，管理员最多放宽到 D2；
+v1.10.51 debug 双开关时 cloud 可到 D4）的工具。
 ``local-trusted`` 可见至 D4，但必须由管理员在 ``config.toml`` 中显式开启：
 
     [mcp]
@@ -59,7 +60,7 @@ def _local_trusted_enabled(config: dict[str, Any]) -> bool:
 
 
 def _cloud_ceiling(config_path: Path) -> DataClass:
-    # 与 LLM 网关共用同一数据策略（单一事实来源）；load_llm_config 已强制 ≤ D2。
+    # 与 LLM 网关共用同一数据策略（单一事实来源）；D4 仅调试双开关例外。
     from bacmap.agent.llm.endpoints import load_llm_config
 
     return load_llm_config(config_path).policy.cloud_max_data_class
@@ -74,9 +75,22 @@ def resolve_profile(name: str, home: Path, transport: str) -> ProfileSpec:
 
     config_path = active_config_path(home)
     if debug_mode():
-        # 开发模式：跳过 local-trusted 的配置开关，所有 Profile 都可见 D4。
+        # 开发模式：跳过 local-trusted 的配置开关。cloud Profile 的 D4 仍需
+        # 第二把开关；否则 debug 单独开启即可把 D4 交给外部模型，和新 ADR-16
+        # 例外的双开关语义不一致。local-trusted 本身就是受控本地 Profile。
+        from bacmap.config import debug_allow_cloud_d4
+
+        if profile is McpProfile.LOCAL_TRUSTED:
+            ceiling = DataClass.D4
+        else:
+            try:
+                configured = _cloud_ceiling(config_path)
+            except ValueError:  # 配置里残留 D4 但运行期开关关闭：fail-closed
+                configured = DataClass.D1
+            # 与 agent.llm 一致：第二开关只是放行 D4，实际上限仍取数据策略。
+            ceiling = configured if debug_allow_cloud_d4() else min(configured, DataClass.D2)
         return ProfileSpec(
-            profile=profile, max_data_class=DataClass.D4, actor=_actor(profile, transport)
+            profile=profile, max_data_class=ceiling, actor=_actor(profile, transport)
         )
     if profile is McpProfile.LOCAL_TRUSTED:
         if not _local_trusted_enabled(_read_toml(config_path)):

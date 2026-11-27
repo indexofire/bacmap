@@ -63,7 +63,7 @@ HZCPE-01__ont__20261020	VPA	gs/HZCPE-01__ont__20261020/HZCPE-01__ont__20261020_R
 | `gom.sqlite` | 基因组对象、GOM 事件、数据集、菌株基因型索引、AMR 基因索引 |
 | `baseline.sqlite` | 基线候选与已发布版本 |
 | `research.sqlite` | Research Workbench 会话、统计结果、产物与账本（P1） |
-| `data/bacmap.sqlite` | 菌株元数据、实验室结果、菌株实体、样本（specimens） |
+| `data/bacmap.sqlite` | 菌株元数据、样本/菌株/测序数据湿实验元数据、实验室结果（支持 isolate/specimen 主体）、身份实体、本地账号/会话/API 令牌 |
 | `data/knowledge.sqlite` | 文献/方法条目 + FTS5 索引 |
 | `refs/manifest.json` | 外部数据库版本/校验和 |
 

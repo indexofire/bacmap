@@ -8,7 +8,14 @@
 4. 更新环境：`pixi install`（开发环境另加 `pixi install -e dev`）。
 5. 重启 `bacmap start web` / `bacmap start mcp`；工作流按内容哈希自动重部署。
 6. 再次 `bacmap doctor`，确认数据库版本。
-7. 冒烟：`bacmap overview`、`bacmap run list`、一次小型 `analyze` 或 `record`。
+7. **v1.10.49 升级额外步骤**：执行一次 `bacmap results reindex --backfill-metadata` 回填结果索引（已有索引行只补新列）
+   （物种/基因组列表走 SQL 分页；未回填时回退旧扫描）。若启用多用户，先
+   `bacmap user create <admin> --role admin`，再设置 `BACMAP_WEB_AUTH=accounts`。
+8. **v1.10.56 升级额外步骤**：`data/bacmap.sqlite` 会自动执行迁移 7（扩展
+   `import_jobs`），启动前务必备份；迁移后可运行
+   `bacmap imports prune --days 30 --dry-run` 查看待过期/可清理的旧提案。
+9. 冒烟：`bacmap overview`、`bacmap run list`、一次小型 `analyze` 或 `record`，
+   以及 `/console/species` 与 `/console/samples` 的筛选/分页。
 
 回滚：用第 2 步的备份恢复。被新版本迁移过的数据库不能由旧版本打开，不要原地降级。
 

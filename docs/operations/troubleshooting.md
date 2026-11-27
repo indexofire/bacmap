@@ -100,7 +100,10 @@ The `snakemake_v8` diagnostic is historical; current pins are Snakemake 9 (see `
 
 | Symptom | Fix |
 |---|---|
-| Result missing after an upgrade | run `bacmap results migrate`; check symlink targets |
+| Result missing after an upgrade | run `bacmap results migrate`; since v1.10.49 also `bacmap results reindex` |
+| accounts login returns 503 | no accounts yet: run `bacmap user create <name> --role admin` locally |
+| A user cannot see a specimen | it is not owned by the user: `bacmap specimen assign-owner <id> <username>` |
+| Administrator forgot the password | run `bacmap user passwd <name>` locally (requires `BACMAP_HOME` access) |
 | Two runs of the same sample differ | `bacmap run compare <a> <b>`; check `NOT_REPRODUCIBLE` |
 | Baseline excludes a strain | inspect `excluded` reasons: species/QC/metadata/duplicate/representative |
 | Citation gate rejects | approve the knowledge entry (`knowledge-approve`) or fix the citation |

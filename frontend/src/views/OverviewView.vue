@@ -87,7 +87,7 @@ onMounted(() => void load())
           <section class="card">
             <div class="card__head">
               <h2 class="card__title">LLM 端点</h2>
-              <span class="card__hint">ADR-16：D3/D4 永不发往 cloud</span>
+              <span class="card__hint">ADR-16：默认 D3/D4 不发 cloud；仅 debug 双开关例外</span>
             </div>
             <div v-if="overview.endpoints.length" class="table-wrap">
               <table class="table">

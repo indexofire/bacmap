@@ -12,18 +12,24 @@ actions.
 | **D1** | de-identified aggregate statistics | allowed (default ceiling) | allowed |
 | **D2** | single-strain typing results, sample IDs | blocked by default; admin may raise ceiling to D2 | allowed only if ceiling is D2 |
 | **D3** | sequences, alignments, assemblies | **never** | requires `local-trusted` |
-| **D4** | personal/epidemiological identifiers, metadata, lab results | **never** | requires `local-trusted` |
+| **D4** | personal/epidemiological identifiers, metadata, lab results | **never** (debug double-switch exception) | requires `local-trusted` |
 
-The ceiling is enforced twice:
+By default the ceiling is enforced twice:
 
 1. **LLM gateway** — before sending, `LlmGateway` compares the payload class with
-   `[llm.data_policy].cloud_max_data_class`; D3/D4 cannot be configured above D2.
+   `[llm.data_policy].cloud_max_data_class`; by default D3/D4 cannot be configured above D2.
 2. **MCP profile** — the `cloud` server does not even register tools whose output class exceeds the
    ceiling; a call is re-checked at execution time.
+3. **Debug exception (v1.10.51, user decision)** — only when both `BACMAP_DEBUG=1`
+   (or `[debug].enabled=true`) and `BACMAP_DEBUG_ALLOW_CLOUD_D4=1` are set may
+   `agent.llm` configure a cloud endpoint up to D4; the gateway re-checks both switches
+   at call time and fails closed immediately when either is off. MCP `cloud` Profiles need the same second switch for D4; debug alone no longer
+   lifts MCP cloud to D4. `local-trusted` remains the controlled local profile. Off by default; data
+   sent to a cloud model cannot be recalled.
 
 ```toml
 [llm.data_policy]
-cloud_max_data_class = "D1"      # "D1" or "D2" only
+cloud_max_data_class = "D1"      # "D1"/"D2"; D3/D4 only with the debug double switch
 ```
 
 ```
@@ -86,6 +92,11 @@ deliberately unsupported. The container, not an allow-list, is the security boun
   tunnel or cookie mode.
 - `cookie` mode: `/login` issues a signed `HttpOnly`, `SameSite=Strict` session cookie; every
   state-changing POST needs a CSRF token and a same-origin Origin/Referer.
+- `accounts` mode (v1.10.49): username + scrypt password login; the server stores a SHA-256
+  hash of the session in `web_sessions`, while the cookie carries only a random token. The
+  server enforces admin/analyst/user permissions and limits `user` to data it submitted or
+  owns. Failed logins are throttled per username + source IP. See
+  [Multi-user accounts](accounts.md) for bootstrap and roles.
 - `BACMAP_WEB_COOKIE_SECURE=1` adds `Secure` behind TLS.
 - Security headers include strict CSP, nosniff, frame-deny, referrer-policy and COOP.
 - The JSON API is a trusted operator surface; never give its token to a harness.
@@ -112,7 +123,7 @@ deliberately unsupported. The container, not an allow-list, is the security boun
 
 | Threat | Control |
 |---|---|
-| Cloud model sees sequences/D4 | data classes enforced in gateway + MCP profile |
+| Cloud model sees sequences/D4 | data classes enforced in gateway + MCP profile; D3/D4 cloud only with the explicit debug double switch (off by default) |
 | Prompt injection makes an agent confirm or sign | confirmation only on trusted surfaces; model has no confirmation tool |
 | Agent swaps a plan before you confirm | plan ownership + version/hash binding + input fingerprints |
 | Forged request writes metadata | record tasks + task layer; MCP D4 only on local-trusted |

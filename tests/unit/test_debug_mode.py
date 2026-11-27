@@ -81,10 +81,22 @@ class TestWebDebug:
 
 
 class TestMcpDebug:
-    def test_cloud_profile_gets_d4(self, debug, tmp_path: Path):
+    def test_cloud_profile_requires_d4_double_switch(self, debug, monkeypatch, tmp_path: Path):
         from bacmap.interfaces.mcp.profiles import resolve_profile
         from bacmap.tools.spec import DataClass
 
+        monkeypatch.delenv("BACMAP_DEBUG_ALLOW_CLOUD_D4", raising=False)
+        profile = resolve_profile("cloud", tmp_path, "stdio")
+        assert profile.max_data_class is DataClass.D1
+
+    def test_cloud_profile_gets_d4_with_second_switch(self, debug, monkeypatch, tmp_path: Path):
+        from bacmap.interfaces.mcp.profiles import resolve_profile
+        from bacmap.tools.spec import DataClass
+
+        monkeypatch.setenv("BACMAP_DEBUG_ALLOW_CLOUD_D4", "1")
+        (tmp_path / "config.toml").write_text(
+            "[llm.data_policy]\ncloud_max_data_class = 'D4'\n", encoding="utf-8"
+        )
         profile = resolve_profile("cloud", tmp_path, "stdio")
         assert profile.max_data_class is DataClass.D4
 

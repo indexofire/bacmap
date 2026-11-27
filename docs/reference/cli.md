@@ -6,7 +6,7 @@ The `bacmap` executable has two kinds of top-level entries:
   `bacmap start mcp|web|tui|console`; each interface keeps its own flags;
 - **`stop` / `restart`** — lifecycle of the background Web daemon (`bacmap start web -D`);
 - **commands** that perform one operation and exit: `overview`, `task`, `plan`, `record`, `run`,
-  `gom`, `isolate`, `sample`, `search`, `selection`, `doctor`, `backup`, `restore`, `results`,
+  `gom`, `isolate`, `sample`, `search`, `user`, `selection`, `doctor`, `backup`, `restore`, `results`,
   `events`.
 
 `--version` prints the program version.
@@ -169,9 +169,74 @@ bacmap record knowledge-import --title TITLE [--authors A] [--year Y] [--source 
                                [--identifier ID] [--content TEXT]
                                [--entry-kind {literature,method,report}]
 bacmap record knowledge-approve <entry_id>
+bacmap record import <file.xlsx|file.csv|file.tsv>
+                    [--specimen-sheet NAME] [--isolate-sheet NAME]
+                    [--library-sheet NAME] [--lab-sheet NAME]
+                    [--lab-subject {auto,isolate,specimen}]
+                    [--dry-run] [--by ACTOR] [--json]
 ```
 
-Examples in [Data & identity](../guide/data.md#5-records-metadata-lab-results-and-knowledge).
+`record import` submits all metadata/lab rows from one workbook as a single `record`
+task (`kind=batch`). The whole file is validated first; a missing strain/required column
+rejects it. See [Data & identity](../guide/data.md#5-records-metadata-lab-results-and-knowledge)
+for columns and examples.
+
+
+## `bacmap user`
+
+```text
+bacmap user list|ls [--home H] [--json]
+bacmap user create <username> --role {admin,analyst,user} [--password P] [--display-name N]
+bacmap user set-role <username> {admin,analyst,user}
+bacmap user disable <username> [--enable]
+bacmap user passwd <username> [--password P]
+bacmap user token create <username> [--name N] [--expires-days D] [--json]
+bacmap user token list <username> [--json]
+bacmap user token revoke <username> <token-id>
+```
+
+Local accounts live in `$BACMAP_HOME/data/bacmap.sqlite`. Create the first administrator
+from a local shell (there is no anonymous Web registration); omitted passwords are prompted.
+Enable account mode with:
+
+```bash
+bacmap user create admin --role admin
+export BACMAP_WEB_AUTH=accounts
+bacmap start web
+```
+
+API tokens start with `bm_...`, are shown once, and inherit the account role; use them for
+scripts/API clients (the local CLI needs no token). See [Multi-user accounts](../concepts/accounts.md) for data visibility.
+
+## `bacmap imports`
+
+```text
+bacmap imports list|ls [--status STATUS] [--kind import|edit] [--limit N] [--json]
+bacmap imports prune [--days 30] [--dry-run] [--json]
+```
+
+`list` shows file imports and user edit proposals; `prune` marks overdue
+`pending_review` rows as `expired` and deletes older terminal proposals plus their local
+upload directories (`--dry-run` reports only). Review still happens in the Web console
+(`/console/imports`) or via the API.
+
+## `bacmap personal`
+
+```text
+bacmap personal init [--rotate] [--json]
+bacmap personal status [--json]
+bacmap personal rotate [--json]
+```
+
+Access-key management for personal mode (single user, full features). `init` generates
+`bk_...` and the built-in `owner` (admin); the key is shown once and `personal.json`
+stores only its scrypt hash (0600). Rotation invalidates the old key immediately. Enable:
+
+```bash
+bacmap personal init
+export BACMAP_WEB_AUTH=personal
+bacmap start web
+```
 
 ## `bacmap specimen`
 
@@ -182,6 +247,8 @@ bacmap specimen import <map.tsv> [--by {dataset,isolate}] [--dry-run]
 bacmap specimen assign --specimen ID [--dataset D ...] [--isolate I ...]
 bacmap specimen backfill [--dry-run]
 bacmap specimen delete <specimen_id> [--force]
+bacmap specimen assign-owner <specimen_id> <username>
+bacmap specimen assign-owner <specimen_id> --clear
 ```
 
 A specimen is the unique submission ID; it owns 0..N isolates, and each isolate may have several
@@ -474,7 +541,7 @@ See [Operations](../operations/index.md).
 
 ```text
 bacmap results migrate [--dry-run]
-bacmap results reindex [--dry-run] [--force] [--json]
+bacmap results reindex [--dry-run] [--force] [--backfill-metadata] [--json]
 ```
 
 `migrate` moves legacy flat result directories into `runs/legacy-<name>/` and replaces them

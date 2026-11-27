@@ -58,10 +58,23 @@ STRAIN_INDEX_DDL = (
 
 def data_migrations() -> tuple[Migration, ...]:
     """data/bacmap.sqlite 的清单：菌株元数据与检验结果共用同一文件。"""
+    from bacmap.store.import_jobs import (
+        IMPORT_JOB_DDL,
+        IMPORT_JOB_INDEXES,
+        IMPORT_JOB_V7,
+    )
     from bacmap.store.isolates import ISOLATES_DDL
     from bacmap.store.lab_results import DDL_STATEMENTS as LAB_DDL
+    from bacmap.store.library_metadata import DDL_STATEMENTS as LIBRARY_META_DDL
+    from bacmap.store.specimen_metadata import DDL_STATEMENTS as SPECIMEN_META_DDL
     from bacmap.store.specimens import SPECIMENS_DDL
     from bacmap.store.strain_metadata import DDL_STATEMENTS as META_DDL
+    from bacmap.store.users import (
+        ACCOUNT_INDEXES,
+        API_TOKENS_DDL,
+        SESSIONS_DDL,
+        USERS_DDL,
+    )
 
     return (
         Migration(1, "baseline: strain metadata, lab results", (*META_DDL, *LAB_DDL)),
@@ -85,6 +98,47 @@ def data_migrations() -> tuple[Migration, ...]:
                 "UPDATE isolates SET specimen_id = isolate_id"
                 " WHERE specimen_id IS NULL",
             ),
+        ),
+        Migration(
+            4,
+            "accounts: users, sessions, API tokens; specimen/isolate ownership",
+            (
+                USERS_DDL,
+                SESSIONS_DDL,
+                API_TOKENS_DDL,
+                *ACCOUNT_INDEXES,
+                "ALTER TABLE specimens ADD COLUMN owner_user_id TEXT",
+                "ALTER TABLE isolates ADD COLUMN owner_user_id TEXT",
+                "CREATE INDEX IF NOT EXISTS idx_specimens_owner"
+                " ON specimens(owner_user_id)",
+                "CREATE INDEX IF NOT EXISTS idx_isolates_owner"
+                " ON isolates(owner_user_id)",
+            ),
+        ),
+        Migration(
+            5,
+            "wet-lab layers: specimen/library metadata; lab subject",
+            (
+                *SPECIMEN_META_DDL,
+                *LIBRARY_META_DDL,
+                "ALTER TABLE lab_results ADD COLUMN subject_type TEXT NOT NULL"
+                " DEFAULT 'isolate'",
+                "ALTER TABLE lab_results ADD COLUMN subject_id TEXT",
+                "UPDATE lab_results SET subject_id = strain_id"
+                " WHERE subject_id IS NULL",
+                "CREATE INDEX IF NOT EXISTS idx_lab_subject"
+                " ON lab_results(subject_type, subject_id)",
+            ),
+        ),
+        Migration(
+            6,
+            "import proposals: uploaded files awaiting analyst/admin review",
+            (IMPORT_JOB_DDL, *IMPORT_JOB_INDEXES),
+        ),
+        Migration(
+            7,
+            "wet-lab edit proposals: kind/payload/target/base version",
+            IMPORT_JOB_V7,
         ),
     )
 

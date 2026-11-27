@@ -5,7 +5,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from bacmap.core.utils import parse_mlst
 from bacmap.store.schema import STRAIN_INDEX_DDL
@@ -56,6 +56,16 @@ class StrainGenotypeIndex:
         object_id: str = "",
         analysis_date: str = "",
         pipeline_version: str = "",
+        specimen_id: str = "",
+        isolate_id: str = "",
+        genome_size: int | None = None,
+        contigs: int | None = None,
+        gc_pct: float | None = None,
+        n_card: int = 0,
+        n_vfdb: int = 0,
+        n_plasmid: int = 0,
+        owner_user_id: str = "",
+        prelim: bool = False,
     ) -> None:
         now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()  # noqa: UP017
         try:
@@ -63,8 +73,11 @@ class StrainGenotypeIndex:
                 """INSERT INTO strain_genotype_index
                    (strain_id, organism, species, serotype, serotype_method,
                     mlst_scheme, mlst_st, plasmid_types, object_id,
-                    analysis_date, pipeline_version, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    analysis_date, pipeline_version, updated_at,
+                    specimen_id, isolate_id, genome_size, contigs, gc_pct,
+                    n_card, n_vfdb, n_plasmid, owner_user_id, prelim)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                           ?, ?)
                    ON CONFLICT(strain_id) DO UPDATE SET
                      organism=excluded.organism,
                      species=excluded.species,
@@ -76,7 +89,17 @@ class StrainGenotypeIndex:
                      object_id=excluded.object_id,
                      analysis_date=excluded.analysis_date,
                      pipeline_version=excluded.pipeline_version,
-                     updated_at=excluded.updated_at""",
+                     updated_at=excluded.updated_at,
+                     specimen_id=excluded.specimen_id,
+                     isolate_id=excluded.isolate_id,
+                     genome_size=excluded.genome_size,
+                     contigs=excluded.contigs,
+                     gc_pct=excluded.gc_pct,
+                     n_card=excluded.n_card,
+                     n_vfdb=excluded.n_vfdb,
+                     n_plasmid=excluded.n_plasmid,
+                     owner_user_id=excluded.owner_user_id,
+                     prelim=excluded.prelim""",
                 (
                     strain_id,
                     organism,
@@ -90,6 +113,16 @@ class StrainGenotypeIndex:
                     analysis_date,
                     pipeline_version,
                     now,
+                    specimen_id or None,
+                    isolate_id or None,
+                    genome_size,
+                    contigs,
+                    gc_pct,
+                    int(n_card),
+                    int(n_vfdb),
+                    int(n_plasmid),
+                    owner_user_id or None,
+                    1 if prelim else 0,
                 ),
             )
             self._conn.execute(
@@ -187,6 +220,349 @@ class StrainGenotypeIndex:
                 )
             )
         return results
+
+    # ---- 结果目录（v1.10.x）：服务端分页/检索，替代逐请求扫描 summary JSON ----
+
+    _SORT_FIELDS: ClassVar[dict[str, str]] = {
+        "sample_id": "g.strain_id",
+        "species": "COALESCE(NULLIF(g.organism,''), g.species)",
+        "st": "g.mlst_st",
+        "serovar": "g.serotype",
+        "genome_size": "g.genome_size",
+        "contigs": "g.contigs",
+        "gc_pct": "g.gc_pct",
+        "analysis_date": "g.analysis_date",
+        "n_card": "g.n_card",
+        "n_vfdb": "g.n_vfdb",
+        "n_plasmid": "g.n_plasmid",
+    }
+
+    def sample_page(
+        self,
+        *,
+        query: str = "",
+        species: str = "",
+        serotype: str = "",
+        mlst_st: str = "",
+        amr_gene: str = "",
+        owner_user_id: str | None = None,
+        offset: int = 0,
+        limit: int = 50,
+        sort: str = "sample_id",
+        order: str = "asc",
+    ) -> tuple[list[dict[str, Any]], int]:
+        """按结果索引分页；返回 (rows, total)。过滤条件全部在 SQL 内完成。"""
+        where, params = self._sample_filters(
+            query=query,
+            species=species,
+            serotype=serotype,
+            mlst_st=mlst_st,
+            amr_gene=amr_gene,
+            owner_user_id=owner_user_id,
+        )
+        column = self._SORT_FIELDS.get(sort)
+        if column is None:
+            raise ValueError(f"unknown sort field: {sort}")
+        direction = "DESC" if order == "desc" else "ASC"
+        total_row = self._conn.execute(
+            f"SELECT COUNT(*) FROM strain_genotype_index g{where}", params  # noqa: S608 — 同上
+        ).fetchone()
+        total = int(total_row[0]) if total_row else 0
+        rows = self._conn.execute(
+            "SELECT g.* FROM strain_genotype_index g"  # noqa: S608 — 排序字段白名单 + 值参数化
+            f"{where} ORDER BY ({column} IS NULL) ASC, {column} {direction},"
+            " g.strain_id ASC LIMIT ? OFFSET ?",
+            (*params, max(1, min(limit, 500)), max(0, offset)),
+        ).fetchall()
+        items = [self._sample_dict(row) for row in rows]
+        self._attach_genes(items)
+        return items, total
+
+    def backfill_metadata(
+        self,
+        *,
+        strain_id: str,
+        specimen_id: str = "",
+        isolate_id: str = "",
+        genome_size: int | None = None,
+        contigs: int | None = None,
+        gc_pct: float | None = None,
+        n_card: int = 0,
+        n_vfdb: int = 0,
+        n_plasmid: int = 0,
+        owner_user_id: str = "",
+    ) -> bool:
+        """只更新结果目录新增列，保留 object_id/分型/analysis_date 等既有字段。
+
+        用于 v1.10.49 升级：旧索引行已有 GOM 关联，不能用 ``--force`` 全量重写。
+        """
+        cur = self._conn.execute(
+            "UPDATE strain_genotype_index SET specimen_id = ?, isolate_id = ?,"
+            " genome_size = ?, contigs = ?, gc_pct = ?, n_card = ?, n_vfdb = ?,"
+            " n_plasmid = ?, owner_user_id = ?, updated_at = ? WHERE strain_id = ?",
+            (
+                specimen_id or None,
+                isolate_id or None,
+                genome_size,
+                contigs,
+                gc_pct,
+                int(n_card),
+                int(n_vfdb),
+                int(n_plasmid),
+                owner_user_id or None,
+                datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),  # noqa: UP017
+                strain_id,
+            ),
+        )
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    def set_identity(
+        self,
+        *,
+        sample_id: str | None = None,
+        isolate_id: str | None = None,
+        specimen_id: str = "",
+        new_isolate_id: str = "",
+    ) -> int:
+        """同步 samples.tsv 变更后的 specimen/isolate 映射（关联/回填后调用）。"""
+        if sample_id:
+            cur = self._conn.execute(
+                "UPDATE strain_genotype_index SET specimen_id = ?,"
+                " isolate_id = COALESCE(NULLIF(?, ''), isolate_id)"
+                " WHERE strain_id = ?",
+                (specimen_id or None, new_isolate_id, sample_id),
+            )
+        elif isolate_id:
+            cur = self._conn.execute(
+                "UPDATE strain_genotype_index SET specimen_id = ?, isolate_id = ?"
+                " WHERE isolate_id = ?",
+                (specimen_id or None, new_isolate_id or isolate_id, isolate_id),
+            )
+        else:
+            return 0
+        self._conn.commit()
+        return int(cur.rowcount)
+
+    def set_owner(
+        self,
+        owner_user_id: str | None,
+        *,
+        specimen_id: str | None = None,
+        isolate_id: str | None = None,
+    ) -> int:
+        """把样本/菌株下所有结果行改归属；返回更新行数。"""
+        if specimen_id:
+            cur = self._conn.execute(
+                "UPDATE strain_genotype_index SET owner_user_id = ?"
+                " WHERE specimen_id = ?",
+                (owner_user_id or None, specimen_id),
+            )
+        elif isolate_id:
+            cur = self._conn.execute(
+                "UPDATE strain_genotype_index SET owner_user_id = ?"
+                " WHERE isolate_id = ?",
+                (owner_user_id or None, isolate_id),
+            )
+        else:
+            return 0
+        self._conn.commit()
+        return int(cur.rowcount)
+
+    def count_indexed(self) -> int:
+        row = self._conn.execute("SELECT COUNT(*) FROM strain_genotype_index").fetchone()
+        return int(row[0]) if row else 0
+
+    def species_summary(
+        self, *, owner_user_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """物种维度聚合（物种页/筛选器）；按结果数降序。"""
+        where, params = self._sample_filters(owner_user_id=owner_user_id)
+        rows = self._conn.execute(
+            "SELECT COALESCE(NULLIF(g.organism,''), g.species) AS species,"  # noqa: S608
+            " COUNT(*) AS n_samples,"
+            " COUNT(DISTINCT g.specimen_id) AS n_specimens,"
+            " COUNT(DISTINCT g.isolate_id) AS n_isolates,"
+            " MAX(g.analysis_date) AS last_analysis,"
+            " COUNT(g.genome_size) AS n_with_metrics"
+            " FROM strain_genotype_index g"
+            f"{where} GROUP BY 1 ORDER BY n_samples DESC, 1 ASC",
+            params,
+        ).fetchall()
+        return [
+            {
+                "species": str(r["species"] or "Unknown"),
+                "n_samples": int(r["n_samples"]),
+                "n_specimens": int(r["n_specimens"] or 0),
+                "n_isolates": int(r["n_isolates"] or 0),
+                "last_analysis": str(r["last_analysis"] or ""),
+                "n_with_metrics": int(r["n_with_metrics"] or 0),
+            }
+            for r in rows
+        ]
+
+    def specimen_summary(self, specimen_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """样本 → 物种/结果数/最近分析（批量查，供样本列表补列）。"""
+        if not specimen_ids:
+            return {}
+        marks = ",".join("?" for _ in specimen_ids)
+        rows = self._conn.execute(
+            "SELECT specimen_id,"  # noqa: S608 — IN 占位符数量由列表长度决定，值全部参数化
+            " GROUP_CONCAT(DISTINCT COALESCE(NULLIF(organism,''), species)) AS species,"
+            " COUNT(*) AS n_results, MAX(analysis_date) AS last_analysis"
+            " FROM strain_genotype_index"
+            f" WHERE specimen_id IN ({marks}) GROUP BY specimen_id",
+            tuple(specimen_ids),
+        ).fetchall()
+        return {
+            str(r["specimen_id"]): {
+                "species": str(r["species"] or ""),
+                "n_results": int(r["n_results"]),
+                "last_analysis": str(r["last_analysis"] or ""),
+            }
+            for r in rows
+        }
+
+    def isolate_summary(self, isolate_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """菌株 → 物种/型别/结果数/最近分析（批量查）。"""
+        if not isolate_ids:
+            return {}
+        marks = ",".join("?" for _ in isolate_ids)
+        rows = self._conn.execute(
+            "SELECT isolate_id,"  # noqa: S608 — IN 占位符数量由列表长度决定，值全部参数化
+            " GROUP_CONCAT(DISTINCT COALESCE(NULLIF(organism,''), species)) AS species,"
+            " GROUP_CONCAT(DISTINCT serotype) AS serotypes,"
+            " GROUP_CONCAT(DISTINCT mlst_st) AS sts,"
+            " COUNT(*) AS n_results, MAX(analysis_date) AS last_analysis"
+            " FROM strain_genotype_index"
+            f" WHERE isolate_id IN ({marks}) GROUP BY isolate_id",
+            tuple(isolate_ids),
+        ).fetchall()
+        return {
+            str(r["isolate_id"]): {
+                "species": str(r["species"] or ""),
+                "serotypes": [
+                    s for s in str(r["serotypes"] or "").split(",") if s
+                ],
+                "sts": [s for s in str(r["sts"] or "").split(",") if s],
+                "n_results": int(r["n_results"]),
+                "last_analysis": str(r["last_analysis"] or ""),
+            }
+            for r in rows
+        }
+
+    def get_sample(self, sample_id: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM strain_genotype_index WHERE strain_id = ?", (sample_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        item = self._sample_dict(row)
+        self._attach_genes([item])
+        return item
+
+    def _sample_filters(
+        self,
+        *,
+        query: str = "",
+        species: str = "",
+        serotype: str = "",
+        mlst_st: str = "",
+        amr_gene: str = "",
+        owner_user_id: str | None = None,
+    ) -> tuple[str, tuple[Any, ...]]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if owner_user_id is not None:
+            clauses.append("g.owner_user_id = ?")
+            params.append(owner_user_id)
+        if species:
+            clauses.append("(g.organism = ? OR g.species = ?)")
+            params.extend([species, species])
+        if serotype:
+            clauses.append("g.serotype LIKE ?")
+            params.append(f"%{serotype}%")
+        if mlst_st:
+            normalized = mlst_st.strip().upper()
+            if normalized and not normalized.startswith("ST"):
+                normalized = "ST" + normalized
+            clauses.append("UPPER(g.mlst_st) = ?")
+            params.append(normalized)
+        if amr_gene:
+            clauses.append(
+                "EXISTS (SELECT 1 FROM strain_amr_genes a"
+                " WHERE a.strain_id = g.strain_id AND a.gene_name = ?)"
+            )
+            params.append(amr_gene)
+        q = query.strip().lower()
+        if q:
+            like = f"%{q}%"
+            clauses.append(
+                "(LOWER(g.strain_id) LIKE ? OR LOWER(COALESCE(g.organism,'')) LIKE ?"
+                " OR LOWER(COALESCE(g.species,'')) LIKE ?"
+                " OR LOWER(COALESCE(g.serotype,'')) LIKE ?"
+                " OR LOWER(COALESCE(g.mlst_st,'')) LIKE ?"
+                " OR LOWER(COALESCE(g.specimen_id,'')) LIKE ?"
+                " OR LOWER(COALESCE(g.isolate_id,'')) LIKE ?"
+                " OR EXISTS (SELECT 1 FROM strain_amr_genes a"
+                "   WHERE a.strain_id = g.strain_id AND LOWER(a.gene_name) LIKE ?))"
+            )
+            params.extend([like] * 8)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        return where, tuple(params)
+
+    @staticmethod
+    def _sample_dict(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "sample_id": str(row["strain_id"]),
+            "verdict": str(row["organism"] or row["species"] or "N/A"),
+            "species_code": str(row["species"] or ""),
+            "genome_size": row["genome_size"],
+            "contigs": row["contigs"],
+            "gc_pct": row["gc_pct"],
+            "st": str(row["mlst_st"] or "N/A"),
+            "serovar": str(row["serotype"] or "N/A"),
+            "n_card": int(row["n_card"] or 0),
+            "n_vfdb": int(row["n_vfdb"] or 0),
+            "n_plasmid": int(row["n_plasmid"] or 0),
+            "specimen_id": str(row["specimen_id"] or ""),
+            "isolate_id": str(row["isolate_id"] or ""),
+            "owner_user_id": str(row["owner_user_id"] or ""),
+            "analysis_date": str(row["analysis_date"] or ""),
+            "prelim": bool(row["prelim"]),
+            "plasmid_types": row["plasmid_types"] or "[]",
+        }
+
+    def _attach_genes(self, items: list[dict[str, Any]]) -> None:
+        ids = [str(item["sample_id"]) for item in items]
+        if not ids:
+            return
+        marks = ",".join("?" for _ in ids)
+        rows = self._conn.execute(
+            "SELECT strain_id, gene_name, database FROM strain_amr_genes"  # noqa: S608 — IN 占位符数量由列表长度决定，值全部参数化
+            f" WHERE strain_id IN ({marks}) ORDER BY gene_name",
+            tuple(ids),
+        ).fetchall()
+        grouped: dict[str, list[dict[str, str]]] = {}
+        for row in rows:
+            grouped.setdefault(str(row["strain_id"]), []).append(
+                {"gene": str(row["gene_name"]), "database": str(row["database"] or "")}
+            )
+        for item in items:
+            genes = grouped.get(str(item["sample_id"]), [])
+            item["card_genes"] = sorted(
+                {g["gene"] for g in genes if g["database"].lower() in ("card", "ncbi", "amrfinder")}
+            )
+            item["vfdb_genes"] = sorted(
+                {g["gene"] for g in genes if g["database"].lower() == "vfdb"}
+            )
+            try:
+                plasmids = json.loads(str(item.get("plasmid_types") or "[]"))
+            except ValueError:
+                plasmids = []
+            item["plasmids"] = sorted(
+                {str(p) for p in plasmids if str(p).strip()}
+            ) if isinstance(plasmids, list) else []
 
     def find_similar(
         self,
@@ -301,6 +677,12 @@ class StrainGenotypeIndex:
             "object_id": row["object_id"],
             "analysis_date": row["analysis_date"],
             "pipeline_version": row["pipeline_version"],
+            "specimen_id": row["specimen_id"],
+            "isolate_id": row["isolate_id"],
+            "genome_size": row["genome_size"],
+            "contigs": row["contigs"],
+            "gc_pct": row["gc_pct"],
+            "owner_user_id": row["owner_user_id"],
         }
 
     def count(self) -> int:

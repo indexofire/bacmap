@@ -63,6 +63,7 @@ class IsolateService:
         lineage_id: str | None = None,
         passage: int | None = None,
         specimen_id: str | None = None,
+        owner_user_id: str | None = None,
     ) -> None:
         """登记 isolate；已存在时不覆盖显式 lineage/passage（幂等）。
 
@@ -73,8 +74,9 @@ class IsolateService:
         now = datetime.now(UTC).isoformat()
         self._conn.execute(
             "INSERT OR IGNORE INTO isolates"
-            " (isolate_id, lineage_id, passage, specimen_id, created_at, updated_at)"
-            " VALUES (?,?,?,?,?,?)",
+            " (isolate_id, lineage_id, passage, specimen_id, created_at, updated_at,"
+            "  owner_user_id)"
+            " VALUES (?,?,?,?,?,?,?)",
             (
                 isolate_id,
                 lineage_id if lineage_id is not None else auto_lineage,
@@ -82,6 +84,7 @@ class IsolateService:
                 specimen_id or None,
                 now,
                 now,
+                owner_user_id or None,
             ),
         )
         if specimen_id:
@@ -101,16 +104,33 @@ class IsolateService:
         )
         return cur.rowcount > 0
 
+    def set_owner(self, isolate_id: str, owner_user_id: str | None) -> bool:
+        """显式改菌株归属；返回是否命中该菌株。"""
+        cur = self._conn.execute(
+            "UPDATE isolates SET owner_user_id = ?, updated_at = ? WHERE isolate_id = ?",
+            (owner_user_id or None, datetime.now(UTC).isoformat(), isolate_id),
+        )
+        return cur.rowcount > 0
+
     def get(self, isolate_id: str) -> dict[str, Any] | None:
         row = self._conn.execute(
             "SELECT * FROM isolates WHERE isolate_id = ?", (isolate_id,)
         ).fetchone()
         return dict(row) if row else None
 
-    def list(self, limit: int = 500, offset: int = 0) -> list[dict[str, Any]]:
+    def list(
+        self,
+        limit: int = 500,
+        offset: int = 0,
+        *,
+        query: str = "",
+        owner_user_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        where, params = _isolate_filters(query, owner_user_id)
         rows = self._conn.execute(
-            "SELECT * FROM isolates ORDER BY isolate_id LIMIT ? OFFSET ?",
-            (max(1, limit), max(0, offset)),
+            f"SELECT i.* FROM isolates i LEFT JOIN specimens s"  # noqa: S608 — where 片段仅由本模块常量拼装，值参数化
+            f" ON s.specimen_id = i.specimen_id{where} ORDER BY i.isolate_id LIMIT ? OFFSET ?",
+            (*params, max(1, limit), max(0, offset)),
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -121,6 +141,31 @@ class IsolateService:
         )
         return cur.rowcount > 0
 
-    def count(self) -> int:
-        row = self._conn.execute("SELECT COUNT(*) FROM isolates").fetchone()
+    def count(
+        self, *, query: str = "", owner_user_id: str | None = None
+    ) -> int:
+        where, params = _isolate_filters(query, owner_user_id)
+        row = self._conn.execute(
+            f"SELECT COUNT(*) FROM isolates i LEFT JOIN specimens s"  # noqa: S608 — 同上
+            f" ON s.specimen_id = i.specimen_id{where}", params
+        ).fetchone()
         return int(row[0]) if row else 0
+
+
+def _isolate_filters(
+    query: str, owner_user_id: str | None
+) -> tuple[str, tuple[Any, ...]]:
+    clauses: list[str] = []
+    params: list[Any] = []
+    if owner_user_id is not None:
+        clauses.append("COALESCE(s.owner_user_id, i.owner_user_id) = ?")
+        params.append(owner_user_id)
+    q = query.strip().lower()
+    if q:
+        like = f"%{q}%"
+        clauses.append(
+            "(LOWER(i.isolate_id) LIKE ? OR LOWER(COALESCE(i.lineage_id,'')) LIKE ?"
+            " OR LOWER(COALESCE(i.specimen_id,'')) LIKE ?)"
+        )
+        params.extend([like, like, like])
+    return (" WHERE " + " AND ".join(clauses)) if clauses else "", tuple(params)

@@ -8,7 +8,15 @@
 4. Update the environment: `pixi install` (and `pixi install -e dev` for development).
 5. Restart `bacmap start web` / `bacmap start mcp`; redeploy happens automatically with a content-hash check.
 6. `bacmap doctor`; verify the database version.
-7. Smoke test: `bacmap overview`, `bacmap run list`, one small `analyze` or `record`.
+7. **Extra step for v1.10.49**: run `bacmap results reindex --backfill-metadata` once to backfill the result index (existing rows get only the new columns)
+   (species/genome lists use SQL paging; they fall back to the old scan until then).
+   For multi-user mode, create the first administrator with
+   `bacmap user create <admin> --role admin`, then set `BACMAP_WEB_AUTH=accounts`.
+8. **Extra step for v1.10.56**: `data/bacmap.sqlite` applies migration 7 (extending
+   `import_jobs`) automatically; back up before starting. Afterwards run
+   `bacmap imports prune --days 30 --dry-run` to inspect old proposals that can expire/clean up.
+9. Smoke test: `bacmap overview`, `bacmap run list`, one small `analyze` or `record`, and
+   filtering/paging on `/console/species` and `/console/samples`.
 
 Rollback: restore the backup from step 2. A database migrated by a newer build cannot be opened by an
 older build; do not downgrade in place.

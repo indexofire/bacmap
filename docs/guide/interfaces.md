@@ -17,13 +17,13 @@ console, PAPER is a TailAdmin-like light document surface, and CONCRETE is a Swi
 gray template (grid paper, hard rules, Helvetica display, monospaced data, split-screen dashboard
 poster). Charts and sample HTML reports follow the theme: console links pass `?theme=light|gray`, and direct report URLs fall back to the `bacmap-theme` cookie set by the console.
 
-**Console login** (single deployment token, no accounts): persist `BACMAP_WEB_TOKEN` and
-`BACMAP_WEB_AUTH=cookie` in `$BACMAP_HOME/web.env` (0600) so `bacmap restart` keeps them; unauthenticated browser navigation is redirected to `/console/login`
-(a Vue login page). After login the top bar shows the operator's token fingerprint and a logout
-button. Without a token, auth stays disabled on loopback; in `bearer` mode the login page explains
-that browsers must switch to cookie mode. The legacy server-rendered `/login` page is kept as a
-fallback/explanation page. Multi-user accounts and role-based permissions are still a design
-proposal (`docs/concepts/accounts.md`), not implemented.
+**Console login**: the default is a single deployment token (`BACMAP_WEB_TOKEN` +
+`BACMAP_WEB_AUTH=cookie`, stored in `$BACMAP_HOME/web.env`, 0600). For a shared workstation set
+`BACMAP_WEB_AUTH=accounts`, create the first administrator locally with
+`bacmap user create <name> --role admin`, then log in at `/console/login` with username/password.
+See [Multi-user accounts](../concepts/accounts.md) for roles and data visibility. Without a token,
+auth stays disabled on loopback; in `bearer` mode the login page explains that browsers must switch
+to cookie mode. The legacy server-rendered `/login` page is kept as a fallback/explanation page.
 
 ```bash
 bacmap start web                            # 127.0.0.1:8800 by default
@@ -331,13 +331,16 @@ name a reverse proxy forwards:
 export BACMAP_WEB_ALLOWED_HOSTS=192.168.1.20,bacmap.lab.example
 ```
 
-Two auth modes:
+Three auth modes:
 
 - `bearer` (default): API clients send `Authorization: Bearer <token>`; browsers cannot set this
   header, so the HTML console returns a short 401 explanation (use an SSH tunnel).
 - `cookie`: set `BACMAP_WEB_AUTH=cookie`; log in at `/login`; the session cookie is signed and
   `HttpOnly`, and every state-changing POST needs a CSRF token. Add
   `BACMAP_WEB_COOKIE_SECURE=1` behind TLS.
+- `accounts`: set `BACMAP_WEB_AUTH=accounts`; local accounts with admin/analyst/user roles.
+  A `user` only sees data it submitted or owns. Create the first administrator with
+  `bacmap user create`.
 
 The MCP HTTP transport is separate: it always requires `BACMAP_MCP_TOKEN` (or `--token-env`) and is
 covered in [Agents & plans](agent-plans.md).

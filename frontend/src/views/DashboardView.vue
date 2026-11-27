@@ -5,7 +5,7 @@ import type { ECharts } from 'echarts/core'
 import Icon from '../components/Icon.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import EmptyState from '../components/EmptyState.vue'
-import { api } from '../api'
+import { ApiError, api } from '../api'
 import type { CountItem, DatabaseStats, Overview, TaskRow } from '../types'
 import { fmtRelative, fmtTime, shortId } from '../lib/format'
 import { mountChart } from '../lib/echarts'
@@ -377,9 +377,13 @@ async function load() {
     if (taskRes.status === 'fulfilled') tasks.value = taskRes.value
     else failures.push('任务列表加载失败')
     if (overviewRes.status === 'fulfilled') overview.value = overviewRes.value
-    else failures.push('系统概览不可用')
+    else if (!(overviewRes.reason instanceof ApiError && overviewRes.reason.status === 403)) {
+      failures.push('系统概览不可用')
+    }
     if (statsRes.status === 'fulfilled') stats.value = statsRes.value
-    else failures.push('数据库统计不可用（如服务刚升级，请重启 bacmap web）')
+    else if (!(statsRes.reason instanceof ApiError && statsRes.reason.status === 403)) {
+      failures.push('数据库统计不可用（如服务刚升级，请重启 bacmap web）')
+    }
     if (failures.length) error.value = failures.join('；')
     loading.value = false
     await renderCharts()
@@ -442,7 +446,7 @@ watch([statusItems, trend, resolvedTheme], () => {
         <h2>LOCAL<br />GENOMIC<br />EVIDENCE</h2>
         <div class="gray-hero__meta">
           {{ total }} TASKS / {{ stats?.strains.total ?? 0 }} STRAINS<br />
-          D1—D4 / AIR-GAPPED / NO CLOUD
+          D1—D4 / LOCAL-FIRST / CLOUD OFF BY DEFAULT
         </div>
       </div>
       <div class="gray-hero__map">

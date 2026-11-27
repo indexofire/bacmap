@@ -14,13 +14,26 @@ bacmap start web --host 127.0.0.1 --port 8800
 curl -H "Authorization: Bearer $BACMAP_WEB_TOKEN" http://127.0.0.1:8800/api/v1/tasks
 ```
 
-### Cookie mode
+### Cookie mode (single token)
 
 ```bash
 export BACMAP_WEB_AUTH=cookie
 bacmap start web
 # browser: /login → signed session cookie + bacmap_csrf cookie
 ```
+
+### Local accounts
+
+```bash
+bacmap user create admin --role admin   # local shell, first administrator
+export BACMAP_WEB_AUTH=accounts
+bacmap start web
+# browser: /console/login → username + password
+# scripts/API clients: bacmap user token create alice → Authorization: Bearer bm_...
+```
+
+See [Multi-user accounts](../concepts/accounts.md) for roles and data visibility. A `user`
+can only read tasks/plans/specimens/results it submitted or owns.
 
 State-changing requests then need:
 
@@ -37,16 +50,16 @@ List endpoints accept `offset`/`limit` and return `{items, total, offset, limit}
 
 | GET | `/api/v1/capabilities` | API version, bacmap version, plannable types, features |
 | GET | `/api/v1/auth/status` | auth mode, login state and operator fingerprint (public) |
-| POST | `/api/v1/auth/login` | exchange the deployment token for a signed session cookie (public; cookie mode only) |
+| POST | `/api/v1/auth/login` | single-token: token → cookie; accounts: username/password → server-side session (public) |
 | POST | `/api/v1/auth/logout` | clear session + CSRF cookies (CSRF-protected) |
 | GET | `/api/v1/overview` | system overview (versions, paths, policy, sandbox, counts) |
 | GET | `/api/v1/stats` | database statistics (tasks/runs/GOM/strains/serotypes/MLST/AMR/research/knowledge) |
 | GET | `/api/v1/samples?cursor=&limit=` | completed-sample page (only the page is parsed) |
 | GET | `/api/v1/samples/{id}` | sample digest + full steps + report-ready flag + gvixb latest-result links |
 | GET | `/api/v1/specimens?limit=` | specimen list (with isolate counts) |
-| GET | `/api/v1/specimens/{id}` | specimen + isolates + each isolate's libraries |
+| GET | `/api/v1/specimens/{id}` | specimen + isolates + libraries + specimen-level wet-lab metadata/labs |
 | GET | `/api/v1/isolates?limit=` | isolate list (specimen link, library counts) |
-| GET | `/api/v1/isolates/{id}` | isolate + specimen + libraries |
+| GET | `/api/v1/isolates/{id}` | isolate + specimen + libraries (with library metadata) |
 | POST | `/api/v1/specimens/assign` | link isolates/datasets to a specimen (CSRF; creates the specimen) |
 | POST | `/api/v1/specimens/{id}/delete` | delete a specimen (`force: true` unlinks isolates first; isolates/data are kept) |
 | POST | `/api/v1/isolates/{id}/delete` | delete an empty isolate (linked libraries/metadata/lab/GOM/runs block deletion; 409) |
@@ -55,7 +68,7 @@ List endpoints accept `offset`/`limit` and return `{items, total, offset, limit}
 | GET | `/api/v1/tasks?limit=` | recent tasks |
 | POST | `/api/v1/tasks` | submit analyze/curate (`task_type`, `samples`, `scope`) |
 | GET | `/api/v1/tasks/{id}` | task status and metadata |
-| POST | `/api/v1/tasks/{id}/approve` | approval signature (`approver`, `decision`, `signature`, `comment?`) |
+| POST | `/api/v1/tasks/{id}/approve` | approval signature (accounts mode derives `approver` from the login) |
 | POST | `/api/v1/tasks/{id}/cancel` | cancel a non-terminal task |
 | POST | `/api/v1/tasks/{id}/pause` | pause a running task (interrupted workflows resumable) |
 | POST | `/api/v1/tasks/{id}/resume` | resume a `paused`/`failed(interrupted)`/`cancelled` task in the same run directory |

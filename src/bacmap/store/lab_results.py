@@ -40,6 +40,8 @@ DDL_STATEMENTS = _SCHEMA_SQL
 class LabResult:
     id: str = ""
     strain_id: str = ""
+    subject_type: str = "isolate"
+    subject_id: str = ""
     category: str = ""
     test_name: str = ""
     method: str = ""
@@ -73,6 +75,8 @@ class LabResultService:
         return LabResult(
             id=d.get("id", ""),
             strain_id=d.get("strain_id", ""),
+            subject_type=d.get("subject_type", "isolate") or "isolate",
+            subject_id=d.get("subject_id", "") or d.get("strain_id", ""),
             category=d.get("category", ""),
             test_name=d.get("test_name", ""),
             method=d.get("method", "") or "",
@@ -98,10 +102,14 @@ class LabResultService:
     ) -> LabResult:
         now = datetime.now(UTC).isoformat()
         result_id = str(uuid4())
+        subject_type = str(kwargs.pop("subject_type", "isolate") or "isolate")
+        subject_id = str(kwargs.pop("subject_id", "") or strain_id)
 
         core_fields = {
             "id": result_id,
             "strain_id": strain_id,
+            "subject_type": subject_type,
+            "subject_id": subject_id,
             "category": category,
             "test_name": test_name,
             "result": result,
@@ -116,9 +124,12 @@ class LabResultService:
             "created_at": now,
         }
 
+        explicit_extra = kwargs.get("extra")
         extra_keys = {
             k: v for k, v in kwargs.items() if k not in core_fields and k != "extra" and v
         }
+        if isinstance(explicit_extra, dict):
+            extra_keys = {**explicit_extra, **extra_keys}
         core_fields["extra"] = json.dumps(extra_keys, ensure_ascii=False) if extra_keys else None
 
         cols = ", ".join(core_fields.keys())
@@ -144,19 +155,83 @@ class LabResultService:
             added.append(lr)
         return added
 
+    _UPDATE_COLUMNS = frozenset(
+        {
+            "category",
+            "test_name",
+            "result",
+            "method",
+            "unit",
+            "interpretation",
+            "standard",
+            "tested_date",
+            "tested_by",
+            "lab",
+            "notes",
+            "subject_type",
+            "subject_id",
+        }
+    )
+
+    def update(self, result_id: str, **fields: Any) -> LabResult | None:
+        """部分更新化验结果；未知列忽略，``extra`` 作为完整替换值。"""
+        current = self.get_by_id(result_id)
+        if current is None:
+            return None
+        payload: dict[str, Any] = {}
+        for key, value in fields.items():
+            if key in self._UPDATE_COLUMNS:
+                payload[key] = value
+            elif key == "extra" and isinstance(value, dict):
+                payload["extra"] = (
+                    json.dumps(value, ensure_ascii=False) if value else None
+                )
+        if not payload:
+            return current
+        if "subject_type" in payload and payload["subject_type"] not in {
+            "isolate",
+            "specimen",
+        }:
+            raise ValueError("subject_type must be 'isolate' or 'specimen'")
+        sets = ", ".join(f"{key} = ?" for key in payload)
+        self._conn.execute(
+            f"UPDATE lab_results SET {sets} WHERE id = ?",  # noqa: S608 — 列名来自本类白名单
+            [*payload.values(), result_id],
+        )
+        return self.get_by_id(result_id)
+
     def get_by_id(self, result_id: str) -> LabResult | None:
         row = self._conn.execute("SELECT * FROM lab_results WHERE id = ?", (result_id,)).fetchone()
         return self._row_to_result(row) if row else None
 
+    def get_by_subject(
+        self, subject_type: str, subject_id: str, category: str | None = None
+    ) -> list[LabResult]:
+        if category:
+            rows = self._conn.execute(
+                "SELECT * FROM lab_results WHERE subject_type = ? AND subject_id = ?"
+                " AND category = ? ORDER BY test_name",
+                (subject_type, subject_id, category),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM lab_results WHERE subject_type = ? AND subject_id = ?"
+                " ORDER BY category, test_name",
+                (subject_type, subject_id),
+            ).fetchall()
+        return [self._row_to_result(r) for r in rows]
+
     def get_by_strain(self, strain_id: str, category: str | None = None) -> list[LabResult]:
         if category:
             rows = self._conn.execute(
-                "SELECT * FROM lab_results WHERE strain_id = ? AND category = ? ORDER BY test_name",
+                "SELECT * FROM lab_results WHERE subject_type = 'isolate'"
+                " AND strain_id = ? AND category = ? ORDER BY test_name",
                 (strain_id, category),
             ).fetchall()
         else:
             rows = self._conn.execute(
-                "SELECT * FROM lab_results WHERE strain_id = ? ORDER BY category, test_name",
+                "SELECT * FROM lab_results WHERE subject_type = 'isolate'"
+                " AND strain_id = ? ORDER BY category, test_name",
                 (strain_id,),
             ).fetchall()
         return [self._row_to_result(r) for r in rows]
@@ -203,6 +278,13 @@ class LabResultService:
     def delete(self, result_id: str) -> bool:
         cur = self._conn.execute("DELETE FROM lab_results WHERE id = ?", (result_id,))
         return cur.rowcount > 0
+
+    def delete_by_subject(self, subject_type: str, subject_id: str) -> int:
+        cur = self._conn.execute(
+            "DELETE FROM lab_results WHERE subject_type = ? AND subject_id = ?",
+            (subject_type, subject_id),
+        )
+        return cur.rowcount
 
     def delete_by_strain(self, strain_id: str, category: str | None = None) -> int:
         if category:

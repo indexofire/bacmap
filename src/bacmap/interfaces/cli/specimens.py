@@ -226,6 +226,48 @@ def run_delete(args: argparse.Namespace) -> None:
     )
 
 
+def run_assign_owner(args: argparse.Namespace) -> None:
+    """把样本（及其结果）归属到某个账号；``--clear`` 收回为无主。"""
+    from bacmap.store.specimens import SpecimenService
+    from bacmap.store.strain_index import StrainGenotypeIndex
+    from bacmap.store.users import UserService
+
+    home = Path(args.home)
+    owner = None
+    if not args.clear and not args.username:
+        raise SystemExit(
+            T("give a username or --clear", "请给用户名或 --clear")
+        )
+    if not args.clear:
+        with UserService(home / "data" / "bacmap.sqlite") as users:
+            account = users.get_by_username(args.username)
+        if account is None:
+            raise SystemExit(
+                T(f"user not found: {args.username}", f"用户不存在：{args.username}")
+            )
+        owner = account.username
+    with SpecimenService(home / "data" / "bacmap.sqlite") as specimens:
+        if not specimens.set_owner(args.specimen_id, owner):
+            raise SystemExit(
+                T(f"specimen not found: {args.specimen_id}",
+                  f"样本不存在：{args.specimen_id}")
+            )
+    gom_db = home / "gom.sqlite"
+    updated = 0
+    if gom_db.is_file():
+        with StrainGenotypeIndex(gom_db) as index:
+            updated = index.set_owner(owner, specimen_id=args.specimen_id)
+    if args.json:
+        print(json.dumps(
+            {"specimen_id": args.specimen_id, "owner_user_id": owner,
+             "index_rows": updated}, ensure_ascii=False, indent=2))
+        return
+    print(T(
+        f"specimen {args.specimen_id} owner={owner or '-'} (index rows: {updated})",
+        f"样本 {args.specimen_id} 归属={owner or '无主'}（索引行：{updated}）",
+    ))
+
+
 def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     p = sub.add_parser(
         "specimen",
@@ -279,6 +321,24 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
     add_home(assign)
     add_json(assign)
     assign.set_defaults(func=run_assign)
+
+    owner = s.add_parser(
+        "assign-owner",
+        help=T(
+            "assign a specimen (and its results) to a user account",
+            "把样本及其结果归属到某个账号",
+        ),
+    )
+    owner.add_argument("specimen_id")
+    owner.add_argument("username", nargs="?")
+    owner.add_argument(
+        "--clear",
+        action="store_true",
+        help=T("remove ownership (admin/analyst only)", "收回归属（仅管理员/分析员可见）"),
+    )
+    add_home(owner)
+    add_json(owner)
+    owner.set_defaults(func=run_assign_owner)
 
     backfill = s.add_parser(
         "backfill",

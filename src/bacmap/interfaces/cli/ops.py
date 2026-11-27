@@ -39,21 +39,21 @@ def _check(name: str, status: str, detail: str) -> dict[str, str]:
 
 def collect_checks(home: Path) -> list[dict[str, str]]:
     checks: list[dict[str, str]] = []
-    from bacmap.config import debug_mode
+    from bacmap.config import debug_allow_cloud_d4, debug_mode
 
     if debug_mode():
-        checks.append(
-            _check(
-                "debug",
-                "warn",
-                T(
-                    "debug mode is enabled (environment variable or [debug] enabled=true): "
-                    "auth/approval/gates/Profile restrictions relaxed",
-                    "debug 模式已开启（环境变量或 [debug] enabled=true）："
-                    "鉴权/审批/门/Profile 限制已放宽",
-                ),
-            )
+        detail = T(
+            "debug mode is enabled (environment variable or [debug] enabled=true): "
+            "auth/approval/gates/Profile restrictions relaxed",
+            "debug 模式已开启（环境变量或 [debug] enabled=true）："
+            "鉴权/审批/门/Profile 限制已放宽",
         )
+        if debug_allow_cloud_d4():
+            detail += T(
+                "; CLOUD D3/D4 EGRESS ENABLED (BACMAP_DEBUG_ALLOW_CLOUD_D4=1)",
+                "；CLOUD D3/D4 外发已开启（BACMAP_DEBUG_ALLOW_CLOUD_D4=1）",
+            )
+        checks.append(_check("debug", "warn", detail))
     if not home.is_dir():
         return [_check("home", "fail", T(f"Directory not found: {home}", f"目录不存在：{home}"))]
     try:
@@ -351,6 +351,8 @@ def results_reindex(args: argparse.Namespace) -> None:
     重建索引行（``object_id`` 留空、pipeline_version=summary 或 legacy），不创建
     GOM 对象、不改原始结果。已存在的菌株默认跳过，``--force`` 覆盖。
     """
+    from bacmap.core.analysis.assembly_qc import summary_metrics
+    from bacmap.store.catalog import library_identity
     from bacmap.store.strain_index import StrainGenotypeIndex, _extract_genotype
 
     home = Path(args.home)
@@ -371,10 +373,12 @@ def results_reindex(args: argparse.Namespace) -> None:
             candidates.append((sample, path, data))
 
     idx = StrainGenotypeIndex(home / "gom.sqlite")
-    inserted = skipped = failed = 0
+    inserted = skipped = failed = backfilled = 0
+    backfill_mode = bool(getattr(args, "backfill_metadata", False))
     try:
         for sample, path, summary in candidates:
-            if not args.force and idx.get_profile(sample) is not None:
+            existing = idx.get_profile(sample) is not None
+            if existing and not args.force and not backfill_mode:
                 skipped += 1
                 continue
             steps = summary.get("steps") if isinstance(summary.get("steps"), dict) else {}
@@ -392,8 +396,47 @@ def results_reindex(args: argparse.Namespace) -> None:
             }
             try:
                 genotype = _extract_genotype(payload)
+                steps = summary.get("steps") if isinstance(summary.get("steps"), dict) else {}
+                metrics = summary_metrics(steps or {})
+                identity = library_identity(home, sample)
+                genes = genotype["amr_genes"]
+                size_raw = metrics.get("genome_size")
+                contigs_raw = metrics.get("contigs")
+                gc_raw = metrics.get("gc_pct")
+                genome_size = size_raw if isinstance(size_raw, int) else None
+                contigs = contigs_raw if isinstance(contigs_raw, int) else None
+                gc_pct = float(gc_raw) if isinstance(gc_raw, (int, float)) else None
+                n_card = sum(
+                    1 for g in genes if str(g.get("database", "")).lower()
+                    in ("card", "ncbi", "amrfinderplus")
+                )
+                n_vfdb = sum(
+                    1 for g in genes if str(g.get("database", "")).lower() == "vfdb"
+                )
+                n_plasmid = len(genotype["plasmid_types"])
+                specimen_id = identity["specimen_id"]
+                isolate_id = identity["isolate_id"]
+                owner_user_id = identity["owner_user_id"]
                 if args.dry_run:
-                    inserted += 1
+                    if existing and backfill_mode and not args.force:
+                        backfilled += 1
+                    else:
+                        inserted += 1
+                    continue
+                if existing and backfill_mode and not args.force:
+                    idx.backfill_metadata(
+                        strain_id=sample,
+                        specimen_id=specimen_id,
+                        isolate_id=isolate_id,
+                        genome_size=genome_size,
+                        contigs=contigs,
+                        gc_pct=gc_pct,
+                        n_card=n_card,
+                        n_vfdb=n_vfdb,
+                        n_plasmid=n_plasmid,
+                        owner_user_id=owner_user_id,
+                    )
+                    backfilled += 1
                     continue
                 idx.upsert(
                     strain_id=sample,
@@ -404,7 +447,7 @@ def results_reindex(args: argparse.Namespace) -> None:
                     mlst_scheme=genotype["mlst_scheme"],
                     mlst_st=genotype["mlst_st"],
                     plasmid_types=genotype["plasmid_types"],
-                    amr_genes=genotype["amr_genes"],
+                    amr_genes=genes,
                     object_id="",
                     analysis_date=(
                         str(summary.get("created_at") or "")
@@ -413,6 +456,15 @@ def results_reindex(args: argparse.Namespace) -> None:
                         ).isoformat()
                     ),
                     pipeline_version=str(summary.get("pipeline_version") or "legacy"),
+                    specimen_id=specimen_id,
+                    isolate_id=isolate_id,
+                    genome_size=genome_size,
+                    contigs=contigs,
+                    gc_pct=gc_pct,
+                    n_card=n_card,
+                    n_vfdb=n_vfdb,
+                    n_plasmid=n_plasmid,
+                    owner_user_id=owner_user_id,
                 )
                 inserted += 1
             except (OSError, ValueError, sqlite3.Error):
@@ -423,6 +475,7 @@ def results_reindex(args: argparse.Namespace) -> None:
     result = {
         "scanned": len(candidates),
         "indexed": inserted,
+        "backfilled_metadata": backfilled,
         "skipped_existing": skipped,
         "failed": failed,
         "dry_run": bool(args.dry_run),
@@ -433,10 +486,10 @@ def results_reindex(args: argparse.Namespace) -> None:
     print(
         T(
             f"reindex: scanned {len(candidates)}, indexed {inserted}, "
-            f"skipped {skipped}, failed {failed}"
+            f"backfilled {backfilled}, skipped {skipped}, failed {failed}"
             + (" (dry-run)" if args.dry_run else ""),
             f"索引回填：扫描 {len(candidates)}，写入 {inserted}，"
-            f"跳过 {skipped}，失败 {failed}"
+            f"补列 {backfilled}，跳过 {skipped}，失败 {failed}"
             + ("（dry-run）" if args.dry_run else ""),
         )
     )
@@ -578,6 +631,14 @@ def add_parser(sub: Any, add_home: Any, add_json: Any) -> None:
         "--force",
         action="store_true",
         help=T("overwrite existing index rows", "覆盖已存在的索引行"),
+    )
+    rr.add_argument(
+        "--backfill-metadata",
+        action="store_true",
+        help=T(
+            "update new metadata columns on existing rows without overwriting typing/GOM links",
+            "只补新元数据列，不覆盖分型/GOM 关联",
+        ),
     )
     rr.set_defaults(func=results_reindex)
 

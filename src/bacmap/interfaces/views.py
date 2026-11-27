@@ -56,6 +56,7 @@ def overview_data(engine: DbosTaskEngine) -> dict[str, Any]:
         "endpoints": endpoints,
         "routing": cfg.routing,
         "cloud_max_data_class": cfg.policy.cloud_max_data_class.name,
+        "ai_max_data_class": cfg.policy.ai_max_data_class.name,
         "versions": versions,
         "paths": {
             "BACMAP_HOME": str(home),
@@ -504,10 +505,10 @@ def _identity_db(home: Path | str) -> Path:
 
 
 def _libraries_by_isolate(home: Path | str) -> dict[str, list[dict[str, str]]]:
-    from bacmap.workflow.samples_registry import list_libraries
+    from bacmap.store.catalog import cached_libraries
 
     grouped: dict[str, list[dict[str, str]]] = {}
-    for row in list_libraries(Path(home)):
+    for row in cached_libraries(Path(home)):
         aside = dict(row)
         # samples.tsv 的 sample 列 = library ID；API 用 library_id 明示语义。
         aside["library_id"] = aside.get("sample", "")
@@ -518,22 +519,57 @@ def _libraries_by_isolate(home: Path | str) -> dict[str, list[dict[str, str]]]:
 
 
 def specimen_rows(
-    home: Path | str, limit: int = 200, offset: int = 0
+    home: Path | str,
+    limit: int = 200,
+    offset: int = 0,
+    *,
+    query: str = "",
+    owner_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """样本列表（含菌株数）；库缺失返回 []（全新数据根）。"""
+    """样本列表（菌株数 + 结果索引中的物种/最近分析）；库缺失返回 []。"""
     db = _identity_db(home)
     if not db.is_file():
         return []
     from bacmap.store.specimens import SpecimenService
 
     with SpecimenService(db) as svc:
-        return svc.list(limit, offset)
+        rows = svc.list(
+            limit, offset, query=query, owner_user_id=owner_user_id
+        )
+    _enrich_specimens(home, rows)
+    return rows
+
+
+def _enrich_specimens(home: Path | str, rows: list[dict[str, Any]]) -> None:
+    ids = [str(row.get("specimen_id")) for row in rows if row.get("specimen_id")]
+    if not ids:
+        return
+    gom_db = Path(home) / "gom.sqlite"
+    if not gom_db.is_file():
+        return
+    try:
+        from bacmap.store.strain_index import StrainGenotypeIndex
+
+        with StrainGenotypeIndex(gom_db) as index:
+            summary = index.specimen_summary(ids)
+    except Exception:  # 索引缺失/旧库不应让样本列表失败
+        return
+    for row in rows:
+        data = summary.get(str(row.get("specimen_id")), {})
+        row["species"] = data.get("species", "")
+        row["n_results"] = int(data.get("n_results", 0))
+        row["last_analysis"] = data.get("last_analysis", "")
 
 
 def isolate_rows(
-    home: Path | str, limit: int = 500, offset: int = 0
+    home: Path | str,
+    limit: int = 500,
+    offset: int = 0,
+    *,
+    query: str = "",
+    owner_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """菌株列表（含其测序数据数量）。"""
+    """菌株列表（测序数据数量 + 结果索引中的物种/型别/最近分析）。"""
     db = _identity_db(home)
     if not db.is_file():
         return []
@@ -541,30 +577,60 @@ def isolate_rows(
 
     libraries = _libraries_by_isolate(home)
     with IsolateService(db) as svc:
-        rows = svc.list(limit=limit, offset=offset)
+        rows = svc.list(
+            limit=limit, offset=offset, query=query, owner_user_id=owner_user_id
+        )
     for row in rows:
         row["n_libraries"] = len(libraries.get(str(row.get("isolate_id")), []))
+    _enrich_isolates(home, rows)
     return rows
 
 
-def count_specimens(home: Path | str) -> int:
+def _enrich_isolates(home: Path | str, rows: list[dict[str, Any]]) -> None:
+    ids = [str(row.get("isolate_id")) for row in rows if row.get("isolate_id")]
+    if not ids:
+        return
+    gom_db = Path(home) / "gom.sqlite"
+    if not gom_db.is_file():
+        return
+    try:
+        from bacmap.store.strain_index import StrainGenotypeIndex
+
+        with StrainGenotypeIndex(gom_db) as index:
+            summary = index.isolate_summary(ids)
+    except Exception:  # 索引缺失/旧库不应让菌株列表失败
+        return
+    for row in rows:
+        data = summary.get(str(row.get("isolate_id")), {})
+        row["species"] = data.get("species", "")
+        row["sts"] = data.get("sts", [])
+        row["serotypes"] = data.get("serotypes", [])
+        row["n_results"] = int(data.get("n_results", 0))
+        row["last_analysis"] = data.get("last_analysis", "")
+
+
+def count_specimens(
+    home: Path | str, *, query: str = "", owner_user_id: str | None = None
+) -> int:
     from bacmap.store.specimens import SpecimenService
 
     db = _identity_db(home)
     if not db.is_file():
         return 0
     with SpecimenService(db) as svc:
-        return svc.count()
+        return svc.count(query=query, owner_user_id=owner_user_id)
 
 
-def count_isolates(home: Path | str) -> int:
+def count_isolates(
+    home: Path | str, *, query: str = "", owner_user_id: str | None = None
+) -> int:
     from bacmap.store.isolates import IsolateService
 
     db = _identity_db(home)
     if not db.is_file():
         return 0
     with IsolateService(db) as svc:
-        return svc.count()
+        return svc.count(query=query, owner_user_id=owner_user_id)
 
 
 def specimen_detail(home: Path | str, specimen_id: str) -> dict[str, Any] | None:
@@ -572,6 +638,8 @@ def specimen_detail(home: Path | str, specimen_id: str) -> dict[str, Any] | None
     db = _identity_db(home)
     if not db.is_file():
         return None
+    from bacmap.store.lab_results import LabResultService
+    from bacmap.store.specimen_metadata import SpecimenMetadataService
     from bacmap.store.specimens import SpecimenService
 
     with SpecimenService(db) as svc:
@@ -582,7 +650,35 @@ def specimen_detail(home: Path | str, specimen_id: str) -> dict[str, Any] | None
     libraries = _libraries_by_isolate(home)
     for isolate in isolates:
         isolate["libraries"] = libraries.get(str(isolate.get("isolate_id")), [])
-    return {"specimen": specimen, "isolates": isolates}
+    from bacmap.store.catalog import cached_libraries
+    from bacmap.store.library_metadata import LibraryMetadataService
+
+    direct_libraries = [
+        dict(row)
+        for row in cached_libraries(home)
+        if row.get("specimen") == specimen_id and not row.get("isolate")
+    ]
+    with LibraryMetadataService(db) as library_meta:
+        for library in direct_libraries:
+            extra = library_meta.get(str(library.get("sample") or ""))
+            if extra is not None:
+                library["library_id"] = str(library.get("sample") or "")
+                library["metadata"] = extra["data"]
+    _enrich_specimens(home, [specimen])
+    _enrich_isolates(home, isolates)
+    with SpecimenMetadataService(db) as specimen_meta:
+        metadata = specimen_meta.get(specimen_id)
+    with LabResultService(db) as lab_svc:
+        lab_results = [
+            row.to_dict() for row in lab_svc.get_by_subject("specimen", specimen_id)
+        ]
+    return {
+        "specimen": specimen,
+        "isolates": isolates,
+        "libraries": direct_libraries,
+        "metadata": metadata,
+        "lab_results": lab_results,
+    }
 
 
 def isolate_detail(home: Path | str, isolate_id: str) -> dict[str, Any] | None:
@@ -613,12 +709,27 @@ def isolate_detail(home: Path | str, isolate_id: str) -> dict[str, Any] | None:
         with StrainMetadataService(db) as meta_svc:
             meta = meta_svc.get(isolate_id)
             metadata = meta.to_dict() if meta is not None else None
+            if metadata is not None:
+                extra = metadata.pop("extra", None)
+                if isinstance(extra, dict):
+                    for key, value in extra.items():
+                        metadata.setdefault(str(key), value)
         with LabResultService(db) as lab_svc:
             lab_results = [r.to_dict() for r in lab_svc.get_by_strain(isolate_id)]
     except (OSError, ValueError):
         # 元数据/化验表可缺（旧数据根）：详情仍可用，只是没有湿实验段。
         metadata, lab_results = None, []
     libraries = _libraries_by_isolate(home).get(isolate_id, [])
+    from bacmap.store.library_metadata import LibraryMetadataService
+
+    with LibraryMetadataService(db) as library_meta:
+        for library in libraries:
+            extra = library_meta.get(str(library.get("library_id") or ""))
+            if extra is not None:
+                library["metadata"] = extra["data"]
+                library["metadata_specimen_id"] = extra["specimen_id"]
+                library["metadata_isolate_id"] = extra["isolate_id"]
+    _enrich_isolates(home, [isolate])
     return {
         "isolate": isolate,
         "specimen": specimen,

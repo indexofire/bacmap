@@ -50,15 +50,16 @@ export BACMAP_CONFIG="$PWD/config.toml"
 | `BACMAP_NOTIFY_ALLOWED_HOSTS` | — | 额外允许的回调主机（loopback 始终允许） |
 | `BACMAP_MCP_TOKEN` | — | MCP HTTP 的 bearer token |
 | `BACMAP_WEB_TOKEN` | — | Web/API 的 bearer token |
-| `BACMAP_WEB_AUTH` | `bearer` | `bearer` 或 `cookie` |
-| `BACMAP_WEB_SECRET` | 由 token 派生 | 会话 cookie 的 HMAC 密钥 |
+| `BACMAP_WEB_AUTH` | `bearer` | `bearer`、`cookie`、`personal`（访问密钥）或 `accounts`（本地账号 + admin/analyst/user 角色） |
+| `BACMAP_WEB_SECRET` | 由 token 派生 | 旧 cookie 模式的 HMAC 密钥（accounts 模式使用服务端随机会话） |
 | `BACMAP_WEB_COOKIE_SECURE` | 关 | `1` 给 cookie 加上 `Secure` |
 | `BACMAP_WEB_ALLOWED_HOSTS` | — | Web 控制台额外接受的 `Host` 名（逗号分隔；反向代理/局域网域名）；回环名与绑定地址始终放行；`*` 仅在启用 Web 鉴权时关闭校验 |
 | `BACMAP_LANG` | — | CLI 显示语言覆盖（`en`/`zh`）；优先于 `[ui].language` |
 | `BACMAP_TOOL_SELECTION` | — | 显式 `tool_selection.yaml` 覆盖层路径（§13） |
 | `BACMAP_DB_SELECTION` | — | 旧版 gspec-only 覆盖层路径（加载时翻译为 `tool_selection.yaml`） |
 | `BACMAP_RESEARCH_PROFILE` | `research` | Research Workbench 默认治理 Profile（`open-test`/`research`/`publication`） |
-| `BACMAP_DEBUG` | 关 | **仅开发**：显式覆盖 `[debug].enabled`；`1` 开启，`0` 关闭。关闭 Web 鉴权/CSRF、计划确认、任务审批、门、MCP Profile 限制、Research Claim/发表门与沙箱回退；D3/D4→cloud 仍被阻止。 |
+| `BACMAP_DEBUG` | 关 | **仅开发**：显式覆盖 `[debug].enabled`；`1` 开启，`0` 关闭。关闭 Web 鉴权/CSRF、计划确认、任务审批、门、MCP Profile 限制、Research Claim/发表门与沙箱回退。默认仍阻止 D3/D4→cloud；仅与 `BACMAP_DEBUG_ALLOW_CLOUD_D4=1` 同开时才允许 cloud 配置到 D4。 |
+| `BACMAP_DEBUG_ALLOW_CLOUD_D4` | 关 | **危险调试开关**：仅在 `BACMAP_DEBUG` 开启时生效；同时允许 `agent.llm` 与 MCP `cloud` Profile 的 D4；`local-trusted` 不受影响。默认关闭，仅环境变量（不写入 config.toml）。数据发出后不可撤回。 |
 | `BACMAP_BENCHMARK_DATA` | — | Research 科学基准的本地公共数据快照；可指向单个数据集目录，或包含 `bvbrc_kpn_meropenem`/`osf_n78q3` 的父目录 |
 | `BACMAP_ALLOW_UNSANDBOXED` | 关 | `1` 允许直接执行（仅开发） |
 | `CHECKM2_DB` | — | CheckM2 数据库路径 |
@@ -72,6 +73,7 @@ token 所在的环境变量名。
 ```toml
 [llm.data_policy]
 cloud_max_data_class = "D1"
+ai_max_data_class = "D4"
 
 [llm.endpoints.strata]
 location = "local"
@@ -140,11 +142,15 @@ interpretation = "deepseek"          # 由 agent/interpret.py 使用
 
 ```toml
 [llm.data_policy]
-cloud_max_data_class = "D1"   # D1 或 D2；D3/D4 在解析时即被拒绝
+cloud_max_data_class = "D1"   # 默认 D1 或 D2；D3/D4 仅 debug 双开关时允许
+ai_max_data_class = "D4"      # AI 总上限（D0–D4）；组织模式可收紧
 ```
 
-网关在发送到 `cloud` 端点前比较载荷分级，超过上限时抛出
-`DataClassViolationError`。该上限无法通过配置提高到 D2 以上。
+网关在发送前比较载荷分级，超过上限时抛出 `DataClassViolationError`。
+`cloud_max_data_class` 无法通过配置提高到 D2 以上（debug 双开关除外）。
+`ai_max_data_class` 是跨端点的总上限，实际生效级别取
+min(AI 总上限, 端点位置策略, 角色 `max_data_class`)；设为 D2 后本地端点也会
+拒收 D3/D4，导入映射顾问自动退回仅 schema/聚合。
 
 ### 3.4 资源（ADR-17）
 
@@ -185,7 +191,7 @@ BACMAP_DEBUG=0 bacmap doctor
 ```
 
 配置文件开启是**持久状态**；`bacmap doctor` 会输出 `debug=warn`。生产环境不得开启。
-该开关不放宽 ADR-16 数据红线：D3/D4 仍不得发往 cloud LLM 端点。
+默认不放宽 ADR-16 数据红线：D3/D4 仍不得发往 cloud LLM 端点。仅在额外设置 `BACMAP_DEBUG_ALLOW_CLOUD_D4=1` 时，`agent.llm` 与 MCP `cloud` Profile 才允许 cloud D4；`local-trusted` 不受此例外影响。
 
 ## 5. 计划
 
@@ -342,7 +348,8 @@ code_review = "always"         # always | plan | off
 ## 11. 校验与失败行为
 
 - 类型化段中的未知 TOML 键会被拒绝（pydantic `extra="forbid"`）。
-- `cloud_max_data_class` 高于 D2 是解析错误。
+- `cloud_max_data_class` 高于 D2 是解析错误（debug 双开关除外）。
+- `ai_max_data_class` 必须是 D0–D4；超过当前上限的 AI 载荷在发送前被拒绝。
 - 无效的 `plans.auto_confirm` 策略（`max_samples`/`max_tasks`/`task_types`/开关）会禁用自动确认（故障安全）。
 - 比代码更新的数据库会被拒绝；请恢复匹配的备份，而不是降级。
 - `config.toml` 只能包含密钥环境变量的名称，绝不能包含密钥本身。

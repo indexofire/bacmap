@@ -100,7 +100,10 @@ $BACMAP_HOME/workspaces/<task_id>/      # mine 的 stdout/stderr 与 context.jso
 
 | 症状 | 修复 |
 |---|---|
-| 升级后结果缺失 | 运行 `bacmap results migrate`；检查符号链接目标 |
+| 升级后结果缺失 | 运行 `bacmap results migrate`；v1.10.49 起再跑 `bacmap results reindex` |
+| accounts 登录返回 503 | 尚无账号：在本机运行 `bacmap user create <name> --role admin` |
+| 普通用户看不到某样本 | 样本/结果未归属该用户：`bacmap specimen assign-owner <id> <username>` |
+| 管理员忘记密码 | 在本机运行 `bacmap user passwd <name>`（需要 `BACMAP_HOME` 权限） |
 | 同一样本的两次运行结果不同 | `bacmap run compare <a> <b>`；检查 `NOT_REPRODUCIBLE` |
 | 基线排除了某个菌株 | 查看 `excluded` 原因：物种/QC/元数据/重复/代表株 |
 | 引用门拒绝 | 批准知识条目（`knowledge-approve`）或修正引用 |

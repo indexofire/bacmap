@@ -16,10 +16,95 @@ export interface Page<T> {
 
 export interface AuthStatus {
   enabled: boolean
-  mode: 'cookie' | 'bearer' | 'disabled'
+  mode: 'cookie' | 'bearer' | 'accounts' | 'personal' | 'disabled'
   authenticated: boolean
   operator: string
   login_url: string
+  role?: 'admin' | 'analyst' | 'user' | ''
+  username?: string
+  display_name?: string
+  accounts_ready?: boolean
+  personal_ready?: boolean
+  permissions?: string[]
+}
+
+export interface WetlabWriteResult {
+  task_id: string
+  kind: string
+  task: TaskRow
+}
+
+export interface MappingAdvice {
+  job_id: string
+  endpoint: string
+  location: string
+  data_class: string
+  included_values: boolean
+  columns: Array<{
+    layer: string
+    source_column: string
+    suggested_field: string
+    action: 'map' | 'keep_extra' | 'ignore'
+    confidence: 'high' | 'medium' | 'low'
+    reason: string
+  }>
+  warnings: string[]
+  notes: string
+}
+
+export interface ImportJob {
+  job_id: string
+  kind?: 'import' | 'edit'
+  target_type?: string
+  target_id?: string
+  base_version?: string
+  payload?: Array<Record<string, unknown>>
+  filename: string
+  status: 'pending_review' | 'submitted' | 'rejected' | 'withdrawn'
+  created_by: string
+  created_at: string
+  updated_at: string
+  reviewed_by?: string
+  reviewed_at?: string
+  review_note?: string
+  task_id?: string
+  sheet_args?: Record<string, string>
+  summary?: {
+    operation?: string
+    target_type?: string
+    target_id?: string
+    isolate_rows?: number
+    specimen_rows?: number
+    library_rows?: number
+    lab_rows?: number
+    isolates?: string[]
+    specimens?: string[]
+    libraries?: string[]
+    isolate_fields?: string[]
+    specimen_fields?: string[]
+    library_fields?: string[]
+    lab_fields?: string[]
+  }
+  errors?: string[]
+}
+
+export interface UserRow {
+  user_id: string
+  username: string
+  role: 'admin' | 'analyst' | 'user'
+  display_name: string
+  disabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface SpeciesSummary {
+  species: string
+  n_samples: number
+  n_specimens: number
+  n_isolates: number
+  last_analysis: string
+  n_with_metrics: number
 }
 
 export interface ContigBin {
@@ -170,11 +255,16 @@ export interface SampleRow {
   n_card: number
   n_vfdb: number
   n_plasmid: number
-  ipaH: string
-  pathotype: string
+  ipaH?: string
+  pathotype?: string
   card_genes: string[]
   vfdb_genes: string[]
   plasmids: string[]
+  specimen_id?: string
+  isolate_id?: string
+  owner_user_id?: string
+  analysis_date?: string
+  prelim?: boolean
 }
 
 export interface SampleDetail {
@@ -191,6 +281,9 @@ export interface LibraryRow {
   specimen?: string
   species?: string
   platform?: string
+  metadata?: Record<string, unknown>
+  metadata_specimen_id?: string
+  metadata_isolate_id?: string
   [key: string]: unknown
 }
 
@@ -201,6 +294,12 @@ export interface IsolateRow {
   passage?: number | null
   n_libraries?: number
   libraries?: LibraryRow[]
+  owner_user_id?: string | null
+  species?: string
+  sts?: string[]
+  serotypes?: string[]
+  n_results?: number
+  last_analysis?: string
   [key: string]: unknown
 }
 
@@ -209,17 +308,26 @@ export interface SpecimenRow {
   origin?: string
   note?: string
   n_isolates?: number
+  owner_user_id?: string | null
+  species?: string
+  n_results?: number
+  last_analysis?: string
   [key: string]: unknown
 }
 
 export interface SpecimenDetail {
   specimen: SpecimenRow
   isolates: IsolateRow[]
+  libraries?: LibraryRow[]
+  metadata?: Record<string, unknown> | null
+  lab_results?: LabResultRow[]
 }
 
 export interface LabResultRow {
   id: string
   strain_id: string
+  subject_type?: string
+  subject_id?: string
   category: string
   test_name: string
   result: string

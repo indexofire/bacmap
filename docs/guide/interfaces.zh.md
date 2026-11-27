@@ -15,11 +15,11 @@
 风格浅色文档，CONCRETE 为 Swiss/brutalist 灰色模板（网格纸、硬边框、Helvetica 大标题、
 等宽数据与分屏海报式首页）。图表与样本 HTML 报告同步主题：控制台链接带 `?theme=light|gray`，直接打开报告 URL 时回退到控制台写入的 `bacmap-theme` cookie。
 
-**控制台登录**（单部署令牌，无账号体系）：把 `BACMAP_WEB_TOKEN` 与
-`BACMAP_WEB_AUTH=cookie` 写入 `$BACMAP_HOME/web.env`（0600），`bacmap restart` 会自动加载；未登录的浏览器导航会跳转到 `/console/login`（Vue 登录页）；
-登录后顶栏显示操作员令牌指纹与登出按钮。未设置令牌时回环访问免鉴权；`bearer` 模式下
-登录页会说明浏览器需改用 cookie 模式。服务端渲染的 `/login` 保留为兼容/说明页。
-多用户账号与角色权限仍是设计稿（`docs/concepts/accounts.md`），尚未实现。
+**控制台登录**：默认是单部署令牌（`BACMAP_WEB_TOKEN` + `BACMAP_WEB_AUTH=cookie`，写入
+`$BACMAP_HOME/web.env`，0600）。多人共用工作站时设置 `BACMAP_WEB_AUTH=accounts`，先在本机
+执行 `bacmap user create <name> --role admin` 创建管理员，再用用户名/密码登录 `/console/login`。
+角色与数据可见性见 [多用户与角色](../concepts/accounts.zh.md)。未设置令牌且回环访问时仍可
+免鉴权；`bearer` 模式下登录页会说明浏览器需改用 cookie 模式。
 
 ```bash
 bacmap start web                            # 默认 127.0.0.1:8800
@@ -308,13 +308,15 @@ IP/域名或反向代理转发的主机名加进去：
 export BACMAP_WEB_ALLOWED_HOSTS=192.168.1.20,bacmap.lab.example
 ```
 
-两种鉴权模式：
+三种鉴权模式：
 
 - `bearer`（默认）：API 客户端发送 `Authorization: Bearer <token>`；浏览器无法设置该请求头，
   因此 HTML 控制台会返回一段简短的 401 说明（请改用 SSH 隧道）。
 - `cookie`：设置 `BACMAP_WEB_AUTH=cookie`；在 `/login` 登录；会话 cookie 经过签名且为
   `HttpOnly`，每个改变状态的 POST 都需要 CSRF 令牌。在 TLS 之后请再加上
   `BACMAP_WEB_COOKIE_SECURE=1`。
+- `accounts`：设置 `BACMAP_WEB_AUTH=accounts`；本地账号 + 角色（admin/analyst/user）登录，
+  普通用户只能查看自己提交/归属的数据。首个管理员用 `bacmap user create` 创建。
 
 MCP 的 HTTP 传输是独立的：它始终要求 `BACMAP_MCP_TOKEN`（或 `--token-env`），相关内容见
 [智能体与计划](agent-plans.zh.md)。

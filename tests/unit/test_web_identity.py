@@ -85,12 +85,25 @@ def test_search_identity_and_isolate_wet_lab(tmp_path):
     home = _home(tmp_path)
     db = home / "data" / "bacmap.sqlite"
     from bacmap.store.lab_results import LabResultService
+    from bacmap.store.library_metadata import LibraryMetadataService
+    from bacmap.store.specimen_metadata import SpecimenMetadataService
     from bacmap.store.strain_metadata import StrainMetadataService
 
     with StrainMetadataService(db) as meta:
         meta.upsert("ISO-1", {"province": "ZJ", "patient_age": "42"})
+    with SpecimenMetadataService(db) as meta:
+        meta.upsert("A03-SN-001", {"patient_name": "张三", "collection_date": "2026-10-01"})
+    with LibraryMetadataService(db) as meta:
+        meta.upsert(
+            "LIB-1", {"platform": "illumina"}, specimen_id="A03-SN-001",
+            isolate_id="ISO-1",
+        )
     with LabResultService(db) as lab:
         lab.add("ISO-1", "antimicrobial", "meropenem", "R", unit="mg/L")
+        lab.add(
+            "A03-SN-001", "mngs", "blaCTX-M", "positive",
+            subject_type="specimen", subject_id="A03-SN-001",
+        )
 
     engine = eng.DbosTaskEngine(home)
     try:
@@ -104,6 +117,10 @@ def test_search_identity_and_isolate_wet_lab(tmp_path):
         assert detail["metadata"]["province"] == "ZJ"
         assert detail["lab_results"][0]["test_name"] == "meropenem"
         assert detail["lab_results"][0]["result"] == "R"
+        assert detail["libraries"][0]["metadata"]["platform"] == "illumina"
+        specimen_detail = client.get("/api/v1/specimens/A03-SN-001").json()
+        assert specimen_detail["metadata"]["patient_name"] == "张三"
+        assert specimen_detail["lab_results"][0]["test_name"] == "blaCTX-M"
     finally:
         eng.shutdown_dbos()
 

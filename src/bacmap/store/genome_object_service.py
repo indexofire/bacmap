@@ -305,6 +305,32 @@ GOM_MIGRATIONS: tuple[Migration, ...] = (
     ),
     # 菌株基因型索引与 GOM 同库（dbos_engine / tools.services 均在此文件上打开它）
     Migration(2, "strain genotype index", STRAIN_INDEX_DDL),
+    # v1.10.x：结果列表/检索的物化索引（10 万级不再逐请求扫 summary JSON）。
+    # 只追加列；旧库由 migration 3 原地升级，历史行由 `bacmap results reindex` 回填。
+    Migration(
+        3,
+        "strain genotype index: identity, assembly metrics, ownership",
+        (
+            "ALTER TABLE strain_genotype_index ADD COLUMN specimen_id TEXT",
+            "ALTER TABLE strain_genotype_index ADD COLUMN isolate_id TEXT",
+            "ALTER TABLE strain_genotype_index ADD COLUMN genome_size INTEGER",
+            "ALTER TABLE strain_genotype_index ADD COLUMN contigs INTEGER",
+            "ALTER TABLE strain_genotype_index ADD COLUMN gc_pct REAL",
+            "ALTER TABLE strain_genotype_index ADD COLUMN n_card INTEGER",
+            "ALTER TABLE strain_genotype_index ADD COLUMN n_vfdb INTEGER",
+            "ALTER TABLE strain_genotype_index ADD COLUMN n_plasmid INTEGER",
+            "ALTER TABLE strain_genotype_index ADD COLUMN owner_user_id TEXT",
+            "ALTER TABLE strain_genotype_index ADD COLUMN prelim INTEGER NOT NULL DEFAULT 0",
+            "CREATE INDEX IF NOT EXISTS idx_gi_specimen"
+            " ON strain_genotype_index(specimen_id)",
+            "CREATE INDEX IF NOT EXISTS idx_gi_isolate"
+            " ON strain_genotype_index(isolate_id)",
+            "CREATE INDEX IF NOT EXISTS idx_gi_owner"
+            " ON strain_genotype_index(owner_user_id)",
+            "CREATE INDEX IF NOT EXISTS idx_gi_analysis_date"
+            " ON strain_genotype_index(analysis_date)",
+        ),
+    ),
 )
 
 

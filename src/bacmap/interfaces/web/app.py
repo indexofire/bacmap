@@ -37,6 +37,7 @@ from bacmap.interfaces.web.auth import (
     web_allowed_hosts,
 )
 from bacmap.interfaces.web.static import STATIC_DIR
+from bacmap.store.users import UserService
 from bacmap.tasks.engine.dbos_engine import DbosTaskEngine
 from bacmap.tools._common import _validate_sample_id
 
@@ -222,6 +223,11 @@ def _build_sample_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     ) -> Response:
         if not _validate_sample_id(sample_id):
             raise HTTPException(400, "非法样本 ID")
+        from bacmap.interfaces.web.rbac import can_access_owner
+        from bacmap.store.catalog import sample_owner
+
+        if not can_access_owner(request, sample_owner(engine.home, sample_id) or None):
+            raise HTTPException(404, "sample not found")
         final_path = report_path(engine, sample_id)
         # v1.10.24 流式首屏：最终报告缺失时——有最终 summary 先按需重渲染，
         # 否则 prelim summary 存在则生成/提供初步报告（注释完成前 web 即可
@@ -359,6 +365,11 @@ def create_app(
     """
     app = FastAPI(title="bacmap", docs_url=None, redoc_url=None)
     cfg = WebAuthConfig.from_env(auth_token)
+    user_db = Path(engine.home) / "data" / "bacmap.sqlite"
+
+    def _users_factory() -> UserService:
+        return UserService(user_db)
+
     # v1.10.24 智能体对话嵌入：读 [[web.agent_embed]]，origin 进 CSP frame-src。
     from bacmap.config import config_path as _active_config_path
     from bacmap.interfaces.web.agent_embed import load_agent_embeds
@@ -366,13 +377,20 @@ def create_app(
     agent_embeds = load_agent_embeds(_active_config_path(engine.home))
     app.state.agent_embeds = agent_embeds
     app.state.web_auth = cfg
+    app.state.users_factory = _users_factory
+    app.state.engine = engine
     # v1.10.30：周期进度 + 智能体回调投递（Web 进程通常承载长任务）。
     from bacmap.tasks.notifier import start as start_task_notifier
 
     start_task_notifier(engine.home)
     if cfg.enabled:
         # ADR-14/v1.4.15：bearer（API）与 cookie（浏览器）双通道；cookie 模式配 CSRF。
-        app.add_middleware(WebAuthMiddleware, cfg=cfg)
+        # accounts/personal 模式额外按会话/个人令牌解析主体（v1.10.x）。
+        app.add_middleware(
+            WebAuthMiddleware,
+            cfg=cfg,
+            users_factory=_users_factory if (cfg.accounts or cfg.personal) else None,
+        )
     # DNS rebinding 防护：任何模式都校验 Host（位于鉴权外层、安全头内层）。
     allowed_hosts = web_allowed_hosts(host, allow_any=cfg.enabled)
     if allowed_hosts is not None:
