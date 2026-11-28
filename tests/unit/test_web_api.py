@@ -523,3 +523,72 @@ class TestResearchDagApi:
             "/api/v1/research/dag/t1/artifacts/" + urllib.parse.quote("sha256:" + "0" * 64)
         )
         assert other.status_code == 404
+
+
+class TestEventsUserScoping:
+    """步级实时推送配套：Role.USER 只见自己提交任务的事件（不多泄露他人样本标识）。"""
+
+    @pytest.fixture
+    def accounts_env(self, tmp_path: Path, monkeypatch):
+        from bacmap.store.users import Role, UserService
+        from bacmap.tasks.engine import task_engine
+
+        monkeypatch.setenv("BACMAP_WEB_AUTH", "accounts")
+        monkeypatch.setattr(task_engine.DBOS, "start_workflow", lambda wf, p: None)
+        monkeypatch.setattr(task_engine.DBOS, "cancel_workflow", lambda wid: None)
+        db = tmp_path / "data" / "bacmap.sqlite"
+        db.parent.mkdir(parents=True, exist_ok=True)
+        with UserService(db) as users:
+            users.create("admin", "admin-pass", Role.ADMIN)
+            users.create("alice", "alice-pass", Role.USER)
+        engine = eng.DbosTaskEngine(tmp_path)
+        yield engine, TestClient(create_app(engine), base_url="http://127.0.0.1:8800")
+        eng.shutdown_dbos()
+
+    def _login(self, client: TestClient, username: str, password: str) -> None:
+        r = client.post(
+            "/api/v1/auth/login",
+            json={"username": username, "password": password, "next": "/console/"},
+        )
+        assert r.status_code == 200, r.text
+
+    def test_user_sees_only_own_task_events(self, accounts_env):
+        engine, client = accounts_env
+        own = engine.submit(TaskType.ANALYZE, {"samples": ["S1"]}, "alice")
+        other = engine.submit(TaskType.ANALYZE, {"samples": ["S2"]}, "admin")
+        self._login(client, "alice", "alice-pass")
+        body = client.get("/api/v1/events").json()
+        task_ids = {e["task_id"] for e in body["events"]}
+        assert task_ids == {own}
+        assert other not in task_ids
+
+    def test_user_stream_filters_foreign_tasks(self, accounts_env):
+        engine, client = accounts_env
+        own = engine.submit(TaskType.ANALYZE, {"samples": ["S1"]}, "alice")
+        engine.submit(TaskType.ANALYZE, {"samples": ["S2"]}, "admin")
+        self._login(client, "alice", "alice-pass")
+        r = client.get("/api/v1/events/stream?timeout=0")
+        events = _sse_events(r.text)
+        assert {e["task_id"] for e in events} == {own}
+
+    def test_admin_sees_all_events(self, accounts_env):
+        engine, client = accounts_env
+        engine.submit(TaskType.ANALYZE, {"samples": ["S1"]}, "alice")
+        engine.submit(TaskType.ANALYZE, {"samples": ["S2"]}, "admin")
+        self._login(client, "admin", "admin-pass")
+        body = client.get("/api/v1/events").json()
+        # 2 条 task.submitted + 1 条 admin 登录的 auth.login：特权角色无过滤。
+        submitted = [e for e in body["events"] if e["type"] == "task.submitted"]
+        assert len(submitted) == 2
+        assert any(e["type"] == "auth.login" for e in body["events"])
+
+    def test_user_cursor_advances_past_filtered_events(self, accounts_env):
+        """被过滤事件仍推进 seq 游标：轮询不会反复重扫他人事件。"""
+        engine, client = accounts_env
+        engine.submit(TaskType.ANALYZE, {"samples": ["S1"]}, "admin")
+        own = engine.submit(TaskType.ANALYZE, {"samples": ["S2"]}, "alice")
+        self._login(client, "alice", "alice-pass")
+        first = client.get("/api/v1/events").json()
+        assert [e["task_id"] for e in first["events"]] == [own]
+        nxt = client.get(f"/api/v1/events?after={first['last_seq']}").json()
+        assert nxt["events"] == []

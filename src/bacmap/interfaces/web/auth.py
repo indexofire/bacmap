@@ -294,12 +294,14 @@ margin:3em auto;padding:0 1em;line-height:1.6">
 
 
 # 普通用户不可进入的管理/全库视图（服务端硬边界；前端隐藏只是体验）。
+# 注意：``/api/v1/events`` 自步级实时推送起**不在**此清单——事件路由内部
+# 对 Role.USER 按"仅自己提交的任务"过滤（见 api._event_routes 的 ownership
+# 过滤），普通用户需要订阅自己任务的步级进度；其余全库视图维持硬拒绝。
 _USER_DENIED_PREFIXES = (
     "/api/v1/research",
     "/api/v1/runs",
     "/api/v1/gom",
     "/api/v1/gvixb",
-    "/api/v1/events",
     "/api/v1/stats",
     "/api/v1/records",
     "/api/v1/users",

@@ -68,6 +68,7 @@ from bacmap.interfaces.web.payloads import (
 from bacmap.interfaces.web.rbac import (
     Permission,
     actor,
+    require_any,
     require_permission,
     scoped_owner,
 )
@@ -302,6 +303,9 @@ def build_api_routes(app: FastAPI, engine: DbosTaskEngine) -> None:
     _identity_routes(router, engine)
     build_import_routes(router, engine)
     build_wetlab_routes(router, engine)
+    from bacmap.interfaces.web.chat import build_chat_routes
+
+    build_chat_routes(router, engine)
     _research_routes(router, engine)
     app.include_router(router)
 
@@ -627,10 +631,14 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa: C9
         from bacmap.interfaces.web.agent_embed import embeds_payload
 
         embeds = getattr(request.app.state, "agent_embeds", [])
+        from bacmap.interfaces.web.chat import chat_capabilities_for_request
+
+        chat = chat_capabilities_for_request(request, engine)
         return {
             "api_version": API_VERSION,
             "bacmap_version": pkg_version("bacmap"),
             "agent_embeds": embeds_payload(embeds),
+            "chat": chat,
             # 与 application/plans.py 的 PlannableTask 全集一致（MCP
             # bacmap_capabilities 同源）——此前写死两类会让外部编排方低估能力面。
             "plannable_task_types": [
@@ -648,6 +656,7 @@ def _meta_routes(router: APIRouter, engine: DbosTaskEngine) -> None:  # noqa: C9
                 "stats",
                 "search",
                 "records",
+                *(["chat"] if chat.get("enabled") else []),
             ],
         }
 
@@ -1091,6 +1100,29 @@ def _plan_routes(router: APIRouter, plans: PlanService) -> None:
 
 
 def _event_routes(router: APIRouter, engine: DbosTaskEngine, events: EventLog) -> None:
+    """领域事件读取/SSE。
+
+    多用户可见性（步级实时推送配套）：analyst/admin 与旧令牌模式可见全部事件；
+    ``Role.USER`` 只看到**自己提交的任务**的事件（其他任务、计划与系统事件一律
+    不下发）——这样普通用户也能订阅步级进度，而不泄露他人样本标识（D2）。
+    """
+
+    def _scope_user(request: Request) -> str | None:
+        """返回需要按提交者过滤的用户名；无需过滤（特权角色/旧模式）返回 None。"""
+        from bacmap.store.users import Role
+
+        principal = require_any(request, Permission.DATA_READ_ALL, Permission.DATA_READ)
+        if principal is not None and principal.role is Role.USER:
+            return principal.username
+        return None
+
+    def _owned_task_ids(username: str) -> set[str]:
+        try:
+            rows = engine.list_tasks(limit=500, submitted_by=username)
+        except Exception:
+            return set()
+        return {str(r.get("task_id")) for r in rows if r.get("task_id")}
+
     @router.get("/events")
     def list_events(
         request: Request,
@@ -1099,8 +1131,11 @@ def _event_routes(router: APIRouter, engine: DbosTaskEngine, events: EventLog) -
         task_id: str | None = None,
         plan_id: str | None = None,
     ) -> dict[str, Any]:
-        require_permission(request, Permission.DATA_READ_ALL)
+        scope_user = _scope_user(request)
         items = events.list(after=after, limit=limit, task_id=task_id, plan_id=plan_id)
+        if scope_user is not None:
+            owned = _owned_task_ids(scope_user)
+            items = [e for e in items if e.task_id is not None and e.task_id in owned]
         return {
             "events": [e.model_dump(mode="json") for e in items],
             "last_seq": items[-1].seq if items else after,
@@ -1110,7 +1145,7 @@ def _event_routes(router: APIRouter, engine: DbosTaskEngine, events: EventLog) -
 
     @router.get("/events/stream")
     def stream_events(request: Request, after: int = 0, timeout: int = _SSE_MAX_S) -> Any:
-        require_permission(request, Permission.DATA_READ_ALL)
+        scope_user = _scope_user(request)
         header = request.headers.get("last-event-id", "")
         cursor = int(header) if header.isdigit() else after
         deadline = time.monotonic() + max(0, min(timeout, _SSE_MAX_S))
@@ -1120,8 +1155,11 @@ def _event_routes(router: APIRouter, engine: DbosTaskEngine, events: EventLog) -
             while True:
                 # 列表读取会惰性对账 running 任务的终态 → 终态事件得以产生
                 engine.count_states()
+                owned = _owned_task_ids(scope_user) if scope_user is not None else None
                 for e in events.list(after=cursor, limit=200):
-                    cursor = e.seq
+                    cursor = e.seq  # 游标始终推进：被过滤的事件不重扫
+                    if owned is not None and (e.task_id is None or e.task_id not in owned):
+                        continue
                     data = json.dumps(e.model_dump(mode="json"), ensure_ascii=False)
                     yield f"id: {e.seq}\nevent: {e.type.value}\ndata: {data}\n\n"
                 if time.monotonic() >= deadline:

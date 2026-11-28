@@ -4,14 +4,17 @@ import { RouterLink, useRoute } from 'vue-router'
 import CopyButton from '../components/CopyButton.vue'
 import Icon from '../components/Icon.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import TaskProgressSteps from '../components/TaskProgressSteps.vue'
 import { api } from '../api'
 import type { RunRow, TaskEvent, TaskRow } from '../types'
 import { fmtTime, jsonText, shortId } from '../lib/format'
 import { usePolling } from '../composables/usePolling'
+import { useTaskEvents } from '../composables/useTaskEvents'
 import { useToast } from '../composables/useToast'
 
 const route = useRoute()
 const toast = useToast()
+const taskEvents = useTaskEvents()
 const id = String(route.params.id)
 
 const task = ref<TaskRow | null>(null)
@@ -212,6 +215,8 @@ async function load(silent = false) {
     ])
     task.value = taskData
     events.value = eventData.events.slice().reverse()
+    // 步级结果事件喂入共享 store：轮询间隙到达的步骤即时点亮渐进面板。
+    taskEvents.ingest(eventData.events)
     if (terminal.includes(taskData.state)) {
       await loadRun(taskData.task_id)
     } else {
@@ -454,6 +459,16 @@ onMounted(() => void load())
               </details>
               <pre v-else-if="messageText" class="code-block" style="max-height: 180px">{{ messageText }}</pre>
               <p v-else class="muted">—</p>
+            </div>
+          </section>
+
+          <section v-if="taskEvents.stepsFor(id).length" class="card">
+            <div class="card__head">
+              <h2 class="card__title">分析步骤进度</h2>
+              <span class="card__hint">实时</span>
+            </div>
+            <div class="card__body">
+              <TaskProgressSteps :task-id="id" />
             </div>
           </section>
 

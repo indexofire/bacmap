@@ -259,18 +259,35 @@ def _run_snakemake(params: dict[str, Any]) -> Any:
     # v1.10.19：cores 默认取部署 config.yaml 的 threads（此前写死 8，
     # 多核机器上 config.threads 被 --cores 截断，规则线程永远 ≤8）。
     cores = _snakemake_cores(deployed, params)
-    # 阶段1：prelim（快步骤）。失败不致命——最终阶段会重跑并补全；
-    # 成功即建立扁平别名（web 立即可读 live 步骤状态与 prelim 报告）。
-    prelim = _run_targets_with_retry(
-        runner, prelim_targets, cores, overrides, home, task_id, params,
-        env_overrides,
+    # 步级实时推送（v1.10.x）：runner.run() 整包阻塞期间，daemon 线程轮询
+    # run 目录产物——物种/MLST/耐药等快步骤一落盘就写 task.step 富化事件，
+    # 前端经 SSE 渐进渲染，不再等整条管线跑完。事件是观察不是真相：
+    # watcher 任何失败都不影响分析本身。
+    from bacmap.tasks.engine.step_watch import StepWatcher
+
+    watcher = StepWatcher(
+        home=home,
+        task_id=task_id,
+        run_dir=run_dir,
+        samples=list(params.get("samples") or []),
     )
-    if prelim.returncode == 0:
-        _progress(params, "prelim_ready")
-    # 阶段2：最终 summary（注释在此自然垫底）+ 失败语义与历史一致。
-    result = _run_targets_with_retry(
-        runner, targets, cores, overrides, home, task_id, params, env_overrides
-    )
+    watcher.start()
+    try:
+        # 阶段1：prelim（快步骤）。失败不致命——最终阶段会重跑并补全；
+        # 成功即建立扁平别名（web 立即可读 live 步骤状态与 prelim 报告）。
+        prelim = _run_targets_with_retry(
+            runner, prelim_targets, cores, overrides, home, task_id, params,
+            env_overrides,
+        )
+        if prelim.returncode == 0:
+            _progress(params, "prelim_ready")
+        # 阶段2：最终 summary（注释在此自然垫底）+ 失败语义与历史一致。
+        result = _run_targets_with_retry(
+            runner, targets, cores, overrides, home, task_id, params, env_overrides
+        )
+    finally:
+        # stop() 收尾会做最后一次强制扫描，补齐末段落盘产物的步级事件。
+        watcher.stop()
     if result.returncode == 0:
         link_run_results(home, task_id, params["samples"])
         return result
@@ -2006,16 +2023,33 @@ def _step_run_reanalyze(params: dict[str, Any], prepared: dict[str, Any]) -> dic
             targets = reanalysis_targets(run_dir, list(params["samples"]), steps)
             overrides = {"workdir": f"results/runs/{params['task_id']}"}
             cores = _snakemake_cores(deployed, params)
-            proc = _run_targets_with_retry(
-                runner,
-                targets,
-                cores,
-                overrides,
-                home,
-                str(params["task_id"]),
-                params,
-                {"BACMAP_ANNOTATION_ENABLED": "1" if annotation else "0"},
+            # 部分重跑同样步级推送，但只推本次真正再生的产物：reanalyze 复用
+            # 同一 run 目录，原始运行的旧产物（mtime 早于监听启动）不重推。
+            import time as _time
+
+            from bacmap.tasks.engine.step_watch import StepWatcher
+
+            watcher = StepWatcher(
+                home=home,
+                task_id=str(params["task_id"]),
+                run_dir=run_dir,
+                samples=list(params["samples"]),
+                since=_time.time(),
             )
+            watcher.start()
+            try:
+                proc = _run_targets_with_retry(
+                    runner,
+                    targets,
+                    cores,
+                    overrides,
+                    home,
+                    str(params["task_id"]),
+                    params,
+                    {"BACMAP_ANNOTATION_ENABLED": "1" if annotation else "0"},
+                )
+            finally:
+                watcher.stop()
     except Exception as exc:
         logger.exception("reanalyze preparation failed")
         return {

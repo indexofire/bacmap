@@ -4,7 +4,9 @@ import { RouterLink, useRoute } from 'vue-router'
 import Icon from '../components/Icon.vue'
 import AssemblyQcPanel from '../components/AssemblyQcPanel.vue'
 import CopyButton from '../components/CopyButton.vue'
+import TaskProgressSteps from '../components/TaskProgressSteps.vue'
 import { api } from '../api'
+import { useTaskEvents } from '../composables/useTaskEvents'
 import { useTheme } from '../composables/useTheme'
 import type { AssemblyContigStats, GvixbLink, RunRow, SampleDetail } from '../types'
 import { appUrl, fmtTime, jsonText, shortId } from '../lib/format'
@@ -13,12 +15,26 @@ const MAX_GENE_CHIPS = 24
 
 const route = useRoute()
 const id = String(route.params.id)
+const taskEvents = useTaskEvents()
 const data = ref<SampleDetail | null>(null)
 const latestRun = ref<RunRow | null>(null)
 const runsLoaded = ref(false)
 const loading = ref(true)
 const error = ref('')
 const expandedGeneGroups = ref<Record<string, boolean>>({})
+
+// 步级实时推送：运行中的分析还没有运行记录链接，经事件反查该样本所属任务；
+// 面板只在确有条目时出现（无历史/未运行时不占位）。
+const progressTaskId = computed(() => taskEvents.subjectIndex[id] ?? '')
+const progressSteps = computed(() =>
+  progressTaskId.value
+    ? taskEvents.stepsFor(progressTaskId.value).filter((e) => e.subject === id)
+    : [],
+)
+const progressRunning = computed(() => {
+  const state = progressTaskId.value ? taskEvents.states[progressTaskId.value] : ''
+  return !!state && !['succeeded', 'failed', 'cancelled'].includes(state)
+})
 
 const { resolved: resolvedTheme } = useTheme()
 const activeTab = ref<'summary' | 'report'>('summary')
@@ -165,7 +181,11 @@ function openReport() {
   activeTab.value = 'report'
 }
 
-onMounted(() => void load())
+onMounted(() => {
+  void load()
+  void taskEvents.ensureStream()
+  void taskEvents.backfillSample(id)
+})
 </script>
 
 <template>
@@ -201,6 +221,21 @@ onMounted(() => void load())
     </div>
 
     <div v-if="error" class="form-error" style="margin-bottom: 16px">{{ error }}</div>
+
+    <section v-if="progressSteps.length && progressTaskId" class="card" style="margin-bottom: 16px">
+      <div class="card__head">
+        <h2 class="card__title">
+          {{ progressRunning ? '分析进行中' : '分析步骤' }}
+        </h2>
+        <RouterLink class="card__hint link-cell" :to="`/tasks/${encodeURIComponent(progressTaskId)}`">
+          任务 {{ shortId(progressTaskId, 10) }}
+        </RouterLink>
+      </div>
+      <div class="card__body">
+        <TaskProgressSteps :task-id="progressTaskId" :subject="id" />
+      </div>
+    </section>
+
     <div v-if="loading" class="card card--pad"><div class="skeleton" style="height: 220px" /></div>
 
     <template v-else-if="digest">

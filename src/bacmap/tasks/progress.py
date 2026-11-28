@@ -29,6 +29,20 @@ _STEP_FLOOR: dict[str, int] = {
     "record": 10,
     "research_session": 20,
     "advstats_sandbox": 20,
+    # 步级实时推送（StepWatcher）的产物步：下限按管线中的典型位置渐进，
+    # 保证 current_step 被颗粒度步覆盖时进度仍大致单调、阶段显示更精确。
+    "species": 22,
+    "assembly": 25,
+    "mlst": 28,
+    "serotype": 30,
+    "amr": 32,
+    "vfdb": 33,
+    "card": 34,
+    "plasmid": 35,
+    "prelim_summary": 40,
+    "final_summary": 85,
+    "report": 88,
+    "cgmlst": 90,
 }
 _TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
 
