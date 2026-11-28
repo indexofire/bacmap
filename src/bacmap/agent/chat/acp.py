@@ -357,6 +357,18 @@ def close_acp_session(backend_id: str = "", session_id: str = "") -> None:
                 proc.kill()
 
 
+async def reap_acp_pool() -> None:
+    """kill 并 await 全部池化 ACP 子进程（测试拆除与服务关停用）。
+
+    与 pi_rpc.reap_pi_pool 同理：不收割会在事件循环关闭后产生
+    "Event loop is closed" 的 GC 告警并可能孤儿化外部 Agent 进程。
+    """
+    entries = list(_ACP_POOL.values())
+    _ACP_POOL.clear()
+    for entry in entries:
+        await entry.process.kill()
+
+
 class AcpStdioBackend:
     """ACP stdio 后端：DSH / OpenCode / Hermes / 通用 ACP 代理。"""
 

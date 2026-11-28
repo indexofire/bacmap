@@ -36,6 +36,30 @@ def _no_debug_mode(monkeypatch):
     monkeypatch.setattr("bacmap.config.debug_mode", lambda: False)
 
 
+async def _reap_pools() -> None:
+    """收割池化外部子进程（kill+wait）。
+
+    子进程 transport 绑定创建它的事件循环——必须在同一循环内、循环关闭前
+    收割，否则 GC 时触发 "Event loop is closed" 告警并可能孤儿化进程。
+    """
+    from bacmap.agent.chat.acp import reap_acp_pool
+    from bacmap.agent.chat.pi_rpc import reap_pi_pool
+
+    await reap_acp_pool()
+    await reap_pi_pool()
+
+
+def _run(coro):
+    """asyncio.run 的包装：在同一事件循环内先执行协程再收割进程池。"""
+    async def _main():
+        try:
+            return await coro
+        finally:
+            await _reap_pools()
+
+    return asyncio.run(_main())
+
+
 def _actor(**overrides) -> ChatActor:
     base = {
         "user_id": "u_admin",
@@ -315,7 +339,7 @@ class TestAcpStdio:
             second = await _collect(backend, _ctx(message="第二轮"))
             return first, second
 
-        first, second = asyncio.run(run())
+        first, second = _run(run())
         types = _types(first)
         assert types[0] == "RUN_STARTED"
         assert "THINKING_TEXT_MESSAGE_CONTENT" in types
@@ -348,7 +372,7 @@ class TestAcpStdio:
         async def run():
             return await _collect(AcpStdioBackend(cfg, tmp_path), _ctx())
 
-        events = asyncio.run(run())
+        events = _run(run())
         assert _types(events)[-1] == "RUN_FINISHED"
         decisions = json.loads((tmp_path / "state.json").read_text())["permissions"]
         assert decisions == ["selected", "selected"]
@@ -366,7 +390,7 @@ class TestAcpStdio:
         async def run():
             return await _collect(AcpStdioBackend(cfg, tmp_path), _ctx())
 
-        events = asyncio.run(run())
+        events = _run(run())
         assert _types(events)[-1] == "RUN_FINISHED"
         from bacmap.agent.chat.acp import close_acp_session
 
@@ -463,7 +487,7 @@ class TestAcpHttp:
             backend = AcpHttpBackend(cfg, tmp_path, transport=transport)
             return await _collect(backend, _ctx())
 
-        events = asyncio.run(run())
+        events = _run(run())
         types = _types(events)
         assert types[0] == "RUN_STARTED"
         assert types[-1] == "RUN_FINISHED"
@@ -489,7 +513,7 @@ class TestPiRpc:
             second = await _collect(backend, _ctx(message="第二轮"))
             return first, second
 
-        first, _ = asyncio.run(run())
+        first, _ = _run(run())
         types = _types(first)
         assert types[0] == "RUN_STARTED"
         assert types[-1] == "RUN_FINISHED"
@@ -505,6 +529,39 @@ class TestPiRpc:
         from bacmap.agent.chat.pi_rpc import close_pi_session
 
         close_pi_session(session_id="cs_ext")
+
+    def test_turn_end_error_surfaces_as_run_error(self):
+        """模型调用失败（stopReason=error）必须浮现为 RUN_ERROR，而非空回复。"""
+        from bacmap.agent.chat.pi_rpc import PiRpcEventTranslator
+
+        translator = PiRpcEventTranslator(can_confirm=False)
+        events = translator.translate(
+            {
+                "type": "turn_end",
+                "message": {
+                    "role": "assistant",
+                    "content": [],
+                    "provider": "zai-coding-cn",
+                    "model": "glm-5.3",
+                    "stopReason": "error",
+                    "errorMessage": "401 unauthorized",
+                },
+            }
+        )
+        kinds = [e.type for e in events]
+        assert "RUN_ERROR" in kinds
+        error = next(e for e in events if e.type == "RUN_ERROR")
+        assert "401 unauthorized" in error.message
+        assert "zai-coding-cn/glm-5.3" in error.message
+
+    def test_turn_end_normal_stop_is_silent(self):
+        """正常收尾（stopReason=stop）不产生任何事件。"""
+        from bacmap.agent.chat.pi_rpc import PiRpcEventTranslator
+
+        translator = PiRpcEventTranslator(can_confirm=False)
+        assert translator.translate(
+            {"type": "turn_end", "message": {"role": "assistant", "stopReason": "stop"}}
+        ) == []
 
 
 # ---- Web API 集成 -----------------------------------------------------------------

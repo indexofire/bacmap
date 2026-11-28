@@ -216,6 +216,8 @@ allowed_roles = ["admin", "analyst"]
 数据分级不变：云端端点上限照旧受 ADR-16 约束，对话内容按端点位置裁剪（D2 消息脱敏与
 MCP 一致）。
 
+外部后端的模型调用失败（如 pi 的 `stopReason: error`）会浮现为带 provider/model 信息的可见错误，而不是无声的空回复。
+
 ### 0.3.1 管线步级实时推送
 
 #### 里程碑自动解读

@@ -150,6 +150,8 @@ class PiRpcEventTranslator:
 
     def translate(self, rec: dict[str, Any]) -> list[AgUiEvent]:
         rtype = str(rec.get("type") or "")
+        if rtype == "turn_end":
+            return self._turn_end(rec)
         if rtype == "message_update":
             sub = rec.get("assistantMessageEvent")
             if isinstance(sub, dict):
@@ -195,6 +197,26 @@ class PiRpcEventTranslator:
         if text:
             out.extend(extract_bacmap_cards(name, text, can_confirm=self._can_confirm))
         return out
+
+    def _turn_end(self, rec: dict[str, Any]) -> list[AgUiEvent]:
+        """模型调用失败（stopReason=error）必须浮现——否则用户只看到空回复。
+
+        pi 把错误放在 assistant 消息的 ``errorMessage`` 字段（docs/message-types.md），
+        此处整轮结束时翻译为 RunErrorEvent；流仍由 agent_settled 正常收尾。
+        """
+        msg = rec.get("message")
+        if not isinstance(msg, dict):
+            return []
+        if str(msg.get("stopReason") or "") != "error":
+            return []
+        detail = str(msg.get("errorMessage") or "").strip() or "未知错误"
+        provider = str(msg.get("provider") or "")
+        model = str(msg.get("model") or "")
+        origin = f"（{provider}/{model}）" if provider or model else ""
+        return [
+            *self.close(),
+            RunErrorEvent(message=f"外部智能体模型调用失败{origin}: {detail}"),
+        ]
 
     def close(self) -> list[AgUiEvent]:
         return [*self._close_thinking(), *self._close_text()]
@@ -266,6 +288,24 @@ def close_pi_session(backend_id: str = "", session_id: str = "") -> None:
         if proc is not None and proc.returncode is None:
             with contextlib.suppress(ProcessLookupError):
                 proc.kill()
+
+
+async def reap_pi_pool() -> None:
+    """kill 并 await 全部池化 Pi 子进程（测试拆除与服务关停用）。
+
+    仅 ``kill`` 不 ``wait`` 会让 subprocess transport 半开，事件循环关闭后
+    GC 触发 ``BaseSubprocessTransport.__del__`` 报 "Event loop is closed"。
+    """
+    entries = list(_PI_POOL.values())
+    _PI_POOL.clear()
+    for entry in entries:
+        proc = entry.process.proc
+        if proc is None or proc.returncode is not None:
+            continue
+        with contextlib.suppress(ProcessLookupError):
+            proc.kill()
+        with contextlib.suppress(TimeoutError, ProcessLookupError):
+            await asyncio.wait_for(proc.wait(), timeout=5.0)
 
 
 class PiRpcExternalBackend:

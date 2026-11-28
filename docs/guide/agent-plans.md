@@ -231,6 +231,8 @@ Notes:
 Data classes are unchanged: cloud endpoint ceilings still follow ADR-16, and chat content is
 clipped by endpoint location (D2 redaction identical to MCP).
 
+External backend model failures (e.g. pi `stopReason: error`) surface as visible run errors naming provider/model instead of silent empty replies.
+
 ### 0.3.1 Step-level realtime pipeline push
 
 #### Milestone auto-interpretation
