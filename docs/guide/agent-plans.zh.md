@@ -1,7 +1,7 @@
 # 智能体与计划
 
 用户使用自然语言与大语言模型交互直接使用外部智能体 Harness。Harness 经 MCP 访问 bacmap；
-确定性管线、门以及**可信确认界面**都留在 bacmap 内。没有内置对话。
+确定性管线、门以及**可信确认界面**都留在 bacmap 内。默认没有内置对话；可选启用 `[web.chat]` 原生控制台对话（见 0.3 节）。
 
 ```text
 Hermes / Pi / DSH / Codex / any MCP client
@@ -136,6 +136,108 @@ bacmap agent doctor
 
 这些文件是**指导，不是权限**。实际权限由 MCP Profile 决定；计划门、写边界与数据分级
 始终在服务端（ADR-12/16/21）。
+
+## 0.3 Web 控制台原生 AG-UI 对话（`[web.chat]`，无需 iframe）
+
+除外部 Harness 之外，bacmap Web 控制台可选启用**原生对话界面**（AG-UI 事件协议，
+SSE 流式，不依赖任何 iframe/外部资产）。默认 `off`，显式开启：
+
+```toml
+# $BACMAP_HOME/config.toml
+[llm.routing]
+chat = "strata"            # 指向任一 enabled 端点（见 [llm.endpoints]）
+
+[web.chat]
+mode = "builtin"
+```
+
+- **多用户友好**：`builtin` 模式下服务端只配置一次 `[llm.*]`，所有登录用户即可对话。
+  会话按用户严格隔离（跨用户访问一律 404），`Role.USER` 的可用工具收敛为 D0 只读
+  加本人限定的 `bacmap_my_samples` / `bacmap_my_tasks` / `bacmap_task_status`。
+- **计划确认不出控制台**：对话中创建的计划渲染为原生确认卡，确认/拒绝走与
+  `/plans` 页面、CLI 相同的 `PlanService`（校验 plan_hash + version）；
+  `user` 不能确认计划，只能等待 analyst/admin。
+- **双形态界面**：任意页面右侧可开合抽屉（可附带当前页实体上下文，如样本/任务/计划），
+  以及独立全页 `/chat`（会话列表 + 完整工作区）。
+- 外部条目 URL 与 `agent_embed` 同纪律：仅回环 http(s)、不得含凭据。
+
+### 接入外部 Harness（`mode = "external" | "both"`）
+
+四个 Harness 已内置协议适配，子进程按会话持久复用，bacmap 计划/任务结果自动提取为
+原生确认卡。单用户可纯 `external`；想内置 + 外部并存用 `both`：
+
+```toml
+[web.chat]
+mode = "both"               # 或 "external"（只用外部代理）
+default_backend = "dsh"
+
+# DSH —— stdio（默认命令可省略）或 HTTP 服务（dsh --profile acp serve）
+[[web.chat.external]]
+id = "dsh"
+name = "DSH"
+protocol = "dsh"
+# command = ["dsh", "--profile", "acp"]     # 省略则自动解析（含 npx 回退）
+# url = "http://127.0.0.1:3080"            # 配 url 走 HTTP+SSE
+# api_key_env = "DSH_ACP_TOKEN"            # 可选 HTTP Bearer（环境变量名）
+allowed_roles = ["admin", "analyst"]
+
+# Pi —— pi --mode rpc（JSONL stdio）
+[[web.chat.external]]
+id = "pi"
+name = "Pi"
+protocol = "pi-rpc"
+allowed_roles = ["admin"]
+
+# OpenCode —— opencode acp
+[[web.chat.external]]
+id = "opencode"
+name = "OpenCode"
+protocol = "opencode"
+allowed_roles = ["admin"]
+
+# Hermes —— hermes-acp / hermes-acp-http
+[[web.chat.external]]
+id = "hermes"
+name = "Hermes"
+protocol = "hermes"
+# url = "http://127.0.0.1:8642"
+allowed_roles = ["admin", "analyst"]
+```
+
+要点：
+
+- 外部 Harness 需自行配置 bacmap MCP（见第 1–3 节）才能调 bacmap 工具；bacmap 侧只做
+  协议桥接与卡片提取。
+- ACP 权限请求默认只放行只读与 bacmap MCP 工具，破坏性 shell/写操作被拒绝
+  （`auto_approve_permissions = true` 才全部自动放行）——代理永不悬挂。
+- `allowed_roles` 服务端强制：`user` 看不到也跑不了外部后端。
+
+
+数据分级不变：云端端点上限照旧受 ADR-16 约束，对话内容按端点位置裁剪（D2 消息脱敏与
+MCP 一致）。
+
+### 0.3.1 管线步级实时推送
+
+#### 里程碑自动解读
+
+当 `[web.chat.builtin].auto_interpret_milestones = true`（默认）且对话开启时，
+Web 进程内的后台线程监听 `task.state` 的 `succeeded` 事件，在每个链接了该任务
+且使用 **builtin** 后端的会话里自动执行一次简短的无人值守解读。external 后端
+（DSH/Pi/OpenCode/Hermes）绝不会在无人值守时被唤起。每个（会话, 任务）对最多
+解读一次——去重记账先于执行写入，失败不重试（避免无人时空烧 token）。
+授权沿用会话属主：accounts 模式实时查询属主角色，已禁用/已删除用户直接跳过。
+
+
+分析运行期间，不需要等整条管线跑完：引擎在执行 Snakemake 时以监听线程轮询产物目录，
+物种鉴定、组装质控、MLST、血清型/基因型、耐药/毒力/质粒筛查、初步与最终汇总等
+**每完成一步即写一条步级结果事件**（轻量摘要，不含大对象）。前端随之渐进点亮：
+
+- 对话流中的任务引用卡下方实时列出已完成步骤及关键结果（物种、ST、血清型、命中数）；
+- 任务详情页新增「分析步骤进度」面板（页面刷新后由持久事件回填，不丢失）；
+- 多用户部署下，`user` 角色只能收到**自己提交任务**的事件——服务端按提交者过滤，
+  他人样本标识不会泄露（其余全库视图仍对 `user` 硬拒绝）。
+
+事件是观察、不是真相：任务/计划状态仍以任务表为准。
 
 ## 1. 启动 MCP 服务器
 

@@ -106,8 +106,10 @@ bacmap plan confirm <plan_id> --version 1 --hash <first-12-chars>
   regardless of configuration (ADR-16). MCP profiles further limit what a client may receive.
 - **History is immutable.** Results are run-scoped, run records and GOM objects are append-only,
   and published baseline libraries are versioned.
-- **No built-in chat.** Conversation lives in the external harness; bacmap keeps the deterministic
-  pipeline and the trusted surfaces (CLI, Web, local dialog) for confirmation (ADR-21).
+- **No built-in chat by default.** Conversation lives in the external harness; bacmap keeps the
+  deterministic pipeline and the trusted surfaces (CLI, Web, local dialog) for confirmation
+  (ADR-21). An optional native AG-UI console chat (`[web.chat]`, default `off`) adds a per-user
+  isolated chat drawer/page with inline plan confirmation cards.
 
 ## Documentation map
 

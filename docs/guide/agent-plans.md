@@ -2,7 +2,7 @@
 
 Natural-language interaction with large language models happens in an external agent harness.
 The harness reaches bacmap only over MCP; the deterministic pipeline, gates and **trusted
-confirmation surface** stay in bacmap. There is no built-in chat.
+confirmation surface** stay in bacmap. There is no built-in chat by default; the optional `[web.chat]` native console chat is described in section 0.3.
 
 ```text
 Hermes / Pi / DSH / Codex / any MCP client
@@ -145,6 +145,120 @@ bacmap agent doctor
 
 These files are **guidance, not permissions**. Actual permissions come from the MCP profile; the
 plan gate, write boundary and data classes stay server-side (ADR-12/16/21).
+
+## 0.3 Native AG-UI console chat (`[web.chat]`, no iframe)
+
+Besides external harnesses, the bacmap Web console can optionally enable a **native chat
+interface** (AG-UI event protocol over SSE, no iframe and no external assets). It is `off`
+by default; enable it explicitly:
+
+```toml
+# $BACMAP_HOME/config.toml
+[llm.routing]
+chat = "strata"            # any enabled endpoint (see [llm.endpoints])
+
+[web.chat]
+mode = "builtin"
+```
+
+- **Multi-user friendly**: in `builtin` mode the server reads `[llm.*]` once and every
+  authenticated user can chat. Sessions are strictly isolated per user (cross-user access
+  returns 404), and `Role.USER` only sees D0 read tools plus the owner-scoped
+  `bacmap_my_samples` / `bacmap_my_tasks` / `bacmap_task_status`.
+- **Plan confirmation stays in bacmap**: plans created in chat render as native confirmation
+  cards; confirm/reject goes through the same `PlanService` as the `/plans` page and the CLI
+  (plan_hash + version checked). `user` cannot confirm plans and waits for an analyst/admin.
+- **Dual-mode UI**: a collapsible right-hand drawer on any page (optionally carrying the
+  current page's entity context, e.g. sample/task/plan) plus a dedicated full-page `/chat`
+  with a session list and the full workspace.
+- External URLs follow the same discipline as `agent_embed`:
+  loopback http(s) only, no embedded credentials.
+
+### Connecting external harnesses (`mode = "external" | "both"`)
+
+All four harnesses ship with built-in protocol adapters; subprocesses are pooled per
+session, and bacmap plan/task results are extracted into native confirmation cards.
+Use pure `external` for a single harness or `both` for builtin + external side by side:
+
+```toml
+[web.chat]
+mode = "both"               # or "external" (harnesses only)
+default_backend = "dsh"
+
+# DSH — stdio (default command may be omitted) or HTTP (dsh --profile acp serve)
+[[web.chat.external]]
+id = "dsh"
+name = "DSH"
+protocol = "dsh"
+# command = ["dsh", "--profile", "acp"]     # auto-resolved when omitted (npx fallback)
+# url = "http://127.0.0.1:3080"            # set url for HTTP+SSE transport
+# api_key_env = "DSH_ACP_TOKEN"            # optional HTTP bearer (env var name)
+allowed_roles = ["admin", "analyst"]
+
+# Pi — pi --mode rpc (JSONL stdio)
+[[web.chat.external]]
+id = "pi"
+name = "Pi"
+protocol = "pi-rpc"
+allowed_roles = ["admin"]
+
+# OpenCode — opencode acp
+[[web.chat.external]]
+id = "opencode"
+name = "OpenCode"
+protocol = "opencode"
+allowed_roles = ["admin"]
+
+# Hermes — hermes-acp / hermes-acp-http
+[[web.chat.external]]
+id = "hermes"
+name = "Hermes"
+protocol = "hermes"
+# url = "http://127.0.0.1:8642"
+allowed_roles = ["admin", "analyst"]
+```
+
+Notes:
+
+- The harness still needs its own bacmap MCP configuration (sections 1–3) to call bacmap
+  tools; bacmap only bridges the protocol and extracts cards.
+- ACP permission requests are auto-approved only for read-only and bacmap MCP tools;
+  destructive shell/write operations are rejected unless
+  `auto_approve_permissions = true` — the agent never hangs on an unattended prompt.
+- `allowed_roles` is enforced server-side: `user` can neither see nor run external backends.
+
+
+Data classes are unchanged: cloud endpoint ceilings still follow ADR-16, and chat content is
+clipped by endpoint location (D2 redaction identical to MCP).
+
+### 0.3.1 Step-level realtime pipeline push
+
+#### Milestone auto-interpretation
+
+When `[web.chat.builtin].auto_interpret_milestones = true` (default) and chat is enabled,
+a background thread in the web process watches for `task.state` events with `succeeded`
+and runs one short headless interpretation in every chat session that is linked to the
+task and uses the **builtin** backend. External backends (DSH/Pi/OpenCode/Hermes) are
+never spawned unattended. Each (session, task) pair is interpreted at most once — the
+dedupe record is written before the run, so failures are not retried (no token burn
+while nobody is watching). Session owner permissions apply: in accounts mode the
+owner's current role is looked up and disabled/removed users are skipped.
+
+
+Results no longer wait for the whole pipeline: while Snakemake runs, the engine polls the
+run directory from a watcher thread and writes a **step-result event as each artifact lands**
+(species, assembly QC, MLST, serotype, AMR/virulence/plasmid screens, prelim/final summaries —
+lightweight summaries only, never bulk data). The console lights up progressively:
+
+- below task-reference cards in the chat stream, finished steps appear with key results
+  (species, ST, serotype, hit counts) as they complete;
+- the task detail page gains a "pipeline step progress" panel (backfilled from persisted
+  events after refresh — nothing is lost);
+- in multi-user deployments, `user` roles only receive events for **tasks they submitted** —
+  filtering happens server-side by submitter, so other users' sample identifiers never leak
+  (all other library-wide views remain hard-denied for `user`).
+
+Events are observational, not truth: task/plan state always comes from the task tables.
 
 ## 1. Start an MCP server
 

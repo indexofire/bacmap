@@ -102,8 +102,9 @@ bacmap plan confirm <plan_id> --version 1 --hash <first-12-chars>
   （ADR-16）。MCP Profile 进一步限制客户端可以收到什么。
 - **历史不可变。** 结果是运行范围的，运行记录与 GOM 对象只追加，已发布的基线与特征库
   带版本。
-- **没有内置对话。** 对话位于外部 Harness 中；bacmap 保留确定性管线，以及用于确认的受信
-  界面（CLI、Web、本地对话框）（ADR-21）。
+- **默认没有内置对话。** 对话位于外部 Harness 中；bacmap 保留确定性管线，以及用于确认的受信
+  界面（CLI、Web、本地对话框）（ADR-21）。可选的原生 AG-UI 控制台对话（`[web.chat]`，默认
+  `off`）提供按用户隔离的抽屉/独立页对话与内联计划确认卡。
 
 ## 文档地图
 

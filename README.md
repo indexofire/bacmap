@@ -11,8 +11,12 @@ Program version: **0.1.5**.
 
 ## Operating in natural language (the intended entry point)
 
-bacmap **has no built-in chat window**: the conversation happens in an external agent (Hermes, Pi,
-DeepSeek Harness or any MCP client), while bacmap exposes tools, plans and evidence over MCP. The
+bacmap **has no built-in chat window by default**: the conversation happens in an external agent (Hermes, Pi,
+DeepSeek Harness or any MCP client), while bacmap exposes tools, plans and evidence over MCP.
+Optionally, `[web.chat] mode = "builtin"` enables a native AG-UI chat inside the Web console
+(drawer on any page plus a full `/chat` page, per-user isolated sessions, inline plan
+confirmation cards) — no iframe, no external assets; see
+[Agents & plans](docs/guide/agent-plans.md). The
 minimal sequence is five steps:
 
 1. install and check the environment: `pixi install && pixi shell && bacmap doctor`;

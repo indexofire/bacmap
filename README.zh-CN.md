@@ -10,8 +10,11 @@ AI 智能体使用的 MCP 服务。数据不出本地网络。
 
 ## 用自然语言操作（推荐入口）
 
-bacmap **没有内置聊天窗口**：对话发生在外部智能体（Hermes / Pi / DeepSeek Harness / 任意
-MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小操作序列只有五步：
+bacmap **默认没有内置聊天窗口**：对话发生在外部智能体（Hermes / Pi / DeepSeek Harness / 任意
+MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。也可以配置 `[web.chat] mode = "builtin"`
+启用 Web 控制台原生 AG-UI 对话（任意页右侧抽屉 + `/chat` 独立页、按用户隔离会话、内联计划
+确认卡，无 iframe、无外部资产，见[智能体与计划](docs/guide/agent-plans.zh.md)）。
+最小操作序列只有五步：
 
 1. 安装并体检：`pixi install && pixi shell && bacmap doctor`；
 2. 在智能体配置里启动 `bacmap start mcp`（配置片段见
@@ -44,7 +47,7 @@ MCP 客户端）里，bacmap 通过 MCP 提供工具、计划与证据。最小�
   GOM 对象。
 - **仅 MCP 的智能体接入** — 26 个注册表工具 + 计划/任务/记录工具，按固定的 `cloud`（默认）或
   `local-trusted` 数据分级 Profile 裁剪；配置 gaxis 上游后可额外获得 `bacmap_chart_*` 图表工具。
-  无内置对话（ADR-21）。
+  可选 `[web.chat]` 原生控制台对话默认关闭（ADR-21 有限放宽，v1.10.58）。
 - **多种界面** — `/console/` 的 Vue 3 控制台（暗色/浅色/灰色主题、图表、审批）、CLI、TUI、
   JSON API `/api/v1`、MCP（stdio / Streamable HTTP）。
 - **个人模式或本地账号** — `BACMAP_WEB_AUTH=personal` 用 `bacmap personal init` 生成的一次性
