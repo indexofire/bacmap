@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -9,6 +10,20 @@ if TYPE_CHECKING:
     # (which imports parse_mlst from this module at load time). The runtime
     # import lives inside parse_cgmlst_profile(s).
     from .analysis.cgmlst_types import CgmlstProfile
+
+
+def sha256_text(text: str) -> str:
+    """文本的 sha256 十六进制摘要（跨模块共享的唯一实现）。"""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    """文件内容的 sha256（分块读取，大文件安全）。"""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 _MLST_META_COLUMNS = frozenset({"file", "scheme", "st"})

@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from bacmap.core.species_codes import species_code
+from bacmap.core.utils import sha256_file as _sha256_file
 from bacmap.tools._common import _validate_sample_id
 
 _FASTA_EXTS = {".fna", ".fasta", ".fa"}
@@ -49,14 +50,6 @@ def parse_dataset_name(stem: str) -> tuple[str, str, str]:
     if len(parts) >= 2 and parts[0]:
         return stem, parts[0], parts[1] or "unknown"
     return stem, stem, "unknown"
-
-
-def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(8 * 1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def _checksum(paths: list[Path]) -> str:

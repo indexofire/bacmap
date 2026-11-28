@@ -8,7 +8,6 @@ registered with spec/data/code/output hashes so a reviewer can reproduce it.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +16,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from bacmap import __version__
+
+# sha256_text/sha256_file 公共名保留（下游 render/service 引用），实现归并 core.utils 唯一副本。
+from bacmap.core.utils import sha256_file, sha256_text
 from bacmap.research import figure_checks
 from bacmap.research.models import AnalysisSession, StatResult
 
@@ -109,17 +111,6 @@ class FigureArtifact(BaseModel):
 def _canonical(value: Any) -> str:
     return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
 
-
-def sha256_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def stat_sha256(stat: StatResult) -> str:
