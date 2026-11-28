@@ -120,16 +120,24 @@ class SpecimenService:
                 f"specimen {specimen_id!r} has {linked} linked isolate(s); "
                 "reassign them first or use force to unlink"
             )
+        # autocommit 连接（isolation_level=None）：解绑+删除必须包进显式事务——
+        # 否则两次写入各自独立提交，中途崩溃会留下"菌株已解绑但样本仍存在"的不一致态。
         unlinked = 0
-        if linked:
-            now = datetime.now(UTC).isoformat()
-            self._conn.execute(
-                "UPDATE isolates SET specimen_id = NULL, updated_at = ?"
-                " WHERE specimen_id = ?",
-                (now, specimen_id),
-            )
-            unlinked = int(linked)
-        self._conn.execute("DELETE FROM specimens WHERE specimen_id = ?", (specimen_id,))
+        self._conn.execute("BEGIN")
+        try:
+            if linked:
+                now = datetime.now(UTC).isoformat()
+                self._conn.execute(
+                    "UPDATE isolates SET specimen_id = NULL, updated_at = ?"
+                    " WHERE specimen_id = ?",
+                    (now, specimen_id),
+                )
+                unlinked = int(linked)
+            self._conn.execute("DELETE FROM specimens WHERE specimen_id = ?", (specimen_id,))
+            self._conn.execute("COMMIT")
+        except Exception:
+            self._conn.execute("ROLLBACK")
+            raise
         return {"deleted": True, "unlinked_isolates": unlinked}
 
     def isolates(self, specimen_id: str) -> list[dict[str, Any]]:

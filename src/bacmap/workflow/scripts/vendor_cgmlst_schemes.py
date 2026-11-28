@@ -109,7 +109,20 @@ def _download_scheme(gmlst_bin: str, scheme: str, scheme_dir: Path) -> None:
         shutil.rmtree(scheme_dir)
     cmd = [gmlst_bin, "scheme", "download", "-s", scheme]
     print(f"  $ {' '.join(cmd)} -> {scheme_dir}")
-    result = subprocess.run(cmd, cwd=str(scheme_dir.parent), capture_output=True, text=True)
+    # 网络下载必须设上限：挂死的连接不会自行恢复。1 小时远超正常方案体积所需。
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=str(scheme_dir.parent),
+            capture_output=True,
+            text=True,
+            timeout=3600,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"gmlst scheme download timed out for {scheme} after 1h "
+            "(network stall?); partial output in scheme dir parent"
+        ) from exc
     if result.returncode != 0:
         msg = (
             f"gmlst scheme download failed for {scheme} (exit {result.returncode})\n"
