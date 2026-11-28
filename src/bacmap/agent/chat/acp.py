@@ -340,8 +340,8 @@ class _PoolEntry:
 _ACP_POOL: dict[tuple[str, str, Any], _PoolEntry] = {}
 
 
-def close_acp_session(backend_id: str = "", session_id: str = "") -> None:
-    """回收匹配会话的 ACP 子进程（同步、best-effort）。"""
+async def aclose_acp_session(backend_id: str = "", session_id: str = "") -> None:
+    """按会话回收 ACP 子进程（kill+wait，须在拥有进程的循环内 await）。"""
     doomed = [
         key
         for key in _ACP_POOL
@@ -349,12 +349,8 @@ def close_acp_session(backend_id: str = "", session_id: str = "") -> None:
     ]
     for key in doomed:
         entry = _ACP_POOL.pop(key, None)
-        if entry is None:
-            continue
-        proc = entry.process.proc
-        if proc is not None and proc.returncode is None:
-            with contextlib.suppress(ProcessLookupError):
-                proc.kill()
+        if entry is not None:
+            await entry.process.kill()
 
 
 async def reap_acp_pool() -> None:

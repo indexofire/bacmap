@@ -360,10 +360,6 @@ class TestAcpStdio:
         assert state["session_new"] == 1
         assert second[0].type == "RUN_STARTED"
         # 清理，避免泄漏子进程
-        from bacmap.agent.chat.acp import close_acp_session
-
-        close_acp_session(session_id="cs_ext")
-
     def test_permission_decisions_default(self, tmp_path, monkeypatch):
         monkeypatch.setenv("MOCK_ACP_MODE", "permission")
         script = _write_mock(tmp_path, "acp_mock.py", ACP_MOCK)
@@ -378,10 +374,6 @@ class TestAcpStdio:
         assert decisions == ["selected", "selected"]
         # 第一个是 bacmap 只读（allow），第二个是破坏性 bash（reject）
         # 次序与 mock 发出顺序一致：allow 后 reject —— 由 optionId 区分在下面测试
-        from bacmap.agent.chat.acp import close_acp_session
-
-        close_acp_session(session_id="cs_ext")
-
     def test_permission_auto_approve(self, tmp_path, monkeypatch):
         monkeypatch.setenv("MOCK_ACP_MODE", "permission")
         script = _write_mock(tmp_path, "acp_mock.py", ACP_MOCK)
@@ -392,10 +384,6 @@ class TestAcpStdio:
 
         events = _run(run())
         assert _types(events)[-1] == "RUN_FINISHED"
-        from bacmap.agent.chat.acp import close_acp_session
-
-        close_acp_session(session_id="cs_ext")
-
 
 class TestPermissionDecision:
     def test_readonly_bacmap_allowed(self):
@@ -525,10 +513,6 @@ class TestPiRpc:
         assert len(cards) == 1
         state = json.loads((tmp_path / "pi_state.json").read_text())
         assert state["prompts"] == 2  # 同一持久进程处理两轮
-
-        from bacmap.agent.chat.pi_rpc import close_pi_session
-
-        close_pi_session(session_id="cs_ext")
 
     def test_turn_end_error_surfaces_as_run_error(self):
         """模型调用失败（stopReason=error）必须浮现为 RUN_ERROR，而非空回复。"""

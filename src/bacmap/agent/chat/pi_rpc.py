@@ -273,8 +273,11 @@ class _PiPoolEntry:
 _PI_POOL: dict[tuple[str, str, Any], _PiPoolEntry] = {}
 
 
-def close_pi_session(backend_id: str = "", session_id: str = "") -> None:
-    """回收匹配会话的 Pi 子进程（同步、best-effort）。"""
+async def aclose_pi_session(backend_id: str = "", session_id: str = "") -> None:
+    """按会话回收 Pi 子进程（kill+wait，须在拥有进程的循环内 await）。
+
+    只 kill 不 wait 会留下半开传输层——会话删除等异步上下文必须经此收割。
+    """
     doomed = [
         key
         for key in _PI_POOL
@@ -285,9 +288,12 @@ def close_pi_session(backend_id: str = "", session_id: str = "") -> None:
         if entry is None:
             continue
         proc = entry.process.proc
-        if proc is not None and proc.returncode is None:
-            with contextlib.suppress(ProcessLookupError):
-                proc.kill()
+        if proc is None or proc.returncode is not None:
+            continue
+        with contextlib.suppress(ProcessLookupError):
+            proc.kill()
+        with contextlib.suppress(TimeoutError, ProcessLookupError):
+            await asyncio.wait_for(proc.wait(), timeout=5.0)
 
 
 async def reap_pi_pool() -> None:

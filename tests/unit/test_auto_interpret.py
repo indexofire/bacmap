@@ -50,7 +50,7 @@ class TestScanPending:
         sid = _linked_session(home, "local", "t1")
         _succeeded(home, "t1")
         pending, cursor = scan_pending(_db(home), _events_db(home), after=0)
-        assert [(s, t) for s, t, _ in pending] == [(sid, "t1")]
+        assert [(s, t) for s, t, _, _o in pending] == [(sid, "t1")]
         assert cursor > 0
 
     def test_external_backend_session_skipped(self, home: Path):
@@ -78,7 +78,7 @@ class TestScanPending:
         # 后续成功事件仍能被扫到（游标语义正确）
         _succeeded(home, "t1")
         pending, cursor2 = scan_pending(_db(home), _events_db(home), after=cursor)
-        assert [(s, t) for s, t, _ in pending] == [(sid, "t1")]
+        assert [(s, t) for s, t, _, _o in pending] == [(sid, "t1")]
         assert cursor2 > cursor
 
     def test_unlinked_task_produces_nothing(self, home: Path):

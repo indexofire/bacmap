@@ -184,13 +184,17 @@ def build_external_backend(cfg: ExternalAgentConfig, home: Path) -> ChatBackend:
     return AcpStdioBackend(cfg, home)
 
 
-def close_external_session(session_id: str) -> None:
-    """会话删除时回收其外部后端子进程（best-effort，不抛错）。"""
-    try:
-        from bacmap.agent.chat.acp import close_acp_session
-        from bacmap.agent.chat.pi_rpc import close_pi_session
+async def aclose_external_session(session_id: str) -> None:
+    """会话删除时回收其外部后端子进程（kill+wait，best-effort 不抛错）。
 
-        close_acp_session(session_id=session_id)
-        close_pi_session(session_id=session_id)
+    必须在 Web 应用的事件循环内 await——子进程 transport 绑定创建它的循环，
+    同步 kill-without-wait 会留下半开传输层（GC 告警/孤儿进程）。
+    """
+    try:
+        from bacmap.agent.chat.acp import aclose_acp_session
+        from bacmap.agent.chat.pi_rpc import aclose_pi_session
+
+        await aclose_acp_session(session_id=session_id)
+        await aclose_pi_session(session_id=session_id)
     except Exception:  # 清理失败不影响删除操作
         logging.getLogger(__name__).debug("external session cleanup failed", exc_info=True)

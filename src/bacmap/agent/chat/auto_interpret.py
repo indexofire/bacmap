@@ -86,8 +86,8 @@ def scan_pending(
     *,
     after: int,
     task_types: Callable[[str], str] | None = None,
-) -> tuple[list[tuple[str, str, str]], int]:
-    """扫描 succeeded 事件，返回 ``(session_id, task_id, task_type)`` 待办与游标。
+) -> tuple[list[tuple[str, str, str, str]], int]:
+    """扫描 succeeded 事件，返回 ``(session_id, task_id, task_type, owner)`` 待办与游标。
 
     过滤规则：会话后端为 builtin（空值按默认 builtin 计）、未去过重。
     游标对所有事件照常推进（跳过的不回头重扫，与事件 API 语义一致）。
@@ -95,17 +95,17 @@ def scan_pending(
     log_events = EventLog(events_db)
     events = log_events.list(after=after, limit=200)
     cursor = after
-    pending: list[tuple[str, str, str]] = []
-    for event in events:
-        cursor = max(cursor, event.seq)
-        if event.type is not EventType.TASK_STATE or not event.task_id:
-            continue
-        if str(event.payload.get("state", "")) != MILESTONE_SUCCEEDED:
-            continue
-        task_type = str(event.payload.get("task_type", "")) or (
-            task_types(event.task_id) if task_types else ""
-        )
-        with ChatStore(db_path) as store:
+    pending: list[tuple[str, str, str, str]] = []
+    with ChatStore(db_path) as store:
+        for event in events:
+            cursor = max(cursor, event.seq)
+            if event.type is not EventType.TASK_STATE or not event.task_id:
+                continue
+            if str(event.payload.get("state", "")) != MILESTONE_SUCCEEDED:
+                continue
+            task_type = str(event.payload.get("task_type", "")) or (
+                task_types(event.task_id) if task_types else ""
+            )
             for session in store.sessions_for_task(event.task_id):
                 backend = session.backend_id or "builtin"
                 if backend != "builtin":
@@ -114,7 +114,9 @@ def scan_pending(
                     session.session_id, event.task_id, MILESTONE_SUCCEEDED,
                 ):
                     continue
-                pending.append((session.session_id, event.task_id, task_type))
+                pending.append(
+                    (session.session_id, event.task_id, task_type, session.owner_user_id),
+                )
     return pending, cursor
 
 
@@ -172,25 +174,17 @@ class AutoInterpreter:
         if not self._db.is_file() or not self._events_db.is_file():
             return cursor
         pending, cursor = scan_pending(self._db, self._events_db, after=cursor)
-        for session_id, task_id, task_type in pending:
+        for session_id, task_id, task_type, owner in pending:
             if self._stop.is_set():
                 break
-            self._interpret(session_id, task_id, task_type)
+            self._interpret(session_id, task_id, task_type, owner)
         return cursor
 
-    def _interpret(self, session_id: str, task_id: str, task_type: str) -> None:
+    def _interpret(self, session_id: str, task_id: str, task_type: str, owner: str) -> None:
         with ChatStore(self._db) as store:
-            session = None
-            # sessions_for_task 已按 task 过滤；这里取回属主（跨用户，不用 owner 过滤）
-            for s in store.sessions_for_task(task_id):
-                if s.session_id == session_id:
-                    session = s
-                    break
-            if session is None:
-                return
             # 先记账：无论成败只尝试一次，避免无人值守的 token 重试循环。
             store.record_auto_interpretation(session_id, task_id, MILESTONE_SUCCEEDED)
-        actor = actor_for_owner(self._db, session.owner_user_id)
+        actor = actor_for_owner(self._db, owner)
         if actor is None:
             log.info("auto-interpret: skip session %s (owner unavailable)", session_id)
             return

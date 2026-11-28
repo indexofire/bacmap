@@ -199,7 +199,9 @@ def _session_write_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         return session.model_dump(mode="json")
 
     @router.delete("/chat/sessions/{session_id}")
-    def chat_delete_session(session_id: str, request: Request) -> dict[str, Any]:
+    async def chat_delete_session(session_id: str, request: Request) -> dict[str, Any]:
+        # 必须 async：外部后端子进程绑定主事件循环，同步 def 会落到线程池，
+        # 跨循环无法正确收割 transport（kill+wait 失效，半开传输层泄漏）。
         _require_csrf(request)
         require_permission(request, Permission.DATA_READ)
         actor = _chat_actor(request)
@@ -208,9 +210,9 @@ def _session_write_routes(router: APIRouter, engine: DbosTaskEngine) -> None:
         if not deleted:
             raise HTTPException(404, "chat session not found")
         try:
-            from bacmap.agent.chat.external import close_external_session
+            from bacmap.agent.chat.external import aclose_external_session
 
-            close_external_session(session_id)
+            await aclose_external_session(session_id)
         except Exception:  # 子进程清理失败不影响删除
             logger.debug("chat: external session cleanup failed", exc_info=True)
         return {"deleted": True, "session_id": session_id}
