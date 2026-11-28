@@ -45,7 +45,7 @@ def blast(args: dict[str, Any], **kwargs: Any) -> str:
             max_hits,
             out_file,
         )
-    elif mode == "local":
+    if mode == "local":
         return _blast_local(
             query,
             args.get("query_is_file", False),
@@ -412,13 +412,13 @@ def variant(args: dict[str, Any], **kwargs: Any) -> str:
 
     if op == "mpileup_call":
         return _var_mpileup_call(inp, args)
-    elif op == "filter":
+    if op == "filter":
         return _var_filter(inp, args)
-    elif op == "query":
+    if op == "query":
         return _var_query(inp, args)
-    elif op == "annotate":
+    if op == "annotate":
         return _var_annotate(inp, args)
-    elif op == "consensus":
+    if op == "consensus":
         return _var_consensus(inp, args)
     return json.dumps({"error": f"Unknown operation: {op}"})
 

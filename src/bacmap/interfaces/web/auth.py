@@ -389,11 +389,7 @@ class WebAuthMiddleware:
             await self._app(scope, receive, send)
             return
         path = scope.get("path", "")
-        if (
-            path in PUBLIC_PATHS
-            or path.startswith("/static/")
-            or path.startswith("/console/assets/")
-        ):
+        if path in PUBLIC_PATHS or path.startswith(("/static/", "/console/assets/")):
             # /auth/status 是公开路径，但仍需要解析已有会话以返回角色/用户名
             #（只放行请求，不等于匿名）。
             if (self._cfg.accounts or self._cfg.personal) and path in (

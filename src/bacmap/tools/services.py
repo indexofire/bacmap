@@ -74,12 +74,11 @@ def query_metadata(args: dict[str, Any], **kwargs: Any) -> str:
             if not meta:
                 return json.dumps({"error": f"Strain {strain_id} not found"})
             return json.dumps(meta.to_dict(), ensure_ascii=False)
-        else:
-            results = svc.search(**search_kwargs) if search_kwargs else svc.list_all()
-            return json.dumps(
-                {"count": len(results), "results": [m.to_dict() for m in results]},
-                ensure_ascii=False,
-            )
+        results = svc.search(**search_kwargs) if search_kwargs else svc.list_all()
+        return json.dumps(
+            {"count": len(results), "results": [m.to_dict() for m in results]},
+            ensure_ascii=False,
+        )
 @tool_handler
 def add_metadata(args: dict[str, Any], **kwargs: Any) -> str:
     """Add or update strain background metadata."""

@@ -61,7 +61,7 @@ def genotype_to_allele(gt: str, ref: str, alts: list[str]) -> str:
     Bacterial genomes are effectively haploid, so heterozygous calls
     (0/1) are treated as ALT. Missing calls become N.
     """
-    if gt.startswith("./.") or gt.startswith(".") or gt == ".":
+    if gt.startswith("."):
         return "N"
 
     gt_clean = gt.replace("|", "/")

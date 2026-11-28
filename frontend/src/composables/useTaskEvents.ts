@@ -83,6 +83,33 @@ function ingestEvent(ev: TaskEvent): void {
 
 function ingest(events: TaskEvent[]): void {
   for (const ev of events) ingestEvent(ev)
+  evictIfNeeded()
+}
+
+/**
+ * 内存上界：SPA 长会话里 progress/states/subjectIndex 会随任务数单调增长。
+ * 终态任务的步骤条目在卡片收起后没有持续价值——超过上限时优先逐出终态
+ * 任务（按插入序最旧的在前），运行中任务最后才逐出。被逐出的任务若再次
+ * 进入视野，backfill 会重新拉取，语义无损。
+ */
+const MAX_TRACKED_TASKS = 50
+const TERMINAL = new Set(['succeeded', 'failed', 'cancelled'])
+
+function evictIfNeeded(): void {
+  const keys = Object.keys(progress)
+  if (keys.length <= MAX_TRACKED_TASKS) return
+  const terminalFirst = [...keys].sort((a, b) => {
+    const ta = TERMINAL.has(states[a] ?? '') ? 0 : 1
+    const tb = TERMINAL.has(states[b] ?? '') ? 0 : 1
+    return ta - tb
+  })
+  for (const key of terminalFirst.slice(0, keys.length - MAX_TRACKED_TASKS)) {
+    delete progress[key]
+    delete states[key]
+    for (const [subject, taskId] of Object.entries(subjectIndex)) {
+      if (taskId === key) delete subjectIndex[subject]
+    }
+  }
 }
 
 /** 拉取某任务的历史步级事件补齐 store（进入页面/会话时调用）。 */
@@ -134,6 +161,7 @@ async function ensureStream(): Promise<void> {
     const onEvent = (event: MessageEvent<string>) => {
       try {
         ingestEvent(JSON.parse(event.data) as TaskEvent)
+        evictIfNeeded()
       } catch {
         // 非 JSON 或未知事件：SSE 连接保持。
       }

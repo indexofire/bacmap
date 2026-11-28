@@ -22,6 +22,19 @@ bacmap start web
 # browser: /login → signed session cookie + bacmap_csrf cookie
 ```
 
+### Personal mode (access key)
+
+```bash
+bacmap personal init                    # shown once: bk_…
+export BACMAP_WEB_AUTH=personal
+bacmap start web
+# browser: /console/login → access key
+# scripts/API: deployment token still works as Authorization: Bearer <BACMAP_WEB_TOKEN>
+```
+
+The access key is stored as a scrypt hash in `$BACMAP_HOME/personal.json` (0600);
+sign-in yields a server-side session for the built-in `owner` (admin, full access).
+
 ### Local accounts
 
 ```bash
