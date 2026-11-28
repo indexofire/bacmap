@@ -39,6 +39,16 @@ pixi run bacmap start mcp
 pixi run bacmap start tui
 ```
 
+## 快速分析测试
+
+```bash
+# 提交一个 FASTA 目录进行分析
+pixi run bacmap task submit --fasta-dir /path/to/assemblies --type analyze
+
+# 查看任务状态
+pixi run bacmap task list
+```
+
 ## 硬件需求
 
 | 档位 | CPU | 内存 | 磁盘 | 说明 |
