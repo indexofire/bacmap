@@ -122,8 +122,9 @@ forbidden_modules = [
     "bacmap.application",
     "bacmap.tasks",
     "bacmap.interfaces",
-    "bacmap.workflow",
     "bacmap.research",
+    # bacmap.workflow 为命名空间包（无 __init__，grimp 不可见），
+    # 其边界由 tests/unit/test_import_boundaries.py 补足。
 ]
 
 # v1.5 应用服务层：不得依赖接口层，也不得依赖智能体层（C3：无 LLM 时计划闭环可用）。
