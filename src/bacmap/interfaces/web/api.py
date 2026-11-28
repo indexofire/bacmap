@@ -10,10 +10,11 @@ MCP（ADR-21）。事件流 SSE 支持 ``Last-Event-ID`` 续传；事件不是�
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 from importlib.metadata import version as pkg_version
 from pathlib import Path
 from typing import Any, Literal
@@ -1150,8 +1151,11 @@ def _event_routes(router: APIRouter, engine: DbosTaskEngine, events: EventLog) -
         cursor = int(header) if header.isdigit() else after
         deadline = time.monotonic() + max(0, min(timeout, _SSE_MAX_S))
 
-        def gen() -> Iterator[str]:
+        async def gen() -> AsyncIterator[str]:
             nonlocal cursor
+            # 异步生成器：同步迭代器会被 starlette 放进线程池执行——每条 SSE
+            # 连接在存活期内独占一个线程池线程（time.sleep 阻塞），并发连接
+            # 可耗尽线程池拖垮所有同步端点。asyncio.sleep 让出循环不占线程。
             while True:
                 # 列表读取会惰性对账 running 任务的终态 → 终态事件得以产生
                 engine.count_states()
@@ -1165,7 +1169,7 @@ def _event_routes(router: APIRouter, engine: DbosTaskEngine, events: EventLog) -
                 if time.monotonic() >= deadline:
                     return
                 yield ": keepalive\n\n"
-                time.sleep(_SSE_POLL_S)
+                await asyncio.sleep(_SSE_POLL_S)
 
         return StreamingResponse(
             gen(),
