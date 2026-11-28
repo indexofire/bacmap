@@ -5,6 +5,11 @@ withDefaults(defineProps<{ name: string; size?: number; strokeWidth?: number }>(
 })
 
 const icons: Record<string, string[]> = {
+  'message-square': ['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'],
+  maximize: ['M8 3H5a2 2 0 0 0-2 2v3', 'M21 8V5a2 2 0 0 0-2-2h-3', 'M16 21h3a2 2 0 0 0 2-2v-3', 'M3 16v3a2 2 0 0 0 2 2h3'],
+  minimize: ['M8 3v3a2 2 0 0 1-2 2H3', 'M21 8h-3a2 2 0 0 1-2-2V3', 'M16 21v-3a2 2 0 0 1 2-2h3', 'M3 16h3a2 2 0 0 1 2 2v3'],
+  send: ['M22 2 11 13', 'M22 2 15 22l-4-9-9-4z'],
+  square: ['M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z'],
   activity: ['M22 12h-4l-3 9L9 3l-3 9H2'],
   dashboard: [
     'M3 3h7v9H3z',

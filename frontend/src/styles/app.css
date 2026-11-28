@@ -1570,3 +1570,33 @@ code {
   opacity: 1;
   color: var(--link);
 }
+
+/* AI chat drawer integration */
+.chat-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  border-radius: 999px;
+  padding: 3px var(--sp-3);
+  cursor: pointer;
+  font-size: var(--fs-caption);
+  flex-shrink: 0;
+}
+.chat-toggle:hover {
+  border-color: var(--control-border-hover);
+  background: var(--surface-hover);
+}
+.chat-toggle--active {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+@media (min-width: 1200px) {
+  .main--chat-open {
+    margin-right: min(460px, 92vw);
+  }
+}

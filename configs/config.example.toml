@@ -73,6 +73,7 @@
 # [llm.routing]
 # interpretation = "strata"
 # planner = "strata"
+# chat = "strata"                        # [web.chat] builtin 模式的后端对话端点
 
 # 资源仲裁（ADR-17）：模型与分析管线同机时防止内存挤占。
 #   co_located                    模型是否与本机管线同机（false=模型在别处/云端，仲裁关闭）
@@ -99,6 +100,75 @@ language = "en"
 # allow_local_trusted：默认 false。true 且以 --profile local-trusted 启动时，
 # 才向本机可信实例暴露 D4 级工具（ADR-16；云端 Profile 永不受此影响）。
 allow_local_trusted = false
+
+# ─────────────────────────────────────────────────────────────────
+# [web.chat] Web 控制台原生 AG-UI 对话（默认关闭）
+#
+# mode:
+#   off       不启用（默认）
+#   builtin   内置 pydantic-ai 后端：服务端读一次 [llm.*] 配置，所有登录用户
+#             即可对话；会话按用户严格隔离，计划确认走原生卡片（ADR-21）
+#   external  桥接外部 Harness（DSH / Pi / OpenCode / Hermes，见下）
+#   both      内置 + 外部并存
+# default_backend  新建会话默认后端（builtin 或某个 external 条目的 id）
+#
+# [web.chat.builtin]
+#   purpose                   对话端点路由用途（对应 [llm.routing] 的键，默认 chat；
+#                             无该路由条目时回落 interpretation）
+#   max_history_messages      每次请求携带的最近消息数（2–200，默认 40）
+#   auto_interpret_milestones 任务完成后自动触发解读（默认 true）
+#
+# [[web.chat.external]]  外部智能体条目（与 agent_embed 同纪律：
+#   url 仅允许回环 http(s)、不得含凭据，ADR-16）：
+#   id / name        后端标识与显示名
+#   protocol         acp | dsh | pi-rpc | opencode | hermes
+#   command          stdio 启动命令（数组，可选）
+#   url              回环服务地址（可选）
+#   allowed_roles    可见角色（默认 ["admin"]）
+# ─────────────────────────────────────────────────────────────────
+# [web.chat]
+# mode = "builtin"
+# default_backend = "builtin"
+# [web.chat.builtin]
+# purpose = "chat"
+# max_history_messages = 40
+# auto_interpret_milestones = true
+# —— DSH：stdio（默认命令 dsh --profile acp）或 HTTP 服务（dsh --profile acp serve）
+# [[web.chat.external]]
+# id = "dsh"
+# name = "DSH"
+# protocol = "dsh"
+# command = ["dsh", "--profile", "acp"]        # 省略则自动解析（含 npx 回退）
+# url = "http://127.0.0.1:3080"              # 配 url 时走 HTTP+SSE，command 忽略
+# api_key_env = "DSH_ACP_TOKEN"              # 可选：HTTP Bearer 令牌的环境变量名
+# allowed_roles = ["admin", "analyst"]
+#
+# —— Pi：pi --mode rpc（JSONL stdio）
+# [[web.chat.external]]
+# id = "pi"
+# name = "Pi"
+# protocol = "pi-rpc"
+# command = ["pi", "--mode", "rpc"]
+# allowed_roles = ["admin"]
+#
+# —— OpenCode：opencode acp
+# [[web.chat.external]]
+# id = "opencode"
+# name = "OpenCode"
+# protocol = "opencode"
+# command = ["opencode", "acp"]
+# allowed_roles = ["admin"]
+#
+# —— Hermes：hermes-acp（或 hermes acp）/ hermes-acp-http
+# [[web.chat.external]]
+# id = "hermes"
+# name = "Hermes"
+# protocol = "hermes"
+# url = "http://127.0.0.1:8642"
+# allowed_roles = ["admin", "analyst"]
+#
+# auto_approve_permissions（默认 false）：stdio ACP 代理的权限请求默认只放行
+# 只读与 bacmap MCP 工具，破坏性 shell/写操作一律拒绝；true 则全部自动放行。
 
 # ─────────────────────────────────────────────────────────────────
 # [debug] 调试模式

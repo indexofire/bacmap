@@ -31,6 +31,9 @@ import type {
   MappingAdvice,
   WetlabWriteResult,
   UserRow,
+  ChatCapabilities,
+  ChatSession,
+  ChatMessage,
 } from './types'
 
 export class ApiError extends Error {
@@ -44,7 +47,7 @@ export class ApiError extends Error {
   }
 }
 
-function csrfToken(): string {
+export function csrfToken(): string {
   const match = document.cookie.match(/(?:^|;\s*)bacmap_csrf=([^;]+)/)
   return match ? decodeURIComponent(match[1]) : ''
 }
@@ -268,6 +271,26 @@ export const api = {
     ).then(() => undefined),
 
   capabilities: () => request<Capabilities>('/capabilities'),
+
+  chatConfig: () => request<ChatCapabilities>('/chat/config'),
+  listChatSessions: (limit = 50, offset = 0) =>
+    request<{ items: ChatSession[] }>(`/chat/sessions?limit=${limit}&offset=${offset}`),
+  createChatSession: (payload: { title?: string; backend_id?: string } = {}) =>
+    request<ChatSession>('/chat/sessions', json(payload)),
+  getChatSession: (id: string) =>
+    request<{ session: ChatSession; messages: ChatMessage[] }>(
+      `/chat/sessions/${encodeURIComponent(id)}`,
+    ),
+  updateChatSession: (id: string, payload: { title?: string; backend_id?: string }) =>
+    request<ChatSession>(`/chat/sessions/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
+  deleteChatSession: (id: string) =>
+    request<{ deleted: boolean; session_id: string }>(
+      `/chat/sessions/${encodeURIComponent(id)}`,
+      { method: 'DELETE' },
+    ),
   overview: () => request<Overview>('/overview'),
   stats: () => request<DatabaseStats>('/stats'),
 

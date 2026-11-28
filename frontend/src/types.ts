@@ -464,6 +464,7 @@ export interface Capabilities {
   plannable_task_types: string[]
   features: string[]
   agent_embeds?: AgentEmbedLink[]
+  chat?: ChatCapabilities
 }
 
 export interface CountItem {
@@ -559,3 +560,117 @@ export interface DagArtifactPayload {
   type: string
   value: unknown
 }
+
+// ---- Web 控制台对话（P1，AG-UI） ------------------------------------------------
+
+export interface ChatBackendInfo {
+  id: string
+  name: string
+  kind: 'builtin' | 'external'
+  protocol: string
+  available: boolean
+  reason: string
+}
+
+export interface ChatCapabilities {
+  enabled: boolean
+  mode: 'off' | 'builtin' | 'external' | 'both'
+  default_backend: string
+  backends: ChatBackendInfo[]
+  can_confirm_plans: boolean
+}
+
+export interface ChatPageContext {
+  route: string
+  entity_type: string
+  entity_id: string
+  title: string
+}
+
+export interface ChatSession {
+  session_id: string
+  owner_user_id: string
+  title: string
+  backend_id: string
+  linked_tasks: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ChatToolCall {
+  id: string
+  name: string
+  args: string
+  result: string
+  done?: boolean
+}
+
+export interface ChatPlanCard {
+  kind: 'bacmap.plan_card'
+  plan_id: string
+  version: number
+  state: string
+  plan_hash: string
+  short_hash: string
+  rationale: string
+  tasks: Array<Record<string, unknown>>
+  task_ids: string[]
+  created_by: string
+  can_confirm?: boolean
+}
+
+export interface ChatTaskRefCard {
+  kind: 'bacmap.task_ref'
+  task_id: string
+  state?: string
+  plan_id?: string
+}
+
+export type ChatCard = ChatPlanCard | ChatTaskRefCard | ({ kind: string } & Record<string, unknown>)
+
+export interface ChatMessage {
+  message_id: string
+  session_id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  thinking: string
+  tool_calls: ChatToolCall[]
+  cards: ChatCard[]
+  backend_id: string
+  created_at: string
+  streaming?: boolean
+}
+
+// AG-UI v0.1 wire events（camelCase 与后端 agui.py 一致）
+export type AgUiEvent =
+  | { type: 'RUN_STARTED'; threadId: string; runId: string; timestamp?: number }
+  | { type: 'RUN_FINISHED'; threadId: string; runId: string; result?: unknown; timestamp?: number }
+  | { type: 'RUN_ERROR'; message: string; code?: string; timestamp?: number }
+  | { type: 'THINKING_START'; title?: string; timestamp?: number }
+  | { type: 'THINKING_TEXT_MESSAGE_START'; timestamp?: number }
+  | { type: 'THINKING_TEXT_MESSAGE_CONTENT'; delta: string; timestamp?: number }
+  | { type: 'THINKING_TEXT_MESSAGE_END'; timestamp?: number }
+  | { type: 'THINKING_END'; timestamp?: number }
+  | { type: 'TEXT_MESSAGE_START'; messageId: string; role?: string; timestamp?: number }
+  | { type: 'TEXT_MESSAGE_CONTENT'; messageId: string; delta: string; timestamp?: number }
+  | { type: 'TEXT_MESSAGE_END'; messageId: string; timestamp?: number }
+  | {
+      type: 'TOOL_CALL_START'
+      toolCallId: string
+      toolCallName: string
+      parentMessageId?: string
+      timestamp?: number
+    }
+  | { type: 'TOOL_CALL_ARGS'; toolCallId: string; delta: string; timestamp?: number }
+  | { type: 'TOOL_CALL_END'; toolCallId: string; timestamp?: number }
+  | {
+      type: 'TOOL_CALL_RESULT'
+      messageId: string
+      toolCallId: string
+      content: string
+      role?: string
+      timestamp?: number
+    }
+  | { type: 'STATE_SNAPSHOT'; snapshot: Record<string, unknown>; timestamp?: number }
+  | { type: 'STATE_DELTA'; delta: Array<Record<string, unknown>>; timestamp?: number }
+  | { type: 'CUSTOM'; name: string; value: unknown; timestamp?: number }

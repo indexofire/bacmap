@@ -45,7 +45,7 @@ class TestShadowMigration:
             assert row is not None
             assert row["origin"] == "legacy"
             assert specimens.isolates("HZCPE-01")[0]["specimen_id"] == "HZCPE-01"
-        assert store_schema.data_migrations()[-1].version == 7
+        assert store_schema.data_migrations()[-1].version == 9
 
     def test_migration_is_idempotent(self, tmp_path):
         db = _legacy_db_with_isolate(tmp_path)

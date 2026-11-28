@@ -58,6 +58,12 @@ STRAIN_INDEX_DDL = (
 
 def data_migrations() -> tuple[Migration, ...]:
     """data/bacmap.sqlite 的清单：菌株元数据与检验结果共用同一文件。"""
+    from bacmap.store.chat import (
+        CHAT_AUTO_INTERPRET_DDL,
+        CHAT_INDEXES,
+        CHAT_MESSAGES_DDL,
+        CHAT_SESSIONS_DDL,
+    )
     from bacmap.store.import_jobs import (
         IMPORT_JOB_DDL,
         IMPORT_JOB_INDEXES,
@@ -139,6 +145,16 @@ def data_migrations() -> tuple[Migration, ...]:
             7,
             "wet-lab edit proposals: kind/payload/target/base version",
             IMPORT_JOB_V7,
+        ),
+        Migration(
+            8,
+            "web console chat: sessions + messages",
+            (CHAT_SESSIONS_DDL, CHAT_MESSAGES_DDL, *CHAT_INDEXES),
+        ),
+        Migration(
+            9,
+            "chat milestone auto-interpretation dedupe",
+            (CHAT_AUTO_INTERPRET_DDL,),
         ),
     )
 

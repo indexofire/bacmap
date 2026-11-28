@@ -3,11 +3,13 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import Icon from './Icon.vue'
 import ToastHost from './ToastHost.vue'
+import ChatDrawer from './ChatDrawer.vue'
 import { api } from '../api'
 import { appUrl } from '../lib/format'
 import type { AgentEmbedLink, AuthStatus } from '../types'
 import { useTheme } from '../composables/useTheme'
 import { useToast } from '../composables/useToast'
+import { useChat } from '../composables/useChat'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,12 +31,16 @@ const title = computed(() => (route.meta.title as string | undefined) ?? '控制
 const agentEmbeds = ref<AgentEmbedLink[]>([])
 const auth = ref<AuthStatus | null>(null)
 const toast = useToast()
+const chat = useChat()
 const handledTaskStates = new Set<string>()
 let eventSource: EventSource | undefined
 
 const role = computed(() => auth.value?.role ?? '')
 const isManager = computed(() => !role.value || role.value === 'admin' || role.value === 'analyst')
 const isAdmin = computed(() => role.value === 'admin')
+const chatEnabled = computed(() => chat.config.value?.enabled === true)
+const showChatToggle = computed(() => chatEnabled.value && route.path !== '/chat')
+const drawerDesktopOpen = computed(() => showChatToggle.value && chat.drawerOpen.value)
 
 type NavItem = { to: string; label: string; icon: string; exact?: boolean }
 
@@ -46,6 +52,9 @@ const groups = computed(() => {
   ]
   if (isManager.value) {
     workbench.push({ to: '/research', label: '研究', icon: 'chart' })
+  }
+  if (chatEnabled.value) {
+    workbench.push({ to: '/chat', label: 'AI 对话', icon: 'message-square' })
   }
   const evidence: NavItem[] = [
     { to: '/species', label: '物种', icon: 'grid' },
@@ -104,6 +113,7 @@ onMounted(async () => {
     version.value = cap.bacmap_version
     const embeds = cap.agent_embeds
     agentEmbeds.value = Array.isArray(embeds) ? embeds : []
+    void chat.init(cap.chat)
   } catch {
     // 版本号是装饰信息，失败不打断控制台。
   }
@@ -246,7 +256,7 @@ function submitSearch() {
 
     <div v-if="menuOpen" class="sidebar__scrim" @click="menuOpen = false" />
 
-    <div class="main">
+    <div class="main" :class="{ 'main--chat-open': drawerDesktopOpen }">
       <header class="topbar">
         <button
           class="icon-btn topbar__menu"
@@ -300,6 +310,19 @@ function submitSearch() {
           </button>
         </div>
 
+        <button
+          v-if="showChatToggle"
+          class="chat-toggle"
+          :class="{ 'chat-toggle--active': chat.drawerOpen.value }"
+          type="button"
+          title="AI 助手"
+          aria-label="AI 助手"
+          @click="chat.toggleDrawer()"
+        >
+          <Icon name="message-square" :size="14" />
+          <span>AI 助手</span>
+        </button>
+
         <div class="theme-control">
           <button
             class="icon-btn topbar__theme"
@@ -342,6 +365,7 @@ function submitSearch() {
       </main>
     </div>
 
+    <ChatDrawer v-if="showChatToggle" />
     <ToastHost />
   </div>
 </template>

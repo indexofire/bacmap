@@ -376,6 +376,10 @@ def create_app(
 
     agent_embeds = load_agent_embeds(_active_config_path(engine.home))
     app.state.agent_embeds = agent_embeds
+    # v1.10.x P1：Web 控制台对话（[web.chat]；默认 off，不在能力面暴露）。
+    from bacmap.agent.chat.config import load_chat_config
+
+    app.state.chat_config = load_chat_config(_active_config_path(engine.home))
     app.state.web_auth = cfg
     app.state.users_factory = _users_factory
     app.state.engine = engine
@@ -383,6 +387,24 @@ def create_app(
     from bacmap.tasks.notifier import start as start_task_notifier
 
     start_task_notifier(engine.home)
+    chat_cfg = app.state.chat_config
+    if chat_cfg.enabled and chat_cfg.builtin.auto_interpret_milestones:
+        # 里程碑自动解读：任务成功后对链接会话做一次后台简短解读（仅 builtin 后端，
+        # external 进程不在无人值守时唤起；去重防重试，见 agent.chat.auto_interpret）。
+        from bacmap.agent.chat.auto_interpret import start_auto_interpreter
+
+        def _orch_factory() -> Any:
+            from bacmap.agent.chat.service import ChatOrchestrator
+            from bacmap.interfaces.web.chat import _builtin_backend
+
+            return ChatOrchestrator(
+                Path(engine.home),
+                engine,
+                chat_cfg,
+                builtin_backend_factory=lambda: _builtin_backend(engine, chat_cfg),
+            )
+
+        app.state.chat_auto_interpreter = start_auto_interpreter(engine.home, _orch_factory)
     if cfg.enabled:
         # ADR-14/v1.4.15：bearer（API）与 cookie（浏览器）双通道；cookie 模式配 CSRF。
         # accounts/personal 模式额外按会话/个人令牌解析主体（v1.10.x）。
